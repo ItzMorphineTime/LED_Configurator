@@ -1,0 +1,2003 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="author" content="Joe Loe">
+    <title>LED Wall Configurator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a24;
+            --accent-cyan: #00f0ff;
+            --accent-magenta: #ff00aa;
+            --accent-orange: #ff6b35;
+            --accent-green: #00ff66;
+            --text-primary: #e8e8ec;
+            --text-secondary: #8a8a9a;
+            --text-dim: #4a4a5a;
+            --border-color: #2a2a3a;
+            --glow-cyan: 0 0 20px rgba(0, 240, 255, 0.3);
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .app-container {
+            display: grid;
+            grid-template-columns: 400px 1fr;
+            grid-template-rows: 60px 1fr;
+            height: 100vh;
+        }
+
+        .header {
+            grid-column: 1 / -1;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-magenta));
+            border-radius: 8px;
+        }
+
+        .logo-text {
+            font-weight: 600;
+            font-size: 18px;
+        }
+
+        .logo-text span {
+            color: var(--accent-cyan);
+        }
+
+        .header-stats {
+            display: flex;
+            gap: 32px;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 18px;
+            color: var(--accent-cyan);
+            text-shadow: var(--glow-cyan);
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 2px;
+        }
+
+        .control-panel {
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        .control-panel::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .control-panel::-webkit-scrollbar-track {
+            background: var(--bg-tertiary);
+        }
+
+        .control-panel::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+
+        .wall-sections {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .wall-section {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .wall-section.collapsed .section-content {
+            display: none;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 14px;
+            cursor: pointer;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .wall-section:not(.collapsed) .section-header {
+            border-bottom-color: var(--border-color);
+        }
+
+        .section-header:hover {
+            background: rgba(0, 240, 255, 0.05);
+        }
+
+        .section-header-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+        }
+
+        .section-title {
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .section-summary {
+            font-size: 11px;
+            color: var(--text-secondary);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .section-header-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-toggle {
+            width: 24px;
+            height: 24px;
+            display: grid;
+            place-items: center;
+            color: var(--text-secondary);
+            transition: transform 0.2s ease;
+        }
+
+        .wall-section.collapsed .section-toggle {
+            transform: rotate(-90deg);
+        }
+
+        .section-delete {
+            width: 24px;
+            height: 24px;
+            display: grid;
+            place-items: center;
+            color: var(--text-secondary);
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .section-delete:hover {
+            color: #ff4444;
+            background: rgba(255, 68, 68, 0.1);
+        }
+
+        .section-content {
+            padding: 14px;
+        }
+
+        .section-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .section-row.single {
+            grid-template-columns: 1fr;
+        }
+
+        .input-field {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 10px;
+            transition: border-color 0.2s ease;
+        }
+
+        .input-field:focus-within {
+            border-color: var(--accent-cyan);
+        }
+
+        .input-field label {
+            display: block;
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        .input-field input {
+            width: 100%;
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .curve-hint {
+            font-size: 10px;
+            color: var(--text-secondary);
+            font-style: italic;
+            margin-top: 4px;
+        }
+
+        .add-section-btn {
+            width: 100%;
+            padding: 12px;
+            background: transparent;
+            border: 2px dashed var(--border-color);
+            border-radius: 10px;
+            color: var(--text-secondary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .add-section-btn:hover {
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+            background: rgba(0, 240, 255, 0.05);
+        }
+
+        .global-section {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 14px;
+            margin-bottom: 16px;
+        }
+
+        .global-section-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-secondary);
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .global-section-title::before {
+            content: '';
+            width: 3px;
+            height: 12px;
+            background: var(--accent-magenta);
+            border-radius: 2px;
+        }
+
+        .mesh-mode-select {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 14px;
+        }
+
+        .mesh-mode-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .mesh-mode-option:hover {
+            border-color: var(--accent-cyan);
+        }
+
+        .mesh-mode-option.active {
+            background: rgba(0, 240, 255, 0.1);
+            border-color: var(--accent-cyan);
+        }
+
+        .mesh-mode-option input {
+            display: none;
+        }
+
+        .mesh-mode-radio {
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--border-color);
+            border-radius: 50%;
+            position: relative;
+        }
+
+        .mesh-mode-option.active .mesh-mode-radio {
+            border-color: var(--accent-cyan);
+        }
+
+        .mesh-mode-option.active .mesh-mode-radio::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 6px;
+            height: 6px;
+            background: var(--accent-cyan);
+            border-radius: 50%;
+        }
+
+        .mesh-mode-label {
+            font-size: 12px;
+        }
+
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 0;
+        }
+
+        .toggle-label {
+            font-size: 13px;
+        }
+
+        .toggle {
+            width: 44px;
+            height: 24px;
+            background: var(--bg-primary);
+            border-radius: 12px;
+            cursor: pointer;
+            position: relative;
+            transition: background 0.3s ease;
+        }
+
+        .toggle.active {
+            background: var(--accent-cyan);
+        }
+
+        .toggle::after {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            background: white;
+            border-radius: 50%;
+            top: 3px;
+            left: 3px;
+            transition: transform 0.3s ease;
+        }
+
+        .toggle.active::after {
+            transform: translateX(20px);
+        }
+
+        .export-btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-magenta));
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-family: 'Outfit', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .export-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 240, 255, 0.3);
+        }
+
+        .viewport {
+            position: relative;
+            background: var(--bg-primary);
+            overflow: hidden;
+        }
+
+        #three-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .viewport-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+        }
+
+        .grid-lines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: 
+                linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 240, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+        }
+
+        .viewport-info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+        }
+
+        .info-badge {
+            background: rgba(18, 18, 26, 0.9);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .viewport-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .view-btn {
+            width: 40px;
+            height: 40px;
+            background: rgba(18, 18, 26, 0.9);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            cursor: pointer;
+            display: grid;
+            place-items: center;
+            transition: all 0.2s ease;
+            color: var(--text-secondary);
+        }
+
+        .view-btn:hover {
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
+
+        .view-btn svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .section-color-0 { background: #00f0ff; }
+        .section-color-1 { background: #ff00aa; }
+        .section-color-2 { background: #00ff66; }
+        .section-color-3 { background: #ff6b35; }
+        .section-color-4 { background: #ffdd00; }
+        .section-color-5 { background: #aa66ff; }
+        .section-color-6 { background: #66ffaa; }
+        .section-color-7 { background: #ff6666; }
+
+        .section-color-picker {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            margin-top: 6px;
+        }
+
+        .color-swatch-small {
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .color-swatch-small:hover {
+            transform: scale(1.1);
+        }
+
+        .color-swatch-small.active {
+            border-color: white;
+            box-shadow: 0 0 8px currentColor;
+        }
+
+        .color-input-custom {
+            width: 28px;
+            height: 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background: transparent;
+            padding: 0;
+        }
+
+        .color-input-custom::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+
+        .color-input-custom::-webkit-color-swatch {
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+        }
+
+        .export-section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .export-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .export-btn {
+            flex: 1;
+            padding: 12px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-magenta));
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-family: 'Outfit', sans-serif;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .export-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 240, 255, 0.3);
+        }
+
+        .export-btn.secondary {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+        }
+
+        .export-btn.secondary:hover {
+            border-color: var(--accent-cyan);
+            box-shadow: 0 5px 20px rgba(0, 240, 255, 0.2);
+        }
+
+        .import-input {
+            display: none;
+        }
+
+        @media (max-width: 900px) {
+            .app-container {
+                grid-template-columns: 1fr;
+                grid-template-rows: 60px 1fr 350px;
+            }
+            .control-panel {
+                order: 3;
+                border-right: none;
+                border-top: 1px solid var(--border-color);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <header class="header">
+            <div class="logo">
+                <div class="logo-icon"></div>
+                <div class="logo-text">LED<span>WALL</span> Configurator</div>
+            </div>
+            <div class="header-stats">
+                <div class="stat">
+                    <div class="stat-value" id="total-pixels">0</div>
+                    <div class="stat-label">Total Pixels</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="total-panels">0</div>
+                    <div class="stat-label">Panels</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="total-sections">0</div>
+                    <div class="stat-label">Sections</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="total-arc">0°</div>
+                    <div class="stat-label">Total Arc</div>
+                </div>
+            </div>
+        </header>
+
+        <aside class="control-panel">
+            <div class="wall-sections" id="wall-sections"></div>
+
+            <button class="add-section-btn" id="add-section-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                Add Wall Section
+            </button>
+
+            <div class="global-section" style="margin-top: 16px;">
+                <div class="global-section-title">Mesh Options</div>
+                <div class="mesh-mode-select" id="mesh-mode-select">
+                    <label class="mesh-mode-option active" data-mode="combined">
+                        <input type="radio" name="mesh-mode" value="combined" checked>
+                        <span class="mesh-mode-radio"></span>
+                        <span class="mesh-mode-label">Single Combined Mesh</span>
+                    </label>
+                    <label class="mesh-mode-option" data-mode="section">
+                        <input type="radio" name="mesh-mode" value="section">
+                        <span class="mesh-mode-radio"></span>
+                        <span class="mesh-mode-label">Individual Section Meshes</span>
+                    </label>
+                    <label class="mesh-mode-option" data-mode="panel">
+                        <input type="radio" name="mesh-mode" value="panel">
+                        <span class="mesh-mode-radio"></span>
+                        <span class="mesh-mode-label">Individual Panels</span>
+                    </label>
+                </div>
+                <div class="toggle-container">
+                    <span class="toggle-label">Wireframe</span>
+                    <div class="toggle" id="toggle-wireframe"></div>
+                </div>
+                <div class="toggle-container">
+                    <span class="toggle-label">Show Panel Frames</span>
+                    <div class="toggle" id="toggle-frame"></div>
+                </div>
+            </div>
+
+            <div class="global-section">
+                <div class="global-section-title">Display</div>
+                <div class="toggle-container">
+                    <span class="toggle-label">Simulate LED Pixels</span>
+                    <div class="toggle" id="toggle-led-sim"></div>
+                </div>
+                <div class="toggle-container" id="animation-toggle-container" style="display: none;">
+                    <span class="toggle-label">Animate LEDs</span>
+                    <div class="toggle" id="toggle-animation"></div>
+                </div>
+            </div>
+
+            <div class="export-section">
+                <div class="export-row">
+                    <button class="export-btn" id="export-json">Export JSON</button>
+                    <button class="export-btn secondary" id="import-json">Import JSON</button>
+                </div>
+                <div class="export-row">
+                    <button class="export-btn secondary" id="export-obj">Export OBJ</button>
+                    <button class="export-btn secondary" id="export-gltf">Export glTF</button>
+                </div>
+                <input type="file" id="import-input" class="import-input" accept=".json">
+            </div>
+        </aside>
+
+        <main class="viewport">
+            <canvas id="three-canvas"></canvas>
+            <div class="viewport-overlay">
+                <div class="grid-lines"></div>
+                <div class="viewport-info">
+                    <div class="info-badge">Drag to rotate • Scroll to zoom</div>
+                </div>
+                <div class="viewport-controls">
+                    <button class="view-btn" id="view-front" title="Front View">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2"/>
+                        </svg>
+                    </button>
+                    <button class="view-btn" id="view-side" title="Side View">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 3v18M3 12h18"/>
+                        </svg>
+                    </button>
+                    <button class="view-btn" id="view-top" title="Top View">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="9"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                    </button>
+                    <button class="view-btn" id="view-reset" title="Reset View">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                            <path d="M3 3v5h5"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let scene, camera, renderer, ledWallGroup, frameGroup;
+        let animationEnabled = false;
+        let showFrame = false;
+        let wireframeEnabled = false;
+        let ledSimEnabled = false;
+        let meshMode = 'combined';
+        let animationTime = 0;
+
+        const sectionColors = [
+            '#00f0ff', '#ff00aa', '#00ff66', '#ff6b35',
+            '#ffdd00', '#aa66ff', '#66ffaa', '#ff6666'
+        ];
+
+        let wallSections = [{
+            id: 0,
+            panelCols: 5,
+            panelRows: 3,
+            panelWidth: 500,
+            panelHeight: 500,
+            ledX: 32,
+            ledY: 32,
+            curveIntensity: 0,
+            color: '#00f0ff'
+        }];
+
+        let nextSectionId = 1;
+
+        function init() {
+            const canvas = document.getElementById('three-canvas');
+            const container = canvas.parentElement;
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0a0f);
+
+            camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.set(0, 0, 8);
+
+            renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+            const pointLight = new THREE.PointLight(0xffffff, 0.8);
+            pointLight.position.set(5, 5, 10);
+            scene.add(pointLight);
+
+            const gridHelper = new THREE.GridHelper(20, 20, 0x1a1a24, 0x1a1a24);
+            gridHelper.rotation.x = Math.PI / 2;
+            gridHelper.position.z = -0.1;
+            scene.add(gridHelper);
+            scene.add(new THREE.AxesHelper(0.5));
+
+            createLEDWall();
+            setupControls();
+            window.addEventListener('resize', onResize);
+            animate();
+        }
+
+        function createLEDWall() {
+            if (ledWallGroup) {
+                scene.remove(ledWallGroup);
+                ledWallGroup.traverse((child) => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) {
+                        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+                        else child.material.dispose();
+                    }
+                });
+            }
+            if (frameGroup) {
+                scene.remove(frameGroup);
+                frameGroup.traverse((child) => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) child.material.dispose();
+                });
+            }
+
+            ledWallGroup = new THREE.Group();
+            frameGroup = new THREE.Group();
+
+            const scale = 0.002;
+            let allSectionsData = [];
+            
+            // Track cumulative position and angle across sections
+            let currentX = 0;
+            let currentZ = 0;
+            let currentAngle = 0;
+
+            wallSections.forEach((section, sectionIndex) => {
+                const panelW = section.panelWidth * scale;
+                const panelH = section.panelHeight * scale;
+                const curveAngleRad = (Math.abs(section.curveIntensity) * Math.PI) / 180;
+                const isFlat = section.curveIntensity === 0;
+                const dirMult = section.curveIntensity > 0 ? 1 : (section.curveIntensity < 0 ? -1 : 0);
+
+                const edgePositions = [];
+                const panelData = [];
+
+                // First edge starts at current position with inherited angle
+                edgePositions.push({ x: currentX, z: currentZ, angle: currentAngle });
+
+                for (let col = 0; col < section.panelCols; col++) {
+                    // Apply curve BEFORE movement (so first panel is also curved)
+                    if (!isFlat) {
+                        currentAngle += curveAngleRad;
+                    }
+
+                    // Move in the direction of current angle
+                    const moveAngle = currentAngle * (dirMult !== 0 ? dirMult : 1);
+                    
+                    if (isFlat && edgePositions[0].angle === 0 && edgePositions.length === 1) {
+                        // Pure flat section starting from origin, no inherited angle
+                        currentX += panelW;
+                    } else {
+                        // Curved or flat with inherited angle
+                        currentX += panelW * Math.cos(moveAngle);
+                        currentZ += panelW * Math.sin(moveAngle);
+                    }
+
+                    edgePositions.push({ x: currentX, z: currentZ, angle: currentAngle });
+                }
+
+                // Calculate panel centers
+                for (let row = 0; row < section.panelRows; row++) {
+                    const y = row * panelH;
+
+                    for (let col = 0; col < section.panelCols; col++) {
+                        const leftEdge = edgePositions[col];
+                        const rightEdge = edgePositions[col + 1];
+
+                        const centerX = (leftEdge.x + rightEdge.x) / 2;
+                        const centerZ = (leftEdge.z + rightEdge.z) / 2;
+                        const centerY = y + panelH / 2;
+
+                        const dx = rightEdge.x - leftEdge.x;
+                        const dz = rightEdge.z - leftEdge.z;
+                        const rotY = -Math.atan2(dz, dx);
+
+                        panelData.push({
+                            x: centerX, y: centerY, z: centerZ,
+                            rotY, col, row, sectionIndex
+                        });
+                    }
+                }
+
+                allSectionsData.push({
+                    section, sectionIndex, edgePositions, panelData,
+                    panelW, panelH, dirMult, isFlat
+                });
+            });
+
+            if (meshMode === 'combined') {
+                createCombinedMesh(allSectionsData);
+            } else if (meshMode === 'section') {
+                createSectionMeshes(allSectionsData);
+            } else {
+                createIndividualPanels(allSectionsData);
+            }
+
+            if (showFrame) {
+                allSectionsData.forEach(({ panelData, panelW, panelH }) => {
+                    panelData.forEach((data) => {
+                        const frameGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(panelW, panelH, 0.02));
+                        const frame = new THREE.LineSegments(frameGeometry, new THREE.LineBasicMaterial({ color: 0x4a4a5a }));
+                        frame.position.set(data.x, data.y, data.z);
+                        frame.rotation.y = data.rotY;
+                        frameGroup.add(frame);
+                    });
+                });
+            }
+
+            scene.add(ledWallGroup);
+            if (showFrame) scene.add(frameGroup);
+
+            updateStats();
+            updateCameraPosition();
+        }
+
+        function createCombinedMesh(allSectionsData) {
+            const vertPositions = [];
+            const vertNormals = [];
+            const vertUvs = [];
+            const indices = [];
+            let vertexOffset = 0;
+
+            let totalLedX = 0, totalLedY = 0;
+            wallSections.forEach(s => {
+                totalLedX += s.panelCols * s.ledX;
+                totalLedY = Math.max(totalLedY, s.panelRows * s.ledY);
+            });
+
+            let uvOffsetX = 0;
+
+            allSectionsData.forEach(({ section, edgePositions, panelW, panelH, dirMult, isFlat }) => {
+                const sectionLedX = section.panelCols * section.ledX;
+                const uvWidth = sectionLedX / totalLedX;
+
+                for (let row = 0; row <= section.panelRows; row++) {
+                    const y = row * panelH;
+                    for (let col = 0; col <= section.panelCols; col++) {
+                        const edge = edgePositions[col];
+                        vertPositions.push(edge.x, y, edge.z);
+
+                        const nx = isFlat ? 0 : Math.sin(edge.angle * dirMult);
+                        const nz = isFlat ? 1 : Math.cos(edge.angle * dirMult);
+                        vertNormals.push(nx, 0, nz);
+
+                        vertUvs.push(uvOffsetX + (col / section.panelCols) * uvWidth, row / section.panelRows);
+                    }
+                }
+
+                const vertsPerRow = section.panelCols + 1;
+                for (let row = 0; row < section.panelRows; row++) {
+                    for (let col = 0; col < section.panelCols; col++) {
+                        const bl = vertexOffset + row * vertsPerRow + col;
+                        const br = bl + 1;
+                        const tl = vertexOffset + (row + 1) * vertsPerRow + col;
+                        const tr = tl + 1;
+                        indices.push(bl, tl, tr, bl, tr, br);
+                    }
+                }
+
+                vertexOffset += (section.panelCols + 1) * (section.panelRows + 1);
+                uvOffsetX += uvWidth;
+            });
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertPositions, 3));
+            geometry.setAttribute('normal', new THREE.Float32BufferAttribute(vertNormals, 3));
+            geometry.setAttribute('uv', new THREE.Float32BufferAttribute(vertUvs, 2));
+            geometry.setIndex(indices);
+
+            // For combined mesh, use vertex colors to support multiple section colors
+            const colors = [];
+            allSectionsData.forEach(({ section }) => {
+                const color = new THREE.Color(section.color);
+                for (let row = 0; row <= section.panelRows; row++) {
+                    for (let col = 0; col <= section.panelCols; col++) {
+                        colors.push(color.r, color.g, color.b);
+                    }
+                }
+            });
+            geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+            const material = ledSimEnabled
+                ? new THREE.MeshBasicMaterial({ map: createLEDTexture(totalLedX, totalLedY, wallSections[0].color), side: THREE.DoubleSide, wireframe: wireframeEnabled })
+                : new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, wireframe: wireframeEnabled });
+
+            ledWallGroup.add(new THREE.Mesh(geometry, material));
+        }
+
+        function createSectionMeshes(allSectionsData) {
+            allSectionsData.forEach(({ section, edgePositions, panelW, panelH, dirMult, isFlat }) => {
+                const vertPositions = [], vertNormals = [], vertUvs = [], indices = [];
+                const sectionColor = new THREE.Color(section.color);
+
+                for (let row = 0; row <= section.panelRows; row++) {
+                    const y = row * panelH;
+                    for (let col = 0; col <= section.panelCols; col++) {
+                        const edge = edgePositions[col];
+                        vertPositions.push(edge.x, y, edge.z);
+                        vertNormals.push(isFlat ? 0 : Math.sin(edge.angle * dirMult), 0, isFlat ? 1 : Math.cos(edge.angle * dirMult));
+                        vertUvs.push(col / section.panelCols, row / section.panelRows);
+                    }
+                }
+
+                const vertsPerRow = section.panelCols + 1;
+                for (let row = 0; row < section.panelRows; row++) {
+                    for (let col = 0; col < section.panelCols; col++) {
+                        const bl = row * vertsPerRow + col, br = bl + 1;
+                        const tl = (row + 1) * vertsPerRow + col, tr = tl + 1;
+                        indices.push(bl, tl, tr, bl, tr, br);
+                    }
+                }
+
+                const geometry = new THREE.BufferGeometry();
+                geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertPositions, 3));
+                geometry.setAttribute('normal', new THREE.Float32BufferAttribute(vertNormals, 3));
+                geometry.setAttribute('uv', new THREE.Float32BufferAttribute(vertUvs, 2));
+                geometry.setIndex(indices);
+
+                const material = ledSimEnabled
+                    ? new THREE.MeshBasicMaterial({ map: createLEDTexture(section.panelCols * section.ledX, section.panelRows * section.ledY, section.color), side: THREE.DoubleSide, wireframe: wireframeEnabled })
+                    : new THREE.MeshBasicMaterial({ color: sectionColor, side: THREE.DoubleSide, wireframe: wireframeEnabled });
+
+                ledWallGroup.add(new THREE.Mesh(geometry, material));
+            });
+        }
+
+        function createIndividualPanels(allSectionsData) {
+            allSectionsData.forEach(({ section, panelData, panelW, panelH }) => {
+                const sectionColor = new THREE.Color(section.color);
+                
+                panelData.forEach((data) => {
+                    const geometry = new THREE.PlaneGeometry(panelW, panelH);
+                    const material = ledSimEnabled
+                        ? new THREE.MeshBasicMaterial({ map: createLEDTexture(section.ledX, section.ledY, section.color), side: THREE.DoubleSide, wireframe: wireframeEnabled })
+                        : new THREE.MeshBasicMaterial({ color: sectionColor, side: THREE.DoubleSide, wireframe: wireframeEnabled });
+
+                    const panel = new THREE.Mesh(geometry, material);
+                    panel.position.set(data.x, data.y, data.z);
+                    panel.rotation.y = data.rotY;
+                    ledWallGroup.add(panel);
+                });
+            });
+        }
+
+        function createLEDTexture(ledX, ledY, color) {
+            const ledColor = new THREE.Color(color);
+            const canvas = document.createElement('canvas');
+            const maxDim = 4096;
+            const pixelSize = Math.max(4, Math.min(16, Math.floor(maxDim / Math.max(ledX, ledY))));
+            canvas.width = Math.min(maxDim, ledX * pixelSize);
+            canvas.height = Math.min(maxDim, ledY * pixelSize);
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = '#0a0a0f';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const pixelW = canvas.width / ledX, pixelH = canvas.height / ledY;
+            const ledRadius = Math.min(pixelW, pixelH) * 0.35;
+
+            for (let y = 0; y < ledY; y++) {
+                for (let x = 0; x < ledX; x++) {
+                    const cx = (x + 0.5) * pixelW, cy = (y + 0.5) * pixelH;
+
+                    const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, ledRadius * 1.5);
+                    gradient.addColorStop(0, `rgba(${ledColor.r * 255}, ${ledColor.g * 255}, ${ledColor.b * 255}, 1)`);
+                    gradient.addColorStop(0.5, `rgba(${ledColor.r * 255}, ${ledColor.g * 255}, ${ledColor.b * 255}, 0.5)`);
+                    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                    ctx.fillStyle = gradient;
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, ledRadius * 1.5, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.fillStyle = `rgb(${ledColor.r * 255}, ${ledColor.g * 255}, ${ledColor.b * 255})`;
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, ledRadius * 0.7, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.needsUpdate = true;
+            return texture;
+        }
+
+        function updateStats() {
+            let totalPixels = 0, totalPanels = 0, totalArc = 0;
+            wallSections.forEach(s => {
+                totalPixels += s.panelCols * s.panelRows * s.ledX * s.ledY;
+                totalPanels += s.panelCols * s.panelRows;
+                totalArc += s.panelCols * Math.abs(s.curveIntensity);
+            });
+            document.getElementById('total-pixels').textContent = totalPixels.toLocaleString();
+            document.getElementById('total-panels').textContent = totalPanels;
+            document.getElementById('total-sections').textContent = wallSections.length;
+            document.getElementById('total-arc').textContent = `${totalArc.toFixed(1)}°`;
+        }
+
+        let isDragging = false, previousMousePosition = { x: 0, y: 0 };
+        let cameraAngle = { theta: 0, phi: Math.PI / 2 }, cameraDistance = 8;
+        let targetPosition = new THREE.Vector3(0, 0, 0);
+
+        function updateTargetPosition() {
+            const scale = 0.002;
+            let totalWidth = 0, maxHeight = 0;
+            wallSections.forEach(s => {
+                totalWidth += s.panelCols * s.panelWidth * scale;
+                maxHeight = Math.max(maxHeight, s.panelRows * s.panelHeight * scale);
+            });
+            targetPosition.set(totalWidth / 2, maxHeight / 2, 0);
+        }
+
+        function setupControls() {
+            const canvas = renderer.domElement;
+            canvas.addEventListener('mousedown', (e) => { isDragging = true; previousMousePosition = { x: e.clientX, y: e.clientY }; });
+            canvas.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                cameraAngle.theta -= (e.clientX - previousMousePosition.x) * 0.01;
+                cameraAngle.phi = Math.max(0.1, Math.min(Math.PI - 0.1, cameraAngle.phi - (e.clientY - previousMousePosition.y) * 0.01));
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+                updateCameraPosition();
+            });
+            canvas.addEventListener('mouseup', () => isDragging = false);
+            canvas.addEventListener('mouseleave', () => isDragging = false);
+            canvas.addEventListener('wheel', (e) => { e.preventDefault(); cameraDistance = Math.max(2, Math.min(30, cameraDistance + e.deltaY * 0.01)); updateCameraPosition(); });
+        }
+
+        function updateCameraPosition() {
+            updateTargetPosition();
+            camera.position.x = targetPosition.x + cameraDistance * Math.sin(cameraAngle.phi) * Math.sin(cameraAngle.theta);
+            camera.position.y = targetPosition.y + cameraDistance * Math.cos(cameraAngle.phi);
+            camera.position.z = targetPosition.z + cameraDistance * Math.sin(cameraAngle.phi) * Math.cos(cameraAngle.theta);
+            camera.lookAt(targetPosition);
+        }
+
+        function setView(view) {
+            if (view === 'front') cameraAngle = { theta: 0, phi: Math.PI / 2 };
+            else if (view === 'side') cameraAngle = { theta: Math.PI / 2, phi: Math.PI / 2 };
+            else if (view === 'top') cameraAngle = { theta: 0, phi: 0.1 };
+            else { cameraAngle = { theta: 0.3, phi: Math.PI / 2.5 }; cameraDistance = 8; }
+            updateCameraPosition();
+        }
+
+        function onResize() {
+            const container = renderer.domElement.parentElement;
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+
+        function renderWallSections() {
+            const container = document.getElementById('wall-sections');
+            container.innerHTML = '';
+
+            wallSections.forEach((section, index) => {
+                const colorIndex = index % 8;
+                const curveType = section.curveIntensity === 0 ? 'Flat' : (section.curveIntensity > 0 ? 'Concave' : 'Convex');
+                const summary = `${section.panelCols}×${section.panelRows} • ${curveType}`;
+
+                const sectionEl = document.createElement('div');
+                sectionEl.className = 'wall-section';
+                sectionEl.innerHTML = `
+                    <div class="section-header">
+                        <div class="section-header-left">
+                            <div class="section-color" style="background: ${section.color}"></div>
+                            <div>
+                                <div class="section-title">Wall ${index + 1}</div>
+                                <div class="section-summary">${summary}</div>
+                            </div>
+                        </div>
+                        <div class="section-header-right">
+                            ${wallSections.length > 1 ? `<button class="section-delete" data-id="${section.id}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>` : ''}
+                            <div class="section-toggle"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></div>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="section-row">
+                            <div class="input-field"><label>Columns</label><input type="number" data-field="panelCols" value="${section.panelCols}" min="1" max="50"></div>
+                            <div class="input-field"><label>Rows</label><input type="number" data-field="panelRows" value="${section.panelRows}" min="1" max="20"></div>
+                        </div>
+                        <div class="section-row">
+                            <div class="input-field"><label>Width (mm)</label><input type="number" data-field="panelWidth" value="${section.panelWidth}" min="50" max="5000"></div>
+                            <div class="input-field"><label>Height (mm)</label><input type="number" data-field="panelHeight" value="${section.panelHeight}" min="50" max="5000"></div>
+                        </div>
+                        <div class="section-row">
+                            <div class="input-field"><label>Pixels X</label><input type="number" data-field="ledX" value="${section.ledX}" min="8" max="350"></div>
+                            <div class="input-field"><label>Pixels Y</label><input type="number" data-field="ledY" value="${section.ledY}" min="8" max="350"></div>
+                        </div>
+                        <div class="section-row single">
+                            <div class="input-field">
+                                <label>Angle Between Panels (°)</label>
+                                <input type="number" data-field="curveIntensity" value="${section.curveIntensity}" min="-45" max="45" step="0.1">
+                                <div class="curve-hint">${curveType}${section.curveIntensity !== 0 ? ` (${section.curveIntensity > 0 ? '+' : ''}${section.curveIntensity}°)` : ''}</div>
+                            </div>
+                        </div>
+                        <div class="section-row single">
+                            <div class="input-field">
+                                <label>Panel Color</label>
+                                <div class="section-color-picker">
+                                    <div class="color-swatch-small ${section.color === '#00f0ff' ? 'active' : ''}" data-color="#00f0ff" style="background: #00f0ff;"></div>
+                                    <div class="color-swatch-small ${section.color === '#ff00aa' ? 'active' : ''}" data-color="#ff00aa" style="background: #ff00aa;"></div>
+                                    <div class="color-swatch-small ${section.color === '#00ff66' ? 'active' : ''}" data-color="#00ff66" style="background: #00ff66;"></div>
+                                    <div class="color-swatch-small ${section.color === '#ff6b35' ? 'active' : ''}" data-color="#ff6b35" style="background: #ff6b35;"></div>
+                                    <div class="color-swatch-small ${section.color === '#ffffff' ? 'active' : ''}" data-color="#ffffff" style="background: #ffffff;"></div>
+                                    <div class="color-swatch-small ${section.color === '#ffdd00' ? 'active' : ''}" data-color="#ffdd00" style="background: #ffdd00;"></div>
+                                    <input type="color" class="color-input-custom" value="${section.color}" title="Custom color">
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+
+                container.appendChild(sectionEl);
+
+                sectionEl.querySelector('.section-header').addEventListener('click', (e) => {
+                    if (!e.target.closest('.section-delete')) sectionEl.classList.toggle('collapsed');
+                });
+
+                const deleteBtn = sectionEl.querySelector('.section-delete');
+                if (deleteBtn) deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteSection(section.id); });
+
+                // Color swatches
+                sectionEl.querySelectorAll('.color-swatch-small').forEach(swatch => {
+                    swatch.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        sectionEl.querySelectorAll('.color-swatch-small').forEach(s => s.classList.remove('active'));
+                        swatch.classList.add('active');
+                        section.color = swatch.dataset.color;
+                        sectionEl.querySelector('.section-color').style.background = section.color;
+                        sectionEl.querySelector('.color-input-custom').value = section.color;
+                        createLEDWall();
+                    });
+                });
+
+                // Custom color input
+                sectionEl.querySelector('.color-input-custom').addEventListener('input', (e) => {
+                    e.stopPropagation();
+                    section.color = e.target.value;
+                    sectionEl.querySelectorAll('.color-swatch-small').forEach(s => s.classList.remove('active'));
+                    sectionEl.querySelector('.section-color').style.background = section.color;
+                    createLEDWall();
+                });
+
+                sectionEl.querySelectorAll('input[type="number"]').forEach(input => {
+                    input.addEventListener('change', (e) => {
+                        const field = e.target.dataset.field;
+                        let value = parseFloat(e.target.value);
+                        if (field === 'panelCols') value = Math.max(1, Math.min(50, value || 1));
+                        else if (field === 'panelRows') value = Math.max(1, Math.min(20, value || 1));
+                        else if (field === 'panelWidth' || field === 'panelHeight') value = Math.max(50, Math.min(5000, value || 500));
+                        else if (field === 'ledX' || field === 'ledY') value = Math.max(8, Math.min(350, value || 32));
+                        else if (field === 'curveIntensity') value = Math.max(-45, Math.min(45, value || 0));
+                        e.target.value = value;
+                        section[field] = value;
+                        if (field === 'curveIntensity') {
+                            const hint = sectionEl.querySelector('.curve-hint');
+                            const ct = value === 0 ? 'Flat' : (value > 0 ? 'Concave' : 'Convex');
+                            hint.textContent = `${ct}${value !== 0 ? ` (${value > 0 ? '+' : ''}${value}°)` : ''}`;
+                        }
+                        renderWallSections();
+                        createLEDWall();
+                    });
+                    input.addEventListener('click', (e) => e.stopPropagation());
+                });
+            });
+        }
+
+        function addSection() {
+            const last = wallSections[wallSections.length - 1];
+            const newColorIndex = wallSections.length % sectionColors.length;
+            wallSections.push({ 
+                id: nextSectionId++, 
+                panelCols: last.panelCols, 
+                panelRows: last.panelRows, 
+                panelWidth: last.panelWidth, 
+                panelHeight: last.panelHeight, 
+                ledX: last.ledX, 
+                ledY: last.ledY, 
+                curveIntensity: last.curveIntensity,
+                color: sectionColors[newColorIndex]
+            });
+            renderWallSections();
+            createLEDWall();
+        }
+
+        function deleteSection(id) {
+            if (wallSections.length <= 1) return;
+            wallSections = wallSections.filter(s => s.id !== id);
+            renderWallSections();
+            createLEDWall();
+        }
+
+        function setupUI() {
+            renderWallSections();
+            document.getElementById('add-section-btn').addEventListener('click', addSection);
+
+            document.querySelectorAll('.mesh-mode-option').forEach(opt => {
+                opt.addEventListener('click', () => {
+                    document.querySelectorAll('.mesh-mode-option').forEach(o => o.classList.remove('active'));
+                    opt.classList.add('active');
+                    meshMode = opt.dataset.mode;
+                    createLEDWall();
+                });
+            });
+
+            document.getElementById('toggle-wireframe').addEventListener('click', function() { this.classList.toggle('active'); wireframeEnabled = this.classList.contains('active'); createLEDWall(); });
+            document.getElementById('toggle-frame').addEventListener('click', function() { this.classList.toggle('active'); showFrame = this.classList.contains('active'); createLEDWall(); });
+            document.getElementById('toggle-led-sim').addEventListener('click', function() { this.classList.toggle('active'); ledSimEnabled = this.classList.contains('active'); document.getElementById('animation-toggle-container').style.display = ledSimEnabled ? 'flex' : 'none'; createLEDWall(); });
+            document.getElementById('toggle-animation').addEventListener('click', function() { this.classList.toggle('active'); animationEnabled = this.classList.contains('active'); });
+
+            document.getElementById('view-front').addEventListener('click', () => setView('front'));
+            document.getElementById('view-side').addEventListener('click', () => setView('side'));
+            document.getElementById('view-top').addEventListener('click', () => setView('top'));
+            document.getElementById('view-reset').addEventListener('click', () => setView('reset'));
+
+            // Export/Import handlers
+            document.getElementById('export-json').addEventListener('click', exportJSON);
+            document.getElementById('import-json').addEventListener('click', () => document.getElementById('import-input').click());
+            document.getElementById('import-input').addEventListener('change', importJSON);
+            document.getElementById('export-obj').addEventListener('click', exportOBJ);
+            document.getElementById('export-gltf').addEventListener('click', exportGLTF);
+        }
+
+        function exportJSON() {
+            const exportData = {
+                version: '1.0',
+                sections: wallSections.map((s, i) => ({
+                    name: `Wall ${i + 1}`,
+                    id: s.id,
+                    panel: { columns: s.panelCols, rows: s.panelRows, width_mm: s.panelWidth, height_mm: s.panelHeight },
+                    led_resolution: { x: s.ledX, y: s.ledY, pixel_pitch_mm: parseFloat((s.panelWidth / s.ledX).toFixed(2)) },
+                    curvature: { 
+                        type: s.curveIntensity === 0 ? 'flat' : (s.curveIntensity > 0 ? 'concave' : 'convex'), 
+                        angle_degrees: s.curveIntensity 
+                    },
+                    color: s.color
+                })),
+                mesh_mode: meshMode,
+                totals: {
+                    sections: wallSections.length,
+                    total_panels: wallSections.reduce((sum, s) => sum + s.panelCols * s.panelRows, 0),
+                    total_pixels: wallSections.reduce((sum, s) => sum + s.panelCols * s.panelRows * s.ledX * s.ledY, 0)
+                }
+            };
+            downloadFile(JSON.stringify(exportData, null, 2), 'led-wall-config.json', 'application/json');
+        }
+
+        function importJSON(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const data = JSON.parse(event.target.result);
+                    if (data.sections && Array.isArray(data.sections)) {
+                        wallSections = data.sections.map((s, i) => ({
+                            id: s.id !== undefined ? s.id : i,
+                            panelCols: s.panel?.columns || 5,
+                            panelRows: s.panel?.rows || 3,
+                            panelWidth: s.panel?.width_mm || 500,
+                            panelHeight: s.panel?.height_mm || 500,
+                            ledX: s.led_resolution?.x || 32,
+                            ledY: s.led_resolution?.y || 32,
+                            curveIntensity: s.curvature?.angle_degrees || 0,
+                            color: s.color || sectionColors[i % sectionColors.length]
+                        }));
+                        nextSectionId = Math.max(...wallSections.map(s => s.id)) + 1;
+                        
+                        if (data.mesh_mode) {
+                            meshMode = data.mesh_mode;
+                            document.querySelectorAll('.mesh-mode-option').forEach(o => {
+                                o.classList.toggle('active', o.dataset.mode === meshMode);
+                            });
+                        }
+                        
+                        renderWallSections();
+                        createLEDWall();
+                    }
+                } catch (err) {
+                    alert('Error parsing JSON file: ' + err.message);
+                }
+            };
+            reader.readAsText(file);
+            e.target.value = ''; // Reset input
+        }
+
+        function exportOBJ() {
+            let objContent = '# LED Wall Configuration OBJ Export\n';
+            objContent += `# Mesh Mode: ${meshMode}\n`;
+            objContent += '# Generated by LED Wall Configurator\n\n';
+            
+            let mtlContent = '# LED Wall Materials\n\n';
+            const scale = 0.002;
+
+            // Generate geometry data for all sections first
+            const allSectionsGeometry = generateAllSectionsGeometry(scale);
+
+            if (meshMode === 'combined') {
+                // Single combined mesh
+                const color = new THREE.Color(wallSections[0].color);
+                mtlContent += `newmtl LED_Wall_Combined\n`;
+                mtlContent += `Kd ${color.r.toFixed(4)} ${color.g.toFixed(4)} ${color.b.toFixed(4)}\n`;
+                mtlContent += `Ka 0.1 0.1 0.1\nKs 0.5 0.5 0.5\nNs 100\nd 1.0\n\n`;
+
+                objContent += 'mtllib led-wall-config.mtl\n\n';
+                objContent += 'o LED_Wall_Combined\n';
+                objContent += 'usemtl LED_Wall_Combined\n';
+
+                let vertexOffset = 1;
+                
+                // Write all vertices
+                allSectionsGeometry.forEach(({ vertices }) => {
+                    for (let i = 0; i < vertices.length; i += 3) {
+                        objContent += `v ${vertices[i].toFixed(6)} ${vertices[i+1].toFixed(6)} ${vertices[i+2].toFixed(6)}\n`;
+                    }
+                });
+
+                // Write all texture coordinates
+                allSectionsGeometry.forEach(({ section }) => {
+                    for (let row = 0; row <= section.panelRows; row++) {
+                        for (let col = 0; col <= section.panelCols; col++) {
+                            objContent += `vt ${(col / section.panelCols).toFixed(6)} ${(row / section.panelRows).toFixed(6)}\n`;
+                        }
+                    }
+                });
+
+                objContent += 'vn 0 0 1\n';
+
+                // Write all faces with proper offsets
+                allSectionsGeometry.forEach(({ section }) => {
+                    const vertsPerRow = section.panelCols + 1;
+                    for (let row = 0; row < section.panelRows; row++) {
+                        for (let col = 0; col < section.panelCols; col++) {
+                            const bl = vertexOffset + row * vertsPerRow + col;
+                            const br = bl + 1;
+                            const tl = vertexOffset + (row + 1) * vertsPerRow + col;
+                            const tr = tl + 1;
+                            objContent += `f ${bl}/${bl}/1 ${tl}/${tl}/1 ${tr}/${tr}/1\n`;
+                            objContent += `f ${bl}/${bl}/1 ${tr}/${tr}/1 ${br}/${br}/1\n`;
+                        }
+                    }
+                    vertexOffset += (section.panelCols + 1) * (section.panelRows + 1);
+                });
+
+            } else if (meshMode === 'section') {
+                // Individual section meshes
+                wallSections.forEach((section, i) => {
+                    const color = new THREE.Color(section.color);
+                    mtlContent += `newmtl Wall_${i + 1}\n`;
+                    mtlContent += `Kd ${color.r.toFixed(4)} ${color.g.toFixed(4)} ${color.b.toFixed(4)}\n`;
+                    mtlContent += `Ka 0.1 0.1 0.1\nKs 0.5 0.5 0.5\nNs 100\nd 1.0\n\n`;
+                });
+
+                objContent += 'mtllib led-wall-config.mtl\n\n';
+
+                let vertexOffset = 1;
+                let texCoordOffset = 1;
+                let normalOffset = 1;
+                
+                allSectionsGeometry.forEach(({ section, vertices }, sectionIndex) => {
+                    objContent += `o Wall_${sectionIndex + 1}\n`;
+                    objContent += `usemtl Wall_${sectionIndex + 1}\n`;
+
+                    // Vertices
+                    for (let i = 0; i < vertices.length; i += 3) {
+                        objContent += `v ${vertices[i].toFixed(6)} ${vertices[i+1].toFixed(6)} ${vertices[i+2].toFixed(6)}\n`;
+                    }
+
+                    // Texture coordinates
+                    for (let row = 0; row <= section.panelRows; row++) {
+                        for (let col = 0; col <= section.panelCols; col++) {
+                            objContent += `vt ${(col / section.panelCols).toFixed(6)} ${(row / section.panelRows).toFixed(6)}\n`;
+                        }
+                    }
+
+                    objContent += `vn 0 0 1\n`;
+
+                    // Faces
+                    const vertsPerRow = section.panelCols + 1;
+                    for (let row = 0; row < section.panelRows; row++) {
+                        for (let col = 0; col < section.panelCols; col++) {
+                            const bl = vertexOffset + row * vertsPerRow + col;
+                            const br = bl + 1;
+                            const tl = vertexOffset + (row + 1) * vertsPerRow + col;
+                            const tr = tl + 1;
+                            const tbl = texCoordOffset + row * vertsPerRow + col;
+                            const tbr = tbl + 1;
+                            const ttl = texCoordOffset + (row + 1) * vertsPerRow + col;
+                            const ttr = ttl + 1;
+                            objContent += `f ${bl}/${tbl}/${normalOffset} ${tl}/${ttl}/${normalOffset} ${tr}/${ttr}/${normalOffset}\n`;
+                            objContent += `f ${bl}/${tbl}/${normalOffset} ${tr}/${ttr}/${normalOffset} ${br}/${tbr}/${normalOffset}\n`;
+                        }
+                    }
+
+                    const numVerts = (section.panelCols + 1) * (section.panelRows + 1);
+                    vertexOffset += numVerts;
+                    texCoordOffset += numVerts;
+                    normalOffset += 1;
+                    objContent += '\n';
+                });
+
+            } else {
+                // Individual panels
+                wallSections.forEach((section, i) => {
+                    const color = new THREE.Color(section.color);
+                    mtlContent += `newmtl Wall_${i + 1}\n`;
+                    mtlContent += `Kd ${color.r.toFixed(4)} ${color.g.toFixed(4)} ${color.b.toFixed(4)}\n`;
+                    mtlContent += `Ka 0.1 0.1 0.1\nKs 0.5 0.5 0.5\nNs 100\nd 1.0\n\n`;
+                });
+
+                objContent += 'mtllib led-wall-config.mtl\n\n';
+
+                let vertexOffset = 1;
+                let texCoordOffset = 1;
+                let normalOffset = 1;
+                
+                allSectionsGeometry.forEach(({ section, panelData, panelW, panelH }, sectionIndex) => {
+                    panelData.forEach((panel, panelIndex) => {
+                        const panelName = `Wall_${sectionIndex + 1}_Panel_R${panel.row + 1}_C${panel.col + 1}`;
+                        objContent += `o ${panelName}\n`;
+                        objContent += `usemtl Wall_${sectionIndex + 1}\n`;
+
+                        // Panel corners matching Three.js PlaneGeometry with rotation.y
+                        // Three.js rotation around Y: x' = x*cos(θ) + z*sin(θ), z' = -x*sin(θ) + z*cos(θ)
+                        // For PlaneGeometry vertices at z=0: x' = x*cos(θ), z' = -x*sin(θ)
+                        const hw = panelW / 2;
+                        const hh = panelH / 2;
+                        const cos = Math.cos(panel.rotY);
+                        const sin = Math.sin(panel.rotY);
+
+                        // Corners: transform local (lx, ly, 0) to world
+                        // world_x = center_x + lx * cos(rotY)
+                        // world_z = center_z - lx * sin(rotY)
+                        const corners = [
+                            { x: panel.x + (-hw) * cos, y: panel.y - hh, z: panel.z - (-hw) * sin }, // BL
+                            { x: panel.x + (hw) * cos,  y: panel.y - hh, z: panel.z - (hw) * sin },  // BR
+                            { x: panel.x + (hw) * cos,  y: panel.y + hh, z: panel.z - (hw) * sin },  // TR
+                            { x: panel.x + (-hw) * cos, y: panel.y + hh, z: panel.z - (-hw) * sin }  // TL
+                        ];
+
+                        // Vertices
+                        corners.forEach(c => {
+                            objContent += `v ${c.x.toFixed(6)} ${c.y.toFixed(6)} ${c.z.toFixed(6)}\n`;
+                        });
+
+                        // Texture coordinates
+                        objContent += `vt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\n`;
+
+                        // Normal: original (0,0,1) rotated by rotY around Y
+                        // n_x = sin(rotY), n_z = cos(rotY)
+                        const nx = Math.sin(panel.rotY);
+                        const nz = Math.cos(panel.rotY);
+                        objContent += `vn ${nx.toFixed(6)} 0 ${nz.toFixed(6)}\n`;
+
+                        // Faces (two triangles)
+                        const v = vertexOffset;
+                        const t = texCoordOffset;
+                        const n = normalOffset;
+                        objContent += `f ${v}/${t}/${n} ${v+3}/${t+3}/${n} ${v+2}/${t+2}/${n}\n`;
+                        objContent += `f ${v}/${t}/${n} ${v+2}/${t+2}/${n} ${v+1}/${t+1}/${n}\n`;
+
+                        vertexOffset += 4;
+                        texCoordOffset += 4;
+                        normalOffset += 1;
+                        objContent += '\n';
+                    });
+                });
+            }
+
+            downloadFile(objContent, 'led-wall-config.obj', 'text/plain');
+            setTimeout(() => downloadFile(mtlContent, 'led-wall-config.mtl', 'text/plain'), 100);
+        }
+
+        function generateAllSectionsGeometry(scale) {
+            const allSectionsGeometry = [];
+            let currentX = 0, currentZ = 0, currentAngle = 0;
+
+            wallSections.forEach((section, sectionIndex) => {
+                const panelW = section.panelWidth * scale;
+                const panelH = section.panelHeight * scale;
+                const curveAngleRad = (Math.abs(section.curveIntensity) * Math.PI) / 180;
+                const isFlat = section.curveIntensity === 0;
+                const dirMult = section.curveIntensity > 0 ? 1 : (section.curveIntensity < 0 ? -1 : 0);
+
+                const edgePositions = [{ x: currentX, z: currentZ }];
+                const startAngle = currentAngle;
+
+                for (let col = 0; col < section.panelCols; col++) {
+                    // Apply curve BEFORE movement (so first panel is also curved)
+                    if (!isFlat) {
+                        currentAngle += curveAngleRad;
+                    }
+
+                    const moveAngle = currentAngle * (dirMult !== 0 ? dirMult : 1);
+                    if (isFlat && startAngle === 0 && edgePositions.length === 1) {
+                        // Pure flat section starting from origin
+                        currentX += panelW;
+                    } else {
+                        currentX += panelW * Math.cos(moveAngle);
+                        currentZ += panelW * Math.sin(moveAngle);
+                    }
+                    edgePositions.push({ x: currentX, z: currentZ });
+                }
+
+                // Generate vertices
+                const vertices = [];
+                for (let row = 0; row <= section.panelRows; row++) {
+                    const y = row * panelH;
+                    for (let col = 0; col <= section.panelCols; col++) {
+                        const edge = edgePositions[col];
+                        vertices.push(edge.x, y, edge.z);
+                    }
+                }
+
+                // Generate panel data for individual panels mode
+                const panelData = [];
+                for (let row = 0; row < section.panelRows; row++) {
+                    const y = row * panelH;
+                    for (let col = 0; col < section.panelCols; col++) {
+                        const leftEdge = edgePositions[col];
+                        const rightEdge = edgePositions[col + 1];
+                        const centerX = (leftEdge.x + rightEdge.x) / 2;
+                        const centerZ = (leftEdge.z + rightEdge.z) / 2;
+                        const centerY = y + panelH / 2;
+                        const dx = rightEdge.x - leftEdge.x;
+                        const dz = rightEdge.z - leftEdge.z;
+                        const rotY = -Math.atan2(dz, dx);
+
+                        panelData.push({ x: centerX, y: centerY, z: centerZ, rotY, col, row });
+                    }
+                }
+
+                allSectionsGeometry.push({
+                    section,
+                    sectionIndex,
+                    vertices,
+                    edgePositions,
+                    panelData,
+                    panelW,
+                    panelH
+                });
+            });
+
+            return allSectionsGeometry;
+        }
+
+        function exportGLTF() {
+            const scale = 0.002;
+            const allSectionsGeometry = generateAllSectionsGeometry(scale);
+            
+            const gltf = {
+                asset: { version: "2.0", generator: "LED Wall Configurator" },
+                scene: 0,
+                scenes: [{ nodes: [] }],
+                nodes: [],
+                meshes: [],
+                accessors: [],
+                bufferViews: [],
+                buffers: [],
+                materials: []
+            };
+
+            const allBufferData = [];
+            let byteOffset = 0;
+            let accessorIndex = 0;
+            let meshIndex = 0;
+
+            function addMesh(name, vertices, indices, texCoords, normals, color) {
+                // Create material
+                const materialIndex = gltf.materials.length;
+                gltf.materials.push({
+                    name: name + "_Material",
+                    pbrMetallicRoughness: {
+                        baseColorFactor: [color.r, color.g, color.b, 1.0],
+                        metallicFactor: 0.0,
+                        roughnessFactor: 0.8
+                    },
+                    doubleSided: true
+                });
+
+                // Vertices buffer
+                const vertexBuffer = new Float32Array(vertices);
+                const vertexBytes = new Uint8Array(vertexBuffer.buffer);
+                allBufferData.push(vertexBytes);
+                
+                const vertexBufferView = gltf.bufferViews.length;
+                gltf.bufferViews.push({
+                    buffer: 0,
+                    byteOffset: byteOffset,
+                    byteLength: vertexBytes.length,
+                    target: 34962 // ARRAY_BUFFER
+                });
+                byteOffset += vertexBytes.length;
+                // Pad to 4-byte boundary
+                const vertPadding = (4 - (byteOffset % 4)) % 4;
+                if (vertPadding > 0) {
+                    allBufferData.push(new Uint8Array(vertPadding));
+                    byteOffset += vertPadding;
+                }
+
+                // Calculate bounding box
+                let minX = Infinity, minY = Infinity, minZ = Infinity;
+                let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+                for (let i = 0; i < vertices.length; i += 3) {
+                    minX = Math.min(minX, vertices[i]);
+                    maxX = Math.max(maxX, vertices[i]);
+                    minY = Math.min(minY, vertices[i + 1]);
+                    maxY = Math.max(maxY, vertices[i + 1]);
+                    minZ = Math.min(minZ, vertices[i + 2]);
+                    maxZ = Math.max(maxZ, vertices[i + 2]);
+                }
+
+                const positionAccessor = accessorIndex++;
+                gltf.accessors.push({
+                    bufferView: vertexBufferView,
+                    byteOffset: 0,
+                    componentType: 5126, // FLOAT
+                    count: vertices.length / 3,
+                    type: "VEC3",
+                    min: [minX, minY, minZ],
+                    max: [maxX, maxY, maxZ]
+                });
+
+                // Normals buffer
+                const normalBuffer = new Float32Array(normals);
+                const normalBytes = new Uint8Array(normalBuffer.buffer);
+                allBufferData.push(normalBytes);
+                
+                const normalBufferView = gltf.bufferViews.length;
+                gltf.bufferViews.push({
+                    buffer: 0,
+                    byteOffset: byteOffset,
+                    byteLength: normalBytes.length,
+                    target: 34962
+                });
+                byteOffset += normalBytes.length;
+                const normPadding = (4 - (byteOffset % 4)) % 4;
+                if (normPadding > 0) {
+                    allBufferData.push(new Uint8Array(normPadding));
+                    byteOffset += normPadding;
+                }
+
+                const normalAccessor = accessorIndex++;
+                gltf.accessors.push({
+                    bufferView: normalBufferView,
+                    byteOffset: 0,
+                    componentType: 5126,
+                    count: normals.length / 3,
+                    type: "VEC3"
+                });
+
+                // UVs buffer
+                const uvBuffer = new Float32Array(texCoords);
+                const uvBytes = new Uint8Array(uvBuffer.buffer);
+                allBufferData.push(uvBytes);
+                
+                const uvBufferView = gltf.bufferViews.length;
+                gltf.bufferViews.push({
+                    buffer: 0,
+                    byteOffset: byteOffset,
+                    byteLength: uvBytes.length,
+                    target: 34962
+                });
+                byteOffset += uvBytes.length;
+                const uvPadding = (4 - (byteOffset % 4)) % 4;
+                if (uvPadding > 0) {
+                    allBufferData.push(new Uint8Array(uvPadding));
+                    byteOffset += uvPadding;
+                }
+
+                const uvAccessor = accessorIndex++;
+                gltf.accessors.push({
+                    bufferView: uvBufferView,
+                    byteOffset: 0,
+                    componentType: 5126,
+                    count: texCoords.length / 2,
+                    type: "VEC2"
+                });
+
+                // Indices buffer
+                const indexBuffer = new Uint16Array(indices);
+                const indexBytes = new Uint8Array(indexBuffer.buffer);
+                allBufferData.push(indexBytes);
+                
+                const indexBufferView = gltf.bufferViews.length;
+                gltf.bufferViews.push({
+                    buffer: 0,
+                    byteOffset: byteOffset,
+                    byteLength: indexBytes.length,
+                    target: 34963 // ELEMENT_ARRAY_BUFFER
+                });
+                byteOffset += indexBytes.length;
+                // Pad to 4-byte boundary
+                const idxPadding = (4 - (byteOffset % 4)) % 4;
+                if (idxPadding > 0) {
+                    allBufferData.push(new Uint8Array(idxPadding));
+                    byteOffset += idxPadding;
+                }
+
+                const indexAccessor = accessorIndex++;
+                gltf.accessors.push({
+                    bufferView: indexBufferView,
+                    byteOffset: 0,
+                    componentType: 5123, // UNSIGNED_SHORT
+                    count: indices.length,
+                    type: "SCALAR"
+                });
+
+                // Create mesh
+                const currentMeshIndex = meshIndex++;
+                gltf.meshes.push({
+                    name: name,
+                    primitives: [{
+                        attributes: { 
+                            POSITION: positionAccessor,
+                            NORMAL: normalAccessor,
+                            TEXCOORD_0: uvAccessor
+                        },
+                        indices: indexAccessor,
+                        material: materialIndex
+                    }]
+                });
+
+                // Create node
+                const nodeIndex = gltf.nodes.length;
+                gltf.nodes.push({
+                    name: name,
+                    mesh: currentMeshIndex
+                });
+                gltf.scenes[0].nodes.push(nodeIndex);
+            }
+
+            if (meshMode === 'combined') {
+                // Single combined mesh
+                const allVertices = [];
+                const allIndices = [];
+                const allTexCoords = [];
+                const allNormals = [];
+                let indexOffset = 0;
+
+                allSectionsGeometry.forEach(({ section, vertices }) => {
+                    for (let i = 0; i < vertices.length; i++) {
+                        allVertices.push(vertices[i]);
+                    }
+                    // Generate UVs and normals per vertex
+                    for (let row = 0; row <= section.panelRows; row++) {
+                        for (let col = 0; col <= section.panelCols; col++) {
+                            allTexCoords.push(col / section.panelCols, row / section.panelRows);
+                            allNormals.push(0, 0, 1);
+                        }
+                    }
+                    const vertsPerRow = section.panelCols + 1;
+                    for (let row = 0; row < section.panelRows; row++) {
+                        for (let col = 0; col < section.panelCols; col++) {
+                            const bl = indexOffset + row * vertsPerRow + col;
+                            const br = bl + 1;
+                            const tl = indexOffset + (row + 1) * vertsPerRow + col;
+                            const tr = tl + 1;
+                            allIndices.push(bl, tl, tr, bl, tr, br);
+                        }
+                    }
+                    indexOffset += (section.panelCols + 1) * (section.panelRows + 1);
+                });
+
+                const color = new THREE.Color(wallSections[0].color);
+                addMesh('LED_Wall_Combined', allVertices, allIndices, allTexCoords, allNormals, color);
+
+            } else if (meshMode === 'section') {
+                // Individual section meshes
+                allSectionsGeometry.forEach(({ section, vertices }, sectionIndex) => {
+                    const indices = [];
+                    const texCoords = [];
+                    const normals = [];
+                    
+                    // Generate UVs and normals per vertex
+                    for (let row = 0; row <= section.panelRows; row++) {
+                        for (let col = 0; col <= section.panelCols; col++) {
+                            texCoords.push(col / section.panelCols, row / section.panelRows);
+                            normals.push(0, 0, 1);
+                        }
+                    }
+                    
+                    const vertsPerRow = section.panelCols + 1;
+                    for (let row = 0; row < section.panelRows; row++) {
+                        for (let col = 0; col < section.panelCols; col++) {
+                            const bl = row * vertsPerRow + col;
+                            const br = bl + 1;
+                            const tl = (row + 1) * vertsPerRow + col;
+                            const tr = tl + 1;
+                            indices.push(bl, tl, tr, bl, tr, br);
+                        }
+                    }
+                    const color = new THREE.Color(section.color);
+                    addMesh(`Wall_${sectionIndex + 1}`, vertices, indices, texCoords, normals, color);
+                });
+
+            } else {
+                // Individual panels
+                allSectionsGeometry.forEach(({ section, panelData, panelW, panelH }, sectionIndex) => {
+                    const color = new THREE.Color(section.color);
+
+                    panelData.forEach((panel) => {
+                        const hw = panelW / 2;
+                        const hh = panelH / 2;
+                        const cos = Math.cos(-panel.rotY); // Negate rotation for correct direction
+                        const sin = Math.sin(-panel.rotY);
+
+                        // Corners with corrected rotation
+                        const vertices = [
+                            panel.x + (-hw * cos), panel.y - hh, panel.z + (-hw * sin), // BL
+                            panel.x + (hw * cos),  panel.y - hh, panel.z + (hw * sin),  // BR
+                            panel.x + (hw * cos),  panel.y + hh, panel.z + (hw * sin),  // TR
+                            panel.x + (-hw * cos), panel.y + hh, panel.z + (-hw * sin)  // TL
+                        ];
+
+                        const indices = [0, 3, 2, 0, 2, 1];
+                        const texCoords = [0, 0, 1, 0, 1, 1, 0, 1];
+                        
+                        // Normal perpendicular to panel face
+                        const nx = Math.sin(-panel.rotY);
+                        const nz = Math.cos(-panel.rotY);
+                        const normals = [nx, 0, nz, nx, 0, nz, nx, 0, nz, nx, 0, nz];
+                        
+                        const name = `Wall_${sectionIndex + 1}_Panel_R${panel.row + 1}_C${panel.col + 1}`;
+                        addMesh(name, vertices, indices, texCoords, normals, color);
+                    });
+                });
+            }
+
+            // Combine all buffer data
+            const totalLength = allBufferData.reduce((sum, arr) => sum + arr.length, 0);
+            const combinedBuffer = new Uint8Array(totalLength);
+            let offset = 0;
+            for (const arr of allBufferData) {
+                combinedBuffer.set(arr, offset);
+                offset += arr.length;
+            }
+
+            // Convert to base64 (handle large buffers)
+            let base64 = '';
+            const chunkSize = 32768;
+            for (let i = 0; i < combinedBuffer.length; i += chunkSize) {
+                const chunk = combinedBuffer.subarray(i, Math.min(i + chunkSize, combinedBuffer.length));
+                base64 += String.fromCharCode.apply(null, chunk);
+            }
+            base64 = btoa(base64);
+            gltf.buffers.push({
+                byteLength: combinedBuffer.length,
+                uri: "data:application/octet-stream;base64," + base64
+            });
+
+            downloadFile(JSON.stringify(gltf, null, 2), 'led-wall-config.gltf', 'application/json');
+        }
+
+        function downloadFile(content, filename, mimeType) {
+            const blob = new Blob([content], { type: mimeType });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);
+        }
+
+        init();
+        setupUI();
+        setView('reset');
+    </script>
+</body>
+</html>
