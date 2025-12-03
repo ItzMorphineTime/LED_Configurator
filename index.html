@@ -792,34 +792,34 @@
 
         <main class="viewport">
             <canvas id="three-canvas"></canvas>
+            <div class="viewport-controls">
+                <button class="view-btn" id="view-front" title="Front View">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    </svg>
+                </button>
+                <button class="view-btn" id="view-side" title="Side View">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 3v18M3 12h18"/>
+                    </svg>
+                </button>
+                <button class="view-btn" id="view-top" title="Top View">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="9"/>
+                        <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                </button>
+                <button class="view-btn" id="view-reset" title="Reset View">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                        <path d="M3 3v5h5"/>
+                    </svg>
+                </button>
+            </div>
             <div class="viewport-overlay">
                 <div class="grid-lines"></div>
                 <div class="viewport-info">
-                    <div class="info-badge">Drag to rotate • Scroll to zoom</div>
-                </div>
-                <div class="viewport-controls">
-                    <button class="view-btn" id="view-front" title="Front View">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="3" y="3" width="18" height="18" rx="2"/>
-                        </svg>
-                    </button>
-                    <button class="view-btn" id="view-side" title="Side View">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M12 3v18M3 12h18"/>
-                        </svg>
-                    </button>
-                    <button class="view-btn" id="view-top" title="Top View">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="9"/>
-                            <circle cx="12" cy="12" r="3"/>
-                        </svg>
-                    </button>
-                    <button class="view-btn" id="view-reset" title="Reset View">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-                            <path d="M3 3v5h5"/>
-                        </svg>
-                    </button>
+                    <div class="info-badge">Drag to rotate • Scroll to zoom, WASD to move, EQ to go up and down</div>
                 </div>
             </div>
         </main>
@@ -1389,6 +1389,7 @@
         let isDragging = false, previousMousePosition = { x: 0, y: 0 };
         let cameraAngle = { theta: 0, phi: Math.PI / 2 }, cameraDistance = 8;
         let targetPosition = new THREE.Vector3(0, 0, 0);
+        let sceneOffset = new THREE.Vector3(0, 0, 0);
 
         function updateTargetPosition() {
             const scale = 0.002;
@@ -1397,7 +1398,7 @@
                 totalWidth += s.panelCols * s.panelWidth * scale;
                 maxHeight = Math.max(maxHeight, s.panelRows * s.panelHeight * scale);
             });
-            targetPosition.set(totalWidth / 2, maxHeight / 2, 0);
+            targetPosition.set(totalWidth / 2, maxHeight / 2, 0).add(sceneOffset);
         }
 
         function setupControls() {
@@ -1413,6 +1414,43 @@
             canvas.addEventListener('mouseup', () => isDragging = false);
             canvas.addEventListener('mouseleave', () => isDragging = false);
             canvas.addEventListener('wheel', (e) => { e.preventDefault(); cameraDistance = Math.max(2, Math.min(30, cameraDistance + e.deltaY * 0.01)); updateCameraPosition(); });
+            const moveSpeed = 0.5; // tweak to taste
+
+            window.addEventListener('keydown', (e) => {
+                const key = e.key.toLowerCase();
+                if (!['w', 'a', 's', 'd', 'q', 'e'].includes(key)) return;
+
+                // current local basis
+                const forward = new THREE.Vector3()
+                    .subVectors(targetPosition, camera.position)  // from camera to target
+                    .normalize();
+
+                const worldUp = new THREE.Vector3(0, 1, 0);
+                const right = new THREE.Vector3()
+                    .crossVectors(forward, worldUp)
+                    .normalize();
+
+                const up = worldUp.clone();
+
+                const delta = new THREE.Vector3();
+
+                if (key === 'w') delta.add(forward);
+                if (key === 's') delta.sub(forward);
+                if (key === 'd') delta.add(right);
+                if (key === 'a') delta.sub(right);
+                if (key === 'q') delta.sub(up);
+                if (key === 'e') delta.add(up);
+
+                if (delta.lengthSq() === 0) return;
+
+                delta.normalize().multiplyScalar(moveSpeed);
+
+                // move the *offset*, not the raw target
+                sceneOffset.add(delta);
+
+                // recompute target & camera
+                updateCameraPosition();
+            });
         }
 
         function updateCameraPosition() {
@@ -1427,7 +1465,7 @@
             if (view === 'front') cameraAngle = { theta: 0, phi: Math.PI / 2 };
             else if (view === 'side') cameraAngle = { theta: Math.PI / 2, phi: Math.PI / 2 };
             else if (view === 'top') cameraAngle = { theta: 0, phi: 0.1 };
-            else { cameraAngle = { theta: 0.3, phi: Math.PI / 2.5 }; cameraDistance = 8; }
+            else { cameraAngle = { theta: 0.3, phi: Math.PI / 2.5 }; cameraDistance = 8; sceneOffset = new THREE.Vector3(0, 0, 0); targetPosition = new THREE.Vector3(0, 0, 0);}
             updateCameraPosition();
         }
 
