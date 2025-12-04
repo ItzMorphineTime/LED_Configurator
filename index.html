@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta author="Joe Loe">
     <title>LED Wall Configurator</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -771,6 +772,175 @@
                 </div>
             </div>
 
+            <div class="global-section">
+                <div class="global-section-title">Camera Frustum Preview</div>
+                <div class="toggle-container">
+                    <span class="toggle-label">Enable Camera Preview</span>
+                    <div class="toggle" id="toggle-camera-preview"></div>
+                </div>
+                <div id="camera-preview-options" style="display: none;">
+                    <div class="input-field" style="margin-top: 10px;">
+                        <label>Filmback / Sensor</label>
+                        <select id="camera-filmback" style="width: 100%; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 6px; border-radius: 4px; font-size: 12px;">
+                            <option value="full-frame">Full Frame (36×24mm)</option>
+                            <option value="super35">Super 35 (24.89×18.66mm)</option>
+                            <option value="arri-lf">ARRI LF (36.70×25.54mm)</option>
+                            <option value="arri-alexa">ARRI Alexa (28.17×18.13mm)</option>
+                            <option value="red-v-raptor">RED V-RAPTOR (40.96×21.60mm)</option>
+                            <option value="red-komodo">RED KOMODO (27.03×14.26mm)</option>
+                            <option value="sony-venice">Sony VENICE (36×24mm)</option>
+                            <option value="bmpcc-6k">BMPCC 6K (23.10×12.99mm)</option>
+                            <option value="aps-c">APS-C (23.6×15.6mm)</option>
+                            <option value="mft">Micro 4/3 (17.3×13mm)</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                    </div>
+                    <div id="custom-filmback" style="display: none;">
+                        <div class="section-row" style="margin-top: 10px; margin-bottom: 0;">
+                            <div class="input-field">
+                                <label>Sensor Width (mm)</label>
+                                <input type="number" id="filmback-width" value="36" min="1" max="100" step="0.01">
+                            </div>
+                            <div class="input-field">
+                                <label>Sensor Height (mm)</label>
+                                <input type="number" id="filmback-height" value="24" min="1" max="100" step="0.01">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="input-field" style="margin-top: 10px;">
+                        <label>Focal Length (mm)</label>
+                        <input type="number" id="camera-focal-length" value="35" min="8" max="800" step="1">
+                    </div>
+                    <div class="camera-info" style="margin-top: 10px; padding: 10px; background: var(--bg-secondary); border-radius: 6px; font-size: 11px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="color: var(--text-secondary);">H-FOV:</span>
+                            <span id="camera-hfov" style="color: var(--accent-cyan);">54.4°</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="color: var(--text-secondary);">V-FOV:</span>
+                            <span id="camera-vfov" style="color: var(--accent-cyan);">37.8°</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-secondary);">Aspect:</span>
+                            <span id="camera-aspect" style="color: var(--accent-cyan);">1.50:1</span>
+                        </div>
+                    </div>
+                    <div class="subsection-title" style="margin-top: 14px; margin-bottom: 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-secondary);">Camera Position</div>
+                    <div class="section-row" style="margin-bottom: 8px;">
+                        <div class="input-field">
+                            <label>X Position (m)</label>
+                            <input type="number" id="camera-pos-x" value="0" step="0.1">
+                        </div>
+                        <div class="input-field">
+                            <label>Y Height (m)</label>
+                            <input type="number" id="camera-pos-y" value="1.5" min="0" step="0.1">
+                        </div>
+                    </div>
+                    <div class="input-field" style="margin-bottom: 10px;">
+                        <label>Z Distance from Wall (m)</label>
+                        <input type="number" id="camera-pos-z" value="5" min="0.1" step="0.1">
+                    </div>
+                    <div class="subsection-title" style="margin-top: 6px; margin-bottom: 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-secondary);">Camera Rotation</div>
+                    <div class="section-row" style="margin-bottom: 8px;">
+                        <div class="input-field">
+                            <label>Tilt (°)</label>
+                            <input type="number" id="camera-rot-x" value="0" min="-90" max="90" step="0.5">
+                        </div>
+                        <div class="input-field">
+                            <label>Pan (°)</label>
+                            <input type="number" id="camera-rot-y" value="0" min="-180" max="360" step="0.5">
+                        </div>
+                    </div>
+                    <div class="section-row single" style="margin-bottom: 10px;">
+                        <div class="input-field">
+                            <label>Roll (°)</label>
+                            <input type="number" id="camera-rot-z" value="0" min="-180" max="180" step="0.5">
+                        </div>
+                    </div>
+                    <div class="frustum-status" style="margin-top: 10px; padding: 10px; background: var(--bg-secondary); border-radius: 6px; font-size: 11px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="color: var(--text-secondary);">Frame Width at Wall:</span>
+                            <span id="frustum-width" style="color: var(--accent-cyan);">--</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="color: var(--text-secondary);">Frame Height at Wall:</span>
+                            <span id="frustum-height" style="color: var(--accent-cyan);">--</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="color: var(--text-secondary);">Status:</span>
+                            <span id="frustum-status-text" style="color: #ffaa00;">--</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-secondary);">Max Distance:</span>
+                            <span id="safe-distance" style="color: #00ff66;">--</span>
+                        </div>
+                    </div>
+                    <div class="toggle-container" style="margin-top: 12px;">
+                        <span class="toggle-label">Show Safe Distance 3D</span>
+                        <div class="toggle" id="toggle-safe-distance"></div>
+                    </div>
+                    <button class="export-btn secondary" id="reset-camera" style="margin-top: 10px; width: 100%;">Reset Camera Position</button>
+                    <button class="export-btn secondary" id="export-safe-distance" style="margin-top: 6px; width: 100%; display: none;">Export Safe Distance OBJ</button>
+                </div>
+            </div>
+
+            <div class="global-section">
+                <div class="global-section-title">Scene Props</div>
+                <div class="toggle-container">
+                    <span class="toggle-label">Show Person</span>
+                    <div class="toggle" id="toggle-person"></div>
+                </div>
+                <div id="person-options" style="display: none; margin-top: 10px;">
+                    <div class="section-row" style="margin-bottom: 8px;">
+                        <div class="input-field">
+                            <label>X Position (m)</label>
+                            <input type="number" id="person-pos-x" value="2" step="0.1">
+                        </div>
+                        <div class="input-field">
+                            <label>Z Position (m)</label>
+                            <input type="number" id="person-pos-z" value="2" step="0.1">
+                        </div>
+                    </div>
+                    <div class="section-row" style="margin-bottom: 8px;">
+                        <div class="input-field">
+                            <label>Rotation (°)</label>
+                            <input type="number" id="person-rot-y" value="0" min="-180" max="180" step="5">
+                        </div>
+                        <div class="input-field">
+                            <label>Scale</label>
+                            <input type="number" id="person-scale" value="1" min="0.5" max="2" step="0.1">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="toggle-container" style="margin-top: 12px;">
+                    <span class="toggle-label">Show Car</span>
+                    <div class="toggle" id="toggle-car"></div>
+                </div>
+                <div id="car-options" style="display: none; margin-top: 10px;">
+                    <div class="section-row" style="margin-bottom: 8px;">
+                        <div class="input-field">
+                            <label>X Position (m)</label>
+                            <input type="number" id="car-pos-x" value="4" step="0.1">
+                        </div>
+                        <div class="input-field">
+                            <label>Z Position (m)</label>
+                            <input type="number" id="car-pos-z" value="3" step="0.1">
+                        </div>
+                    </div>
+                    <div class="section-row" style="margin-bottom: 8px;">
+                        <div class="input-field">
+                            <label>Rotation (°)</label>
+                            <input type="number" id="car-rot-y" value="0" min="-180" max="180" step="5">
+                        </div>
+                        <div class="input-field">
+                            <label>Scale</label>
+                            <input type="number" id="car-scale" value="1" min="0.5" max="2" step="0.1">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="export-section">
                 <div class="export-row">
                     <button class="export-btn" id="export-zip">Export All (ZIP)</button>
@@ -792,6 +962,22 @@
 
         <main class="viewport">
             <canvas id="three-canvas"></canvas>
+            <div id="camera-preview-window" style="display: none; position: absolute; bottom: 20px; right: 20px; width: 320px; height: 180px; background: #000; border: 2px solid var(--accent-cyan); border-radius: 8px; overflow: hidden; box-shadow: 0 4px 20px rgba(0, 240, 255, 0.3);">
+                <div id="camera-preview-resize" style="position: absolute; top: 0; left: 0; width: 20px; height: 20px; cursor: nw-resize; z-index: 20; display: flex; align-items: center; justify-content: center;">
+                    <svg width="10" height="10" viewBox="0 0 10 10" style="opacity: 0.5;">
+                        <path d="M0 10 L10 0 M0 6 L6 0 M0 2 L2 0" stroke="var(--accent-cyan)" stroke-width="1.5" fill="none"/>
+                    </svg>
+                </div>
+                <div style="position: absolute; top: 0; left: 0; right: 0; padding: 4px 8px; padding-left: 24px; background: rgba(0, 0, 0, 0.7); font-size: 10px; color: var(--accent-cyan); display: flex; justify-content: space-between; align-items: center; z-index: 10;">
+                    <span>📷 Camera View</span>
+                    <span id="camera-preview-info">35mm • Full Frame</span>
+                </div>
+                <canvas id="camera-preview-canvas" style="width: 100%; height: 100%;"></canvas>
+                <div style="position: absolute; bottom: 0; left: 0; right: 0; padding: 4px 8px; background: rgba(0, 0, 0, 0.7); font-size: 9px; color: var(--text-secondary); display: flex; justify-content: space-between;">
+                    <span id="camera-preview-fov">H: 54.4° V: 37.8°</span>
+                    <span id="camera-preview-res">1920×1080</span>
+                </div>
+            </div>
             <div class="viewport-controls">
                 <button class="view-btn" id="view-front" title="Front View">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -815,11 +1001,16 @@
                         <path d="M3 3v5h5"/>
                     </svg>
                 </button>
+                <button class="view-btn active" id="toggle-grid" title="Toggle Grid">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18"/>
+                    </svg>
+                </button>
             </div>
             <div class="viewport-overlay">
                 <div class="grid-lines"></div>
                 <div class="viewport-info">
-                    <div class="info-badge">Drag to rotate • Scroll to zoom, WASD to move, EQ to go up and down</div>
+                    <div class="info-badge">Drag to rotate • Scroll to zoom • WASD to move • QE up/down</div>
                 </div>
             </div>
         </main>
@@ -834,10 +1025,77 @@
         let meshMode = 'combined';
         let animationTime = 0;
         
+        // Grid
+        let gridHelper = null;
+        let showGrid = true;
+        
+        // Safe distance visualization
+        let safeDistanceEnabled = false;
+        let safeDistanceMesh = null;
+        
         // Panel ID settings
         let panelIdsEnabled = false;
         let panelBorderThickness = 8;
         let panelFontSize = 0; // 0 = auto
+
+        // Camera Frustum Preview settings
+        let cameraPreviewEnabled = false;
+        let previewCameraGroup = null;
+        let frustumHelper = null;
+        let frustumOutline = null;
+        let wallIntersectionPlane = null;
+        
+        // Filmback presets (width x height in mm)
+        const filmbackPresets = {
+            'full-frame': { name: 'Full Frame (36×24mm)', width: 36, height: 24 },
+            'super35': { name: 'Super 35 (24.89×18.66mm)', width: 24.89, height: 18.66 },
+            'arri-lf': { name: 'ARRI LF (36.70×25.54mm)', width: 36.70, height: 25.54 },
+            'arri-alexa': { name: 'ARRI Alexa (28.17×18.13mm)', width: 28.17, height: 18.13 },
+            'red-v-raptor': { name: 'RED V-RAPTOR (40.96×21.60mm)', width: 40.96, height: 21.60 },
+            'red-komodo': { name: 'RED KOMODO (27.03×14.26mm)', width: 27.03, height: 14.26 },
+            'sony-venice': { name: 'Sony VENICE (36×24mm)', width: 36, height: 24 },
+            'bmpcc-6k': { name: 'BMPCC 6K (23.10×12.99mm)', width: 23.10, height: 12.99 },
+            'aps-c': { name: 'APS-C (23.6×15.6mm)', width: 23.6, height: 15.6 },
+            'mft': { name: 'Micro 4/3 (17.3×13mm)', width: 17.3, height: 13 },
+            'custom': { name: 'Custom', width: 36, height: 24 }
+        };
+        
+        let cameraSettings = {
+            filmback: 'full-frame',
+            filmbackWidth: 36,
+            filmbackHeight: 24,
+            focalLength: 35,
+            posX: 0,
+            posY: 1.5, // meters from ground
+            posZ: 5,   // meters from wall
+            rotX: 0,   // tilt (degrees)
+            rotY: 0,   // pan (degrees)
+            rotZ: 0    // roll (degrees)
+        };
+
+        // Scene Props
+        let personMesh = null;
+        let carMesh = null;
+        let showPerson = false;
+        let showCar = false;
+        
+        let personSettings = {
+            posX: 2,
+            posZ: 2,
+            rotY: 0,
+            scale: 1
+        };
+        
+        let carSettings = {
+            posX: 4,
+            posZ: 3,
+            rotY: 0,
+            scale: 1
+        };
+
+        // Preview Camera (for camera view window)
+        let previewCamera = null;
+        let previewRenderer = null;
 
         const sectionColors = [
             '#00f0ff', '#ff00aa', '#00ff66', '#ff6b35',
@@ -886,9 +1144,9 @@
             pointLight.position.set(5, 5, 10);
             scene.add(pointLight);
 
-            const gridHelper = new THREE.GridHelper(20, 20, 0x1a1a24, 0x1a1a24);
-            gridHelper.rotation.x = Math.PI / 2;
-            gridHelper.position.z = -0.1;
+            // Floor grid - larger area, on Y=0 plane
+            gridHelper = new THREE.GridHelper(50, 50, 0x2a2a3a, 0x1a1a24);
+            gridHelper.position.set(12.5, 0, 12.5); // Offset to cover area in front of wall
             scene.add(gridHelper);
             scene.add(new THREE.AxesHelper(0.5));
 
@@ -920,7 +1178,7 @@
             ledWallGroup = new THREE.Group();
             frameGroup = new THREE.Group();
 
-            const scale = 0.002;
+            const scale = 0.001;
             let allSectionsData = [];
             
             // Track cumulative position and angle across sections
@@ -1016,6 +1274,7 @@
 
             updateStats();
             updateCameraPosition();
+            if (cameraPreviewEnabled) updateCameraFrustum();
         }
 
         function createCombinedMesh(allSectionsData) {
@@ -1386,19 +1645,851 @@
             document.getElementById('total-arc').textContent = `${totalArc.toFixed(1)}°`;
         }
 
+        // Camera Frustum Preview Functions
+        function createCameraPreview() {
+            if (previewCameraGroup) {
+                scene.remove(previewCameraGroup);
+                previewCameraGroup.traverse((child) => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) child.material.dispose();
+                });
+            }
+
+            previewCameraGroup = new THREE.Group();
+
+            // Create camera body (simple box representation) - positioned behind the camera view point
+            const bodyGeom = new THREE.BoxGeometry(0.15, 0.1, 0.2);
+            const bodyMat = new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.8 });
+            const cameraBody = new THREE.Mesh(bodyGeom, bodyMat);
+            cameraBody.position.z = 0.15; // Move body behind the camera origin so it doesn't block view
+            previewCameraGroup.add(cameraBody);
+
+            // Create frustum wireframe
+            updateFrustumGeometry();
+
+            scene.add(previewCameraGroup);
+            updateCameraPreviewTransform();
+        }
+
+        function updateFrustumGeometry() {
+            // Remove old frustum
+            if (frustumHelper) {
+                previewCameraGroup.remove(frustumHelper);
+                frustumHelper.geometry.dispose();
+                frustumHelper.material.dispose();
+            }
+            if (frustumOutline) {
+                previewCameraGroup.remove(frustumOutline);
+                frustumOutline.geometry.dispose();
+                frustumOutline.material.dispose();
+            }
+            if (wallIntersectionPlane) {
+                previewCameraGroup.remove(wallIntersectionPlane);
+                wallIntersectionPlane.geometry.dispose();
+                wallIntersectionPlane.material.dispose();
+            }
+
+            // Calculate FOV from filmback and focal length
+            const hFov = 2 * Math.atan(cameraSettings.filmbackWidth / (2 * cameraSettings.focalLength));
+            const vFov = 2 * Math.atan(cameraSettings.filmbackHeight / (2 * cameraSettings.focalLength));
+            
+            // Update UI with FOV values
+            document.getElementById('camera-hfov').textContent = `${(hFov * 180 / Math.PI).toFixed(1)}°`;
+            document.getElementById('camera-vfov').textContent = `${(vFov * 180 / Math.PI).toFixed(1)}°`;
+            document.getElementById('camera-aspect').textContent = `${(cameraSettings.filmbackWidth / cameraSettings.filmbackHeight).toFixed(2)}:1`;
+
+            // Frustum depth (how far to draw it)
+            const frustumDepth = 15; // meters
+            const nearPlane = 0.2;
+
+            // Calculate frustum corners at near and far planes
+            const nearHalfW = Math.tan(hFov / 2) * nearPlane;
+            const nearHalfH = Math.tan(vFov / 2) * nearPlane;
+            const farHalfW = Math.tan(hFov / 2) * frustumDepth;
+            const farHalfH = Math.tan(vFov / 2) * frustumDepth;
+
+            // Create frustum lines
+            const frustumVertices = [];
+            
+            // Near plane corners (looking down -Z)
+            const nearTL = [-nearHalfW, nearHalfH, -nearPlane];
+            const nearTR = [nearHalfW, nearHalfH, -nearPlane];
+            const nearBL = [-nearHalfW, -nearHalfH, -nearPlane];
+            const nearBR = [nearHalfW, -nearHalfH, -nearPlane];
+            
+            // Far plane corners
+            const farTL = [-farHalfW, farHalfH, -frustumDepth];
+            const farTR = [farHalfW, farHalfH, -frustumDepth];
+            const farBL = [-farHalfW, -farHalfH, -frustumDepth];
+            const farBR = [farHalfW, -farHalfH, -frustumDepth];
+
+            // Near plane rectangle
+            frustumVertices.push(...nearTL, ...nearTR, ...nearTR, ...nearBR, ...nearBR, ...nearBL, ...nearBL, ...nearTL);
+            // Far plane rectangle
+            frustumVertices.push(...farTL, ...farTR, ...farTR, ...farBR, ...farBR, ...farBL, ...farBL, ...farTL);
+            // Connecting lines
+            frustumVertices.push(...nearTL, ...farTL, ...nearTR, ...farTR, ...nearBL, ...farBL, ...nearBR, ...farBR);
+
+            const frustumGeom = new THREE.BufferGeometry();
+            frustumGeom.setAttribute('position', new THREE.Float32BufferAttribute(frustumVertices, 3));
+            frustumHelper = new THREE.LineSegments(frustumGeom, new THREE.LineBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.7 }));
+            previewCameraGroup.add(frustumHelper);
+
+            // Create semi-transparent frustum fill
+            const fillGeom = new THREE.BufferGeometry();
+            const fillVertices = new Float32Array([
+                // Near plane
+                ...nearTL, ...nearTR, ...nearBR, ...nearTL, ...nearBR, ...nearBL,
+                // Left side
+                ...nearTL, ...nearBL, ...farBL, ...nearTL, ...farBL, ...farTL,
+                // Right side
+                ...nearTR, ...farTR, ...farBR, ...nearTR, ...farBR, ...nearBR,
+                // Top side
+                ...nearTL, ...farTL, ...farTR, ...nearTL, ...farTR, ...nearTR,
+                // Bottom side
+                ...nearBL, ...nearBR, ...farBR, ...nearBL, ...farBR, ...farBL
+            ]);
+            fillGeom.setAttribute('position', new THREE.BufferAttribute(fillVertices, 3));
+            frustumOutline = new THREE.Mesh(fillGeom, new THREE.MeshBasicMaterial({ 
+                color: 0xffaa00, transparent: true, opacity: 0.08, side: THREE.DoubleSide, depthWrite: false 
+            }));
+            previewCameraGroup.add(frustumOutline);
+        }
+
+        function updateCameraPreviewTransform() {
+            if (!previewCameraGroup) return;
+
+            // Position camera (Z is distance from wall, so we position it at +Z)
+            previewCameraGroup.position.set(
+                cameraSettings.posX,
+                cameraSettings.posY,
+                cameraSettings.posZ
+            );
+
+            // Apply rotations using YXZ order to avoid gimbal lock
+            // Pan (Y) first, then Tilt (X), then Roll (Z)
+            const tilt = cameraSettings.rotX * Math.PI / 180;
+            const pan = cameraSettings.rotY * Math.PI / 180;
+            const roll = cameraSettings.rotZ * Math.PI / 180;
+            
+            previewCameraGroup.rotation.order = 'YXZ';
+            previewCameraGroup.rotation.set(tilt, pan, roll);
+        }
+
+        function updateCameraFrustum() {
+            if (!cameraPreviewEnabled) return;
+            
+            if (!previewCameraGroup) {
+                createCameraPreview();
+            }
+
+            updateFrustumGeometry();
+            updateCameraPreviewTransform();
+            calculateFrustumIntersection();
+            updatePreviewCamera();
+            updateSafeDistance();
+        }
+
+        function calculateFrustumIntersection() {
+            // Calculate where frustum intersects the wall plane (Z = 0)
+            const hFov = 2 * Math.atan(cameraSettings.filmbackWidth / (2 * cameraSettings.focalLength));
+            const vFov = 2 * Math.atan(cameraSettings.filmbackHeight / (2 * cameraSettings.focalLength));
+            
+            // Distance from camera to wall plane
+            const distToWall = cameraSettings.posZ;
+            
+            // Frame size at wall distance (simplified, assumes camera pointing at wall)
+            const frameWidth = 2 * Math.tan(hFov / 2) * distToWall;
+            const frameHeight = 2 * Math.tan(vFov / 2) * distToWall;
+            
+            // Update UI
+            document.getElementById('frustum-width').textContent = `${frameWidth.toFixed(2)}m`;
+            document.getElementById('frustum-height').textContent = `${frameHeight.toFixed(2)}m`;
+
+            // Calculate wall dimensions
+            const scale = 0.001;
+            let totalWallWidth = 0, maxWallHeight = 0;
+            wallSections.forEach(s => {
+                totalWallWidth += s.panelCols * s.panelWidth * scale;
+                maxWallHeight = Math.max(maxWallHeight, s.panelRows * s.panelHeight * scale);
+            });
+
+            // Check if frame fits within wall
+            const fitsWidth = frameWidth <= totalWallWidth;
+            const fitsHeight = frameHeight <= maxWallHeight;
+            
+            // Calculate center offset
+            const camCenterX = cameraSettings.posX;
+            const camCenterY = cameraSettings.posY;
+            const wallCenterX = totalWallWidth / 2;
+            const wallCenterY = maxWallHeight / 2;
+            
+            // Check if frame is within wall bounds considering position
+            const frameLeft = camCenterX - frameWidth / 2;
+            const frameRight = camCenterX + frameWidth / 2;
+            const frameBottom = camCenterY - frameHeight / 2;
+            const frameTop = camCenterY + frameHeight / 2;
+            
+            const withinBounds = frameLeft >= 0 && frameRight <= totalWallWidth && 
+                                frameBottom >= 0 && frameTop <= maxWallHeight;
+
+            // Update status
+            const statusEl = document.getElementById('frustum-status-text');
+            if (withinBounds) {
+                statusEl.textContent = 'Within bounds';
+                statusEl.style.color = '#00ff66';
+            } else if (fitsWidth && fitsHeight) {
+                statusEl.textContent = 'Off-center';
+                statusEl.style.color = '#ffaa00';
+            } else {
+                statusEl.textContent = 'Exceeds wall';
+                statusEl.style.color = '#ff4444';
+            }
+
+            // Calculate max safe distance (beyond this, frame exceeds wall)
+            // Use MIN because we're limited by whichever dimension we'd exceed first
+            const maxSafeDistWidth = totalWallWidth / (2 * Math.tan(hFov / 2));
+            const maxSafeDistHeight = maxWallHeight / (2 * Math.tan(vFov / 2));
+            const safeDistance = Math.min(maxSafeDistWidth, maxSafeDistHeight);
+            
+            document.getElementById('safe-distance').textContent = `≤ ${safeDistance.toFixed(2)}m`;
+        }
+
+        function removeCameraPreview() {
+            if (previewCameraGroup) {
+                scene.remove(previewCameraGroup);
+                previewCameraGroup.traverse((child) => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) child.material.dispose();
+                });
+                previewCameraGroup = null;
+                frustumHelper = null;
+                frustumOutline = null;
+                wallIntersectionPlane = null;
+            }
+        }
+
+        function resetCameraPosition() {
+            // Calculate wall center
+            const scale = 0.001;
+            let totalWallWidth = 0, maxWallHeight = 0;
+            wallSections.forEach(s => {
+                totalWallWidth += s.panelCols * s.panelWidth * scale;
+                maxWallHeight = Math.max(maxWallHeight, s.panelRows * s.panelHeight * scale);
+            });
+
+            cameraSettings.posX = totalWallWidth / 2;
+            cameraSettings.posY = maxWallHeight / 2;
+            cameraSettings.posZ = 5;
+            cameraSettings.rotX = 0;
+            cameraSettings.rotY = 0;
+            cameraSettings.rotZ = 0;
+
+            // Update UI
+            document.getElementById('camera-pos-x').value = cameraSettings.posX.toFixed(1);
+            document.getElementById('camera-pos-y').value = cameraSettings.posY.toFixed(1);
+            document.getElementById('camera-pos-z').value = cameraSettings.posZ;
+            document.getElementById('camera-rot-x').value = cameraSettings.rotX;
+            document.getElementById('camera-rot-y').value = cameraSettings.rotY;
+            document.getElementById('camera-rot-z').value = cameraSettings.rotZ;
+
+            updateCameraFrustum();
+        }
+
+        // Grid toggle
+        function toggleGrid() {
+            showGrid = !showGrid;
+            if (gridHelper) {
+                gridHelper.visible = showGrid;
+            }
+        }
+
+        // Safe Distance 3D Visualization
+        function createSafeDistanceMesh() {
+            removeSafeDistanceMesh();
+            
+            if (!cameraPreviewEnabled) return;
+
+            const scale = 0.001;
+            const hFov = 2 * Math.atan(cameraSettings.filmbackWidth / (2 * cameraSettings.focalLength));
+            const vFov = 2 * Math.atan(cameraSettings.filmbackHeight / (2 * cameraSettings.focalLength));
+
+            safeDistanceMesh = new THREE.Group();
+
+            // Calculate overall wall dimensions for safe distance
+            let totalWallWidth = 0;
+            let maxWallHeight = 0;
+            wallSections.forEach(s => {
+                totalWallWidth += s.panelCols * s.panelWidth * scale;
+                maxWallHeight = Math.max(maxWallHeight, s.panelRows * s.panelHeight * scale);
+            });
+            
+            // Safe distance = maximum distance where frame still fits within wall
+            // Use MIN because we're limited by whichever dimension we'd exceed first
+            // Formula: at distance D, frame size = 2 * D * tan(FOV/2)
+            // Frame fits when: 2 * D * tan(FOV/2) <= wallDimension
+            // So: D <= wallDimension / (2 * tan(FOV/2))
+            const maxSafeDistW = totalWallWidth / (2 * Math.tan(hFov / 2));
+            const maxSafeDistH = maxWallHeight / (2 * Math.tan(vFov / 2));
+            const overallSafeDist = Math.min(maxSafeDistW, maxSafeDistH);
+
+            // Build edge positions matching createLEDWall exactly
+            let currentX = 0;
+            let currentZ = 0;
+            let currentAngle = 0;
+            
+            const allEdges = []; // Store all edges across all sections (flattened)
+
+            wallSections.forEach((section, sectionIndex) => {
+                const panelW = section.panelWidth * scale;
+                const panelH = section.panelHeight * scale;
+                const curveAngleRad = (Math.abs(section.curveIntensity) * Math.PI) / 180;
+                const isFlat = section.curveIntensity === 0;
+                const dirMult = section.curveIntensity > 0 ? 1 : (section.curveIntensity < 0 ? -1 : 0);
+
+                // Store first edge of section
+                if (allEdges.length === 0) {
+                    allEdges.push({ x: currentX, z: currentZ, angle: currentAngle });
+                }
+
+                for (let col = 0; col < section.panelCols; col++) {
+                    if (!isFlat) {
+                        currentAngle += curveAngleRad;
+                    }
+
+                    const moveAngle = currentAngle * (dirMult !== 0 ? dirMult : 1);
+                    
+                    if (isFlat && allEdges.length === 1 && allEdges[0].angle === 0) {
+                        currentX += panelW;
+                    } else {
+                        currentX += panelW * Math.cos(moveAngle);
+                        currentZ += panelW * Math.sin(moveAngle);
+                    }
+
+                    allEdges.push({ x: currentX, z: currentZ, angle: currentAngle, moveAngle: moveAngle, dirMult: dirMult });
+                }
+            });
+
+            // Create floor mesh from wall to safe distance
+            const vertices = [];
+            const indices = [];
+            const colors = [];
+            let vertexIndex = 0;
+
+            // Also collect points for the curved safe distance line
+            const safeLinePoints = [];
+
+            for (let i = 0; i < allEdges.length - 1; i++) {
+                const leftEdge = allEdges[i];
+                const rightEdge = allEdges[i + 1];
+
+                // Calculate panel facing direction (normal pointing toward camera/+Z for flat)
+                const dx = rightEdge.x - leftEdge.x;
+                const dz = rightEdge.z - leftEdge.z;
+                
+                // Normal perpendicular to panel edge, pointing outward (toward viewer)
+                const edgeLen = Math.sqrt(dx * dx + dz * dz);
+                const normalX = -dz / edgeLen;
+                const normalZ = dx / edgeLen;
+
+                // Wall edge points (on floor)
+                const wallLeft = { x: leftEdge.x, z: leftEdge.z };
+                const wallRight = { x: rightEdge.x, z: rightEdge.z };
+                
+                // Safe distance points (extend in normal direction using OVERALL safe distance)
+                const safeLeft = {
+                    x: leftEdge.x + normalX * overallSafeDist,
+                    z: leftEdge.z + normalZ * overallSafeDist
+                };
+                const safeRight = {
+                    x: rightEdge.x + normalX * overallSafeDist,
+                    z: rightEdge.z + normalZ * overallSafeDist
+                };
+
+                // Collect safe line points (use left edge of each panel, plus final right edge)
+                if (i === 0) {
+                    safeLinePoints.push(safeLeft);
+                }
+                safeLinePoints.push(safeRight);
+
+                // Add vertices (on floor, Y=0.005 to avoid z-fighting)
+                vertices.push(wallLeft.x, 0.005, wallLeft.z);
+                vertices.push(wallRight.x, 0.005, wallRight.z);
+                vertices.push(safeRight.x, 0.005, safeRight.z);
+                vertices.push(safeLeft.x, 0.005, safeLeft.z);
+
+                // Colors - gradient from GREEN (wall/safe) to RED (threshold/danger)
+                const wallColor = [0.2, 1, 0.4]; // Green - safe zone near wall
+                const thresholdColor = [1, 0.2, 0.2]; // Red - edge of safe zone
+                colors.push(...wallColor, ...wallColor, ...thresholdColor, ...thresholdColor);
+
+                // Indices for two triangles
+                indices.push(
+                    vertexIndex, vertexIndex + 1, vertexIndex + 2,
+                    vertexIndex, vertexIndex + 2, vertexIndex + 3
+                );
+                vertexIndex += 4;
+            }
+
+            if (vertices.length > 0) {
+                const geometry = new THREE.BufferGeometry();
+                geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+                geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+                geometry.setIndex(indices);
+                geometry.computeVertexNormals();
+
+                const material = new THREE.MeshBasicMaterial({
+                    vertexColors: true,
+                    transparent: true,
+                    opacity: 0.5,
+                    side: THREE.DoubleSide,
+                    depthWrite: false
+                });
+
+                const mesh = new THREE.Mesh(geometry, material);
+                safeDistanceMesh.add(mesh);
+
+                // Draw curved safe distance line following wall shape
+                const lineMaterial = new THREE.LineBasicMaterial({ color: 0xff4444, transparent: true, opacity: 0.8, linewidth: 2 });
+                const linePositions = [];
+                safeLinePoints.forEach(pt => {
+                    linePositions.push(pt.x, 0.02, pt.z);
+                });
+                const lineGeom = new THREE.BufferGeometry();
+                lineGeom.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
+                const safeLine = new THREE.Line(lineGeom, lineMaterial);
+                safeDistanceMesh.add(safeLine);
+
+                // Find center point of the safe line for label placement
+                const midIndex = Math.floor(safeLinePoints.length / 2);
+                const labelPos = safeLinePoints[midIndex];
+
+                // Add text sprite for distance label at curve center
+                const canvas = document.createElement('canvas');
+                canvas.width = 256;
+                canvas.height = 64;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#ff4444';
+                ctx.font = 'bold 32px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(`Safe: ${overallSafeDist.toFixed(2)}m`, 128, 40);
+                
+                const texture = new THREE.CanvasTexture(canvas);
+                const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
+                const sprite = new THREE.Sprite(spriteMaterial);
+                sprite.position.set(labelPos.x, 0.5, labelPos.z);
+                sprite.scale.set(2, 0.5, 1);
+                safeDistanceMesh.add(sprite);
+            }
+
+            scene.add(safeDistanceMesh);
+        }
+
+        function removeSafeDistanceMesh() {
+            if (safeDistanceMesh) {
+                scene.remove(safeDistanceMesh);
+                safeDistanceMesh.traverse((child) => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) {
+                        if (child.material.map) child.material.map.dispose();
+                        child.material.dispose();
+                    }
+                });
+                safeDistanceMesh = null;
+            }
+        }
+
+        function updateSafeDistance() {
+            if (safeDistanceEnabled && cameraPreviewEnabled) {
+                createSafeDistanceMesh();
+            } else {
+                removeSafeDistanceMesh();
+            }
+        }
+
+        function exportSafeDistanceOBJ() {
+            if (!safeDistanceMesh) {
+                alert('Enable Safe Distance 3D visualization first');
+                return;
+            }
+
+            let objContent = '# Safe Distance Floor Mesh\n# Exported from LED Wall Configurator\n\n';
+            
+            let vertexOffset = 1;
+            
+            safeDistanceMesh.traverse((child) => {
+                if (child.isMesh && child.geometry) {
+                    const positions = child.geometry.attributes.position;
+                    const indices = child.geometry.index;
+                    
+                    // Export vertices
+                    for (let i = 0; i < positions.count; i++) {
+                        const x = positions.getX(i);
+                        const y = positions.getY(i);
+                        const z = positions.getZ(i);
+                        objContent += `v ${x.toFixed(6)} ${y.toFixed(6)} ${z.toFixed(6)}\n`;
+                    }
+                    
+                    objContent += '\n';
+                    
+                    // Export faces
+                    if (indices) {
+                        for (let i = 0; i < indices.count; i += 3) {
+                            const a = indices.getX(i) + vertexOffset;
+                            const b = indices.getX(i + 1) + vertexOffset;
+                            const c = indices.getX(i + 2) + vertexOffset;
+                            objContent += `f ${a} ${b} ${c}\n`;
+                        }
+                    }
+                    
+                    vertexOffset += positions.count;
+                }
+            });
+
+            const blob = new Blob([objContent], { type: 'text/plain' });
+            downloadBlob(blob, 'safe-distance-floor.obj');
+        }
+
+        // Scene Props Functions
+        function createPersonMesh() {
+            if (personMesh) {
+                scene.remove(personMesh);
+                personMesh.traverse((child) => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) child.material.dispose();
+                });
+            }
+
+            personMesh = new THREE.Group();
+            const personMaterial = new THREE.MeshBasicMaterial({ color: 0x4488ff, transparent: true, opacity: 0.85 });
+            const darkMaterial = new THREE.MeshBasicMaterial({ color: 0x2244aa, transparent: true, opacity: 0.85 });
+
+            // Legs (two cylinders)
+            const legGeom = new THREE.CylinderGeometry(0.08, 0.08, 0.85, 8);
+            const leftLeg = new THREE.Mesh(legGeom, darkMaterial);
+            leftLeg.position.set(-0.1, 0.425, 0);
+            personMesh.add(leftLeg);
+            const rightLeg = new THREE.Mesh(legGeom, darkMaterial);
+            rightLeg.position.set(0.1, 0.425, 0);
+            personMesh.add(rightLeg);
+
+            // Torso (box)
+            const torsoGeom = new THREE.BoxGeometry(0.4, 0.55, 0.22);
+            const torso = new THREE.Mesh(torsoGeom, personMaterial);
+            torso.position.set(0, 1.125, 0);
+            personMesh.add(torso);
+
+            // Arms (two cylinders)
+            const armGeom = new THREE.CylinderGeometry(0.05, 0.05, 0.55, 8);
+            const leftArm = new THREE.Mesh(armGeom, personMaterial);
+            leftArm.position.set(-0.28, 1.1, 0);
+            personMesh.add(leftArm);
+            const rightArm = new THREE.Mesh(armGeom, personMaterial);
+            rightArm.position.set(0.28, 1.1, 0);
+            personMesh.add(rightArm);
+
+            // Neck
+            const neckGeom = new THREE.CylinderGeometry(0.06, 0.08, 0.12, 8);
+            const neck = new THREE.Mesh(neckGeom, personMaterial);
+            neck.position.set(0, 1.46, 0);
+            personMesh.add(neck);
+
+            // Head (sphere)
+            const headGeom = new THREE.SphereGeometry(0.13, 16, 12);
+            const head = new THREE.Mesh(headGeom, personMaterial);
+            head.position.set(0, 1.65, 0);
+            personMesh.add(head);
+
+            updatePersonTransform();
+            scene.add(personMesh);
+        }
+
+        function updatePersonTransform() {
+            if (!personMesh) return;
+            personMesh.position.set(personSettings.posX, 0, personSettings.posZ);
+            personMesh.rotation.y = personSettings.rotY * Math.PI / 180;
+            personMesh.scale.setScalar(personSettings.scale);
+        }
+
+        function removePersonMesh() {
+            if (personMesh) {
+                scene.remove(personMesh);
+                personMesh.traverse((child) => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) child.material.dispose();
+                });
+                personMesh = null;
+            }
+        }
+
+        function createCarMesh() {
+            if (carMesh) {
+                scene.remove(carMesh);
+                carMesh.traverse((child) => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) child.material.dispose();
+                });
+            }
+
+            carMesh = new THREE.Group();
+            const bodyMaterial = new THREE.MeshBasicMaterial({ color: 0xff4444, transparent: true, opacity: 0.85 });
+            const darkMaterial = new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0.9 });
+            const glassMaterial = new THREE.MeshBasicMaterial({ color: 0x88ccff, transparent: true, opacity: 0.5 });
+
+            // Main body (lower)
+            const bodyLowerGeom = new THREE.BoxGeometry(4.5, 0.8, 1.8);
+            const bodyLower = new THREE.Mesh(bodyLowerGeom, bodyMaterial);
+            bodyLower.position.set(0, 0.55, 0);
+            carMesh.add(bodyLower);
+
+            // Cabin (upper)
+            const cabinGeom = new THREE.BoxGeometry(2.2, 0.7, 1.6);
+            const cabin = new THREE.Mesh(cabinGeom, bodyMaterial);
+            cabin.position.set(-0.3, 1.25, 0);
+            carMesh.add(cabin);
+
+            // Windshield (angled)
+            const windshieldGeom = new THREE.BoxGeometry(0.05, 0.65, 1.5);
+            const windshield = new THREE.Mesh(windshieldGeom, glassMaterial);
+            windshield.position.set(0.75, 1.2, 0);
+            windshield.rotation.z = -0.5;
+            carMesh.add(windshield);
+
+            // Rear window
+            const rearWindowGeom = new THREE.BoxGeometry(0.05, 0.55, 1.5);
+            const rearWindow = new THREE.Mesh(rearWindowGeom, glassMaterial);
+            rearWindow.position.set(-1.35, 1.2, 0);
+            rearWindow.rotation.z = 0.4;
+            carMesh.add(rearWindow);
+
+            // Wheels (4)
+            const wheelGeom = new THREE.CylinderGeometry(0.35, 0.35, 0.2, 16);
+            const wheelPositions = [
+                { x: 1.4, z: 0.9 }, { x: 1.4, z: -0.9 },
+                { x: -1.4, z: 0.9 }, { x: -1.4, z: -0.9 }
+            ];
+            wheelPositions.forEach(pos => {
+                const wheel = new THREE.Mesh(wheelGeom, darkMaterial);
+                wheel.position.set(pos.x, 0.35, pos.z);
+                wheel.rotation.x = Math.PI / 2;
+                carMesh.add(wheel);
+            });
+
+            // Headlights
+            const lightGeom = new THREE.BoxGeometry(0.05, 0.15, 0.3);
+            const lightMat = new THREE.MeshBasicMaterial({ color: 0xffffaa });
+            [-0.6, 0.6].forEach(z => {
+                const light = new THREE.Mesh(lightGeom, lightMat);
+                light.position.set(2.25, 0.55, z);
+                carMesh.add(light);
+            });
+
+            // Scale car down to reasonable size (car is ~4.5m long, scale to ~4.5m)
+            carMesh.scale.setScalar(1);
+            
+            updateCarTransform();
+            scene.add(carMesh);
+        }
+
+        function updateCarTransform() {
+            if (!carMesh) return;
+            carMesh.position.set(carSettings.posX, 0, carSettings.posZ);
+            carMesh.rotation.y = carSettings.rotY * Math.PI / 180;
+            carMesh.scale.setScalar(carSettings.scale);
+        }
+
+        function removeCarMesh() {
+            if (carMesh) {
+                scene.remove(carMesh);
+                carMesh.traverse((child) => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) child.material.dispose();
+                });
+                carMesh = null;
+            }
+        }
+
+        // Preview Camera Functions
+        function initPreviewCamera() {
+            const previewCanvas = document.getElementById('camera-preview-canvas');
+            previewRenderer = new THREE.WebGLRenderer({ canvas: previewCanvas, antialias: true });
+            previewRenderer.setSize(320, 180);
+            previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+            // Create preview camera with settings matching the frustum
+            updatePreviewCamera();
+            
+            // Setup resize functionality
+            setupPreviewResize();
+        }
+
+        function setupPreviewResize() {
+            const previewWindow = document.getElementById('camera-preview-window');
+            const resizeHandle = document.getElementById('camera-preview-resize');
+            let isResizing = false;
+            let startX, startY, startWidth, startHeight;
+
+            resizeHandle.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                isResizing = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                startWidth = previewWindow.offsetWidth;
+                startHeight = previewWindow.offsetHeight;
+                document.body.style.cursor = 'nw-resize';
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isResizing) return;
+                
+                // Calculate new dimensions (resizing from top-left, window anchored to bottom-right)
+                const deltaX = startX - e.clientX;
+                const deltaY = startY - e.clientY;
+                
+                // Maintain aspect ratio based on filmback
+                const aspect = cameraSettings.filmbackWidth / cameraSettings.filmbackHeight;
+                let newWidth = Math.max(200, Math.min(800, startWidth + deltaX));
+                let newHeight = newWidth / aspect;
+                
+                // Clamp height and recalculate width if needed
+                if (newHeight < 120) {
+                    newHeight = 120;
+                    newWidth = newHeight * aspect;
+                } else if (newHeight > 600) {
+                    newHeight = 600;
+                    newWidth = newHeight * aspect;
+                }
+                
+                previewWindow.style.width = `${newWidth}px`;
+                previewWindow.style.height = `${newHeight}px`;
+                
+                // Update renderer size
+                if (previewRenderer) {
+                    previewRenderer.setSize(newWidth, newHeight);
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (isResizing) {
+                    isResizing = false;
+                    document.body.style.cursor = '';
+                }
+            });
+        }
+
+        function updatePreviewCamera() {
+            const hFov = 2 * Math.atan(cameraSettings.filmbackWidth / (2 * cameraSettings.focalLength)) * 180 / Math.PI;
+            const vFov = 2 * Math.atan(cameraSettings.filmbackHeight / (2 * cameraSettings.focalLength)) * 180 / Math.PI;
+            const aspect = cameraSettings.filmbackWidth / cameraSettings.filmbackHeight;
+
+            if (!previewCamera) {
+                previewCamera = new THREE.PerspectiveCamera(vFov, aspect, 0.1, 100);
+            } else {
+                previewCamera.fov = vFov;
+                previewCamera.aspect = aspect;
+                previewCamera.updateProjectionMatrix();
+            }
+
+            // Position and rotate to match frustum camera
+            previewCamera.position.set(
+                cameraSettings.posX,
+                cameraSettings.posY,
+                cameraSettings.posZ
+            );
+
+            // Apply rotations using YXZ order to avoid gimbal lock
+            const tilt = cameraSettings.rotX * Math.PI / 180;
+            const pan = cameraSettings.rotY * Math.PI / 180;
+            const roll = cameraSettings.rotZ * Math.PI / 180;
+            
+            previewCamera.rotation.order = 'YXZ';
+            previewCamera.rotation.set(tilt, pan, roll);
+
+            // Update preview info
+            document.getElementById('camera-preview-info').textContent = 
+                `${cameraSettings.focalLength}mm • ${filmbackPresets[cameraSettings.filmback]?.name.split(' ')[0] || 'Custom'}`;
+            document.getElementById('camera-preview-fov').textContent = 
+                `H: ${hFov.toFixed(1)}° V: ${vFov.toFixed(1)}°`;
+            
+            // Calculate approx resolution based on aspect
+            const baseHeight = 1080;
+            const width = Math.round(baseHeight * aspect);
+            document.getElementById('camera-preview-res').textContent = `${width}×${baseHeight}`;
+        }
+
+        function renderPreviewCamera() {
+            if (!cameraPreviewEnabled || !previewRenderer || !previewCamera) return;
+            previewRenderer.render(scene, previewCamera);
+        }
+
         let isDragging = false, previousMousePosition = { x: 0, y: 0 };
         let cameraAngle = { theta: 0, phi: Math.PI / 2 }, cameraDistance = 8;
         let targetPosition = new THREE.Vector3(0, 0, 0);
-        let sceneOffset = new THREE.Vector3(0, 0, 0);
+        let targetOffset = new THREE.Vector3(0, 0, 0); // Manual offset from calculated center
+        
+        // Keyboard state for WASD+QE navigation
+        const keysPressed = {};
+        const moveSpeed = 0.08;
 
         function updateTargetPosition() {
-            const scale = 0.002;
+            const scale = 0.001;
             let totalWidth = 0, maxHeight = 0;
             wallSections.forEach(s => {
                 totalWidth += s.panelCols * s.panelWidth * scale;
                 maxHeight = Math.max(maxHeight, s.panelRows * s.panelHeight * scale);
             });
-            targetPosition.set(totalWidth / 2, maxHeight / 2, 0).add(sceneOffset);
+            targetPosition.set(totalWidth / 2 + targetOffset.x, maxHeight / 2 + targetOffset.y, targetOffset.z);
+        }
+
+        function handleKeyboardMovement() {
+            // Calculate forward/right vectors based on camera angle
+            const forward = new THREE.Vector3(
+                Math.sin(cameraAngle.theta),
+                0,
+                Math.cos(cameraAngle.theta)
+            );
+            const right = new THREE.Vector3(
+                Math.cos(cameraAngle.theta),
+                0,
+                -Math.sin(cameraAngle.theta)
+            );
+
+            let moved = false;
+
+            // W/S - Forward/Backward
+            if (keysPressed['KeyW'] || keysPressed['ArrowUp']) {
+                targetOffset.add(forward.clone().multiplyScalar(-moveSpeed));
+                moved = true;
+            }
+            if (keysPressed['KeyS'] || keysPressed['ArrowDown']) {
+                targetOffset.add(forward.clone().multiplyScalar(moveSpeed));
+                moved = true;
+            }
+
+            // A/D - Left/Right
+            if (keysPressed['KeyA'] || keysPressed['ArrowLeft']) {
+                targetOffset.add(right.clone().multiplyScalar(-moveSpeed));
+                moved = true;
+            }
+            if (keysPressed['KeyD'] || keysPressed['ArrowRight']) {
+                targetOffset.add(right.clone().multiplyScalar(moveSpeed));
+                moved = true;
+            }
+
+            // Q/E - Down/Up
+            if (keysPressed['KeyQ']) {
+                targetOffset.y -= moveSpeed;
+                moved = true;
+            }
+            if (keysPressed['KeyE']) {
+                targetOffset.y += moveSpeed;
+                moved = true;
+            }
+
+            if (moved) {
+                updateCameraPosition();
+            }
         }
 
         function setupControls() {
@@ -1414,42 +2505,19 @@
             canvas.addEventListener('mouseup', () => isDragging = false);
             canvas.addEventListener('mouseleave', () => isDragging = false);
             canvas.addEventListener('wheel', (e) => { e.preventDefault(); cameraDistance = Math.max(2, Math.min(30, cameraDistance + e.deltaY * 0.01)); updateCameraPosition(); });
-            const moveSpeed = 0.5; // tweak to taste
-
-            window.addEventListener('keydown', (e) => {
-                const key = e.key.toLowerCase();
-                if (!['w', 'a', 's', 'd', 'q', 'e'].includes(key)) return;
-
-                // current local basis
-                const forward = new THREE.Vector3()
-                    .subVectors(targetPosition, camera.position)  // from camera to target
-                    .normalize();
-
-                const worldUp = new THREE.Vector3(0, 1, 0);
-                const right = new THREE.Vector3()
-                    .crossVectors(forward, worldUp)
-                    .normalize();
-
-                const up = worldUp.clone();
-
-                const delta = new THREE.Vector3();
-
-                if (key === 'w') delta.add(forward);
-                if (key === 's') delta.sub(forward);
-                if (key === 'd') delta.add(right);
-                if (key === 'a') delta.sub(right);
-                if (key === 'q') delta.sub(up);
-                if (key === 'e') delta.add(up);
-
-                if (delta.lengthSq() === 0) return;
-
-                delta.normalize().multiplyScalar(moveSpeed);
-
-                // move the *offset*, not the raw target
-                sceneOffset.add(delta);
-
-                // recompute target & camera
-                updateCameraPosition();
+            
+            // Keyboard controls for WASD+QE navigation
+            document.addEventListener('keydown', (e) => {
+                // Don't capture if typing in an input field
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+                keysPressed[e.code] = true;
+            });
+            document.addEventListener('keyup', (e) => {
+                keysPressed[e.code] = false;
+            });
+            // Clear keys when window loses focus
+            window.addEventListener('blur', () => {
+                Object.keys(keysPressed).forEach(key => keysPressed[key] = false);
             });
         }
 
@@ -1465,7 +2533,11 @@
             if (view === 'front') cameraAngle = { theta: 0, phi: Math.PI / 2 };
             else if (view === 'side') cameraAngle = { theta: Math.PI / 2, phi: Math.PI / 2 };
             else if (view === 'top') cameraAngle = { theta: 0, phi: 0.1 };
-            else { cameraAngle = { theta: 0.3, phi: Math.PI / 2.5 }; cameraDistance = 8; sceneOffset = new THREE.Vector3(0, 0, 0); targetPosition = new THREE.Vector3(0, 0, 0);}
+            else { 
+                cameraAngle = { theta: 0.3, phi: Math.PI / 2.5 }; 
+                cameraDistance = 8; 
+                targetOffset.set(0, 0, 0); // Reset offset on view reset
+            }
             updateCameraPosition();
         }
 
@@ -1478,7 +2550,9 @@
 
         function animate() {
             requestAnimationFrame(animate);
+            handleKeyboardMovement();
             renderer.render(scene, camera);
+            renderPreviewCamera();
         }
 
         function renderWallSections() {
@@ -1796,10 +2870,169 @@
                 if (panelIdsEnabled) createLEDWall();
             });
 
+            // Camera Frustum Preview handlers
+            document.getElementById('toggle-camera-preview').addEventListener('click', function() {
+                this.classList.toggle('active');
+                cameraPreviewEnabled = this.classList.contains('active');
+                document.getElementById('camera-preview-options').style.display = cameraPreviewEnabled ? 'block' : 'none';
+                document.getElementById('camera-preview-window').style.display = cameraPreviewEnabled ? 'block' : 'none';
+                if (cameraPreviewEnabled) {
+                    if (!previewRenderer) initPreviewCamera();
+                    resetCameraPosition();
+                } else {
+                    removeCameraPreview();
+                }
+            });
+
+            document.getElementById('camera-filmback').addEventListener('change', function() {
+                const preset = filmbackPresets[this.value];
+                cameraSettings.filmback = this.value;
+                if (this.value === 'custom') {
+                    document.getElementById('custom-filmback').style.display = 'block';
+                } else {
+                    document.getElementById('custom-filmback').style.display = 'none';
+                    cameraSettings.filmbackWidth = preset.width;
+                    cameraSettings.filmbackHeight = preset.height;
+                    document.getElementById('filmback-width').value = preset.width;
+                    document.getElementById('filmback-height').value = preset.height;
+                }
+                if (cameraPreviewEnabled) updateCameraFrustum();
+            });
+
+            document.getElementById('filmback-width').addEventListener('change', function() {
+                cameraSettings.filmbackWidth = Math.max(1, Math.min(100, parseFloat(this.value) || 36));
+                this.value = cameraSettings.filmbackWidth;
+                if (cameraPreviewEnabled) updateCameraFrustum();
+            });
+
+            document.getElementById('filmback-height').addEventListener('change', function() {
+                cameraSettings.filmbackHeight = Math.max(1, Math.min(100, parseFloat(this.value) || 24));
+                this.value = cameraSettings.filmbackHeight;
+                if (cameraPreviewEnabled) updateCameraFrustum();
+            });
+
+            document.getElementById('camera-focal-length').addEventListener('change', function() {
+                cameraSettings.focalLength = Math.max(8, Math.min(800, parseFloat(this.value) || 35));
+                this.value = cameraSettings.focalLength;
+                if (cameraPreviewEnabled) updateCameraFrustum();
+            });
+
+            document.getElementById('camera-pos-x').addEventListener('change', function() {
+                cameraSettings.posX = parseFloat(this.value) || 0;
+                if (cameraPreviewEnabled) updateCameraFrustum();
+            });
+
+            document.getElementById('camera-pos-y').addEventListener('change', function() {
+                cameraSettings.posY = Math.max(0, parseFloat(this.value) || 1.5);
+                this.value = cameraSettings.posY;
+                if (cameraPreviewEnabled) updateCameraFrustum();
+            });
+
+            document.getElementById('camera-pos-z').addEventListener('change', function() {
+                cameraSettings.posZ = Math.max(0.1, parseFloat(this.value) || 5);
+                this.value = cameraSettings.posZ;
+                if (cameraPreviewEnabled) updateCameraFrustum();
+            });
+
+            document.getElementById('camera-rot-x').addEventListener('change', function() {
+                cameraSettings.rotX = Math.max(-90, Math.min(90, parseFloat(this.value) || 0));
+                this.value = cameraSettings.rotX;
+                if (cameraPreviewEnabled) updateCameraFrustum();
+            });
+
+            document.getElementById('camera-rot-y').addEventListener('change', function() {
+                cameraSettings.rotY = Math.max(-180, Math.min(360, parseFloat(this.value) || 0));
+                this.value = cameraSettings.rotY;
+                if (cameraPreviewEnabled) updateCameraFrustum();
+            });
+
+            document.getElementById('camera-rot-z').addEventListener('change', function() {
+                cameraSettings.rotZ = Math.max(-180, Math.min(180, parseFloat(this.value) || 0));
+                this.value = cameraSettings.rotZ;
+                if (cameraPreviewEnabled) updateCameraFrustum();
+            });
+
+            document.getElementById('reset-camera').addEventListener('click', resetCameraPosition);
+
+            // Safe distance toggle
+            document.getElementById('toggle-safe-distance').addEventListener('click', function() {
+                this.classList.toggle('active');
+                safeDistanceEnabled = this.classList.contains('active');
+                document.getElementById('export-safe-distance').style.display = safeDistanceEnabled ? 'block' : 'none';
+                updateSafeDistance();
+            });
+
+            document.getElementById('export-safe-distance').addEventListener('click', exportSafeDistanceOBJ);
+
+            // Scene Props handlers
+            document.getElementById('toggle-person').addEventListener('click', function() {
+                this.classList.toggle('active');
+                showPerson = this.classList.contains('active');
+                document.getElementById('person-options').style.display = showPerson ? 'block' : 'none';
+                if (showPerson) {
+                    createPersonMesh();
+                } else {
+                    removePersonMesh();
+                }
+            });
+
+            document.getElementById('person-pos-x').addEventListener('change', function() {
+                personSettings.posX = parseFloat(this.value) || 0;
+                updatePersonTransform();
+            });
+            document.getElementById('person-pos-z').addEventListener('change', function() {
+                personSettings.posZ = parseFloat(this.value) || 0;
+                updatePersonTransform();
+            });
+            document.getElementById('person-rot-y').addEventListener('change', function() {
+                personSettings.rotY = Math.max(-180, Math.min(180, parseFloat(this.value) || 0));
+                this.value = personSettings.rotY;
+                updatePersonTransform();
+            });
+            document.getElementById('person-scale').addEventListener('change', function() {
+                personSettings.scale = Math.max(0.5, Math.min(2, parseFloat(this.value) || 1));
+                this.value = personSettings.scale;
+                updatePersonTransform();
+            });
+
+            document.getElementById('toggle-car').addEventListener('click', function() {
+                this.classList.toggle('active');
+                showCar = this.classList.contains('active');
+                document.getElementById('car-options').style.display = showCar ? 'block' : 'none';
+                if (showCar) {
+                    createCarMesh();
+                } else {
+                    removeCarMesh();
+                }
+            });
+
+            document.getElementById('car-pos-x').addEventListener('change', function() {
+                carSettings.posX = parseFloat(this.value) || 0;
+                updateCarTransform();
+            });
+            document.getElementById('car-pos-z').addEventListener('change', function() {
+                carSettings.posZ = parseFloat(this.value) || 0;
+                updateCarTransform();
+            });
+            document.getElementById('car-rot-y').addEventListener('change', function() {
+                carSettings.rotY = Math.max(-180, Math.min(180, parseFloat(this.value) || 0));
+                this.value = carSettings.rotY;
+                updateCarTransform();
+            });
+            document.getElementById('car-scale').addEventListener('change', function() {
+                carSettings.scale = Math.max(0.5, Math.min(2, parseFloat(this.value) || 1));
+                this.value = carSettings.scale;
+                updateCarTransform();
+            });
+
             document.getElementById('view-front').addEventListener('click', () => setView('front'));
             document.getElementById('view-side').addEventListener('click', () => setView('side'));
             document.getElementById('view-top').addEventListener('click', () => setView('top'));
             document.getElementById('view-reset').addEventListener('click', () => setView('reset'));
+            document.getElementById('toggle-grid').addEventListener('click', function() {
+                this.classList.toggle('active');
+                toggleGrid();
+            });
 
             // Export/Import handlers
             document.getElementById('export-zip').addEventListener('click', exportZIP);
@@ -1813,7 +3046,7 @@
 
         async function exportZIP() {
             const zip = new JSZip();
-            const scale = 0.002;
+            const scale = 0.001;
             
             // Helper function to sanitize filename
             const sanitizeFilename = (name) => name.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -2232,7 +3465,7 @@
         }
 
         function exportOBJ() {
-            const scale = 0.002;
+            const scale = 0.001;
             const allSectionsGeometry = generateAllSectionsGeometry(scale);
             const { objContent, mtlContent } = generateOBJContent(allSectionsGeometry, scale);
             downloadFile(objContent, 'led-wall-config.obj', 'text/plain');
@@ -2240,7 +3473,7 @@
         }
 
         function exportGLTF() {
-            const scale = 0.002;
+            const scale = 0.001;
             const allSectionsGeometry = generateAllSectionsGeometry(scale);
             const gltfContent = generateGLTFContent(allSectionsGeometry);
             downloadFile(JSON.stringify(gltfContent, null, 2), 'led-wall-config.gltf', 'application/json');
