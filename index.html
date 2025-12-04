@@ -1120,6 +1120,7 @@
             ledX: 32,
             ledY: 32,
             curveIntensity: 0,
+            angleOffset: 0, // degrees - rotation offset before this section
             color: '#00f0ff'
         }];
 
@@ -1184,38 +1185,39 @@
             // Track cumulative position and angle across sections
             let currentX = 0;
             let currentZ = 0;
-            let currentAngle = 0;
+            let currentAngle = 0; // This is the direction the wall is "facing" (perpendicular to panel surface)
 
             wallSections.forEach((section, sectionIndex) => {
                 const panelW = section.panelWidth * scale;
                 const panelH = section.panelHeight * scale;
-                const curveAngleRad = (Math.abs(section.curveIntensity) * Math.PI) / 180;
+                // Curve angle is signed: positive = concave (curves toward viewer), negative = convex (curves away)
+                const curveAngleRad = (section.curveIntensity * Math.PI) / 180;
                 const isFlat = section.curveIntensity === 0;
-                const dirMult = section.curveIntensity > 0 ? 1 : (section.curveIntensity < 0 ? -1 : 0);
+                
+                // Apply section angle offset before building this section
+                const angleOffsetRad = ((section.angleOffset || 0) * Math.PI) / 180;
+                currentAngle += angleOffsetRad;
 
                 const edgePositions = [];
                 const panelData = [];
 
-                // First edge starts at current position with inherited angle
+                // First edge starts at current position with current angle
                 edgePositions.push({ x: currentX, z: currentZ, angle: currentAngle });
 
                 for (let col = 0; col < section.panelCols; col++) {
-                    // Apply curve BEFORE movement (so first panel is also curved)
+                    // Apply curve angle (rotation around Y axis)
+                    // Positive curve = rotate left (increase angle), negative = rotate right (decrease angle)
                     if (!isFlat) {
                         currentAngle += curveAngleRad;
                     }
 
-                    // Move in the direction of current angle
-                    const moveAngle = currentAngle * (dirMult !== 0 ? dirMult : 1);
+                    // Move perpendicular to the current facing direction
+                    // If angle = 0, we're facing +Z, so we move along +X
+                    // The panel edge moves in direction perpendicular to facing
+                    const moveDirection = currentAngle; // Direction to move along the panel edge
                     
-                    if (isFlat && edgePositions[0].angle === 0 && edgePositions.length === 1) {
-                        // Pure flat section starting from origin, no inherited angle
-                        currentX += panelW;
-                    } else {
-                        // Curved or flat with inherited angle
-                        currentX += panelW * Math.cos(moveAngle);
-                        currentZ += panelW * Math.sin(moveAngle);
-                    }
+                    currentX += panelW * Math.cos(moveDirection);
+                    currentZ += panelW * Math.sin(moveDirection);
 
                     edgePositions.push({ x: currentX, z: currentZ, angle: currentAngle });
                 }
@@ -1245,7 +1247,7 @@
 
                 allSectionsData.push({
                     section, sectionIndex, edgePositions, panelData,
-                    panelW, panelH, dirMult, isFlat
+                    panelW, panelH, isFlat
                 });
             });
 
@@ -1292,7 +1294,7 @@
 
             let uvOffsetX = 0;
 
-            allSectionsData.forEach(({ section, edgePositions, panelW, panelH, dirMult, isFlat }) => {
+            allSectionsData.forEach(({ section, edgePositions, panelW, panelH, isFlat }) => {
                 const sectionLedX = section.panelCols * section.ledX;
                 const uvWidth = sectionLedX / totalLedX;
 
@@ -1302,8 +1304,27 @@
                         const edge = edgePositions[col];
                         vertPositions.push(edge.x, y, edge.z);
 
-                        const nx = isFlat ? 0 : Math.sin(edge.angle * dirMult);
-                        const nz = isFlat ? 1 : Math.cos(edge.angle * dirMult);
+                        // Normal points perpendicular to panel surface (outward toward viewer)
+                        // At angle=0, normal is (0, 0, 1). As angle increases, normal rotates.
+                        // Normal direction is 90 degrees from the edge direction
+                        let nx, nz;
+                        if (col < section.panelCols) {
+                            const nextEdge = edgePositions[col + 1];
+                            const dx = nextEdge.x - edge.x;
+                            const dz = nextEdge.z - edge.z;
+                            const len = Math.sqrt(dx * dx + dz * dz);
+                            // Normal is perpendicular to edge direction, pointing outward
+                            nx = -dz / len;
+                            nz = dx / len;
+                        } else {
+                            // Last edge - use previous edge's direction
+                            const prevEdge = edgePositions[col - 1];
+                            const dx = edge.x - prevEdge.x;
+                            const dz = edge.z - prevEdge.z;
+                            const len = Math.sqrt(dx * dx + dz * dz);
+                            nx = -dz / len;
+                            nz = dx / len;
+                        }
                         vertNormals.push(nx, 0, nz);
 
                         vertUvs.push(uvOffsetX + (col / section.panelCols) * uvWidth, row / section.panelRows);
@@ -1391,7 +1412,7 @@
 
         function createSectionMeshes(allSectionsData) {
             let cumulativeCol = 0;
-            allSectionsData.forEach(({ section, sectionIndex, edgePositions, panelW, panelH, dirMult, isFlat }) => {
+            allSectionsData.forEach(({ section, sectionIndex, edgePositions, panelW, panelH, isFlat }) => {
                 const vertPositions = [], vertNormals = [], vertUvs = [], indices = [];
                 const sectionColor = new THREE.Color(section.color);
 
@@ -1400,7 +1421,25 @@
                     for (let col = 0; col <= section.panelCols; col++) {
                         const edge = edgePositions[col];
                         vertPositions.push(edge.x, y, edge.z);
-                        vertNormals.push(isFlat ? 0 : Math.sin(edge.angle * dirMult), 0, isFlat ? 1 : Math.cos(edge.angle * dirMult));
+                        
+                        // Calculate normal from edge direction
+                        let nx, nz;
+                        if (col < section.panelCols) {
+                            const nextEdge = edgePositions[col + 1];
+                            const dx = nextEdge.x - edge.x;
+                            const dz = nextEdge.z - edge.z;
+                            const len = Math.sqrt(dx * dx + dz * dz);
+                            nx = -dz / len;
+                            nz = dx / len;
+                        } else {
+                            const prevEdge = edgePositions[col - 1];
+                            const dx = edge.x - prevEdge.x;
+                            const dz = edge.z - prevEdge.z;
+                            const len = Math.sqrt(dx * dx + dz * dz);
+                            nx = -dz / len;
+                            nz = dx / len;
+                        }
+                        vertNormals.push(nx, 0, nz);
                         vertUvs.push(col / section.panelCols, row / section.panelRows);
                     }
                 }
@@ -1943,9 +1982,12 @@
             wallSections.forEach((section, sectionIndex) => {
                 const panelW = section.panelWidth * scale;
                 const panelH = section.panelHeight * scale;
-                const curveAngleRad = (Math.abs(section.curveIntensity) * Math.PI) / 180;
+                const curveAngleRad = (section.curveIntensity * Math.PI) / 180;
                 const isFlat = section.curveIntensity === 0;
-                const dirMult = section.curveIntensity > 0 ? 1 : (section.curveIntensity < 0 ? -1 : 0);
+                
+                // Apply section angle offset
+                const angleOffsetRad = ((section.angleOffset || 0) * Math.PI) / 180;
+                currentAngle += angleOffsetRad;
 
                 // Store first edge of section
                 if (allEdges.length === 0) {
@@ -1957,16 +1999,11 @@
                         currentAngle += curveAngleRad;
                     }
 
-                    const moveAngle = currentAngle * (dirMult !== 0 ? dirMult : 1);
-                    
-                    if (isFlat && allEdges.length === 1 && allEdges[0].angle === 0) {
-                        currentX += panelW;
-                    } else {
-                        currentX += panelW * Math.cos(moveAngle);
-                        currentZ += panelW * Math.sin(moveAngle);
-                    }
+                    const moveDirection = currentAngle;
+                    currentX += panelW * Math.cos(moveDirection);
+                    currentZ += panelW * Math.sin(moveDirection);
 
-                    allEdges.push({ x: currentX, z: currentZ, angle: currentAngle, moveAngle: moveAngle, dirMult: dirMult });
+                    allEdges.push({ x: currentX, z: currentZ, angle: currentAngle });
                 }
             });
 
@@ -2617,11 +2654,16 @@
                             <div class="input-field"><label>Pixels X</label><input type="number" data-field="ledX" value="${section.ledX}" min="8" max="350"></div>
                             <div class="input-field"><label>Pixels Y</label><input type="number" data-field="ledY" value="${section.ledY}" min="8" max="350"></div>
                         </div>
-                        <div class="section-row single">
+                        <div class="section-row">
                             <div class="input-field">
                                 <label>Angle Between Panels (°)</label>
                                 <input type="number" data-field="curveIntensity" value="${section.curveIntensity}" min="-45" max="45" step="0.1">
                                 <div class="curve-hint">${curveType}${section.curveIntensity !== 0 ? ` (${section.curveIntensity > 0 ? '+' : ''}${section.curveIntensity}°)` : ''}</div>
+                            </div>
+                            <div class="input-field">
+                                <label>Section Offset (°)</label>
+                                <input type="number" data-field="angleOffset" value="${section.angleOffset || 0}" min="-180" max="180" step="1">
+                                <div class="curve-hint" style="font-size: 9px;">Rotation before section</div>
                             </div>
                         </div>
                         <div class="section-row single">
@@ -2690,6 +2732,7 @@
                         else if (field === 'panelWidth' || field === 'panelHeight') value = Math.max(50, Math.min(5000, value || 500));
                         else if (field === 'ledX' || field === 'ledY') value = Math.max(8, Math.min(350, value || 32));
                         else if (field === 'curveIntensity') value = Math.max(-45, Math.min(45, value || 0));
+                        else if (field === 'angleOffset') value = Math.max(-180, Math.min(180, value || 0));
                         e.target.value = value;
                         section[field] = value;
                         
@@ -2753,6 +2796,7 @@
                 ledX: last.ledX, 
                 ledY: last.ledY, 
                 curveIntensity: last.curveIntensity,
+                angleOffset: 0,
                 color: sectionColors[newColorIndex]
             };
             wallSections.push(newSection);
@@ -3505,7 +3549,8 @@
                     led_resolution: { x: s.ledX, y: s.ledY, pixel_pitch_mm: parseFloat((s.panelWidth / s.ledX).toFixed(2)) },
                     curvature: { 
                         type: s.curveIntensity === 0 ? 'flat' : (s.curveIntensity > 0 ? 'concave' : 'convex'), 
-                        angle_degrees: s.curveIntensity 
+                        angle_degrees: s.curveIntensity,
+                        angle_offset_degrees: s.angleOffset || 0
                     },
                     color: s.color
                 })),
@@ -3538,6 +3583,7 @@
                             ledX: s.led_resolution?.x || 32,
                             ledY: s.led_resolution?.y || 32,
                             curveIntensity: s.curvature?.angle_degrees || 0,
+                            angleOffset: s.curvature?.angle_offset_degrees || 0,
                             color: s.color || sectionColors[i % sectionColors.length]
                         }));
                         nextSectionId = Math.max(...wallSections.map(s => s.id)) + 1;
@@ -3570,28 +3616,25 @@
             wallSections.forEach((section, sectionIndex) => {
                 const panelW = section.panelWidth * scale;
                 const panelH = section.panelHeight * scale;
-                const curveAngleRad = (Math.abs(section.curveIntensity) * Math.PI) / 180;
+                const curveAngleRad = (section.curveIntensity * Math.PI) / 180;
                 const isFlat = section.curveIntensity === 0;
-                const dirMult = section.curveIntensity > 0 ? 1 : (section.curveIntensity < 0 ? -1 : 0);
+                
+                // Apply section angle offset
+                const angleOffsetRad = ((section.angleOffset || 0) * Math.PI) / 180;
+                currentAngle += angleOffsetRad;
 
-                const edgePositions = [{ x: currentX, z: currentZ }];
-                const startAngle = currentAngle;
+                const edgePositions = [{ x: currentX, z: currentZ, angle: currentAngle }];
 
                 for (let col = 0; col < section.panelCols; col++) {
-                    // Apply curve BEFORE movement (so first panel is also curved)
                     if (!isFlat) {
                         currentAngle += curveAngleRad;
                     }
 
-                    const moveAngle = currentAngle * (dirMult !== 0 ? dirMult : 1);
-                    if (isFlat && startAngle === 0 && edgePositions.length === 1) {
-                        // Pure flat section starting from origin
-                        currentX += panelW;
-                    } else {
-                        currentX += panelW * Math.cos(moveAngle);
-                        currentZ += panelW * Math.sin(moveAngle);
-                    }
-                    edgePositions.push({ x: currentX, z: currentZ });
+                    const moveDirection = currentAngle;
+                    currentX += panelW * Math.cos(moveDirection);
+                    currentZ += panelW * Math.sin(moveDirection);
+                    
+                    edgePositions.push({ x: currentX, z: currentZ, angle: currentAngle });
                 }
 
                 // Generate vertices
