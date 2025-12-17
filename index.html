@@ -499,6 +499,127 @@
             display: flex;
             flex-direction: column;
             gap: 8px;
+            pointer-events: all;
+        }
+
+        .gizmo-controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: all;
+        }
+
+        .gizmo-mode-btn {
+            width: 40px;
+            height: 40px;
+            background: rgba(18, 18, 26, 0.9);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            cursor: pointer;
+            display: grid;
+            place-items: center;
+            transition: all 0.2s ease;
+            color: var(--text-secondary);
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .gizmo-mode-btn:hover {
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
+
+        .gizmo-mode-btn.active {
+            background: var(--accent-cyan);
+            border-color: var(--accent-cyan);
+            color: #000;
+        }
+
+        .gizmo-mode-btn.translate.active {
+            background: #ffaa00;
+            border-color: #ffaa00;
+        }
+
+        .gizmo-mode-btn.rotate.active {
+            background: #00aaff;
+            border-color: #00aaff;
+        }
+
+        .gizmo-mode-btn.pilot.active {
+            background: #ff4466;
+            border-color: #ff4466;
+        }
+
+        .gizmo-mode-btn.space {
+            font-weight: 700;
+            font-size: 14px;
+        }
+
+        .gizmo-mode-btn.space.world {
+            background: rgba(100, 100, 100, 0.8);
+            border-color: #888;
+            color: #fff;
+        }
+
+        .gizmo-mode-btn.space.local {
+            background: #aa66ff;
+            border-color: #aa66ff;
+            color: #fff;
+        }
+
+        .pilot-info {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 68, 102, 0.95);
+            border: 2px solid #ff4466;
+            border-radius: 8px;
+            padding: 10px 20px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #fff;
+            pointer-events: none;
+            display: none;
+            z-index: 100;
+            white-space: nowrap;
+        }
+
+        .pilot-info.visible {
+            display: block;
+        }
+
+        .gizmo-divider {
+            width: 100%;
+            height: 1px;
+            background: var(--border-color);
+            margin: 4px 0;
+        }
+
+        .selection-indicator {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(18, 18, 26, 0.9);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            pointer-events: none;
+            display: none;
+        }
+
+        .selection-indicator.visible {
+            display: block;
+        }
+
+        .selection-indicator .selected-name {
+            color: var(--accent-cyan);
+            font-weight: 600;
         }
 
         .view-btn {
@@ -978,39 +1099,66 @@
                     <span id="camera-preview-res">1920×1080</span>
                 </div>
             </div>
-            <div class="viewport-controls">
-                <button class="view-btn" id="view-front" title="Front View">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="3" width="18" height="18" rx="2"/>
-                    </svg>
-                </button>
-                <button class="view-btn" id="view-side" title="Side View">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 3v18M3 12h18"/>
-                    </svg>
-                </button>
-                <button class="view-btn" id="view-top" title="Top View">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="9"/>
-                        <circle cx="12" cy="12" r="3"/>
-                    </svg>
-                </button>
-                <button class="view-btn" id="view-reset" title="Reset View">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-                        <path d="M3 3v5h5"/>
-                    </svg>
-                </button>
-                <button class="view-btn active" id="toggle-grid" title="Toggle Grid">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18"/>
-                    </svg>
-                </button>
-            </div>
             <div class="viewport-overlay">
                 <div class="grid-lines"></div>
                 <div class="viewport-info">
-                    <div class="info-badge">Drag to rotate • Scroll to zoom • WASD to move • QE up/down</div>
+                    <div class="info-badge">Drag to rotate • Scroll to zoom • WASD to move • G=translate R=rotate L=space P=pilot</div>
+                </div>
+                <div class="viewport-controls">
+                    <button class="view-btn" id="view-front" title="Front View">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2"/>
+                        </svg>
+                    </button>
+                    <button class="view-btn" id="view-side" title="Side View">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 3v18M3 12h18"/>
+                        </svg>
+                    </button>
+                    <button class="view-btn" id="view-top" title="Top View">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="9"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                    </button>
+                    <button class="view-btn" id="view-reset" title="Reset View">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                            <path d="M3 3v5h5"/>
+                        </svg>
+                    </button>
+                    <button class="view-btn active" id="toggle-grid" title="Toggle Grid">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="gizmo-controls">
+                    <button class="gizmo-mode-btn translate" id="gizmo-translate" title="Translate Mode (G)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/>
+                        </svg>
+                    </button>
+                    <button class="gizmo-mode-btn rotate" id="gizmo-rotate" title="Rotate Mode (R)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
+                            <path d="M21 3v5h-5"/>
+                        </svg>
+                    </button>
+                    <button class="gizmo-mode-btn space world" id="gizmo-space" title="World Space (L to toggle)">W</button>
+                    <div class="gizmo-divider"></div>
+                    <button class="gizmo-mode-btn pilot" id="gizmo-pilot" title="Pilot Camera View (P)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                            <circle cx="12" cy="13" r="4"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="selection-indicator" id="selection-indicator">
+                    Selected: <span class="selected-name">None</span>
+                </div>
+                <div class="pilot-info" id="pilot-info">
+                    🎥 PILOT MODE — WASD: Move • Mouse: Look • QE: Up/Down • Scroll: Speed • ESC: Exit
                 </div>
             </div>
         </main>
@@ -1096,6 +1244,28 @@
         // Preview Camera (for camera view window)
         let previewCamera = null;
         let previewRenderer = null;
+
+        // Gizmo System
+        let gizmoMode = null; // 'translate', 'rotate', or null
+        let gizmoSpace = 'world'; // 'world' or 'local'
+        let selectedObject = null; // 'camera', 'person', 'car', or null
+        let gizmoGroup = null;
+        let gizmoHandles = {};
+        let isDraggingGizmo = false;
+        let activeGizmoAxis = null;
+        let hoveredGizmoAxis = null;
+        let dragStartPoint = new THREE.Vector3();
+        let dragPlane = new THREE.Plane();
+        let raycaster = new THREE.Raycaster();
+        let mouse = new THREE.Vector2();
+        let pilotMode = false;
+        let savedCameraState = null;
+        let cameraBodyMesh = null; // Reference to camera body for selection (not frustum)
+        
+        // Pilot mode controls
+        let pilotMoveSpeed = 0.05;
+        let isPilotLooking = false;
+        let pilotLastMouse = { x: 0, y: 0 };
 
         const sectionColors = [
             '#00f0ff', '#ff00aa', '#00ff66', '#ff6b35',
@@ -1699,9 +1869,9 @@
             // Create camera body (simple box representation) - positioned behind the camera view point
             const bodyGeom = new THREE.BoxGeometry(0.15, 0.1, 0.2);
             const bodyMat = new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.8 });
-            const cameraBody = new THREE.Mesh(bodyGeom, bodyMat);
-            cameraBody.position.z = 0.15; // Move body behind the camera origin so it doesn't block view
-            previewCameraGroup.add(cameraBody);
+            cameraBodyMesh = new THREE.Mesh(bodyGeom, bodyMat);
+            cameraBodyMesh.position.z = 0.15; // Move body behind the camera origin so it doesn't block view
+            previewCameraGroup.add(cameraBodyMesh);
 
             // Create frustum wireframe
             updateFrustumGeometry();
@@ -1827,6 +1997,12 @@
             calculateFrustumIntersection();
             updatePreviewCamera();
             updateSafeDistance();
+            updatePilotView();
+            
+            // Update gizmo position if camera is selected
+            if (selectedObject === 'camera') {
+                updateGizmoPosition();
+            }
         }
 
         function calculateFrustumIntersection() {
@@ -2106,10 +2282,10 @@
                 canvas.width = 256;
                 canvas.height = 64;
                 const ctx = canvas.getContext('2d');
-                ctx.fillStyle = '#ffffff';
+                ctx.fillStyle = '#ff4444';
                 ctx.font = 'bold 32px Arial';
                 ctx.textAlign = 'center';
-                ctx.fillText(`Safe: ${overallSafeDist.toFixed(2)}m`, 128, 40);
+                ctx.fillText(`Max: ${overallSafeDist.toFixed(2)}m`, 128, 40);
                 
                 const texture = new THREE.CanvasTexture(canvas);
                 const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
@@ -2246,6 +2422,10 @@
             personMesh.position.set(personSettings.posX, 0, personSettings.posZ);
             personMesh.rotation.y = personSettings.rotY * Math.PI / 180;
             personMesh.scale.setScalar(personSettings.scale);
+            
+            if (selectedObject === 'person') {
+                updateGizmoPosition();
+            }
         }
 
         function removePersonMesh() {
@@ -2333,6 +2513,10 @@
             carMesh.position.set(carSettings.posX, 0, carSettings.posZ);
             carMesh.rotation.y = carSettings.rotY * Math.PI / 180;
             carMesh.scale.setScalar(carSettings.scale);
+            
+            if (selectedObject === 'car') {
+                updateGizmoPosition();
+            }
         }
 
         function removeCarMesh() {
@@ -2343,6 +2527,643 @@
                     if (child.material) child.material.dispose();
                 });
                 carMesh = null;
+            }
+        }
+
+        // Gizmo System
+        function createGizmo() {
+            if (gizmoGroup) {
+                scene.remove(gizmoGroup);
+                gizmoGroup = null;
+            }
+            
+            if (!selectedObject || !gizmoMode) return;
+            
+            gizmoGroup = new THREE.Group();
+            gizmoGroup.renderOrder = 999;
+            gizmoHandles = {};
+            
+            const scale = 0.7; // Larger gizmos
+            const defaultOpacity = 0.35; // Semi-transparent by default
+            
+            const createGizmoMaterial = (color) => {
+                return new THREE.MeshBasicMaterial({ 
+                    color: color, 
+                    transparent: true, 
+                    opacity: defaultOpacity,
+                    depthTest: false,
+                    depthWrite: false
+                });
+            };
+            
+            if (gizmoMode === 'translate') {
+                const arrowLength = 1.2 * scale;
+                const arrowHeadLength = 0.28 * scale;
+                const arrowHeadRadius = 0.12 * scale;
+                const shaftRadius = 0.04 * scale;
+                
+                // X axis (red)
+                const xMat = createGizmoMaterial(0xff4444);
+                const xShaft = new THREE.Mesh(new THREE.CylinderGeometry(shaftRadius, shaftRadius, arrowLength - arrowHeadLength, 12), xMat);
+                xShaft.rotation.z = -Math.PI / 2;
+                xShaft.position.x = (arrowLength - arrowHeadLength) / 2;
+                const xHead = new THREE.Mesh(new THREE.ConeGeometry(arrowHeadRadius, arrowHeadLength, 16), xMat);
+                xHead.rotation.z = -Math.PI / 2;
+                xHead.position.x = arrowLength - arrowHeadLength / 2;
+                const xArrow = new THREE.Group();
+                xArrow.add(xShaft, xHead);
+                xArrow.userData = { axis: 'x', type: 'translate', material: xMat, color: 0xff4444 };
+                gizmoHandles.x = xArrow;
+                gizmoGroup.add(xArrow);
+                
+                // Y axis (green)
+                const yMat = createGizmoMaterial(0x44ff44);
+                const yShaft = new THREE.Mesh(new THREE.CylinderGeometry(shaftRadius, shaftRadius, arrowLength - arrowHeadLength, 12), yMat);
+                yShaft.position.y = (arrowLength - arrowHeadLength) / 2;
+                const yHead = new THREE.Mesh(new THREE.ConeGeometry(arrowHeadRadius, arrowHeadLength, 16), yMat);
+                yHead.position.y = arrowLength - arrowHeadLength / 2;
+                const yArrow = new THREE.Group();
+                yArrow.add(yShaft, yHead);
+                yArrow.userData = { axis: 'y', type: 'translate', material: yMat, color: 0x44ff44 };
+                gizmoHandles.y = yArrow;
+                gizmoGroup.add(yArrow);
+                
+                // Z axis (blue)
+                const zMat = createGizmoMaterial(0x4444ff);
+                const zShaft = new THREE.Mesh(new THREE.CylinderGeometry(shaftRadius, shaftRadius, arrowLength - arrowHeadLength, 12), zMat);
+                zShaft.rotation.x = Math.PI / 2;
+                zShaft.position.z = (arrowLength - arrowHeadLength) / 2;
+                const zHead = new THREE.Mesh(new THREE.ConeGeometry(arrowHeadRadius, arrowHeadLength, 16), zMat);
+                zHead.rotation.x = Math.PI / 2;
+                zHead.position.z = arrowLength - arrowHeadLength / 2;
+                const zArrow = new THREE.Group();
+                zArrow.add(zShaft, zHead);
+                zArrow.userData = { axis: 'z', type: 'translate', material: zMat, color: 0x4444ff };
+                gizmoHandles.z = zArrow;
+                gizmoGroup.add(zArrow);
+                
+            } else if (gizmoMode === 'rotate') {
+                const ringRadius = 0.65 * scale;
+                const tubeRadius = 0.04 * scale;
+                
+                // X rotation ring (red)
+                const xMat = createGizmoMaterial(0xff4444);
+                const xRing = new THREE.Mesh(new THREE.TorusGeometry(ringRadius, tubeRadius, 12, 48), xMat);
+                xRing.rotation.y = Math.PI / 2;
+                xRing.userData = { axis: 'x', type: 'rotate', material: xMat, color: 0xff4444 };
+                gizmoHandles.rx = xRing;
+                gizmoGroup.add(xRing);
+                
+                // Y rotation ring (green)
+                const yMat = createGizmoMaterial(0x44ff44);
+                const yRing = new THREE.Mesh(new THREE.TorusGeometry(ringRadius, tubeRadius, 12, 48), yMat);
+                yRing.rotation.x = Math.PI / 2;
+                yRing.userData = { axis: 'y', type: 'rotate', material: yMat, color: 0x44ff44 };
+                gizmoHandles.ry = yRing;
+                gizmoGroup.add(yRing);
+                
+                // Z rotation ring (blue)
+                const zMat = createGizmoMaterial(0x4444ff);
+                const zRing = new THREE.Mesh(new THREE.TorusGeometry(ringRadius, tubeRadius, 12, 48), zMat);
+                zRing.userData = { axis: 'z', type: 'rotate', material: zMat, color: 0x4444ff };
+                gizmoHandles.rz = zRing;
+                gizmoGroup.add(zRing);
+            }
+            
+            updateGizmoOrientation();
+            updateGizmoPosition();
+            scene.add(gizmoGroup);
+        }
+        
+        function updateGizmoOrientation() {
+            if (!gizmoGroup || !selectedObject) return;
+            
+            gizmoGroup.rotation.set(0, 0, 0);
+            
+            if (gizmoSpace === 'local') {
+                if (selectedObject === 'camera') {
+                    gizmoGroup.rotation.order = 'YXZ';
+                    gizmoGroup.rotation.set(
+                        cameraSettings.rotX * Math.PI / 180,
+                        cameraSettings.rotY * Math.PI / 180,
+                        cameraSettings.rotZ * Math.PI / 180
+                    );
+                } else if (selectedObject === 'person') {
+                    gizmoGroup.rotation.y = personSettings.rotY * Math.PI / 180;
+                } else if (selectedObject === 'car') {
+                    gizmoGroup.rotation.y = carSettings.rotY * Math.PI / 180;
+                }
+            }
+        }
+        
+        function updateGizmoPosition() {
+            if (!gizmoGroup || !selectedObject) return;
+            
+            let pos;
+            if (selectedObject === 'camera' && previewCameraGroup) {
+                pos = new THREE.Vector3(cameraSettings.posX, cameraSettings.posY, cameraSettings.posZ);
+            } else if (selectedObject === 'person' && personMesh) {
+                pos = new THREE.Vector3(personSettings.posX, 0.9, personSettings.posZ);
+            } else if (selectedObject === 'car' && carMesh) {
+                pos = new THREE.Vector3(carSettings.posX, 0.5, carSettings.posZ);
+            } else {
+                return;
+            }
+            
+            gizmoGroup.position.copy(pos);
+        }
+        
+        function selectObject(objName) {
+            selectedObject = objName;
+            updateSelectionIndicator();
+            createGizmo();
+        }
+        
+        function deselectObject() {
+            selectedObject = null;
+            hoveredGizmoAxis = null;
+            updateSelectionIndicator();
+            if (gizmoGroup) {
+                scene.remove(gizmoGroup);
+                gizmoGroup = null;
+            }
+        }
+        
+        function updateSelectionIndicator() {
+            const indicator = document.getElementById('selection-indicator');
+            const nameSpan = indicator.querySelector('.selected-name');
+            
+            if (selectedObject) {
+                indicator.classList.add('visible');
+                const names = { camera: 'Camera', person: 'Person', car: 'Car' };
+                nameSpan.textContent = names[selectedObject] || 'Unknown';
+            } else {
+                indicator.classList.remove('visible');
+                nameSpan.textContent = 'None';
+            }
+        }
+        
+        function setGizmoMode(mode) {
+            if (gizmoMode === mode) {
+                gizmoMode = null;
+            } else {
+                gizmoMode = mode;
+            }
+            
+            document.getElementById('gizmo-translate').classList.toggle('active', gizmoMode === 'translate');
+            document.getElementById('gizmo-rotate').classList.toggle('active', gizmoMode === 'rotate');
+            
+            createGizmo();
+        }
+        
+        function toggleGizmoSpace() {
+            gizmoSpace = gizmoSpace === 'world' ? 'local' : 'world';
+            const btn = document.getElementById('gizmo-space');
+            btn.textContent = gizmoSpace === 'world' ? 'W' : 'L';
+            btn.classList.toggle('world', gizmoSpace === 'world');
+            btn.classList.toggle('local', gizmoSpace === 'local');
+            btn.title = gizmoSpace === 'world' ? 'World Space (L to toggle)' : 'Local Space (L to toggle)';
+            
+            if (gizmoGroup) {
+                updateGizmoOrientation();
+            }
+        }
+        
+        function updateGizmoHover(event) {
+            if (!gizmoGroup || isDraggingGizmo || pilotMode) return;
+            
+            const canvas = renderer.domElement;
+            const rect = canvas.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            
+            const gizmoMeshes = [];
+            Object.values(gizmoHandles).forEach(handle => {
+                handle.traverse(child => {
+                    if (child.isMesh) {
+                        child.userData = { ...handle.userData };
+                        gizmoMeshes.push(child);
+                    }
+                });
+            });
+            
+            const intersects = raycaster.intersectObjects(gizmoMeshes, false);
+            const newHovered = intersects.length > 0 ? intersects[0].object.userData.axis : null;
+            
+            if (newHovered !== hoveredGizmoAxis) {
+                hoveredGizmoAxis = newHovered;
+                
+                Object.values(gizmoHandles).forEach(handle => {
+                    const isHovered = handle.userData.axis === hoveredGizmoAxis;
+                    handle.traverse(child => {
+                        if (child.material) {
+                            child.material.opacity = isHovered ? 1.0 : 0.35;
+                        }
+                    });
+                });
+            }
+        }
+        
+        function handleGizmoMouseDown(event) {
+            if (!gizmoGroup || !selectedObject || pilotMode) return false;
+            
+            const canvas = renderer.domElement;
+            const rect = canvas.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            
+            const gizmoMeshes = [];
+            Object.values(gizmoHandles).forEach(handle => {
+                handle.traverse(child => {
+                    if (child.isMesh) {
+                        child.userData = { ...handle.userData };
+                        gizmoMeshes.push(child);
+                    }
+                });
+            });
+            
+            const intersects = raycaster.intersectObjects(gizmoMeshes, false);
+            
+            if (intersects.length > 0) {
+                const hit = intersects[0];
+                activeGizmoAxis = hit.object.userData.axis;
+                isDraggingGizmo = true;
+                
+                // Highlight active axis
+                Object.values(gizmoHandles).forEach(handle => {
+                    const isActive = handle.userData.axis === activeGizmoAxis;
+                    handle.traverse(child => {
+                        if (child.material) {
+                            child.material.opacity = isActive ? 1.0 : 0.15;
+                        }
+                    });
+                });
+                
+                const gizmoPos = gizmoGroup.position.clone();
+                
+                if (gizmoMode === 'translate') {
+                    let axisDir = new THREE.Vector3();
+                    if (activeGizmoAxis === 'x') axisDir.set(1, 0, 0);
+                    else if (activeGizmoAxis === 'y') axisDir.set(0, 1, 0);
+                    else axisDir.set(0, 0, 1);
+                    
+                    if (gizmoSpace === 'local') {
+                        axisDir.applyQuaternion(gizmoGroup.quaternion);
+                    }
+                    
+                    const cameraDir = camera.position.clone().sub(gizmoPos).normalize();
+                    const planeNormal = cameraDir.clone().cross(axisDir).cross(axisDir).normalize();
+                    
+                    if (planeNormal.length() < 0.1) {
+                        planeNormal.copy(cameraDir);
+                    }
+                    
+                    dragPlane.setFromNormalAndCoplanarPoint(planeNormal, gizmoPos);
+                } else if (gizmoMode === 'rotate') {
+                    let planeNormal = new THREE.Vector3();
+                    if (activeGizmoAxis === 'x') planeNormal.set(1, 0, 0);
+                    else if (activeGizmoAxis === 'y') planeNormal.set(0, 1, 0);
+                    else planeNormal.set(0, 0, 1);
+                    
+                    if (gizmoSpace === 'local') {
+                        planeNormal.applyQuaternion(gizmoGroup.quaternion);
+                    }
+                    
+                    dragPlane.setFromNormalAndCoplanarPoint(planeNormal, gizmoPos);
+                }
+                
+                raycaster.ray.intersectPlane(dragPlane, dragStartPoint);
+                return true;
+            }
+            
+            return false;
+        }
+        
+        function handleGizmoMouseMove(event) {
+            if (!isDraggingGizmo || !activeGizmoAxis || !gizmoGroup) return;
+            
+            const canvas = renderer.domElement;
+            const rect = canvas.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            
+            const currentPoint = new THREE.Vector3();
+            if (!raycaster.ray.intersectPlane(dragPlane, currentPoint)) return;
+            
+            if (gizmoMode === 'translate') {
+                const delta = currentPoint.clone().sub(dragStartPoint);
+                
+                let axisDir = new THREE.Vector3();
+                if (activeGizmoAxis === 'x') axisDir.set(1, 0, 0);
+                else if (activeGizmoAxis === 'y') axisDir.set(0, 1, 0);
+                else axisDir.set(0, 0, 1);
+                
+                if (gizmoSpace === 'local') {
+                    axisDir.applyQuaternion(gizmoGroup.quaternion);
+                }
+                
+                const axisDelta = delta.dot(axisDir);
+                const movement = axisDir.clone().multiplyScalar(axisDelta);
+                
+                if (selectedObject === 'camera') {
+                    cameraSettings.posX += movement.x;
+                    cameraSettings.posY = Math.max(0, cameraSettings.posY + movement.y);
+                    cameraSettings.posZ += movement.z;
+                    
+                    document.getElementById('camera-pos-x').value = cameraSettings.posX.toFixed(2);
+                    document.getElementById('camera-pos-y').value = cameraSettings.posY.toFixed(2);
+                    document.getElementById('camera-pos-z').value = cameraSettings.posZ.toFixed(2);
+                    
+                    if (cameraPreviewEnabled) updateCameraFrustum();
+                } else if (selectedObject === 'person') {
+                    personSettings.posX += movement.x;
+                    personSettings.posZ += movement.z;
+                    
+                    document.getElementById('person-pos-x').value = personSettings.posX.toFixed(2);
+                    document.getElementById('person-pos-z').value = personSettings.posZ.toFixed(2);
+                    updatePersonTransform();
+                } else if (selectedObject === 'car') {
+                    carSettings.posX += movement.x;
+                    carSettings.posZ += movement.z;
+                    
+                    document.getElementById('car-pos-x').value = carSettings.posX.toFixed(2);
+                    document.getElementById('car-pos-z').value = carSettings.posZ.toFixed(2);
+                    updateCarTransform();
+                }
+                
+            } else if (gizmoMode === 'rotate') {
+                const gizmoPos = gizmoGroup.position.clone();
+                const startDir = dragStartPoint.clone().sub(gizmoPos).normalize();
+                const currentDir = currentPoint.clone().sub(gizmoPos).normalize();
+                
+                let angle = Math.atan2(
+                    startDir.clone().cross(currentDir).dot(dragPlane.normal),
+                    startDir.dot(currentDir)
+                );
+                
+                angle = angle * (180 / Math.PI);
+                
+                if (selectedObject === 'camera') {
+                    if (activeGizmoAxis === 'x') {
+                        cameraSettings.rotX = Math.max(-90, Math.min(90, cameraSettings.rotX - angle));
+                        document.getElementById('camera-rot-x').value = cameraSettings.rotX.toFixed(1);
+                    } else if (activeGizmoAxis === 'y') {
+                        cameraSettings.rotY -= angle;
+                        document.getElementById('camera-rot-y').value = cameraSettings.rotY.toFixed(1);
+                    } else {
+                        cameraSettings.rotZ = Math.max(-180, Math.min(180, cameraSettings.rotZ - angle));
+                        document.getElementById('camera-rot-z').value = cameraSettings.rotZ.toFixed(1);
+                    }
+                    
+                    if (cameraPreviewEnabled) updateCameraFrustum();
+                } else if (selectedObject === 'person') {
+                    if (activeGizmoAxis === 'y') {
+                        personSettings.rotY -= angle;
+                        document.getElementById('person-rot-y').value = personSettings.rotY.toFixed(1);
+                        updatePersonTransform();
+                    }
+                } else if (selectedObject === 'car') {
+                    if (activeGizmoAxis === 'y') {
+                        carSettings.rotY -= angle;
+                        document.getElementById('car-rot-y').value = carSettings.rotY.toFixed(1);
+                        updateCarTransform();
+                    }
+                }
+                
+                if (gizmoSpace === 'local') {
+                    updateGizmoOrientation();
+                }
+            }
+            
+            dragStartPoint.copy(currentPoint);
+            updateGizmoPosition();
+        }
+        
+        function handleGizmoMouseUp() {
+            isDraggingGizmo = false;
+            activeGizmoAxis = null;
+            
+            if (gizmoGroup) {
+                Object.values(gizmoHandles).forEach(handle => {
+                    const isHovered = handle.userData.axis === hoveredGizmoAxis;
+                    handle.traverse(child => {
+                        if (child.material) {
+                            child.material.opacity = isHovered ? 1.0 : 0.35;
+                        }
+                    });
+                });
+            }
+        }
+        
+        function handleViewportClick(event) {
+            if (isDraggingGizmo || pilotMode) return;
+            if (!gizmoMode) return;
+            
+            const canvas = renderer.domElement;
+            const rect = canvas.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            
+            const selectables = [];
+            
+            // Only select camera BODY, not frustum
+            if (cameraPreviewEnabled && cameraBodyMesh) {
+                cameraBodyMesh.userData.selectType = 'camera';
+                selectables.push(cameraBodyMesh);
+            }
+            
+            if (showPerson && personMesh) {
+                personMesh.traverse(child => {
+                    if (child.isMesh) {
+                        child.userData.selectType = 'person';
+                        selectables.push(child);
+                    }
+                });
+            }
+            
+            if (showCar && carMesh) {
+                carMesh.traverse(child => {
+                    if (child.isMesh) {
+                        child.userData.selectType = 'car';
+                        selectables.push(child);
+                    }
+                });
+            }
+            
+            const intersects = raycaster.intersectObjects(selectables, false);
+            
+            if (intersects.length > 0) {
+                const selectType = intersects[0].object.userData.selectType;
+                if (selectType && selectType !== selectedObject) {
+                    selectObject(selectType);
+                }
+            } else {
+                deselectObject();
+            }
+        }
+        
+        // Pilot Camera Mode
+        function togglePilotMode() {
+            if (!cameraPreviewEnabled) {
+                alert('Enable Camera Frustum Preview first to use Pilot Mode');
+                return;
+            }
+            
+            pilotMode = !pilotMode;
+            document.getElementById('gizmo-pilot').classList.toggle('active', pilotMode);
+            document.getElementById('pilot-info').classList.toggle('visible', pilotMode);
+            
+            if (pilotMode) {
+                savedCameraState = {
+                    position: camera.position.clone(),
+                    cameraAngle: { ...cameraAngle },
+                    cameraDistance: cameraDistance,
+                    targetOffset: targetOffset.clone(),
+                    fov: camera.fov
+                };
+                
+                enterPilotView();
+            } else {
+                if (savedCameraState) {
+                    camera.position.copy(savedCameraState.position);
+                    cameraAngle = { ...savedCameraState.cameraAngle };
+                    cameraDistance = savedCameraState.cameraDistance;
+                    targetOffset.copy(savedCameraState.targetOffset);
+                    camera.fov = savedCameraState.fov;
+                    camera.updateProjectionMatrix();
+                    updateCameraPosition();
+                }
+                isPilotLooking = false;
+            }
+        }
+        
+        function enterPilotView() {
+            if (!cameraPreviewEnabled || !previewCameraGroup) return;
+            
+            camera.position.set(cameraSettings.posX, cameraSettings.posY, cameraSettings.posZ);
+            
+            const tilt = cameraSettings.rotX * Math.PI / 180;
+            const pan = cameraSettings.rotY * Math.PI / 180;
+            
+            const lookDir = new THREE.Vector3(0, 0, -1);
+            lookDir.applyAxisAngle(new THREE.Vector3(1, 0, 0), tilt);
+            lookDir.applyAxisAngle(new THREE.Vector3(0, 1, 0), pan);
+            
+            const lookTarget = camera.position.clone().add(lookDir);
+            camera.lookAt(lookTarget);
+            camera.rotateZ(cameraSettings.rotZ * Math.PI / 180);
+            
+            const vFov = 2 * Math.atan(cameraSettings.filmbackHeight / (2 * cameraSettings.focalLength)) * (180 / Math.PI);
+            camera.fov = vFov;
+            camera.updateProjectionMatrix();
+        }
+        
+        function updatePilotView() {
+            if (pilotMode) {
+                enterPilotView();
+            }
+        }
+        
+        function handlePilotMouseDown(event) {
+            if (!pilotMode) return;
+            isPilotLooking = true;
+            pilotLastMouse = { x: event.clientX, y: event.clientY };
+        }
+        
+        function handlePilotMouseMove(event) {
+            if (!pilotMode || !isPilotLooking) return;
+            
+            const deltaX = event.clientX - pilotLastMouse.x;
+            const deltaY = event.clientY - pilotLastMouse.y;
+            pilotLastMouse = { x: event.clientX, y: event.clientY };
+            
+            cameraSettings.rotY -= deltaX * 0.3;
+            cameraSettings.rotX = Math.max(-90, Math.min(90, cameraSettings.rotX - deltaY * 0.3));
+            
+            document.getElementById('camera-rot-x').value = cameraSettings.rotX.toFixed(1);
+            document.getElementById('camera-rot-y').value = cameraSettings.rotY.toFixed(1);
+            
+            if (cameraPreviewEnabled) updateCameraFrustum();
+        }
+        
+        function handlePilotMouseUp() {
+            isPilotLooking = false;
+        }
+        
+        function handlePilotKeyboard() {
+            if (!pilotMode) return;
+            
+            const pan = cameraSettings.rotY * Math.PI / 180;
+            const tilt = cameraSettings.rotX * Math.PI / 180;
+            
+            const forward = new THREE.Vector3(
+                -Math.sin(pan) * Math.cos(tilt),
+                -Math.sin(tilt),
+                -Math.cos(pan) * Math.cos(tilt)
+            ).normalize();
+            
+            const right = new THREE.Vector3(Math.cos(pan), 0, -Math.sin(pan)).normalize();
+            
+            let moved = false;
+            
+            if (keysPressed['KeyW'] || keysPressed['ArrowUp']) {
+                cameraSettings.posX += forward.x * pilotMoveSpeed;
+                cameraSettings.posY += forward.y * pilotMoveSpeed;
+                cameraSettings.posZ += forward.z * pilotMoveSpeed;
+                moved = true;
+            }
+            if (keysPressed['KeyS'] || keysPressed['ArrowDown']) {
+                cameraSettings.posX -= forward.x * pilotMoveSpeed;
+                cameraSettings.posY -= forward.y * pilotMoveSpeed;
+                cameraSettings.posZ -= forward.z * pilotMoveSpeed;
+                moved = true;
+            }
+            if (keysPressed['KeyA'] || keysPressed['ArrowLeft']) {
+                cameraSettings.posX -= right.x * pilotMoveSpeed;
+                cameraSettings.posZ -= right.z * pilotMoveSpeed;
+                moved = true;
+            }
+            if (keysPressed['KeyD'] || keysPressed['ArrowRight']) {
+                cameraSettings.posX += right.x * pilotMoveSpeed;
+                cameraSettings.posZ += right.z * pilotMoveSpeed;
+                moved = true;
+            }
+            if (keysPressed['KeyQ']) {
+                cameraSettings.posY -= pilotMoveSpeed;
+                moved = true;
+            }
+            if (keysPressed['KeyE']) {
+                cameraSettings.posY += pilotMoveSpeed;
+                moved = true;
+            }
+            
+            cameraSettings.posY = Math.max(0.1, cameraSettings.posY);
+            
+            if (moved) {
+                document.getElementById('camera-pos-x').value = cameraSettings.posX.toFixed(2);
+                document.getElementById('camera-pos-y').value = cameraSettings.posY.toFixed(2);
+                document.getElementById('camera-pos-z').value = cameraSettings.posZ.toFixed(2);
+                
+                if (cameraPreviewEnabled) updateCameraFrustum();
+            }
+        }
+        
+        function handlePilotWheel(event) {
+            if (!pilotMode) return;
+            event.preventDefault();
+            
+            if (event.deltaY > 0) {
+                pilotMoveSpeed = Math.max(0.01, pilotMoveSpeed * 0.85);
+            } else {
+                pilotMoveSpeed = Math.min(0.3, pilotMoveSpeed * 1.15);
             }
         }
 
@@ -2480,6 +3301,9 @@
         }
 
         function handleKeyboardMovement() {
+            // Skip movement controls in pilot mode
+            if (pilotMode) return;
+            
             // Calculate forward/right vectors based on camera angle
             const forward = new THREE.Vector3(
                 Math.sin(cameraAngle.theta),
@@ -2531,9 +3355,13 @@
 
         function setupControls() {
             const canvas = renderer.domElement;
-            canvas.addEventListener('mousedown', (e) => { isDragging = true; previousMousePosition = { x: e.clientX, y: e.clientY }; });
+            canvas.addEventListener('mousedown', (e) => { 
+                if (isDraggingGizmo || pilotMode) return;
+                isDragging = true; 
+                previousMousePosition = { x: e.clientX, y: e.clientY }; 
+            });
             canvas.addEventListener('mousemove', (e) => {
-                if (!isDragging) return;
+                if (!isDragging || isDraggingGizmo || pilotMode) return;
                 cameraAngle.theta -= (e.clientX - previousMousePosition.x) * 0.01;
                 cameraAngle.phi = Math.max(0.1, Math.min(Math.PI - 0.1, cameraAngle.phi - (e.clientY - previousMousePosition.y) * 0.01));
                 previousMousePosition = { x: e.clientX, y: e.clientY };
@@ -2541,7 +3369,12 @@
             });
             canvas.addEventListener('mouseup', () => isDragging = false);
             canvas.addEventListener('mouseleave', () => isDragging = false);
-            canvas.addEventListener('wheel', (e) => { e.preventDefault(); cameraDistance = Math.max(2, Math.min(30, cameraDistance + e.deltaY * 0.01)); updateCameraPosition(); });
+            canvas.addEventListener('wheel', (e) => { 
+                if (pilotMode) return;
+                e.preventDefault(); 
+                cameraDistance = Math.max(2, Math.min(30, cameraDistance + e.deltaY * 0.01)); 
+                updateCameraPosition(); 
+            });
             
             // Keyboard controls for WASD+QE navigation
             document.addEventListener('keydown', (e) => {
@@ -2588,6 +3421,7 @@
         function animate() {
             requestAnimationFrame(animate);
             handleKeyboardMovement();
+            handlePilotKeyboard();
             renderer.render(scene, camera);
             renderPreviewCamera();
         }
@@ -2925,6 +3759,14 @@
                     resetCameraPosition();
                 } else {
                     removeCameraPreview();
+                    // Exit pilot mode if active
+                    if (pilotMode) {
+                        togglePilotMode();
+                    }
+                    // Deselect camera if selected
+                    if (selectedObject === 'camera') {
+                        deselectObject();
+                    }
                 }
             });
 
@@ -3017,6 +3859,7 @@
                     createPersonMesh();
                 } else {
                     removePersonMesh();
+                    if (selectedObject === 'person') deselectObject();
                 }
             });
 
@@ -3047,6 +3890,7 @@
                     createCarMesh();
                 } else {
                     removeCarMesh();
+                    if (selectedObject === 'car') deselectObject();
                 }
             });
 
@@ -3077,6 +3921,84 @@
                 this.classList.toggle('active');
                 toggleGrid();
             });
+
+            // Gizmo controls
+            document.getElementById('gizmo-translate').addEventListener('click', () => setGizmoMode('translate'));
+            document.getElementById('gizmo-rotate').addEventListener('click', () => setGizmoMode('rotate'));
+            document.getElementById('gizmo-space').addEventListener('click', toggleGizmoSpace);
+            document.getElementById('gizmo-pilot').addEventListener('click', togglePilotMode);
+            
+            // Gizmo keyboard shortcuts
+            document.addEventListener('keydown', (e) => {
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+                
+                if (e.key.toLowerCase() === 'g') {
+                    setGizmoMode('translate');
+                } else if (e.key.toLowerCase() === 'r') {
+                    setGizmoMode('rotate');
+                } else if (e.key.toLowerCase() === 'l') {
+                    toggleGizmoSpace();
+                } else if (e.key.toLowerCase() === 'p') {
+                    togglePilotMode();
+                } else if (e.key === 'Escape') {
+                    if (pilotMode) {
+                        togglePilotMode();
+                    } else {
+                        deselectObject();
+                        if (gizmoMode) {
+                            gizmoMode = null;
+                            document.getElementById('gizmo-translate').classList.remove('active');
+                            document.getElementById('gizmo-rotate').classList.remove('active');
+                            createGizmo();
+                        }
+                    }
+                }
+            });
+            
+            // Gizmo mouse handlers
+            const canvas = renderer.domElement;
+            
+            canvas.addEventListener('mousedown', (e) => {
+                if (pilotMode) {
+                    handlePilotMouseDown(e);
+                    return;
+                }
+                const gizmoHandled = handleGizmoMouseDown(e);
+                if (!gizmoHandled && gizmoMode) {
+                    handleViewportClick(e);
+                }
+            });
+            
+            canvas.addEventListener('mousemove', (e) => {
+                if (pilotMode) {
+                    handlePilotMouseMove(e);
+                    return;
+                }
+                if (isDraggingGizmo) {
+                    handleGizmoMouseMove(e);
+                } else {
+                    updateGizmoHover(e);
+                }
+            });
+            
+            canvas.addEventListener('mouseup', () => {
+                if (pilotMode) {
+                    handlePilotMouseUp();
+                    return;
+                }
+                handleGizmoMouseUp();
+            });
+            
+            window.addEventListener('mouseup', () => {
+                handleGizmoMouseUp();
+                handlePilotMouseUp();
+            });
+            
+            canvas.addEventListener('wheel', (e) => {
+                if (pilotMode) {
+                    handlePilotWheel(e);
+                }
+            }, { passive: false });
 
             // Export/Import handlers
             document.getElementById('export-zip').addEventListener('click', exportZIP);
