@@ -1479,7 +1479,7 @@ git worktree remove ../led-baseline
 
 # 1. Implement ONE commit (one bug id x one consumer). Write tests/regression/expected/<commit-id>.json first.
 GOLDEN_DIR=./no-golden node --test "tests/unit/**/*.test.mjs"   # golden-file tests skip; oracle + new unit tests run
-node tests/static/check.mjs && node tests/static/css-slices.mjs
+node tests/static/check.mjs && node tests/static/css-slices.mjs --report-only   # report-only since 06 T1, the first CSS change (07 S7)
 
 # 2. Full candidate run (never --only: unexpected diffs elsewhere must be caught)
 node tests/regression/run.mjs --root . --out tests/regression/output/candidate

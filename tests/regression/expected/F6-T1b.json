@@ -1,0 +1,10 @@
+{
+  "commit": "F6-T1b",
+  "bugs": [],
+  "expect": [],
+  "mayChange": [
+    { "output": "large_wall/final__export-zip__led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen so far: L2_PanelIDs.png (1995, 948), L3_PanelIDs.png (1970, 1003), L4_PanelIDs.png (2026, 858), 1 px each, 3840x1920); this commit changes no export and no texture" }
+  ],
+  "notes": "Review follow-up of 06 T1, invariance: comments and documentation only. Since T1 links css/99-utilities.css after css/12-responsive.css (07 C52), the header of 12-responsive.css, its ARCHITECTURE 2.1 row and the css-slices.mjs check list call it the last slice instead of the last stylesheet, and 08 8.1 step 1 runs css-slices.mjs --report-only (07 S7). A CSS comment changes no computed style, so no output may change."
+}

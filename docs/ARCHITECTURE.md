@@ -171,7 +171,7 @@ Each file contains a header comment followed by the original lines **verbatim an
 | `css/09-viewport-tools.css` | 604-735 | `.gizmo-mode-btn*`, `.pilot-info*`, `.gizmo-divider`, `.selection-indicator*`, `.view-btn*` | WP2 |
 | `css/10-section-extras.css` | 737-811 | `.section-color-picker`, `.color-swatch-small*`, `.color-input-custom*`, `.section-warning*`, `.warning-indicator` (the dead `.section-color-0..7` were deleted in 06 T1) | WP2 |
 | `css/11-export.css` | 813-857 | `.export-section`, `.export-row`, **second** `.export-btn` block, `.export-btn.secondary*`, `.import-input` | WP2 |
-| `css/12-responsive.css` | 859-869 | `@media (max-width: 900px)` (must stay last) | WP2 |
+| `css/12-responsive.css` | 859-869 | `@media (max-width: 900px)` (must stay the last of the slices; since 06 T1 the link order puts spec 09's `20`-`29` and `css/99-utilities.css` after it, see below) | WP2 |
 
 **Feature stylesheets** are not slices. They live in `css/features/`, are linked in the `css/features/*` block of 07 C52's link order (`00-fonts`, `01`-`11`, `css/features/*`, `12-responsive`, `20`-`29`, `99-utilities`), so `12-responsive.css` stays the last of the slices, and they carry their own `@media` rules. `tests/static/css-slices.mjs` scans only `css/01-*.css` to `css/12-*.css` (07 S7):
 
@@ -3177,3 +3177,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 3.4, 3.12, 7: `App` injects `theme = buildTheme(Theme, getComputedStyle(documentElement) reader, { warn: console.warn })` instead of `Theme` (no `bindFonts` option: `BIND_FONTS_DEFAULT`, `false` until 06 T5); `COLOR_BINDINGS` gains `scene.debug.faceFront`, `faceBack`, `vertexNormal`, `faceNormal`.
 - 2.3: `theme.test.mjs` U4 (token parity: the `:root` block parsed, `var()` chains resolved, every bridged leaf `Object.is` its fallback, fonts unbound while `BIND_FONTS_DEFAULT` is false), U10 (the Theme walk) and U11 (`tests/unit/fixtures/legacy-theme.mjs`: the Phase-1 values of the `UNBRANDED` leaves and spec 01's face-orientation colours).
 - 9: Feature 6's landed steps.
+
+**06 T1b, the last slice is not the last stylesheet (review follow-up of 06 T1)** (manifest `tests/regression/expected/F6-T1b.json`, an invariance gate: empty `expect`; comments and documentation only):
+- 2.1: the `css/12-responsive.css` row and that file's header comment say it is the last of the slices, not the last stylesheet: since 06 T1, 07 C52's link order puts spec 09's `20`-`29` block and `css/99-utilities.css` after it. The `css-slices.mjs` check list says the same.
+- 08 8.1 step 1 (the per-commit procedure) runs `css-slices.mjs --report-only` (07 S7), as the static gate, CI and REFACTOR_PLAN 8 have since 06 T1.

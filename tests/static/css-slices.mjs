@@ -28,7 +28,8 @@
  *      LF, CR, FF) to one space, trimmed. Other Unicode spaces (U+00A0, ...) are not CSS
  *      whitespace (CSS reads them as identifier characters), so they are compared as written.
  *   3. Each file, normalised, equals its own original line range (rules never cross a file boundary).
- *   4. Only 12-responsive.css contains '@media' (it holds the only @media rule and is linked last).
+ *   4. Only 12-responsive.css contains '@media' (it holds the only @media rule and is the last slice; since 06 T1
+ *      css/99-utilities.css is linked after it, 07 C52).
  *   5. Each file starts with its one header comment and contains no other comment (2.1: "a header
  *      comment followed by the original lines"). The original has no comments, so a comment inside
  *      the body could only hide a change: a comment between `col` and `or` makes CSS read two
