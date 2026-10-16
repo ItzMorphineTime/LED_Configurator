@@ -9,7 +9,7 @@
 //   3. null (the probe that needs it records that it was skipped).
 // Section colours always come from the DOM: each card's colour input in #wall-sections (the swatch values that
 // sectionsSnapshot records), so they follow imports and edits.
-// Nothing here is used by a scenario yet: 01 T8's lib/probe.mjs builds its PALETTE from it.
+// lib/probe.mjs readProbePalette builds the probe colours of the normals_debug scenario from it (01 T8).
 
 /** The scene colours the probes use and the token that carries each one once spec 06 lands (06 5.12, 01 4.6). */
 export const SCENE_COLOURS = Object.freeze({

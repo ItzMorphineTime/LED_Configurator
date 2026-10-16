@@ -10,10 +10,22 @@
 //
 // Exported as EXTRA_SCENARIOS ({ name: { description, run } }) and spread into SCENARIOS after the
 // original entries (see scenarios.mjs).
+//
+// normals_debug (docs/improvements/01-normals.md 8.2, T8, step F1-3) is the Feature 1 scenario: Part A runs on every
+// page (the original included), Part B drives the debug view and is skipped (debug_skipped.json) on a page without
+// #toggle-normals. Its pixel probes live in lib/probe.mjs and read their colours from the live palette hook.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { decodePNG } from './lib/formats.mjs';
+import { CONFIGS } from './configs.mjs';
+import { decodePNG, readZip, sha256 } from './lib/formats.mjs';
+import { MODIFIERS } from './lib/app.mjs';
+import { setViewport } from './lib/uiprobe.mjs';
+import {
+    MIN_REGION, classifyFace, colorMask, diffStats, largestComponent, probePoint, readProbePalette, sampleRGB, withinJitter,
+} from './lib/probe.mjs';
+// A function declaration, so this import cycle (scenarios.mjs registers EXTRA_SCENARIOS) is safe.
+import { findPersonPixel } from './scenarios.mjs';
 
 const MODES = ['combined', 'section', 'panel'];
 
@@ -754,6 +766,523 @@ async function importEdgeScenario(ctx) {
     await dialogs('vi_viii');
 }
 
+// ---- scenario: normals_debug (docs/improvements/01-normals.md 8.2, T8) ---------------------------
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * The camera poses of 8.2. Each starts with #view-reset, then #view-front (theta 0, phi PI/2, distance 8); `dx`/`dy`
+ * is a left-button orbit drag through the canvas centre (0.01 rad per px), `wheel` an orbit wheel step (0.01 m per
+ * unit). Probes find sections by colour, never by projection, so the poses do not depend on the orbit target.
+ */
+const POSES = Object.freeze({
+    front: null,
+    behind: { dx: 314, dy: 0, wheel: 0 },      // theta -3.14
+    boxP1: { dx: 79, dy: 60, wheel: 700 },     // theta -0.79, phi 0.971, distance 15
+    boxP2: { dx: -236, dy: 60, wheel: 700 },   // theta 2.36, phi 0.971, distance 15
+});
+
+/** The box_corner section names (the palette hook gives their card colours) and the normal colour each one shows. */
+const BOX_SECTIONS = ['Back', 'Side Right', 'Front', 'Return'];
+
+/**
+ * An orbit drag of (dx, dy) px centred on the canvas centre (from centre - d/2 to centre + d/2) in moves of at most
+ * 20 px. The orbit integrates the mousemove deltas, so only the total displacement matters.
+ */
+async function orbitDrag(app, dx, dy) {
+    const r = await app.canvasRect();
+    const cx = Math.round(r.x + r.w / 2), cy = Math.round(r.y + r.h / 2);
+    const x0 = cx - Math.round(dx / 2), y0 = cy - Math.round(dy / 2);
+    const n = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / 20));
+    await app.mouse('mouseMoved', x0, y0);
+    await app.mouse('mousePressed', x0, y0);
+    for (let i = 1; i <= n; i++) await app.mouse('mouseMoved', x0 + Math.round((dx * i) / n), y0 + Math.round((dy * i) / n), { button: 'left', buttons: 1 });
+    await app.mouse('mouseReleased', x0 + dx, y0 + dy);
+    await app.settle();
+}
+
+/**
+ * Puts the orbit camera in one of the POSES. The drag's mousedown on the canvas is an outside pointerdown for an open
+ * debug popover, which closes it (01 3.2: closed without consuming the event).
+ */
+async function pose(app, name) {
+    await app.click('#view-reset');
+    await app.click('#view-front');
+    const p = POSES[name];
+    if (!p) return;
+    await orbitDrag(app, p.dx, p.dy);
+    if (p.wheel) {
+        const r = await app.canvasRect();
+        await app.page.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: Math.round(r.x + r.w / 2), y: Math.round(r.y + r.h / 2), deltaX: 0, deltaY: p.wheel });
+        await app.settle();
+    }
+}
+
+/** The debug view and the rest of the S0 state as the DOM shows it (page side). */
+function pageDebugState() {
+    const q = (id) => document.getElementById(id);
+    const active = (id) => { const el = q(id); return el ? el.classList.contains('active') : null; };
+    const checked = (id) => { const el = q(id); return el ? el.checked : null; };
+    const a = document.activeElement;
+    const shading = document.querySelector('input[name="debug-shading"]:checked');
+    const popover = q('debug-view-popover');
+    const legend = q('debug-view-legend');
+    const mode = document.querySelector('.mesh-mode-option.active');
+    const toggleNormals = q('toggle-normals');
+    return {
+        lines: toggleNormals ? toggleNormals.getAttribute('aria-pressed') === 'true' : null,
+        vertex: checked('debug-normals-vertex'),
+        face: checked('debug-normals-face'),
+        scale: q('debug-normals-scale') ? q('debug-normals-scale').value : null,
+        onTop: checked('debug-normals-ontop'),
+        shading: shading ? shading.value : null,
+        popoverOpen: popover ? !popover.hidden : null,
+        placement: popover ? popover.dataset.placement || null : null,
+        stats: q('debug-normals-stats') ? q('debug-normals-stats').textContent : null,
+        status: q('debug-view-status') ? q('debug-view-status').textContent : null,
+        legendVisible: legend ? !legend.hidden : null,
+        activeElement: !a || a === document.body ? 'BODY' : (a.id || a.tagName),
+        gizmoMode: active('gizmo-translate') ? 'translate' : active('gizmo-rotate') ? 'rotate' : null,
+        pilot: q('pilot-info') ? q('pilot-info').classList.contains('visible') : null,
+        selected: q('selection-indicator') ? q('selection-indicator').classList.contains('visible') : null,
+        meshMode: mode ? mode.getAttribute('data-mode') : null,
+        wireframe: active('toggle-wireframe'),
+        frames: active('toggle-frame'),
+        panelIds: active('toggle-panel-ids'),
+        person: active('toggle-person'),
+        car: active('toggle-car'),
+        preview: active('toggle-camera-preview'),
+    };
+}
+
+/** The B12 measurements: the popover and the overlay, then the scroll reachability of the popover and the column. */
+function pagePopoverFit() {
+    const r = (el) => { const b = el.getBoundingClientRect(); return { left: b.left, top: b.top, right: b.right, bottom: b.bottom }; };
+    const within = (a, b) => a.left >= b.left - 0.5 && a.top >= b.top - 0.5 && a.right <= b.right + 0.5 && a.bottom <= b.bottom + 0.5;
+    const popover = document.getElementById('debug-view-popover');
+    const overlay = popover.parentElement;
+    const column = document.querySelector('.viewport-controls');
+    const pop = r(popover);
+    const out = {
+        overlayHeight: Math.round(overlay.getBoundingClientRect().height),
+        inside: !popover.hidden && within(pop, r(overlay)),
+        placement: popover.dataset.placement || null,
+        scrollable: popover.scrollHeight > popover.clientHeight,
+        columnScrolls: column.scrollHeight > column.clientHeight,
+    };
+    // Every control reachable: scroll each box to its end and check that its last item lies inside it.
+    const popTop = popover.scrollTop, colTop = column.scrollTop;
+    popover.scrollTop = popover.scrollHeight;
+    out.lastControlReachable = within(r(document.getElementById('debug-normals-ontop')), r(popover));
+    popover.scrollTop = popTop;
+    column.scrollTop = column.scrollHeight;
+    out.lastButtonReachable = within(r(document.getElementById('debug-view-btn')), r(column));
+    column.scrollTop = colTop;
+    return out;
+}
+
+/** Focuses the first element matching `selector` (no text selection) and reports whether it holds the focus. */
+function pageFocus(selector) {
+    const el = document.querySelector(selector);
+    if (!el) return false;
+    el.focus();
+    return document.activeElement === el;
+}
+
+/** The S0 reference state of 8.2 (pose front is set by the steps themselves; the DOM does not show it). */
+const S0 = Object.freeze({
+    lines: false, vertex: true, face: false, scale: '1', onTop: false, shading: 'content', popoverOpen: false,
+    activeElement: 'BODY', gizmoMode: null, pilot: false, selected: false, meshMode: 'combined', wireframe: false,
+    frames: false, person: false, car: false, preview: false,
+});
+
+/**
+ * The normals debug view (01 T8, 8.2). Part A (content mode) runs on every page, the original single-file app
+ * included; Part B (the debug view) needs #toggle-normals and runs on one fresh page, every step asserting its
+ * precondition relative to S0 (the bootstrap state) and leaving the state its row of 8.2 names. Image comparisons
+ * inside the scenario are verdicts within the documented overlay jitter (withinJitter), never exact equality; the raw
+ * numbers go to the runner's stdout. Probe colours come from the live palette hook (lib/probe.mjs).
+ */
+async function normalsDebugScenario(ctx) {
+    const { app, rec } = ctx;
+    const preconditions = [];
+    const state = () => pageCall(app, pageDebugState);
+    /** Asserts `want` against the DOM state; a mismatch is recorded (precondition_failed), and the step continues. */
+    const expectState = async (label, want) => {
+        const s = await state();
+        const failed = Object.entries(want).filter(([k, v]) => s[k] !== v).map(([k, v]) => ({ key: k, expected: v, actual: s[k] }));
+        preconditions.push(failed.length ? { step: label, ok: false, precondition_failed: failed } : { step: label, ok: true });
+        return s;
+    };
+    const capture = async (name) => { const png = await app.screenshotCanvas(); rec.screenshot(name, png); return png; };
+    const report = (label, stats) => console.log(`      normals_debug ${label}: maxDiff ${stats.maxDiff}, diffPixels ${stats.diffPixels}`);
+
+    // ---- the debug controls, always through the DOM (el.click / input + change), opening the popover when needed ----
+    const openPopover = async () => { if (!(await state()).popoverOpen) await app.click('#debug-view-btn'); };
+    const closePopover = async () => { if ((await state()).popoverOpen) await app.click('#debug-view-close'); await app.blurActive(); };
+    const setShading = async (value) => { await openPopover(); await app.click(`input[name="debug-shading"][value="${value}"]`); };
+    const setCheck = async (id, key, on) => { await openPopover(); if ((await state())[key] !== on) await app.click(`#${id}`); };
+    const setLines = async (on) => { if ((await state()).lines !== on) await app.click('#toggle-normals'); };
+    const setScale = async (v) => { await openPopover(); await app.setValue('#debug-normals-scale', String(v)); };
+    /** Debug settings back to S0 (content, lines off, vertex on, face off, x1, on top off), popover closed, focus BODY. */
+    const restoreDebug = async () => {
+        const s = await state();
+        if (s.shading !== 'content') await setShading('content');
+        await setLines(false);
+        if (!s.vertex) await setCheck('debug-normals-vertex', 'vertex', true);
+        if (s.face) await setCheck('debug-normals-face', 'face', false);
+        if (s.scale !== '1') await setScale(1);
+        if (s.onTop) await setCheck('debug-normals-ontop', 'onTop', false);
+        await closePopover();
+    };
+
+    // ---- Part A: content mode (every page) ----
+    const contentProbes = {};
+    let a1 = null;
+    const wallProbe = (png, palette) => {
+        const img = decodePNG(png);
+        return {
+            wallColourFound: largestComponent(colorMask(img, palette.wall, 8)).size >= MIN_REGION,
+            // Until 01 F1-5 the theme has no cabinet colour (SceneTheme.wallBack), so no cabinet can be drawn.
+            cabinetVisible: palette.cabinet ? largestComponent(colorMask(img, palette.cabinet, 6)).size >= MIN_REGION : false,
+        };
+    };
+    const boxProbe = (png, palette) => {
+        const img = decodePNG(png);
+        const found = {};
+        for (const name of BOX_SECTIONS) {
+            const rgb = palette.sections[name] || null;
+            found[name] = rgb ? largestComponent(colorMask(img, rgb, 8)).size >= MIN_REGION : false;
+        }
+        return { found, cabinetVisible: palette.cabinet ? largestComponent(colorMask(img, palette.cabinet, 6)).size >= MIN_REGION : false };
+    };
+    await step(ctx, 'A1-front', async () => {
+        await pose(app, 'front');
+        a1 = await capture('a1_front');
+        contentProbes.front = wallProbe(a1, await readProbePalette(app));
+    });
+    await step(ctx, 'A2-behind', async () => {
+        await pose(app, 'behind');
+        contentProbes.behind = wallProbe(await capture('a2_behind'), await readProbePalette(app));
+    });
+    await step(ctx, 'A3-box-p1', async () => {
+        const r = await app.importConfig(CONFIGS.box_corner, 'box_corner.json');
+        if (!r.ok) throw new Error('box_corner import did not apply: ' + JSON.stringify(r));
+        if ((await state()).panelIds) await app.click('#toggle-panel-ids');
+        await pose(app, 'boxP1');
+        contentProbes.boxP1 = boxProbe(await capture('a3_box_p1'), await readProbePalette(app));
+    });
+    await step(ctx, 'A4-box-p2', async () => {
+        await pose(app, 'boxP2');
+        contentProbes.boxP2 = boxProbe(await capture('a4_box_p2'), await readProbePalette(app));
+    });
+    await record(ctx, 'content_probes', () => contentProbes);
+
+    if (!(await app.exists('#toggle-normals'))) {
+        await record(ctx, 'debug_skipped', () => ({ skipped: true, reason: '#toggle-normals not present' }));
+        return;
+    }
+
+    // ---- Part B: the debug view, on one fresh page ----
+    await step(ctx, 'B-fresh-page', async () => {
+        await app.reload();
+        await pose(app, 'front');
+    });
+
+    /** B0 / B7: every export of the current state, hashed in memory (ZIP: per entry; its container has timestamps). */
+    const exportHashes = async () => {
+        const run = (selector, expect = 1) => app.captureDownloads(() => app.click(selector), { expect });
+        const hashOf = (files, ext) => files.filter((f) => f.filename.endsWith(ext)).map((f) => sha256(f.data)).join(',') || null;
+        const h = {};
+        for (const mode of MODES) {
+            await app.selectMeshMode(mode);
+            const obj = await run('#export-obj', 2);
+            h[`${mode}.obj`] = hashOf(obj, '.obj');
+            h[`${mode}.mtl`] = hashOf(obj, '.mtl');
+            h[`${mode}.gltf`] = hashOf(await run('#export-gltf'), '.gltf');
+        }
+        await app.selectMeshMode('combined');
+        h.json = hashOf(await run('#export-json'), '.json');
+        const zip = (await run('#export-zip')).find((f) => f.filename.endsWith('.zip'));
+        h.zipEntries = zip ? readZip(zip.data).filter((e) => !e.isDir).map((e) => `${e.name} ${sha256(e.data)}`) : null;
+        h.panelIdsPng = hashOf(await run('#export-panel-ids'), '.png');
+        return h;
+    };
+    let b0 = null;
+    await step(ctx, 'B0-exports', async () => {
+        await expectState('B0', S0);
+        b0 = await exportHashes();
+        await expectState('B0-leaves', { meshMode: 'combined' });
+    });
+
+    await step(ctx, 'B1-lines', async () => {
+        await expectState('B1', S0);
+        await app.click('#toggle-normals');
+        await capture('b1_vertex_normals');
+        const s = await state();
+        const classes = await pageCall(app, (id) => [...document.getElementById(id).classList].sort(), 'toggle-normals');
+        rec.state('b1_lines_on', { toggleNormals: { classes, ariaPressed: String(s.lines) }, stats: s.stats, legendVisible: s.legendVisible });
+    });
+
+    await step(ctx, 'B2-popover', async () => {
+        await expectState('B2', { lines: true, popoverOpen: false });
+        await app.click('#debug-view-btn');                       // el.click(): detail 0, a keyboard-style open
+        const opened = await state();
+        await app.click('#debug-normals-face');
+        await capture('b2_vertex_face');
+        const withFace = await state();
+        await app.setValue('#debug-normals-scale', '2');
+        await capture('b3_scale2');
+        const scaled = await state();
+        await sleep(500);
+        const announced = await state();
+        rec.state('b2_popover', {
+            activeElementAfterOpen: opened.activeElement, popoverOpen: opened.popoverOpen, placement: opened.placement,
+            statsWithFace: withFace.stats, statsScale2: scaled.stats, statusAfter500ms: announced.status,
+        });
+    });
+
+    const faceProbes = {};
+    /** Locates `colour` in a normal-colours capture, then samples the same point in a face-orientation capture. */
+    const facePair = async (colours, shotName) => {
+        await setShading('normalColors');
+        const normals = decodePNG(await app.screenshotCanvas());
+        const palette = await readProbePalette(app);
+        const points = {};
+        for (const c of colours) points[c] = probePoint(colorMask(normals, palette[c], 24));
+        await setShading('faceOrientation');
+        const face = decodePNG(await capture(shotName));
+        const out = {};
+        for (const c of colours) out[c] = points[c] ? classifyFace(sampleRGB(face, points[c].x, points[c].y)) : 'not-found';
+        return out;
+    };
+    await step(ctx, 'B3-face-probes', async () => {
+        await expectState('B3', { lines: true, face: true, scale: '2', popoverOpen: true });
+        await pose(app, 'front');
+        const front = await facePair(['lavender'], 'b4_face_front');
+        await pose(app, 'behind');                                // closes the popover (outside pointerdown)
+        const behind = await facePair(['lavender'], 'b5_face_behind');
+        faceProbes.default = { front: front.lavender, behind: behind.lavender };
+    });
+
+    await step(ctx, 'B4-normal-colours', async () => {
+        await expectState('B4', { lines: true, face: true, shading: 'faceOrientation' });
+        await pose(app, 'front');
+        await setShading('normalColors');
+        await capture('b6_normal_colors');
+    });
+
+    await step(ctx, 'B5-rebuilds', async () => {
+        await expectState('B5', { lines: true, shading: 'normalColors', meshMode: 'combined' });
+        await setShading('faceOrientation');
+        const stats = { combined: (await state()).stats };
+        await app.selectMeshMode('section');
+        await capture('b7_section');
+        stats.section = (await state()).stats;
+        await app.selectMeshMode('panel');
+        await capture('b8_panel');
+        stats.panel = (await state()).stats;
+        await app.selectMeshMode('combined');
+        const s = await state();
+        rec.state('b5_rebuilds', { stats, shadingAfterRebuilds: s.shading, linesAfterRebuilds: s.lines });
+    });
+
+    await step(ctx, 'B6-wireframe-and-content', async () => {
+        await expectState('B6', { shading: 'faceOrientation', meshMode: 'combined' });
+        await app.click('#toggle-wireframe');
+        await capture('b9_wire_on');
+        await app.click('#toggle-wireframe');
+        await capture('b10_wire_off');
+        await restoreDebug();
+        await pose(app, 'front');
+        const b11 = await capture('b11_content');
+        const exclude = await app.overlayRects(['.viewport-controls', '.viewport-info', '#debug-view-legend']);
+        const stats = a1 ? diffStats(a1, b11, exclude) : { maxDiff: Infinity, diffPixels: Infinity };
+        report('b11_content vs a1_front', stats);
+        rec.state('content_restored', { pass: withinJitter(stats) });
+    });
+
+    await step(ctx, 'B7-export-isolation', async () => {
+        await expectState('B7', S0);
+        await setLines(true);
+        await setCheck('debug-normals-face', 'face', true);
+        await setScale(4);
+        await setCheck('debug-normals-ontop', 'onTop', true);
+        await setShading('faceOrientation');
+        const b7 = await exportHashes();
+        await restoreDebug();
+        const same = (keys) => keys.every((k) => b0 && b0[k] !== null && b0[k] === b7[k]);
+        rec.state('exports_isolation', {
+            obj: same(MODES.map((m) => `${m}.obj`)),
+            mtl: same(MODES.map((m) => `${m}.mtl`)),
+            gltf: same(MODES.map((m) => `${m}.gltf`)),
+            json: same(['json']),
+            zipEntries: !!(b0 && b0.zipEntries && b7.zipEntries && JSON.stringify(b0.zipEntries) === JSON.stringify(b7.zipEntries)),
+            panelIdsPng: same(['panelIdsPng']),
+        });
+    });
+
+    await step(ctx, 'B8-keyboard', async () => {
+        await expectState('B8', S0);
+        const log = [];
+        const kb = async (action) => {
+            const s = await state();
+            log.push({ action, lines: s.lines, vertex: s.vertex, shading: s.shading, gizmoMode: s.gizmoMode, popoverOpen: s.popoverOpen, activeElement: s.activeElement });
+        };
+        // (1) n in a text input, without inserting the character (the name stays unchanged, so blurring fires no change).
+        await pageCall(app, pageFocus, '#wall-sections .section-name-input');
+        await app.keyPress('n', { noText: true });
+        await kb('1 n in a section-name input');
+        await app.blurActive();
+        // (2) Ctrl+N and Alt+N.
+        await app.keyPress('n', { modifiers: MODIFIERS.Ctrl });
+        await kb('2 Ctrl+N');
+        await app.keyPress('n', { modifiers: MODIFIERS.Alt });
+        await kb('2 Alt+N');
+        // (3) N and Shift+N.
+        await app.keyPress('n');
+        await kb('3 N');
+        await app.keyPress('n', { modifiers: MODIFIERS.Shift });
+        await kb('3 Shift+N');
+        // (4) A pointer open leaves focus on the button.
+        await app.pointerClick('#debug-view-btn');
+        await kb('4 pointer click #debug-view-btn');
+        // (5) A pointer change blurs the control: N and G work again.
+        await app.pointerClick('#debug-normals-vertex');
+        await kb('5 pointer click #debug-normals-vertex');
+        await app.keyPress('n');
+        await kb('5 N');
+        await app.keyPress('g');
+        await kb('5 G');
+        // (6) The first Escape closes the popover; (7) the second one deselects (legacy).
+        await app.keyPress('Escape');
+        await kb('6 Escape');
+        await app.keyPress('Escape');
+        await kb('7 Escape');
+        // (8) A keyboard open focuses the checked radio; arrows change the shading; N is ignored inside the dialog.
+        await pageCall(app, pageFocus, '#debug-view-btn');
+        await app.keyPress('Enter');
+        await kb('8 Enter on #debug-view-btn');
+        await app.keyPress('ArrowDown');
+        await kb('8 ArrowDown');
+        await app.keyPress('n');
+        await kb('8 N');
+        await app.keyPress('Escape');
+        await kb('8 Escape');
+        rec.state('keyboard', log);
+        // Back to S0: shading content (Shift+N from normal colours), vertex lines re-checked, lines off, popover closed.
+        for (let i = 0; i < 3 && (await state()).shading !== 'content'; i++) await app.keyPress('n', { modifiers: MODIFIERS.Shift });
+        await restoreDebug();
+    });
+
+    await step(ctx, 'B9-picking', async () => {
+        await expectState('B9', S0);
+        await app.click('#view-reset');
+        await app.click('#toggle-person');
+        await app.click('#gizmo-translate');
+        await setLines(true);
+        await setCheck('debug-normals-face', 'face', true);
+        await setCheck('debug-normals-ontop', 'onTop', true);
+        await closePopover();
+        const hit = findPersonPixel(await app.screenshotCanvas());
+        if (hit) {
+            const r = await app.canvasRect();
+            await clickAt(app, r.x + hit.x, r.y + hit.y);
+        }
+        const sel = await pageCall(app, () => {
+            const el = document.getElementById('selection-indicator');
+            return { visible: el.classList.contains('visible'), text: el.textContent.replace(/\s+/g, ' ').trim() };
+        });
+        rec.state('picking', { personFound: !!hit, selectionVisible: sel.visible, selectionText: sel.text });
+        await app.blurActive();
+        await app.keyPress('Escape');
+        await app.click('#toggle-person');
+        await restoreDebug();
+        await pose(app, 'front');
+    });
+
+    await step(ctx, 'B10-preview-isolation', async () => {
+        await expectState('B10', S0);
+        await app.click('#toggle-camera-preview');
+        await expectState('B10-preview-on', { preview: true });
+        await setLines(true);
+        await setCheck('debug-normals-face', 'face', true);
+        await setCheck('debug-normals-ontop', 'onTop', true);
+        await closePopover();
+        const a = await app.screenshotElement('#camera-preview-canvas');
+        rec.screenshot('b10_preview_lines_on', a);
+        await setLines(false);
+        const b = await app.screenshotElement('#camera-preview-canvas');
+        const exclude = await app.overlayRects(['#camera-preview-window > div'], '#camera-preview-canvas');
+        const stats = diffStats(a, b, exclude);
+        report('preview lines on vs off', stats);
+        rec.state('preview_isolation', { pass: withinJitter(stats) });
+        await restoreDebug();
+    });
+
+    await step(ctx, 'B11-pilot-legend', async () => {
+        await expectState('B11', { ...S0, preview: true });
+        await setShading('faceOrientation');
+        await app.click('#debug-view-close');                     // focus returns to #debug-view-btn (no guard blocks it)
+        await app.keyPress('p');
+        const pilotStarted = (await state()).pilot === true;
+        const legend = await pageCall(app, pageRect, '#debug-view-legend');
+        const banner = await pageCall(app, pageRect, '#pilot-info');
+        const legendVisible = !!(legend && legend.display !== 'none' && legend.w > 0 && legend.h > 0);
+        const intersects = pilotStarted && legend && banner
+            ? legend.x < banner.x + banner.w && banner.x < legend.x + legend.w && legend.y < banner.y + banner.h && banner.y < legend.y + legend.h
+            : null;
+        if (!pilotStarted) preconditions.push({ step: 'B11-pilot', ok: false, precondition_failed: [{ key: 'pilot', expected: true, actual: false }] });
+        await app.keyPress('Escape');
+        const pilotExited = (await state()).pilot === false;
+        rec.state('pilot_legend', { pilotStarted, legendVisible, intersects, pilotExited });
+        await restoreDebug();
+        await app.click('#toggle-camera-preview');
+        await pose(app, 'front');
+    });
+
+    await step(ctx, 'B12-popover-fit', async () => {
+        await expectState('B12', S0);
+        const fit = {};
+        await setViewport(app, 1366, 650);
+        await openPopover();
+        fit.wide = { viewport: [1366, 650], ...await pageCall(app, pagePopoverFit) };
+        await closePopover();
+        await setViewport(app, 800, 760);
+        await openPopover();
+        fit.narrow = { viewport: [800, 760], ...await pageCall(app, pagePopoverFit) };
+        await closePopover();
+        await setViewport(app, 1600, 1000);
+        rec.state('popover_fit', fit);
+    });
+
+    await step(ctx, 'B13-box-corner', async () => {
+        await expectState('B13', S0);
+        const r = await app.importConfig(CONFIGS.box_corner, 'box_corner.json');
+        if (!r.ok) throw new Error('box_corner import did not apply: ' + JSON.stringify(r));
+        if ((await state()).panelIds) await app.click('#toggle-panel-ids');
+        for (const [poseName, shotName] of [['boxP1', 'b12_box_p1'], ['boxP2', 'b13_box_p2']]) {
+            await pose(app, poseName);
+            await setShading('normalColors');
+            await closePopover();
+            const normals = decodePNG(await app.screenshotCanvas());
+            const palette = await readProbePalette(app);
+            const points = {};
+            for (const c of ['lavender', 'teal', 'olive']) points[c] = probePoint(colorMask(normals, palette[c], 24));
+            await setShading('faceOrientation');
+            await closePopover();
+            const face = decodePNG(await capture(shotName));
+            faceProbes[poseName] = {};
+            for (const c of ['lavender', 'teal', 'olive']) {
+                faceProbes[poseName][c] = points[c] ? classifyFace(sampleRGB(face, points[c].x, points[c].y)) : 'not-found';
+            }
+        }
+    });
+
+    await record(ctx, 'face_probes', () => faceProbes);
+    await record(ctx, 'preconditions', () => preconditions);
+}
+
 export const EXTRA_SCENARIOS = {
     import_edge: {
         description: 'Import edge cases (B-L8): empty wall with safe distance, string numbers, unknown mesh mode, duplicate/string ids, no sections, null, malformed JSON.',
@@ -782,5 +1311,9 @@ export const EXTRA_SCENARIOS = {
     preview_resize: {
         description: 'Camera preview resize handle: aspect-locked drag, then the B-L32 clamp blow-out with a 100x10 mm filmback.',
         run: previewResizeScenario,
+    },
+    normals_debug: {
+        description: 'Normals debug view (01 F1-3): content probes by pose; lines, popover, face orientation and normal colours, export/preview/picking isolation, keyboard and focus, pilot legend, popover fit, box corner face probes.',
+        run: normalsDebugScenario,
     },
 };

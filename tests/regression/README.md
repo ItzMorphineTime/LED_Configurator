@@ -109,6 +109,7 @@ Configs are applied by importing a JSON file through `#import-input`. The harnes
 | `pilot_look` | 9 | Pilot mouse-look drag: the rotation inputs, frustum readouts and preview labels. Also checks that the orbit ignores the wheel in pilot mode. |
 | `gizmo_drag` | 20 | Gizmo drags on handles found by colour: the person's X arrow and Y ring, then the camera's X arrow and Y ring. |
 | `preview_resize` | 9 | The camera preview resize handle: an aspect-locked drag, then the B-L32 clamp blow-out with a 100×10 mm filmback. |
+| `normals_debug` | 34 | The normals debug view (01 F1-3): content-mode colour probes at four poses, then the lines, the popover, face orientation and normal colours, export, preview and picking isolation, keyboard and focus rules, the pilot legend, the popover fit and the box-corner face probes. See [`normals_debug`](#normals_debug-01-f1-3). |
 | `p2_xss_names` | 14 | Phase 2: markup, quotes, spaces and duplicates in section names and a CSS-injecting colour (B-M4, B-L8, B-L14, B-M2, B-L21). |
 | `p2_zip_section_mode` | 8 | Phase 2: `flat3` in section mode with a renamed section; MTL texture paths against the ZIP entries (B-M2, B-L7). |
 | `p2_curved_safe_distance` | 11 | Phase 2: the safe-distance floor on four curved or cornered walls, screenshot and OBJ export each (B-M15, B-L29, B-M1). |
@@ -118,7 +119,7 @@ Configs are applied by importing a JSON file through `#import-input`. The harnes
 | `p2_shortcut_filters` | 8 | Phase 2: shortcut keys in a focused select, with Ctrl, auto-repeated, and a view preset in pilot mode (B-L11, B-L25). |
 | `p2_project_v2` | 35 | Phase 2: a full project save and restore, a save with the preview off, hostile v2 logos and the stored SVG text; the only scenario with `network.json` (B-L31, B-L35, B-L36). |
 
-The seven scenarios after `ui_visual` live in [`scenarios-extra.mjs`](scenarios-extra.mjs) and are
+The eight scenarios after `ui_visual` live in [`scenarios-extra.mjs`](scenarios-extra.mjs) and are
 spread into `SCENARIOS` after the original entries. The eight `p2_*` scenarios live in
 [`scenarios-phase2.mjs`](scenarios-phase2.mjs) and are spread in after them (see
 [The Phase 2 scenarios](#the-phase-2-scenarios)).
@@ -214,7 +215,7 @@ node tests/regression/run.mjs --root <original> --out <baselineDir> --only ui_vi
 
 ## The extra scenarios
 
-[`scenarios-extra.mjs`](scenarios-extra.mjs) adds seven scenarios for code paths the scenarios above
+[`scenarios-extra.mjs`](scenarios-extra.mjs) adds eight scenarios for code paths the scenarios above
 never reach. They follow the same rules: DOM and DevTools-protocol input only, never app functions
 or globals. Besides clicks and value changes they use real CDP key events (typing), CDP mouse drags,
 `DOM.setFileInputFiles` (logo upload) and in-tab reloads (fresh pages inside `import_edge`).
@@ -302,6 +303,45 @@ Turns the preview on and drags `#camera-preview-resize` by (-100, -50) in 5 step
 Then it selects the `custom` filmback, sets 100 × 10 mm and drags again. The height clamp (120 px)
 recomputes the width from the 10:1 aspect, so the window grows to 1200×120 (B-L32). It also takes a
 screenshot after each drag.
+
+### `normals_debug` (01 F1-3)
+
+`docs/improvements/01-normals.md` section 8.2 (T8). **Part A** (content mode) runs on every page, the original
+single-file app included: at the poses `front`, `behind` (a 314 px orbit drag), and, after importing `box_corner`,
+`boxP1` and `boxP2` (drags of 79 / -236 px right and 60 px down, then a wheel step of +700), it records
+`content_probes.json`: whether the wall colour (or each box section's colour) forms a connected region of at least
+400 px, and whether the cabinet colour does (always false until 01 F1-5 adds `SceneTheme.wallBack`: without a cabinet
+colour no cabinet can be drawn). Each pose starts with `#view-reset` and `#view-front`; probes find sections by colour,
+never by projection. On a page without `#toggle-normals` the scenario then writes `debug_skipped.json` and stops.
+
+**Part B** runs on one fresh page (`AppPage.reload()`). Every step asserts its precondition against S0 (the bootstrap
+state: combined, no props, preview off, no gizmo mode, debug defaults, popover closed, focus on BODY) and
+`preconditions.json` lists each check (`precondition_failed` when one did not hold). The debug controls are driven through
+the DOM (`el.click()` on the buttons, radios and checkboxes, input + change on the range), opening the popover when a
+control is needed; an orbit drag closes an open popover (an outside pointerdown, 01 3.2).
+
+| Step | Records |
+|---|---|
+| B0, B7 | The OBJ, MTL and glTF of each mesh mode, the JSON, the ZIP entries and the panel-ID PNG, hashed in memory with every debug option off (B0) and on (B7, popover open): `exports_isolation.json` (all `true`). |
+| B1, B2 | `b1_lines_on.json` (button classes, `aria-pressed`, stats "24 vertex lines · 0.117 m"), `b2_popover.json` (focus after a keyboard-style open, stats with face lines and at ×2, the announcer 500 ms later); screenshots `b1_vertex_normals`, `b2_vertex_face`, `b3_scale2`. |
+| B3, B13 | `face_probes.json`: a point found in a normal-colours capture (lavender +Z, teal -X, olive -Z) is sampled in the face-orientation capture and classified (blue = front, red = back), at `front` / `behind` for the default wall and at `boxP1` / `boxP2` for `box_corner`; screenshots `b4_face_front`, `b5_face_behind`, `b12_box_p1`, `b13_box_p2`. |
+| B4-B6 | Screenshots in normal colours, in section and panel mode, wireframe on and off; `b5_rebuilds.json` (stats per mode, the shading after the rebuilds); `content_restored.json`: `b11_content` back in S0 against Part A's `a1_front`, overlays excluded. |
+| B8 | `keyboard.json`: the state after each action of 01 8.2 B8 (n in a text input, Ctrl+N, Alt+N, N, Shift+N, pointer open, pointer change, N, G, Escape twice, keyboard open, ArrowDown, N inside the popover, Escape). |
+| B9-B12 | `picking.json` (the person is selected with every line option on), `preview_isolation.json` (the preview canvas with lines on and off; `b10_preview_lines_on` is kept), `pilot_legend.json` (pilot starts, the legend shows below the banner, Escape exits), `popover_fit.json` (1366×650 and 800×760: inside the overlay, placement, scrolling, every control reachable). |
+
+**No exact equality.** Every image comparison inside the scenario (`content_restored`, `preview_isolation`) uses
+`lib/probe.mjs` `diffStats` with the overlay rectangles excluded and records only the verdict `withinJitter` (max
+channel difference <= 1 and at most 16 differing pixels: the documented overlay jitter with a 2x margin); the raw
+numbers are printed to the runner's stdout. Probe colours come from `readProbePalette(app)` (the live palette hook);
+only the normal-colour triples are constants (the shader's convention).
+
+**Library additions (01 T8).** `AppPage.screenshotElement(selector)` (`screenshotCanvas` is
+`screenshotElement('#three-canvas')`), `AppPage.pointerClick(selector)` (CDP press and release at the element's centre:
+pointer events, focus and click `detail` 1, unlike `click()`), `AppPage.overlayRects(selectors, origin)` (padded rects
+of visible elements relative to the captured element), `keyPress(key, {modifiers, noText})` with the keys `n`, `Enter`
+and `ArrowDown` and `MODIFIERS` (Alt 1, Ctrl 2, Meta 4, Shift 8), `findPersonPixel` exported from `scenarios.mjs`, and
+`lib/probe.mjs` (`colorMask`, `largestComponent`, `probePoint`, `sampleRGB`, `classifyFace`, `diffStats`,
+`withinJitter`, `readProbePalette`). Without options every existing call sends exactly the events it sent before.
 
 ### Sensitivity
 
@@ -654,7 +694,7 @@ screenshots:
   `faceBack`, `vertexNormal`, `faceNormal`, `frame`, `gridCenter`, `gridLine`) from its `--scene-*`
   token on `:root` when spec 06 defines it, else from the served build's `js/theme/Theme.js`
   `SceneTheme` (imported inside the page, only when it loads `js/main.js` as a module), else `null`.
-  No scenario uses it yet (01 T8's probes will).
+  `normals_debug` reads it through `lib/probe.mjs readProbePalette` (01 T8).
 
 None of this changes a capture: the rect fields only change how `compare.mjs --expect` judges a
 difference, and `measure-rects.mjs` and the hook are not run by `run.mjs`. Their unit tests are the rect

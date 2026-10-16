@@ -2,7 +2,10 @@
 // 1. tests/regression/measure-rects.mjs: the `measure` object rules, the rectangles from DOM boxes (translation to
 //    the capture frame, padding, outward rounding, clipping, hidden and missing selectors) and the manifest formatting;
 // 2. tests/regression/lib/palette.mjs: colour parsing and the palette resolution order (a --scene-* token, then the
-//    served build's SceneTheme, then null; section colours from the cards).
+//    served build's SceneTheme, then null; section colours from the cards);
+// 3. tests/regression/lib/probe.mjs (01 T8, 8.2): colour masks, the largest 4-connected component, the probe point,
+//    the 3x3 median sample, the face classifier, diffStats with excluded rects and the jitter verdict, on synthetic
+//    images (encoded PNGs and decoded {width, height, rgba} objects alike).
 // The browser halves (AppPage measurements, the page-side reads) run only inside the harness.
 // Run: node --test tests/unit/harness-lib.test.mjs   (zero dependencies)
 
@@ -12,6 +15,10 @@ import assert from 'node:assert/strict';
 import { parseMeasure, rectsFromBoxes, formatJson } from '../regression/measure-rects.mjs';
 import { toRgb, resolvePalette, SCENE_COLOURS } from '../regression/lib/palette.mjs';
 import { SceneTheme } from '../../js/theme/Theme.js';
+import { encodePNG } from '../regression/lib/formats.mjs';
+import {
+  NORMAL_COLOURS, MIN_REGION, colorMask, largestComponent, probePoint, sampleRGB, classifyFace, diffStats, withinJitter,
+} from '../regression/lib/probe.mjs';
 
 describe('measure-rects: the measure object and the rectangles', () => {
   test('parseMeasure accepts the documented shape and defaults pad to 8', () => {
@@ -104,5 +111,83 @@ describe('lib/palette.mjs: the live palette hook (07 C53)', () => {
     assert.deepEqual(p.frame, [74, 74, 90]);
     assert.deepEqual(p.gridCenter, [42, 42, 58]);
     assert.deepEqual(p.gridLine, [26, 26, 36]);
+  });
+});
+
+/** A synthetic RGBA image filled with `bg`, with `paint(x, y)` returning a colour (or null to keep bg). */
+function image(width, height, bg, paint = () => null) {
+  const rgba = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const c = paint(x, y) || bg;
+      rgba.set([c[0], c[1], c[2], 255], (y * width + x) * 4);
+    }
+  }
+  return { width, height, rgba };
+}
+
+describe('lib/probe.mjs: pixel probes of normals_debug (01 8.2)', () => {
+  const BG = [10, 10, 15];
+  const BLUE = [47, 107, 255];
+
+  test('colorMask matches every channel within the tolerance, on a PNG buffer or a decoded image; a null colour matches nothing', () => {
+    const img = image(4, 1, BG, (x) => [[47, 107, 255], [55, 115, 263 - 8], [56, 107, 255], null][x]);
+    const fromPng = colorMask(encodePNG(img.width, img.height, img.rgba), BLUE, 8);
+    assert.deepEqual([...fromPng.data], [1, 1, 0, 0]);
+    assert.deepEqual([...colorMask(img, BLUE, 8).data], [1, 1, 0, 0]);
+    assert.deepEqual([...colorMask(img, null, 8).data], [0, 0, 0, 0]);
+  });
+
+  test('largestComponent is 4-connected: a diagonal touch does not join two regions', () => {
+    // A 3x3 block at (0..2, 0..2) and a 2x2 block at (3..4, 3..4) touching only at a corner.
+    const img = image(6, 6, BG, (x, y) => ((x <= 2 && y <= 2) || (x >= 3 && x <= 4 && y >= 3 && y <= 4) ? BLUE : null));
+    const c = largestComponent(colorMask(img, BLUE, 0));
+    assert.equal(c.size, 9);
+    assert.deepEqual(c.bbox, { x0: 0, y0: 0, x1: 2, y1: 2 });
+    assert.equal(largestComponent(colorMask(image(3, 3, BG), BLUE, 0)).size, 0);
+  });
+
+  test('probePoint: the pixel nearest the centroid of the largest component with a full 3x3 neighbourhood', () => {
+    const img = image(12, 8, BG, (x, y) => ((x >= 2 && x <= 8 && y >= 1 && y <= 5) || (x === 11 && y === 7) ? BLUE : null));
+    assert.deepEqual(probePoint(colorMask(img, BLUE, 0)), { x: 5, y: 3, size: 35 });
+    // A one-pixel-wide line has no interior pixel.
+    assert.equal(probePoint(colorMask(image(5, 5, BG, (x, y) => (y === 2 ? BLUE : null)), BLUE, 0)), null);
+    assert.equal(probePoint(colorMask(image(5, 5, BG), BLUE, 0)), null);
+  });
+
+  test('sampleRGB is the per-channel median of the 3x3 neighbourhood (one stray pixel does not move it)', () => {
+    const img = image(5, 5, BLUE, (x, y) => (x === 2 && y === 2 ? [255, 0, 0] : x === 1 && y === 1 ? [0, 255, 0] : null));
+    assert.deepEqual(sampleRGB(img, 2, 2), BLUE);
+    assert.deepEqual(sampleRGB(img, 0, 0), BLUE, 'clipped at the border');
+  });
+
+  test('classifyFace compares channels: blue front, red back, anything else other', () => {
+    assert.equal(classifyFace([47, 107, 255]), 'front');
+    assert.equal(classifyFace([28, 64, 153]), 'front', 'shaded blue (0.6 x)');
+    assert.equal(classifyFace([255, 51, 68]), 'back');
+    assert.equal(classifyFace([153, 31, 41]), 'back', 'shaded red');
+    assert.equal(classifyFace([128, 128, 255]), 'front', 'lavender has b > r + 60');
+    assert.equal(classifyFace([128, 128, 128]), 'other');
+    assert.equal(classifyFace([0, 240, 255]), 'front');
+  });
+
+  test('diffStats counts differing pixels outside the excluded rects; withinJitter is <= 1 level and <= 16 px', () => {
+    const a = image(10, 10, BG);
+    const b = image(10, 10, BG, (x, y) => (y === 0 && x < 3 ? [11, 10, 15] : x === 9 && y === 9 ? [200, 10, 15] : null));
+    assert.deepEqual(diffStats(a, b), { maxDiff: 190, diffPixels: 4 });
+    const excluded = diffStats(a, b, [{ x: 8, y: 8, w: 4, h: 4 }]);
+    assert.deepEqual(excluded, { maxDiff: 1, diffPixels: 3 });
+    assert.equal(withinJitter(excluded), true);
+    assert.equal(withinJitter({ maxDiff: 1, diffPixels: 17 }), false);
+    assert.equal(withinJitter({ maxDiff: 2, diffPixels: 1 }), false);
+    assert.equal(withinJitter(diffStats(a, a)), true);
+    assert.equal(diffStats(a, image(9, 10, BG)).sizeMismatch, true);
+    assert.equal(withinJitter(diffStats(a, image(9, 10, BG))), false);
+  });
+
+  test('the normal-colour triples are the shader convention n * 0.5 + 0.5 (+Z, -X, -Z); a found region is >= 400 px', () => {
+    assert.deepEqual(NORMAL_COLOURS, { lavender: [128, 128, 255], teal: [0, 128, 128], olive: [128, 128, 0] });
+    assert.ok(Object.isFrozen(NORMAL_COLOURS));
+    assert.equal(MIN_REGION, 400);
   });
 });

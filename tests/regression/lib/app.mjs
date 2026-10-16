@@ -20,8 +20,14 @@ const KEYS = {
     r: { code: 'KeyR', vk: 82, text: 'r' },
     l: { code: 'KeyL', vk: 76, text: 'l' },
     p: { code: 'KeyP', vk: 80, text: 'p' },
+    n: { code: 'KeyN', vk: 78, text: 'n' },          // 01 T8: normals (N) and Shift+N
     Escape: { code: 'Escape', vk: 27 },
+    Enter: { code: 'Enter', vk: 13, text: '\r' },    // 01 T8: activates a focused button (keyboard open, click detail 0)
+    ArrowDown: { code: 'ArrowDown', vk: 40 },         // 01 T8: moves the checked radio of a focused radio group
 };
+
+/** CDP Input.dispatchKeyEvent modifier bits. */
+export const MODIFIERS = Object.freeze({ Alt: 1, Ctrl: 2, Meta: 4, Shift: 8 });
 
 function normalizeMessage(s, origin) {
     let m = String(s || '');
@@ -321,9 +327,19 @@ ${url}`;
     async allDialogs() { return [...this.pastDialogs, ...await this.dialogs()]; }
 
     async screenshotCanvas() {
+        return this.screenshotElement('#three-canvas');
+    }
+
+    /**
+     * A screenshot clipped to the bounding box of the first element matching `selector` (01 T8; screenshotCanvas is
+     * screenshotElement('#three-canvas')): CSS transitions waited out, two frames, then Page.captureScreenshot. The
+     * DOM drawn over the element (overlays, labels) is part of the capture.
+     */
+    async screenshotElement(selector) {
         await this.waitAnimations();
         await this.frames(2);
-        const r = await this.eval(`(() => { const c = document.getElementById('three-canvas'); const b = c.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height }; })()`);
+        const r = await this.eval(`(() => { const c = document.querySelector(${JSON.stringify(selector)}); if (!c) return null; const b = c.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height }; })()`);
+        if (!r) throw new Error('screenshotElement: element not found: ' + selector);
         const res = await this.page.send('Page.captureScreenshot', {
             format: 'png',
             clip: { x: r.x, y: r.y, width: r.w, height: r.h, scale: 1 },
@@ -331,6 +347,47 @@ ${url}`;
             fromSurface: true,
         });
         return Buffer.from(res.data, 'base64');
+    }
+
+    /**
+     * A pointer click at the centre of the element's bounding box through CDP (mouseMoved, mousePressed and
+     * mouseReleased with clickCount 1): the page sees pointerdown/mousedown, focus moves as for a user's click and the
+     * click has `detail` 1. app.click() calls el.click() instead (detail 0, no pointer event, no focus change). 01 T8.
+     */
+    async pointerClick(selector) {
+        const r = await this.eval(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return null; const b = el.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width, h: b.height }; })()`);
+        if (!r || !r.w || !r.h) throw new Error('pointerClick: element not found or not rendered: ' + selector);
+        const x = Math.round(r.x), y = Math.round(r.y);
+        await this.mouse('mouseMoved', x, y);
+        await this.mouse('mousePressed', x, y);
+        await this.mouse('mouseReleased', x, y);
+        await this.settle();
+    }
+
+    /**
+     * The rects of the given selectors that are present and visible, relative to the element `origin` matches (the
+     * captured element, e.g. '#three-canvas'), padded by `pad` px on every side (01 T8): [{x, y, w, h, selector}],
+     * integers, rounded outwards. Used to exclude DOM overlays from an image comparison.
+     */
+    async overlayRects(selectors, origin = '#three-canvas', pad = 4) {
+        return this.eval(`(() => {
+            const o = document.querySelector(${JSON.stringify(origin)});
+            if (!o) return [];
+            const ob = o.getBoundingClientRect();
+            const pad = ${Number(pad)};
+            const out = [];
+            for (const selector of ${JSON.stringify(selectors)}) {
+                for (const el of document.querySelectorAll(selector)) {
+                    const cs = getComputedStyle(el);
+                    const b = el.getBoundingClientRect();
+                    if (cs.display === 'none' || cs.visibility === 'hidden' || b.width === 0 || b.height === 0) continue;
+                    const x0 = Math.floor(b.left - ob.left) - pad, y0 = Math.floor(b.top - ob.top) - pad;
+                    const x1 = Math.ceil(b.right - ob.left) + pad, y1 = Math.ceil(b.bottom - ob.top) + pad;
+                    out.push({ x: x0, y: y0, w: x1 - x0, h: y1 - y0, selector });
+                }
+            }
+            return out;
+        })()`);
     }
 
     async stats() {
@@ -420,11 +477,22 @@ ${url}`;
         await this.eval(`(() => { const a = document.activeElement; if (a && a !== document.body && a.blur) a.blur(); return true; })()`);
     }
 
-    async keyPress(key) {
+    /**
+     * A real key press through CDP (keyDown with the key's text, then keyUp) and a settle.
+     * `modifiers` is a sum of MODIFIERS bits (01 T8): with Shift a letter's `key` and `text` are upper case ('N');
+     * with Ctrl, Alt or Meta no text is sent (no character is typed). `noText` sends the keyDown without text, so no
+     * character is inserted into a focused text input while the page's keydown listeners still see the key.
+     * Without options the events are exactly those of the Phase 1 harness.
+     */
+    async keyPress(key, { modifiers = 0, noText = false } = {}) {
         const k = KEYS[key];
         if (!k) throw new Error('unknown key ' + key);
-        const base = { key, code: k.code, windowsVirtualKeyCode: k.vk, nativeVirtualKeyCode: k.vk };
-        await this.page.send('Input.dispatchKeyEvent', { type: 'keyDown', ...base, ...(k.text ? { text: k.text, unmodifiedText: k.text } : {}) });
+        const shifted = (modifiers & MODIFIERS.Shift) !== 0 && /^[a-z]$/.test(key);
+        const name = shifted ? key.toUpperCase() : key;
+        const text = k.text && shifted ? k.text.toUpperCase() : k.text;
+        const typed = text && !noText && (modifiers & (MODIFIERS.Ctrl | MODIFIERS.Alt | MODIFIERS.Meta)) === 0;
+        const base = { key: name, code: k.code, windowsVirtualKeyCode: k.vk, nativeVirtualKeyCode: k.vk, ...(modifiers ? { modifiers } : {}) };
+        await this.page.send('Input.dispatchKeyEvent', { type: 'keyDown', ...base, ...(typed ? { text, unmodifiedText: text } : {}) });
         await this.page.send('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
         await this.settle();
     }

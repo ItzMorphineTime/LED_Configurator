@@ -320,8 +320,12 @@ async function togglesScenario(ctx) {
     await ui('20_final');
 }
 
-/** Find the centre-most pixel of the person prop (MeshBasic 0x4488ff @ 0.85 opacity) in a canvas screenshot. */
-function findPersonPixel(png) {
+/**
+ * Find the centre-most pixel of the person prop (MeshBasic 0x4488ff @ 0.85 opacity) in a canvas screenshot.
+ * Exported for the normals_debug scenario (01 T8, B9); a function declaration, so the import cycle with
+ * scenarios-extra.mjs is safe.
+ */
+export function findPersonPixel(png) {
     const { width, height, rgba } = decodePNG(png);
     let sx = 0, sy = 0, n = 0;
     const hits = [];
