@@ -10,6 +10,8 @@
       "evidence": "README (ES-module build); P2-0 self-consistency runs A/B: 08_camera_moved and 13_safe_distance, 1 level, 2 px each (preview header)" },
     { "output": "gizmo_drag/*.screenshot.png", "maxLevel": 1, "maxPixels": 8, "overlay": "help badge, preview labels", "evidence": "README (ES-module build)" },
     { "output": "import_edge/i_empty.screenshot.png", "maxLevel": 1, "maxPixels": 8, "overlay": "preview labels", "evidence": "README (ES-module build)" },
-    { "output": "toggles/15_car_moved.screenshot.png", "maxLevel": 1, "maxPixels": 8, "overlay": "help badge", "evidence": "README (ES-module build)" }
+    { "output": "toggles/15_car_moved.screenshot.png", "maxLevel": 1, "maxPixels": 8, "overlay": "help badge", "evidence": "README (ES-module build)" },
+    { "output": "p2_curved_safe_distance/concave_offsets.screenshot.png", "maxLevel": 1, "maxPixels": 8, "overlay": "help badge, preview footer",
+      "evidence": "two full runs of the P2-0 build (the baseline promoted by P2-0 and a run of the same app and harness files at 07 G1): 1 level, 4 px, at (365, 905) on the help badge and (1129, 906..911) on the preview footer's resolution label" }
   ]
 }

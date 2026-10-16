@@ -427,7 +427,8 @@ Byte-identical files report `IDENTICAL`. Otherwise:
   pixels flip between the same two values, in both directions. This was first seen in the
   `keyboard` scenario (`pilot_view`, `final_view`) and between captures of the original
   (`preview_resize`, `pilot_look`, `preview_off_in_pilot`). With the ES-module build it shows up
-  more often (`camera`, `gizmo_drag`, `import_edge` `i_empty`, `toggles` `15_car_moved`, ...),
+  more often (`camera`, `gizmo_drag`, `import_edge` `i_empty`, `toggles` `15_car_moved`,
+  `p2_curved_safe_distance` `concave_offsets`, ...),
   because the page can paint before the app starts, while the original's inline script ran before
   the first paint. It occurs equally with the verbatim legacy script loaded as a module (integration
   step I-1). A same-browser A/B run of the original and the candidate showed identical overlay-free
@@ -438,7 +439,10 @@ Byte-identical files report `IDENTICAL`. Otherwise:
   output pattern) with its bounds (at most 1 level, at most 8 pixels), the overlay element and the
   evidence, and every `compare.mjs --expect` run reports a difference within those bounds as
   `JITTER`. The entries are exactly the outputs named above (the "..." resolved by P2-0's two full
-  self-consistency runs; see [Phase 2 re-baselining](#phase-2-re-baselining)).
+  self-consistency runs; see [Phase 2 re-baselining](#phase-2-re-baselining)), plus the outputs
+  added since, each by its own allowlist commit with its evidence:
+  `p2_curved_safe_distance/concave_offsets` (1 level, 4 px on the help badge and the preview
+  footer's resolution label, between the baseline promoted by P2-0 and a full run of the same build).
 - **CSS transitions** (0.2–0.3 s) are waited out through `document.getAnimations()` before any
   state read or screenshot.
 - **Fonts** are preloaded with `document.fonts.load()` before the app is used, so panel-ID canvas
