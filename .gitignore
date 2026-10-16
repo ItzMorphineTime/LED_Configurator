@@ -1,0 +1,8 @@
+# Private brand source files (never commit)
+Morph Brand Assets/
+
+# Regression harness output
+tests/regression/output/
+
+# Local Claude Code preview config
+.claude/
