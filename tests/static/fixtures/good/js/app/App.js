@@ -1,7 +1,7 @@
 /**
  * @module app/App
  * Fixture (good): the composition root imports anything, may use window/document and looks up
- * exactly its seven ids.
+ * exactly its eight ids (the canvas, the six preview-window ids and the normal-line stats element).
  */
 import { EventBus } from '../core/EventBus.js';
 import { Theme } from '../theme/Theme.js';
@@ -32,6 +32,7 @@ export class App {
                 res: byId(doc, 'camera-preview-res'),
             },
         });
+        this.stats = byId(doc, 'debug-normals-stats');
         this.parts = [Theme, JSZip, CameraPanel, PropControls, SceneManager, PanelIdRenderer, ViewportInput, ObjExporter,
             new WallMeshBuilder(Strategies.mesh.viewport), WallController, win, window.devicePixelRatio, document.title];
     }

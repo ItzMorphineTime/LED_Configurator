@@ -1,8 +1,8 @@
 /* 09-viewport-tools.css: index.html@cd3fd3f lines 604-735 (gizmo mode buttons, pilot banner, gizmo divider, selection badge, view buttons).
    Legacy note B-L24 (documentation-only, preserved): .selection-indicator sits at the same
-   bottom: 20px; left: 20px as .viewport-info (07-viewport.css) and overlaps it; #toggle-grid
-   toggles the class .active, but no .view-btn.active rule exists, so the grid button shows no
-   active state. Fix = CSS change here + ui_visual re-baseline.
+   bottom: 20px; left: 20px as .viewport-info (07-viewport.css) and overlaps it.
+   Fix = CSS change here + ui_visual re-baseline (06 T4a). The other half of B-L24, the missing
+   .view-btn.active rule, landed in 01 F1-2 (css/features/debug-view.css).
    Contiguous slice of the original <style>; link order = file number. Do not reorder rules across files. */
 .gizmo-mode-btn {
     width: 40px;

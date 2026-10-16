@@ -9,8 +9,13 @@
  *   node tests/static/css-slices.mjs                 original read with `git show cd3fd3f:index.html`
  *   node tests/static/css-slices.mjs <original.html> original read from that path
  *
+ * Scope (07 S7, C52; since 01 F1-2, the first intentional CSS change): the slices are the stylesheets css/01-*.css to
+ * css/12-*.css. Nothing else under css/ is a slice or is scanned: the feature stylesheets in css/features/ and the
+ * other numbered ranges of 07 C52's link order (00-fonts, 20-29, 99-utilities).
+ *
  * Checks:
- *   1. css/ contains exactly the 12 files of the 2.1 slice table (no more, no fewer).
+ *   1. The regular files css/01-*.css .. css/12-*.css are exactly the 12 files of the 2.1 slice table (no more, no
+ *      fewer).
  *   2. Normalised concatenation of css/01..12 equals normalised original lines 12-869.
  *      Normalising removes every comment and collapses each run of CSS whitespace (space, tab,
  *      LF, CR, FF) to one space, trimmed. Other Unicode spaces (U+00A0, ...) are not CSS
@@ -52,6 +57,8 @@ const SLICES = Object.freeze([
   ['12-responsive.css', 859, 869],
 ]);
 const MEDIA_FILE = '12-responsive.css';
+/** A file name in the slice range css/01-*.css .. css/12-*.css (07 S7: the only files this check scans). */
+const SLICE_RANGE_RE = /^(0[1-9]|1[0-2])-.*\.css$/;
 
 /**
  * Reads the original index.html, from a path or from git.
@@ -149,7 +156,10 @@ function main(originalPath) {
   const expectedNames = SLICES.map(([name]) => name);
   let present;
   try {
-    present = readdirSync(CSS_DIR).sort();
+    present = readdirSync(CSS_DIR, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && SLICE_RANGE_RE.test(entry.name))
+      .map((entry) => entry.name)
+      .sort();
   } catch (error) {
     console.error(`css-slices: cannot list ${CSS_DIR}: ${error.message}`);
     return 1;
@@ -157,7 +167,7 @@ function main(originalPath) {
   const missing = expectedNames.filter((name) => !present.includes(name));
   const extra = present.filter((name) => !expectedNames.includes(name));
   if (missing.length || extra.length) {
-    failures.push(`css/ must contain exactly the 12 slice files; missing: [${missing.join(', ')}], unexpected: [${extra.join(', ')}]`);
+    failures.push(`css/01-*.css .. css/12-*.css must be exactly the 12 slice files; missing: [${missing.join(', ')}], unexpected: [${extra.join(', ')}]`);
   }
 
   const sources = new Map();

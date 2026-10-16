@@ -32,7 +32,7 @@ function assertDeepFrozen(value, path = 'root') {
 // ---------------------------------------------------------------------------------------------------------------
 
 describe('Events catalogue', () => {
-  test('is exactly the 19 entries of ARCHITECTURE.md 3.2, frozen', () => {
+  test('is exactly the 19 Phase-1 entries plus the feature events of ARCHITECTURE.md 3.2, frozen', () => {
     assert.deepEqual({ ...Events }, {
       WALL_STATS_CHANGED:           'wall:statsChanged',
       WALL_SECTIONS_CHANGED:        'wall:sectionsChanged',
@@ -53,8 +53,9 @@ describe('Events catalogue', () => {
       GIZMO_MODE_CHANGED:           'gizmo:modeChanged',
       GIZMO_SPACE_CHANGED:          'gizmo:spaceChanged',
       PILOT_CHANGED:                'pilot:changed',
+      DEBUG_VIEW_CHANGED:           'debug:viewChanged',   // 01 F1-2
     });
-    assert.equal(Object.keys(Events).length, 19);
+    assert.equal(Object.keys(Events).length, 20);
     assert.ok(Object.isFrozen(Events));
   });
 

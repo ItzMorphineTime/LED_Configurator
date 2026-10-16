@@ -4,7 +4,8 @@
  * DOM mutation and no listeners while constructing: only DOM-id lookups and bus subscriptions), then runs the legacy
  * bootstrap `init(); setupUI(); setView('reset');` as the init phase, the setupUI phase and the reset view.
  * It is the only module that imports theme/Theme.js and vendor/jszip.js, and (besides the ui/ panels) the only one
- * that looks up DOM ids: '#three-canvas' for SceneManager and the six preview-window ids for PreviewWindow.
+ * that looks up DOM ids: '#three-canvas' for SceneManager, the six preview-window ids for PreviewWindow and
+ * '#debug-normals-stats' for NormalsDebugView (01 F1-2, 5.6).
  * Nothing is attached to window.
  * Legacy source: index.html@cd3fd3f 1426-1455 (init), 3884-3890 (animate: the frame tick), 4148-4489 (setupUI,
  * statement order), 5093-5095 (bootstrap).
@@ -54,6 +55,7 @@ import { CameraPanel } from '../ui/CameraPanel.js';
 import { PropControls } from '../ui/PropsPanel.js';
 import { ViewportToolbar } from '../ui/ViewportToolbar.js';
 import { ExportPanel } from '../ui/ExportPanel.js';
+import { DebugViewControls } from '../ui/DebugViewControls.js';
 
 /**
  * The application: wires the modules together and runs the legacy bootstrap.
@@ -110,17 +112,19 @@ export class App {
     const ledTiles = new LEDPixelTextureFactory({ doc, display, theme });
     const panelIds = new PanelIdRenderer({ doc, style, logos, theme });
     const materials = new LEDMaterialFactory({ display, panelIds, ledTiles, win });
-    // The normals debug view (01 F1-1, 5.7): settings, lazily created materials, the wall override and the lines.
-    // Nothing is allocated until a debug option is switched on; the lines view subscribes WALL_REBUILT before the
-    // bootstrap rebuild, so it caches the first layout.
+    // The normals debug view (01 F1-1, F1-2; 5.7): settings, lazily created materials, the wall override, the lines
+    // and their stats element. Nothing is allocated until a debug option is switched on; the lines view subscribes
+    // WALL_REBUILT before the bootstrap rebuild, so it caches the first layout.
     const debugSettings = new DebugViewSettings();
     const debugMaterials = new DebugMaterials({ theme });
     const wallView = new LEDWallView({
       sceneManager, materials, builder: new WallMeshBuilder(Strategies.mesh.viewport), theme, debugMaterials,
     });
-    const normalsView = new NormalsDebugView({ sceneManager, bus, settings: debugSettings, materials: debugMaterials, theme });
-    // F1-1 has no bus, no event and no UI: 01 T7 (F1-2) adds the bus, DEBUG_VIEW_CHANGED and DebugViewControls.
-    const debugController = new DebugViewController({ settings: debugSettings, wallView, normalsView });
+    const normalsView = new NormalsDebugView({
+      sceneManager, bus, settings: debugSettings, materials: debugMaterials, theme,
+      elements: { stats: byId(doc, 'debug-normals-stats') },
+    });
+    const debugController = new DebugViewController({ settings: debugSettings, wallView, normalsView, bus });
     const rig = new CameraRigView({ sceneManager, bus, theme });
     const safeDistance = new SafeDistanceView({ sceneManager, doc, theme });
     const preview = new PreviewWindow({
@@ -186,6 +190,8 @@ export class App {
     const toolbar = new ViewportToolbar({ doc, orbit, sceneManager, gizmo, pilot, bus });
     const viewportInput = new ViewportInput({ doc, win, sceneManager, interaction, gizmo, selection, pilot });
     const exportPanel = new ExportPanel({ doc, projectIO });
+    // Subscribes DEBUG_VIEW_CHANGED (its only subscriber, 01 F1-2).
+    const debugControls = new DebugViewControls({ doc, win, controller: debugController, bus, theme });
     // Legacy animate body (3886-3889).
     const tick = () => {
       orbit.tickKeyboard();
@@ -214,6 +220,10 @@ export class App {
     viewportInput.attachShortcuts();           // 4410-4434 (doc keydown, after KeyboardState's)
     viewportInput.attachPointer();             // 4437-4479 (canvas listeners after the orbit ones; win mouseup; wheel)
     exportPanel.bind();                        // 4481-4488
+    // 01 F1-2: the debug view's buttons, popover and N / Shift+N, after every legacy listener (the doc keydown listener
+    // runs after ViewportInput's), so the legacy listener order is unchanged.
+    debugControls.bind();
+    debugControls.bindShortcuts();
 
     // ---- legacy setView('reset') (5095) ----
     orbit.setView('reset');

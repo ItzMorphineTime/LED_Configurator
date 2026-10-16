@@ -10,7 +10,8 @@
 
 /**
  * The event catalogue (ARCHITECTURE.md 5.2). Keys are the constants used in code; values are the wire
- * names passed to {@link EventBus#on}, {@link EventBus#off} and {@link EventBus#emit}.
+ * names passed to {@link EventBus#on}, {@link EventBus#off} and {@link EventBus#emit}. The 19 Phase-1 mirror
+ * events come first; each feature event added since carries its visual / non-visual class (07 C47).
  * @readonly
  * @enum {string}
  */
@@ -34,6 +35,8 @@ export const Events = Object.freeze({
   GIZMO_MODE_CHANGED:           'gizmo:modeChanged',
   GIZMO_SPACE_CHANGED:          'gizmo:spaceChanged',
   PILOT_CHANGED:                'pilot:changed',
+  // Feature events, each classified visual (it changes what the canvas shows) or non-visual (07 C47).
+  DEBUG_VIEW_CHANGED:           'debug:viewChanged',   // visual (01 F1-2): DebugViewController -> DebugViewControls
 });
 
 /** The set of valid wire names (never mutated). */

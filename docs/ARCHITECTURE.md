@@ -150,7 +150,7 @@ Direction of communication:
 
 ## 2. File tree
 
-The `WP` column names the work package that creates the file (see `docs/REFACTOR_PLAN.md` and the work-package list). Every file belongs to exactly one work package. Totals: 12 stylesheets; 45 application modules plus `main.js`, the composition root `App.js` and 2 vendor shims.
+The `WP` column names the work package that creates the file (see `docs/REFACTOR_PLAN.md` and the work-package list). Every file belongs to exactly one work package. Totals (Phase 1): 12 stylesheets; 45 application modules plus `main.js`, the composition root `App.js` and 2 vendor shims. Files added since name their spec step instead of a work package (for example `01 F1-2`).
 
 ### 2.1 Stylesheets (`css/`): contiguous slices of the original `<style>`, linked in this order
 
@@ -170,6 +170,12 @@ Each file contains a header comment followed by the original lines **verbatim an
 | `css/10-section-extras.css` | 737-811 | dead `.section-color-0..7`, `.section-color-picker`, `.color-swatch-small*`, `.color-input-custom*`, `.section-warning*`, `.warning-indicator` | WP2 |
 | `css/11-export.css` | 813-857 | `.export-section`, `.export-row`, **second** `.export-btn` block, `.export-btn.secondary*`, `.import-input` | WP2 |
 | `css/12-responsive.css` | 859-869 | `@media (max-width: 900px)` (must stay last) | WP2 |
+
+**Feature stylesheets** are not slices. They live in `css/features/`, are linked in the `css/features/*` block of 07 C52's link order (`00-fonts`, `01`-`11`, `css/features/*`, `12-responsive`, `20`-`29`, `99-utilities`), so `12-responsive.css` stays the last of the slices, and they carry their own `@media` rules. `tests/static/css-slices.mjs` scans only `css/01-*.css` to `css/12-*.css` (07 S7):
+
+| File | Content | Step |
+|---|---|---|
+| `css/features/debug-view.css` | `.view-btn.active` (the `.view-btn.active` half of B-L24; its one named owner, 07 C52), `.view-divider`, `.debug-popover*`, `#viewport-top-stack` and `.pilot-info.visible ~ #viewport-top-stack`, `.debug-legend*` (swatches through `var(--swatch)`), `.debug-normals-stats`, `.visually-hidden`, the `@media (max-height: 444px), (max-width: 900px) and (max-height: 794px)` overflow fallback of `.viewport-controls`. Colours only through `02-tokens.css` custom properties. | 01 F1-2 |
 
 ### 2.2 JavaScript (`js/`)
 
@@ -244,7 +250,8 @@ js/
                                                  (preview/lens/pose use cases, Selectable 'camera')
     PropController.js                      WP7   Prop use cases (show/hide, fields, transform, Selectable 'person'/'car')
     ProjectIO.js                           WP5   Downloader + export/import use cases (JSON, OBJ, glTF, PNG, ZIP, safe-distance OBJ)
-    DebugViewController.js                 01 F1-1  Debug-view use cases: settings write, then the render call (no bus until F1-2)
+    DebugViewController.js                 01 F1-1  Debug-view use cases: settings write, DEBUG_VIEW_CHANGED (the bus since 01 F1-2),
+                                                 then the render call
   ui/
     dom.js                                 WP3   byId, flipToggle, setDisplay, createDialogs
     HeaderStats.js                         WP9   #total-pixels / #total-panels / #total-sections / #total-arc
@@ -257,6 +264,8 @@ js/
     PropsPanel.js                          WP7   PropControls (one instance per prop prefix 'person' | 'car')
     ViewportToolbar.js                     WP8   View presets, grid button, gizmo buttons, selection badge, pilot banner
     ExportPanel.js                         WP5   Export buttons, #import-json -> #import-input, file input change
+    DebugViewControls.js                   01 F1-2  #toggle-normals, #debug-view-btn, the debug popover, #debug-view-legend
+                                                 (in #viewport-top-stack), #debug-view-status; N / Shift+N; DEBUG_VIEW_CHANGED mirror
 ```
 
 During integration only, `js/legacy/monolith.js` (WP10) temporarily holds the verbatim legacy script (step I-1) and is deleted in step I-2.
@@ -288,11 +297,13 @@ tests/
   static/
     check.mjs                              WP1   layering, DOM-id ownership, call-time globals, import case, LEGACY parity,
                                                  Strategies references, event subscribers, module-level state, domain field writers;
-                                                 01 F1-1: rule 11, no renderOrder literal >= 900 outside core/renderOrder.js
+                                                 01 F1-1: rule 11, no renderOrder literal >= 900 outside core/renderOrder.js;
+                                                 01 F1-2: App.js looks up exactly eight ids (rule 4: + #debug-normals-stats)
     fixtures/                              WP1   synthetic trees used to self-test check.mjs
-    css-slices.mjs                         WP2   proves css/*.css == original lines 12-869 (normalised) in link order
-                                                 (normalisation: CSS whitespace only, i.e. space, tab, LF, CR, FF; each file
-                                                 must hold exactly one leading header comment and no other comment)
+    css-slices.mjs                         WP2   proves css/01-*.css .. css/12-*.css == original lines 12-869 (normalised) in
+                                                 link order (normalisation: CSS whitespace only, i.e. space, tab, LF, CR, FF;
+                                                 each file must hold exactly one leading header comment and no other comment);
+                                                 01 F1-2: scoped to the 01-12 slices (07 S7), so css/features/ is never scanned
   unit/                                    run with: node --test "tests/unit/**/*.test.mjs"
                                            (quoted glob, Node 22.7+: `--test` globs need Node 21+, and the repository has
                                            no package.json, so the typeless js/*.js modules load as ESM only through
@@ -316,7 +327,12 @@ tests/
                                                  strings, the AC 14a cap benchmark (200 sections x 50x20)
     material-override.test.mjs             01 F1-1  MaterialOverride with plain objects (Material[] kept; restore before dispose)
     led-wall-view.test.mjs                 01 F1-1  LEDWallView debug shading and withContentMaterials (fake THREE)
-    debug-view-controller.test.mjs         01 F1-1  DebugViewController: model write, then exactly one render call (spies)
+    debug-view-controller.test.mjs         01 F1-1  DebugViewController: model write, then exactly one render call (spies);
+                                                 01 F1-2: exactly one DEBUG_VIEW_CHANGED between the two (R2)
+    debug-view-controls.test.mjs           01 F1-2  DebugViewControls on a fake DOM: N / Shift+N filters (typing target,
+                                                 modifiers, repeat), popover open/close focus, the open-only capture Escape
+                                                 listener, the pointer-change blur rule and its flag clearing, the mirror, the
+                                                 400 ms announcer, popover placement
     harness-lib.test.mjs                   01 T2  measure-rects.mjs (measure objects, rectangles, formatting) and
                                                  lib/palette.mjs (colour parsing, token / SceneTheme resolution)
     tools.test.mjs                         08 P2-0  tools/check-orientation.mjs and tools/check-gltf.mjs on hand-built files;
@@ -345,7 +361,10 @@ tools/
   workflows/ci.yml                         07 G1  static checks and unit tests on pushes to refactor/** and feature/** and on
                                                  pull requests (no npm install; actions pinned by commit SHA, 07 Q13)
   dependabot.yml                           07 G1  weekly updates of the pinned GitHub Actions
-index.html                                 WP10  head + markup verbatim; 12 <link>s; <script type="module" src="js/main.js">
+index.html                                 WP10  head + markup verbatim; 12 <link>s; <script type="module" src="js/main.js">;
+                                           01 F1-2: the feature markup (view divider, #toggle-normals, #debug-view-btn, the
+                                                 debug popover, #viewport-top-stack with the legend, #debug-view-status), the
+                                                 css/features/debug-view.css <link> before 12-responsive.css, badge " N=normals"
 README.md                                  WP10  "How to run locally" section updated (static server required)
 docs/ARCHITECTURE.md, docs/REFACTOR_PLAN.md       this contract and the plan (amended by whoever changes a contract)
 ```
@@ -392,6 +411,8 @@ export const Events = Object.freeze({
   GIZMO_MODE_CHANGED:           'gizmo:modeChanged',
   GIZMO_SPACE_CHANGED:          'gizmo:spaceChanged',
   PILOT_CHANGED:                'pilot:changed',
+  // Feature events, each classified visual or non-visual (07 C47).
+  DEBUG_VIEW_CHANGED:           'debug:viewChanged',   // visual (01 F1-2): DebugViewController -> DebugViewControls
 });
 
 export class EventBus {
@@ -1186,7 +1207,8 @@ export class DebugMaterials {
 ```js
 export class NormalsDebugView {
   /** Subscribes WALL_REBUILT ({layout, view}) => { #last = {layout, view}; if (settings.normals.enabled) sync() } (R3: only its
-   *  own LineSegments and stats element). elements.stats is optional (#debug-normals-stats arrives with 01 T7).
+   *  own LineSegments and stats element). elements.stats is #debug-normals-stats (owned here; App looks it up and injects it
+   *  since 01 F1-2); every stats write is guarded, so the view also works without it.
    *  Allocates nothing with a THREE id (one scratch Matrix3, a Float64Array(9), reused descriptors). */
   constructor({ sceneManager, bus, settings, materials, theme, elements = {} })
   get object3D(); get stats()
@@ -1985,14 +2007,15 @@ export class ProjectIO {
 #### `js/app/DebugViewController.js` (01 F1-1, 01 5.2)
 ```js
 export class DebugViewController {
-  /** F1-1: no bus and no event; each use case writes DebugViewSettings, then makes its one render call. 01 T7 (F1-2) adds
-   *  `bus` and emits DEBUG_VIEW_CHANGED between the two, together with its subscriber DebugViewControls (5.1 rule 7). */
-  constructor({ settings, wallView, normalsView })
-  toggleNormals()                        // normals.enabled = !enabled; normalsView.sync(); @returns the new state
-  setNormalLineKinds({ vertex, face })   // the booleans given; normalsView.sync()
-  setLengthScale(raw)                    // normals.lengthScale = DebugViewSettings.parseLengthScale(raw); sync(); @returns it
-  setOnTop(on)                           // normals.onTop = !!on; normalsView.sync()
-  setShading(mode)                       // shading = DebugShading value or 'content'; wallView.setDebugShading(shading)
+  /** Each use case writes DebugViewSettings, then #emit() = bus.emit(DEBUG_VIEW_CHANGED, settings.snapshot()), then makes its
+   *  one render call (R2: model, mirror, render). F1-1 had no bus and no event; 01 T7 (F1-2) added both together with the
+   *  subscriber DebugViewControls (5.1 rule 7). */
+  constructor({ settings, wallView, normalsView, bus })
+  toggleNormals()                        // normals.enabled = !enabled; #emit(); normalsView.sync(); @returns the new state
+  setNormalLineKinds({ vertex, face })   // the booleans given; #emit(); normalsView.sync()
+  setLengthScale(raw)                    // normals.lengthScale = DebugViewSettings.parseLengthScale(raw); #emit(); sync(); @returns it
+  setOnTop(on)                           // normals.onTop = !!on; #emit(); normalsView.sync()
+  setShading(mode)                       // shading = DebugShading value or 'content'; #emit(); wallView.setDebugShading(shading)
   cycleShading()                         // setShading(settings.nextShading())
 }
 ```
@@ -2003,7 +2026,7 @@ Every panel follows the same shape:
 - `constructor(deps)`: stores collaborators, looks up its own elements by id/selector (no mutation), and subscribes to its mirror events (so the subscriptions exist before the bootstrap rebuild).
 - `bind()` (or a more specific `bind*()`): adds DOM listeners. `App.start()` calls it at the legacy `setupUI` position (section 7).
 - Handlers call controllers (down). Event handlers only mirror (R3).
-- Each DOM id is owned by exactly one module (the static check enforces it). `App.js` additionally looks up `#three-canvas` (for `SceneManager`) and exactly these six ids for `PreviewWindow`: `#camera-preview-window`, `#camera-preview-canvas`, `#camera-preview-resize`, `#camera-preview-info`, `#camera-preview-fov`, `#camera-preview-res`. (`#camera-preview-options` belongs to `CameraPanel`.)
+- Each DOM id is owned by exactly one module (the static check enforces it). `App.js` additionally looks up `#three-canvas` (for `SceneManager`), exactly these six ids for `PreviewWindow`: `#camera-preview-window`, `#camera-preview-canvas`, `#camera-preview-resize`, `#camera-preview-info`, `#camera-preview-fov`, `#camera-preview-res`, and `#debug-normals-stats` for `NormalsDebugView`, which owns it (01 F1-2, 01 5.6). (`#camera-preview-options` belongs to `CameraPanel`.)
 
 #### `js/ui/dom.js`
 ```js
@@ -2204,6 +2227,40 @@ export class ExportPanel {
 }
 ```
 
+#### `js/ui/DebugViewControls.js` (01 F1-2, 01 3.1-3.5, 5.2)
+```js
+export class DebugViewControls {
+  /** Owns #toggle-normals, #debug-view-btn, #debug-view-popover, #debug-view-title, #debug-shading-content/-face/-normals,
+   *  #debug-normals-vertex, #debug-normals-face, #debug-normals-scale, #debug-normals-scale-value, #debug-normals-ontop,
+   *  #debug-view-close, #debug-view-legend and #debug-view-status (not #debug-normals-stats: NormalsDebugView's).
+   *  Subscribes DEBUG_VIEW_CHANGED -> mirror(snapshot): #toggle-normals .active + aria-pressed; #debug-view-btn .active while
+   *  shading !== 'content'; radios, checkboxes, range and "×N.NN" text; legend rows (face / normal colours by shading, the
+   *  normals row while the lines are on; the legend hidden when no row shows); the announcer (the first changed setting,
+   *  e.g. "Normal lines on", "Shading: Face orientation", "Length ×2.00", written 400 ms after the last change).
+   *  Imports only core (EventBus, typingTarget) and ui/dom.js. @param {{doc, win, controller: DebugViewController, bus, theme}} deps */
+  constructor({ doc, win, controller, bus, theme })
+  /** Sets each legend swatch's --swatch from theme.scene.debug; #toggle-normals click -> controller.toggleNormals();
+   *  #debug-view-btn click -> close, or open (keyboard open iff e.detail === 0); #debug-view-close click -> closePopover();
+   *  radios change -> setShading(value); vertex / face change -> setNormalLineKinds; range input + change -> setLengthScale;
+   *  on-top change -> setOnTop. Pointer-change blur rule: popover pointerdown sets a flag; the next change blurs the focused
+   *  control inside the popover and clears it; a setTimeout(0) after pointerup / pointercancel and any keydown inside clear it. */
+  bind()
+  /** Document keydown, bubble phase, registered after ViewportInput.attachShortcuts:
+   *  if (isTypingTarget(e.target) || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+   *  if (e.key.toLowerCase() === 'n') { e.shiftKey ? controller.cycleShading() : controller.toggleNormals() } */
+  bindShortcuts()
+  isPopoverOpen()            // !popover.hidden (07 C42's Escape entry at priority 70 reads it from 07 I1 on)
+  /** popover.hidden = false; placement (popoverPlacement: down at the button top, else up at its bottom, clamped to the
+   *  overlay with 20 px margins; style.top and data-placement); aria-expanded; adds the capture-phase document keydown
+   *  listener (Escape only: stopPropagation + closePopover; until 07 I1), the capture-phase outside-pointerdown close and the
+   *  window resize re-placement; a keyboard open focuses the checked shading radio. */
+  openPopover({ keyboard = false } = {})
+  /** Hides it, removes the three listeners; focus returns to #debug-view-btn iff it was inside the popover (an outside
+   *  pointerdown passes moveFocus: false). */
+  closePopover({ moveFocus = true } = {})
+}
+```
+
 ### 3.12 Composition root and entry
 
 #### `js/main.js`
@@ -2357,6 +2414,7 @@ Writers listed here are the only allowed writers (checked by `tests/static/check
 | `gizmo:modeChanged` (`GIZMO_MODE_CHANGED`) | `{mode}` | `TransformGizmo.setMode/clearMode` before `rebuild` (3176-3177, 4428-4429) | `ViewportToolbar` |
 | `gizmo:spaceChanged` (`GIZMO_SPACE_CHANGED`) | `{space}` | `TransformGizmo.toggleSpace` before re-orientation (3184-3188) | `ViewportToolbar` |
 | `pilot:changed` (`PILOT_CHANGED`) | `{active}` | `PilotController.toggle` right after the flip (3484-3485) | `ViewportToolbar` (button + banner) |
+| `debug:viewChanged` (`DEBUG_VIEW_CHANGED`) | `{shading, normals: {enabled, vertex, face, lengthScale, onTop}}` (a frozen `DebugViewSettings.snapshot()`); a visual event (07 C47) | `DebugViewController` after every settings write, before its render call (01 F1-2) | `DebugViewControls` (buttons, inputs, legend, announcer); added in the same step as the emitter (5.1 rule 7) |
 
 Ordering guarantees per multi-subscriber event: `WALL_SECTIONS_CHANGED` runs `SectionListPanel` then `SectionLogosPanel` (construction order); `DISPLAY_CONTENT_CHANGED` runs `WallDisplayPanel` then `SectionLogosPanel`. Their targets are disjoint, so the order is not observable.
 
@@ -2597,9 +2655,9 @@ ledTiles = new LEDPixelTextureFactory({ doc, display, theme }); panelIds = new P
 materials = new LEDMaterialFactory({ display, panelIds, ledTiles, win })
 debugSettings = new DebugViewSettings(); debugMaterials = new DebugMaterials({ theme })        // 01 F1-1 (no allocation)
 wallView = new LEDWallView({ sceneManager, materials, builder: new WallMeshBuilder(Strategies.mesh.viewport), theme, debugMaterials })
-normalsView = new NormalsDebugView({ sceneManager, bus, settings: debugSettings, materials: debugMaterials, theme })
-                                                       // subscribes WALL_REBUILT before the bootstrap rebuild; no stats element yet
-debugController = new DebugViewController({ settings: debugSettings, wallView, normalsView })   // no bus, no event (F1-1)
+normalsView = new NormalsDebugView({ sceneManager, bus, settings: debugSettings, materials: debugMaterials, theme,
+                                      elements: { stats: #debug-normals-stats } })   // subscribes WALL_REBUILT before the bootstrap rebuild
+debugController = new DebugViewController({ settings: debugSettings, wallView, normalsView, bus })   // emits DEBUG_VIEW_CHANGED (F1-2)
 rig = new CameraRigView({ sceneManager, bus, theme }); safeDistance = new SafeDistanceView({ sceneManager, doc, theme })
 preview = new PreviewWindow({ doc, win, cine, elements: { windowEl: #camera-preview-window, canvas: #camera-preview-canvas,
                               resizeHandle: #camera-preview-resize, info: #camera-preview-info, fov: #camera-preview-fov,
@@ -2631,6 +2689,7 @@ carControls = new PropControls({ doc, prefix: 'car', controller: carController, 
 toolbar = new ViewportToolbar({ doc, orbit, sceneManager, gizmo, pilot, bus })
 viewportInput = new ViewportInput({ doc, win, sceneManager, interaction, gizmo, selection, pilot })
 exportPanel = new ExportPanel({ doc, projectIO })
+debugControls = new DebugViewControls({ doc, win, controller: debugController, bus, theme })   // subscribes DEBUG_VIEW_CHANGED
 tick = () => { orbit.tickKeyboard(); pilot.tickKeyboard(); sceneManager.render(); preview.render(sceneManager.scene) }
 
 // ---- legacy init() (1426-1455) ----
@@ -2650,11 +2709,12 @@ toolbar.bind()                            // 4394-4407
 viewportInput.attachShortcuts()           // 4410-4434 (doc keydown, after KeyboardState's)
 viewportInput.attachPointer()             // 4437-4479 (canvas listeners after the orbit ones; win mouseup; wheel passive:false)
 exportPanel.bind()                        // 4481-4488
+debugControls.bind(); debugControls.bindShortcuts()   // 01 F1-2: after every legacy listener (N / Shift+N after the shortcuts)
 
 // ---- legacy setView('reset') (5095) ----
 orbit.setView('reset')
 ```
-`display`, `style`, `logos`, `cine`, `person`, `car` are `project.display`, `project.panelIdStyle`, `project.logos`, `project.camera`, `project.person`, `project.car`. Listener order on shared targets after bootstrap: canvas `mousedown`/`mousemove`/`mouseup`/`wheel`: orbit then router; canvas `mouseleave`: orbit only; document `keydown`: keyboard state then shortcuts; document `keyup`: keyboard state; window: `resize` (SceneManager), `blur` (KeyboardState), `mouseup` (router); document `mousemove`/`mouseup`: preview resize, added on the first preview enable.
+`display`, `style`, `logos`, `cine`, `person`, `car` are `project.display`, `project.panelIdStyle`, `project.logos`, `project.camera`, `project.person`, `project.car`. Listener order on shared targets after bootstrap: canvas `mousedown`/`mousemove`/`mouseup`/`wheel`: orbit then router; canvas `mouseleave`: orbit only; document `keydown`: keyboard state, then shortcuts, then the debug view's N / Shift+N (01 F1-2); document `keyup`: keyboard state; window: `resize` (SceneManager), `blur` (KeyboardState), `mouseup` (router); document `mousemove`/`mouseup`: preview resize, added on the first preview enable. While the debug popover is open (01 F1-2) the document also has a capture-phase `keydown` (Escape only) and a capture-phase `pointerdown` (outside close), and the window a `resize` listener; all three are removed on close.
 
 
 ---
@@ -2750,7 +2810,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | B-L21 | Import keeps logos; no logo-list re-render (G-8) | `WallController.applyImport` + `SectionLogosPanel` import exclusion (tags) | reset + render |
 | B-L22 | Prop Y arrow and X/Z rings inert (N-7) | `Prop.translateBy/rotateBy` + `TransformGizmo.rebuild` (tags) | `Selectable.allowedAxes()` |
 | B-L23 | Local gizmo orientation stale (N-10) | `TransformGizmo.updatePosition` / `SELECTABLE_MOVED` handler (tag) | also re-orient |
-| B-L24 | Badge overlaps help badge; no `.view-btn.active` style | `css/07-viewport.css`, `css/09-viewport-tools.css` (documentation entry; CSS is untagged) | CSS change + `ui_visual` re-baseline |
+| B-L24 | Badge overlaps help badge (the `.view-btn.active` half landed in 01 F1-2) | `css/07-viewport.css`, `css/09-viewport-tools.css` (documentation entry; CSS is untagged) | CSS change + `ui_visual` re-baseline (06 T4a) |
 | B-L25 | View presets work in pilot (W-2) | `OrbitController.setView` (tag) | guard |
 | B-L26 | Gizmo visible in pilot | `PilotController.toggle` (tag) | hide/detach |
 | B-L27 | Frame-rate-dependent movement (I-3) | `OrbitController.tickKeyboard`, `PilotController.tickKeyboard` (tags) | `dt` from `startLoop` |
@@ -2839,7 +2899,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `css/09-viewport-tools.css` (header comment; documentation-only) | B-L24 |
 | `index.html` (markup, untagged; documentation-only) | B-L36 |
 
-Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14) and B-L5 (08 P2-1b; its only site was the tag in `GltfExporter.addMesh`, which keeps B-H2 and B-M7) and B-L4 (08 P2-1c; its sites were the tags in `ProjectIO.exportPanelIds`, which has no tag left, and `ProjectIO.exportZIP`, which keeps B-L14; its viewport half never had a tag and is fixed by 08 P2-1d) and B-H1 (08 P2-2a; its sites were the tags in `WallMeshBuilder.quadIndices`, which keeps B-H2 until 08 P2-2d, and `LEDMaterialFactory.side`, whose `'double'` value is now a design choice) and B-L3 (08 P2-2b; its only site was the tag in `WallMeshBuilder.sectionGrid`, which keeps B-L15 and B-L8) and B-H2 (08 P2-2c and P2-2d; its sites were the tags in `ObjExporter.write`'s `#stripNormalLine`, which left with P2-2c (`write` keeps B-M6, B-L6 and B-L8), `WallMeshBuilder.quadIndices`, which has no tag left, and `GltfExporter.addMesh`, which keeps B-M7) and B-L11 (08 P2-9b; its sites were the tags in `InputState.isShortcutIgnoredTarget`, now a re-export of `core/typingTarget.js isTypingTarget`, and `ViewportInput.attachShortcuts`, which has no tag left). B-L24 has two documentation-only entries, one per stylesheet: the header comment of each of the two stylesheets carries a paragraph `Legacy note B-L24 (documentation-only, preserved): ...`, which does not use the reserved token `LEGACY(` (CSS is untagged; rule 6 scans only `js/`); grep `B-L24` or `Legacy note` to find it.
+Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14) and B-L5 (08 P2-1b; its only site was the tag in `GltfExporter.addMesh`, which keeps B-H2 and B-M7) and B-L4 (08 P2-1c; its sites were the tags in `ProjectIO.exportPanelIds`, which has no tag left, and `ProjectIO.exportZIP`, which keeps B-L14; its viewport half never had a tag and is fixed by 08 P2-1d) and B-H1 (08 P2-2a; its sites were the tags in `WallMeshBuilder.quadIndices`, which keeps B-H2 until 08 P2-2d, and `LEDMaterialFactory.side`, whose `'double'` value is now a design choice) and B-L3 (08 P2-2b; its only site was the tag in `WallMeshBuilder.sectionGrid`, which keeps B-L15 and B-L8) and B-H2 (08 P2-2c and P2-2d; its sites were the tags in `ObjExporter.write`'s `#stripNormalLine`, which left with P2-2c (`write` keeps B-M6, B-L6 and B-L8), `WallMeshBuilder.quadIndices`, which has no tag left, and `GltfExporter.addMesh`, which keeps B-M7) and B-L11 (08 P2-9b; its sites were the tags in `InputState.isShortcutIgnoredTarget`, now a re-export of `core/typingTarget.js isTypingTarget`, and `ViewportInput.attachShortcuts`, which has no tag left). B-L24 has two documentation-only entries, one per stylesheet: the header comment of each of the two stylesheets carries a paragraph `Legacy note B-L24 (documentation-only, preserved): ...`, which does not use the reserved token `LEGACY(` (CSS is untagged; rule 6 scans only `js/`); grep `B-L24` or `Legacy note` to find it. Since 01 F1-2 both notes describe only the badge overlap (06 T4a's half): the missing `.view-btn.active` rule, the other half, landed in `css/features/debug-view.css`, and the `css/09-viewport-tools.css` note says so.
 
 How rule 6 reads these rows (as implemented in `tests/static/check.mjs`): the comparison is per file, so a tag may sit in a private helper that only the named method calls (for example `ProjectSerializer.#readV1` for `#read`, `ObjExporter.#writeCombined` for `#write`, `GltfExporter.#writeCombined` for `#write`); a tag wrapped across JSDoc continuation lines counts as one tag (placeholders are still rejected); and a row whose `js/` file does not exist is reported, so a typo in a site path cannot bypass the check.
 
@@ -2862,7 +2922,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 
 | Feature | What exists after Phase 1 | What the feature adds |
 |---|---|---|
-| **1. Normals flipped by default + normals debug view** | One winding function (`quadIndices`) and per-consumer profiles in `Strategies.mesh` used by the viewport, OBJ and glTF; `side` in the viewport profile; `LEDWallView.meshes()`; `WALL_REBUILT`; `SceneManager.addHelper` + `LAYERS`; `ResourceTracker`; the toolbar button pattern. | The flips are Phase-2 commits 08 P2-2a–d, one consumer per commit (`docs/improvements/08-bugfix-roadmap.md`): `'ccw'` winding and `'averaged'` normals in `WallMeshBuilder`, OBJ per-vertex `vn` and the glTF `NORMAL` attribute. Feature 1 adds the debug view and options only: `render/NormalsDebugView.js` (LineSegments from attributes x `matrixWorld`, subscribes to `WALL_REBUILT`, registered as a helper, disposed with a tracker); a `#toggle-normals` view button and a `.view-btn.active` rule (B-L24). Landed so far (docs/improvements/01-normals.md 8.4): F1-0a, F1-0b and F1-0c (tooling), F1-1 (the debug core without UI: `NormalLines`, `NormalsDebugView`, `DebugMaterials`, `MaterialOverride`, `LEDWallView.setDebugShading` / `withContentMaterials`, `DebugViewSettings`, `DebugViewController`, `core/renderOrder.js`). |
+| **1. Normals flipped by default + normals debug view** | One winding function (`quadIndices`) and per-consumer profiles in `Strategies.mesh` used by the viewport, OBJ and glTF; `side` in the viewport profile; `LEDWallView.meshes()`; `WALL_REBUILT`; `SceneManager.addHelper` + `LAYERS`; `ResourceTracker`; the toolbar button pattern. | The flips are Phase-2 commits 08 P2-2a–d, one consumer per commit (`docs/improvements/08-bugfix-roadmap.md`): `'ccw'` winding and `'averaged'` normals in `WallMeshBuilder`, OBJ per-vertex `vn` and the glTF `NORMAL` attribute. Feature 1 adds the debug view and options only: `render/NormalsDebugView.js` (LineSegments from attributes x `matrixWorld`, subscribes to `WALL_REBUILT`, registered as a helper, disposed with a tracker); a `#toggle-normals` view button and a `.view-btn.active` rule (B-L24). Landed so far (docs/improvements/01-normals.md 8.4): F1-0a, F1-0b and F1-0c (tooling), F1-1 (the debug core without UI: `NormalLines`, `NormalsDebugView`, `DebugMaterials`, `MaterialOverride`, `LEDWallView.setDebugShading` / `withContentMaterials`, `DebugViewSettings`, `DebugViewController`, `core/renderOrder.js`), F1-2 (the debug UI: `#toggle-normals`, `#debug-view-btn` and its popover, the legend in `#viewport-top-stack`, the announcer, N / Shift+N, `DEBUG_VIEW_CHANGED`, `css/features/debug-view.css` with `.view-btn.active`, the help-badge token ` N=normals`). |
 | **2. Section selection, property editing, per-section offsets** | `WallSection` with stable ids; `SectionLayout.postTransform` hook (null, never fed back into the cursor); mesh tags `userData.{kind, mode, sectionId, sectionIndex, col, row}` and combined `sectionRanges`; `LEDWallView.sectionNodes()`; the `Selectable` registry and generic gizmo; field rule tables; `WallController` as the single writer of section state; mirror events to cards; `ProjectSerializer.read` version-dispatch point. | `WallSection.offset {position, rotation}` + rules; `layoutProject` builds per-section `postTransforms`; the builder applies them to positions/normals; `LEDWallView` adds per-section groups (section/panel) or bakes (combined) and a transform-only update path; `WallSectionSelectable` (pick by `userData` / `faceIndex` -> `sectionRanges`); select-on-click (B-M14 fix); a `section:changed` event emitted by `WallController` so cards, an inspector and the UV viewer update reactively; safe distance per section instead of `flatEdges()`; schema v2. Exporters follow automatically through the layout. |
 | **3. Configurable pivot + offset** | `WallPivot`/`PivotMode` in `Wall` (identity); `WallLayout.firstEdge/lastEdge/bounds()/pivotPoint(mode)` including "middle of entire wall" = midpoint of the first section's first edge and the last section's last edge on the floor; the single `framingBounds` switch for the four flat-bounds consumers; the single `layoutProject()` entry. | A baked translation in `layoutProject`: stage frame `−(P.x, 0, P.z)`, export frame `−P`, P = anchor + offset (1.4). The raw walk is translated first, and spec 02's `applySectionOffsets(out)` builds its section matrices from the translated layout (07 C32). **No wall root transform, ever:** the identity `wallGroup` transform is a unit-tested invariant (03 §5.1, §5.9 #2). `ui/PivotPanel`; a pivot Selectable + marker view; switch `framingBounds` to pivot/bounds (fixes B-L2); optional re-expression of camera/prop poses; schema v2. |
 | **4. Clean 0..1 UVs + UV viewer/editor** | UV strategies in one builder function per consumer; `TextureAtlas` as the single source of offsets, widths and start columns (yields per-section `uvRects`); `PanelIdRenderer.sectionCanvas()` for the viewer background; mesh tags; the selection registry; `PreviewWindow`'s resize handle as the floating-panel pattern. | `'per-section'` / `'atlas-pixel-accurate'` strategies (fix B-M5/B-M6) and a baked per-section `uvTransform`; glTF TEXCOORD_0; `ui/UVViewer.js` (2D canvas; subscribes to `SELECTION_CHANGED` and `WALL_REBUILT`); `ui/FloatingPanel.js` extracted from `PreviewWindow`. |
@@ -2876,7 +2936,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 | Gate | Command | Passes when |
 |---|---|---|
 | Unit (pure layers) | `node --test "tests/unit/**/*.test.mjs"` (quoted glob; Node 22.7+: Node 21+ treats `--test` arguments as globs, so the directory form `node --test tests/unit/` fails with "Cannot find module", and the typeless `js/*.js` modules (there is no package.json) load as ESM only through module-syntax detection, unflagged since Node 22.7; the glob does not match the `oracle/*.mjs` helpers) | all green. Required per module: rule tables equal the legacy expressions over a seeded grid (0, '', NaN, negatives, fractions, numeric strings); `computeWallLayout`, `WallMeshBuilder`, `TextureAtlas`, `PanelNaming` equal the verbatim oracle with `Object.is` on every number over fuzzed sections (string fields, fractional cols, NaN/duplicate ids, empty walls); `ObjExporter`, `GltfExporter`, `ProjectSerializer` produce **byte-identical** text/JSON to the oracle (the oracle comparisons inject `LegacyProfiles.mesh.*`, the exact Phase-1 profiles, from 08 P2-0 on) and to the golden harness files of `default` and the 6 config scenarios in all 3 modes (when `GOLDEN_DIR` exists); `CameraHub`/`CameraController` step order with spies; `WallController` rebuild counts for every row of 6.2. Two Node-vs-Chrome facts the byte comparisons handle: (1) the goldens were captured in Chrome, whose `Math.atan2` is correctly rounded, while Node 24's V8 still uses fdlibm's `atan2` (last-ulp differences for about 20% of arguments), so any Node-side byte comparison of full-precision `atan2`-derived values against a Chrome golden (the panel-mode glTF accessor min/max of curved walls) installs a correctly rounded `atan2` for the duration of the test; (2) the NaN bit pattern written into a `Float32Array` is implementation-defined (B-L8 garbage imports give NaN positions), so the oracle fuzz canonicalises NaN inside float32 POSITION views on both sides before comparing; the goldens contain no NaN and are compared raw. |
-| Static | `node tests/static/check.mjs`, `node tests/static/css-slices.mjs` | layering table; DOM-id ownership; no `window`/`document` globals outside `vendor/`, `ui/dom.js`, `App.js`, `main.js` (injected `doc`/`win` everywhere else); import specifiers relative, `.js`, case-exact; no module-level `let`/`var`; LEGACY parity (8.3); every `Strategies` leaf referenced (8.1); every `Events` key emitted and (except `WALL_REBUILT`) subscribed; domain fields written only by the writers of section 4; no numeric `renderOrder` literal >= 900 outside `core/renderOrder.js` (rule 11, 01 F1-1; every spec, 07 S10); CSS slices reproduce lines 12-869. Interpretation (as implemented): a `window`/`document` token in a pure-layer file is reported under both the globals rule and the purity rule; the domain-writer rule treats every assignment operator as a write (`=`, all compound and logical assignments, `++`, `--`). |
+| Static | `node tests/static/check.mjs`, `node tests/static/css-slices.mjs` | layering table; DOM-id ownership; no `window`/`document` globals outside `vendor/`, `ui/dom.js`, `App.js`, `main.js` (injected `doc`/`win` everywhere else); import specifiers relative, `.js`, case-exact; no module-level `let`/`var`; LEGACY parity (8.3); every `Strategies` leaf referenced (8.1); every `Events` key emitted and (except `WALL_REBUILT`) subscribed; domain fields written only by the writers of section 4; no numeric `renderOrder` literal >= 900 outside `core/renderOrder.js` (rule 11, 01 F1-1; every spec, 07 S10); CSS slices reproduce lines 12-869 (the `css/01-*.css` to `css/12-*.css` slices only: feature stylesheets in `css/features/` are not scanned, 07 S7, since 01 F1-2). Interpretation (as implemented): a `window`/`document` token in a pure-layer file is reported under both the globals rule and the purity rule; the domain-writer rule treats every assignment operator as a write (`=`, all compound and logical assignments, `++`, `--`). |
 | Golden master | `node tests/regression/run.mjs --root . --out <cand>` (always a full run) then `node tests/regression/compare.mjs <baseline> <cand> --expect tests/regression/expected/<commit-id>.json` (Phase 2 onwards; Phase 1 compared without `--expect`) | exit 0. **Phase 2 onwards (08 P2-0; every spec, every golden-changing commit): the baseline of a commit is the harness output of its parent commit (08 8.1); every golden-changing commit carries an expected-change manifest `tests/regression/expected/<commit-id>.json`, in which every difference must be declared and every declared change must happen (a within-tolerance PASS never satisfies an entry; an invariance commit has an empty `expect` list); `tests/regression/expected/_nondeterminism.json` is the only standing allowance (the overlay-glyph jitter described below, reported as `JITTER` within at most 1 level and 8 pixels on the listed screenshots); `run.mjs --only` is for local iteration and never produces a promoted baseline; export commits also run `tools/check-orientation.mjs` and `tools/check-gltf.mjs` on the candidate outputs; a step whose screenshots may change only in known regions (01 F1-2, 06 T4b, 07 I4a) declares measured `rects` and `size` on its `--expect` entries (01 T2: every differing pixel inside them, except the allowlisted jitter of that screenshot outside them (F1-0c), and the capture of that size, or FAIL) and is reviewed with `--diff-bbox`. The procedure is documented in `tests/regression/README.md` ("Phase 2 re-baselining").** Phase 1: the baseline is captured from the pristine `index.html@cd3fd3f` (twice, self-consistent), including the extra scenarios of `tests/regression/scenarios-extra.mjs`. The only accepted WARNs are the 1-level overlay-glyph jitters documented in `tests/regression/README.md` ("Known nondeterminism"): a maximum channel difference of 1 in a few pixels that all lie on glyphs of DOM text composited over a WebGL canvas (the help badge, the pilot banner, the camera preview window's header and footer labels). Each such pixel is bistable: it flips between the same two values, in both directions, between captures. The original shows it too (between its two baseline captures, and in the `keyboard` screenshots WP1 first documented). With ES-module delivery the page can paint before `App.start()` runs (8.4), and the flips occur more often; they occur equally with the verbatim legacy script loaded as a module (integration step I-1). A same-browser A/B run showed identical overlay-free canvas pixels and an identical draw list (object, material and geometry ids, and draw order) for the original and the candidate. Any other WARN, a difference above 1 level, or a pixel outside those overlays is investigated and never accepted by re-capturing the baseline. |
 | Continuous integration (07 G1) | `.github/workflows/ci.yml` on every push to `refactor/**` and `feature/**`, on every pull request, and as the reusable check of the later deploy workflow | the Static gate (`check.mjs`, `css-slices.mjs`) and the Unit gate pass on Node 22 with no `npm install`; the golden-file unit tests skip there (no `GOLDEN_DIR`), so the golden master stays a local gate (08 8.1) until 07 G4 runs it in CI |
 | Manual (not automatable) | side by side with the original | WASD/QE orbit and pilot fly incl. the inverted vertical (B-M13); hover highlight; window resize; a GitHub Pages smoke test (case-sensitive paths, sub-path URLs). |
@@ -3020,3 +3080,9 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 3.7: `SceneManager.init` enables `LAYERS.HELPERS` on the main camera (only the normal lines use it); `LEDWallView` gains `debugMaterials`, rebuild steps 0 (restore) and 6 (re-apply), `setDebugShading` and `withContentMaterials` (07 C48); new `MaterialOverride`, `DebugMaterials`, `NormalsDebugView` (the first `WALL_REBUILT` subscriber, 5.2).
 - 3.10, 7: `DebugViewController` (no bus and no event until F1-2) and its construction in `App`; 4: the debug-view state rows. No `Events` key and no DOM id is added (01 AC 18).
 - 2.3: `normal-lines`, `material-override`, `led-wall-view` and `debug-view-controller` tests; `core.test.mjs` (SceneTheme, RENDER_ORDER) and `domain.test.mjs` (DebugViewSettings).
+
+**01 F1-2, the normals debug UI (01 T7)** (manifest `tests/regression/expected/F1-2.json`: the `ui_visual` text snapshots, and every `#three-canvas` capture and every `ui_visual` page capture limited to the measured toolbar-column and help-badge rectangles of its frame; `ui_visual` styles may change; debug is off by default, so nothing else changes):
+- 2.1: `css/features/debug-view.css` (the first feature stylesheet, linked before `12-responsive.css`, 07 C52) with `.view-btn.active`, the `.view-btn.active` half of B-L24. 8.2 and 8.3: the B-L24 row and the `css/09-viewport-tools.css` note narrowed to the badge overlap (06 T4a); the id stays in `LEGACY_SITES`.
+- 2.2, 3.11: `ui/DebugViewControls.js` (the toolbar buttons, the popover, the legend in `#viewport-top-stack`, the announcer, N / Shift+N with the shared typing guard, the open-only capture-phase Escape listener until 07 I1); App looks up `#debug-normals-stats` for `NormalsDebugView` (3.7, 3.11, static rule 4: eight App ids). 2.3: `index.html` feature markup and the badge token ` N=normals` (07 C35).
+- 3.2, 5.2: `DEBUG_VIEW_CHANGED` (`debug:viewChanged`, visual, 07 C47), emitted by `DebugViewController` (3.10: `bus`, model -> event -> render call) and subscribed by `DebugViewControls` in the same step (5.1 rule 7). 7: their construction and binding, and the listener order.
+- 2.3, 10: `css-slices.mjs` is scoped to the `css/01-*.css` .. `css/12-*.css` slices (07 S7; the slices themselves are unchanged, so the full check still runs, not `--report-only`); `debug-view-controls.test.mjs`; the controller test checks the event order.

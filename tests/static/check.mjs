@@ -18,7 +18,7 @@
  *   3  the identifiers `window` and `document` only in js/vendor/, js/ui/dom.js, js/app/App.js, js/main.js
  *   4  DOM-id lookups (getElementById / querySelector('#id') / byId(doc, 'id') with a literal id)
  *      only in js/ui/ and js/app/App.js, each id in exactly one module, App.js with exactly its
- *      seven ids, #camera-preview-options owned by ui/CameraPanel.js
+ *      eight ids (01 F1-2 added #debug-normals-stats), #camera-preview-options owned by ui/CameraPanel.js
  *   5  no module-level `let` or `var`
  *   6  per file, the ids of its LEGACY(B-xx) comment tags equal the LEGACY_SITES ids for that file (8.3);
  *      a LEGACY_SITES site under js/ whose file does not exist is reported too
@@ -102,9 +102,10 @@ const UNRESTRICTED = new Set(['main.js', 'app/App.js']);
 const GLOBALS_ALLOWED = ['vendor/', 'ui/dom.js', 'app/App.js', 'main.js'];
 /** Rule 4: where DOM-id lookups may appear. */
 const LOOKUPS_ALLOWED = ['ui/', 'app/App.js'];
-/** Rule 4: App.js looks up exactly these ids (ARCHITECTURE.md 3.11, section 7). */
+/** Rule 4: App.js looks up exactly these ids (ARCHITECTURE.md 3.11, section 7): the canvas, the six preview-window ids,
+ *  and the normal-line stats element it injects into NormalsDebugView (01 F1-2, 5.6). */
 const APP_IDS = Object.freeze(['three-canvas', 'camera-preview-window', 'camera-preview-canvas', 'camera-preview-resize',
-    'camera-preview-info', 'camera-preview-fov', 'camera-preview-res']);
+    'camera-preview-info', 'camera-preview-fov', 'camera-preview-res', 'debug-normals-stats']);
 /** Rule 4: ids whose owner the contract names explicitly. */
 const ID_OWNERS = Object.freeze({ 'camera-preview-options': 'ui/CameraPanel.js' });
 /** Rule 9: the pure layers. */

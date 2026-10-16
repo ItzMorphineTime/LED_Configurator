@@ -1,6 +1,6 @@
 /**
  * @module app/App
- * Fixture (bad), rule 4: only one of the seven preview/canvas ids, plus an id that belongs to a panel.
+ * Fixture (bad), rule 4: only one of the eight canvas, preview and stats ids, plus an id that belongs to a panel.
  */
 import { byId } from '../ui/dom.js';
 

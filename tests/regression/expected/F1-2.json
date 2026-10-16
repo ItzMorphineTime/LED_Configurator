@@ -1,0 +1,63 @@
+{
+  "commit": "F1-2",
+  "bugs": ["B-L24"],
+  "expect": [
+    {
+      "output": "ui_visual/*.text.json",
+      "change": "modified",
+      "each": true,
+      "reason": "the help badge reads '... P=pilot N=normals' (07 C35); the button, label, title and aria-label lists gain #toggle-normals, #debug-view-btn, #debug-view-close and the popover's labels"
+    },
+    {
+      "output": "*/*.screenshot.png",
+      "exclude": "ui_visual/**",
+      "change": "modified",
+      "each": true,
+      "reason": "every #three-canvas capture shows the toolbar column (#toggle-grid now styled .active, B-L24; the divider, #toggle-normals and #debug-view-btn below it) and the longer help badge; nothing else may differ (debug is off by default)",
+      "measure": {"frame":"canvas","window":[1600,1000],"selectors":[".viewport-controls",".viewport-info"]},
+      "size": [1200,940],
+      "rects": [
+        {"x":1132,"y":12,"w":56,"h":361,"label":".viewport-controls"},
+        {"x":12,"y":880,"w":669,"h":48,"label":".viewport-info"}
+      ]
+    },
+    {
+      "output": "ui_visual/*.viewport.screenshot.png",
+      "exclude": "ui_visual/*narrow_800*",
+      "change": "modified",
+      "each": true,
+      "reason": "the page captures show the same toolbar column and help badge (canvases masked; header and sidebar unchanged until F1-4)",
+      "measure": {"frame":"page","window":[1600,1000],"selectors":[".viewport-controls",".viewport-info"]},
+      "size": [1600,1000],
+      "rects": [
+        {"x":1532,"y":72,"w":56,"h":361,"label":".viewport-controls"},
+        {"x":412,"y":940,"w":669,"h":48,"label":".viewport-info"}
+      ]
+    },
+    {
+      "output": "ui_visual/*narrow_800*.viewport.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the narrow (<= 900 px) page capture: the same column and badge in the single-column layout",
+      "measure": {"frame":"page","window":[800,1000],"selectors":[".viewport-controls",".viewport-info"]},
+      "size": [800,1000],
+      "rects": [
+        {"x":732,"y":72,"w":56,"h":361,"label":".viewport-controls"},
+        {"x":12,"y":590,"w":669,"h":48,"label":".viewport-info"}
+      ]
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "ui_visual/*.styles.json",
+      "change": "modified",
+      "reason": "#toggle-grid's computed style (.view-btn.active: background, border and icon colour), the taller .viewport-controls rect and the wider .info-badge / .viewport-info rects"
+    },
+    {
+      "output": "large_wall/final__export-zip__led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen so far: L2_PanelIDs.png (1995, 948), L3_PanelIDs.png (1970, 1003), L4_PanelIDs.png (2026, 858), 1 px each, 3840x1920); this commit changes no export and no texture"
+    }
+  ],
+  "notes": "01 F1-2 (T7; 01 8.4 and AC 4): the debug UI is off by default, so the only visible changes are the toolbar column and the help badge, inside the rectangles measured from the candidate DOM per capture frame by measure-rects.mjs (padded by 8 px); every pixel outside them must be identical (except the allowlisted overlay-glyph jitter, F1-0c). Unchanged by construction: every export, every non-ui_visual state file (no scenario touches a debug control or presses N), the ui_visual sidebar captures (the sidebar does not change until F1-4)."
+}
