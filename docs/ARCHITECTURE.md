@@ -256,6 +256,7 @@ tests/
                                                  expected/_nondeterminism.json (08 8.2; the Phase-1 WARN_ONLY list is gone)
     lib/server.mjs                         WP1 (conditional edit: optional port argument for tools/serve.mjs; default unchanged)
     lib/app.mjs, lib/recorder.mjs          08 P2-0: the opt-in request log (`recordRequests`, network.json), AppPage.reload()
+                                                 (keeps the dialogs of the page it leaves: dialogs.json lists every page's)
     scenarios-extra.mjs                    WP1   logos, gizmo_drag, pilot_look, preview_off_in_pilot, import_edge,
                                                  name_with_panel_ids, preview_resize
     scenarios-phase2.mjs                   08 P2-0  the eight p2_* scenarios of 08 8.3, captured against the unfixed code
@@ -2691,3 +2692,6 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 **07 G1, continuous integration** (no code and no golden output changes):
 - 2.3: `.github/workflows/ci.yml` (07 5.8.1: static checks and unit tests on pushes to `refactor/**` and `feature/**` and on pull requests; Node 22, no `npm install`; actions pinned by commit SHA, 07 Q13) and `.github/dependabot.yml` (keeps the pins current).
 - 10: the continuous-integration row.
+
+**08 P2-0 follow-up (manifest P2-0b)** (harness only; no application behaviour change):
+- 2.3: `AppPage.reload()` keeps the dialogs of the page it leaves and `run.mjs` writes every page's dialogs to `dialogs.json` (`AppPage.allDialogs()`); `p2_project_v2` names its `toggle_aria` probes `toggle_aria_<step>.json` (08 6.18, 8.3; P2-13c's manifest pattern) and records the stored SVG text of step 8 (`stored_svg_08_hostile.json`, read from the Export All archive; 08 8.3, criterion 49).

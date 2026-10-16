@@ -42,6 +42,7 @@ export class AppPage {
         this.requests = new Map();
         this.requestLog = null;  // [{ step, url }] when the scenario sets recordRequests (opt-in request log)
         this.navigating = false; // true while reload() navigates and waits for readiness
+        this.pastDialogs = [];   // the dialogs of the pages reload() has left, in order (allDialogs())
     }
 
     /**
@@ -108,9 +109,11 @@ export class AppPage {
     /**
      * Reload the app in the same tab (a fresh page; console errors keep accumulating on this AppPage). Requests made
      * while it loads are page loads, not scenario requests, so the opt-in request log skips them. `afterReady` runs
-     * inside that window too (for example a font preload).
+     * inside that window too (for example a font preload). The dialogs of the page being left (window.__dialogs) are
+     * kept in `pastDialogs` first, so dialogs.json still lists them (allDialogs()).
      */
     async reload({ afterReady = null } = {}) {
+        try { this.pastDialogs.push(...await this.dialogs()); } catch { /* page may be gone */ }
         this.navigating = true;
         try {
             const loaded = this.page.once('Page.loadEventFired', 60000);
@@ -311,7 +314,11 @@ ${url}`;
         return out;
     }
 
+    /** The dialogs of the current page. */
     async dialogs() { return this.eval('window.__dialogs.slice()'); }
+
+    /** Every dialog of the scenario, as written to dialogs.json: those of the pages reload() has left, then the current page's. */
+    async allDialogs() { return [...this.pastDialogs, ...await this.dialogs()]; }
 
     async screenshotCanvas() {
         await this.waitAnimations();

@@ -1,0 +1,16 @@
+{
+  "commit": "P2-0b",
+  "bugs": [],
+  "expect": [
+    { "output": "p2_project_v2/aria_*.json", "change": "removed", "each": true,
+      "reason": "the toggle_aria probes are renamed (08 sections 6.18 and 8.3): P2-13c declares p2_project_v2/*toggle_aria*.json" },
+    { "output": "p2_project_v2/toggle_aria_*.json", "change": "added", "each": true,
+      "reason": "the same seven probes under their spec name, content unchanged" },
+    { "output": "p2_project_v2/stored_svg_08_hostile.json", "change": "added",
+      "reason": "the stored SVG text of step 8, read from the Export All archive (08 section 8.3, criterion 49); no SVG is stored before P2-13a/e" }
+  ],
+  "mayChange": [
+    { "output": "large_wall/final__export-zip__led-wall-export.zip", "change": "modified",
+      "reason": "seen in this commit's gate, which changes no app code and nothing large_wall runs: textures/L3_PanelIDs.png and L4_PanelIDs.png (3840x1920) differed by 1 level in 1 pixel each, at (1970, 1003) and (2026, 858), and the same two pixels flipped back in the self-consistency run (bistable, 1 level); the export-PNG analogue of the overlay-glyph jitter, which the screenshot-only allowlist cannot cover" }
+  ]
+}

@@ -111,7 +111,8 @@ async function main() {
             const errors = app ? app.errors : [];
             if (fatal) errors.push({ kind: 'harness', step: app ? app.step : 'load', message: String(fatal.message || fatal).split('\n')[0], raw: String(fatal.stack || fatal) });
             let dialogs = [];
-            try { if (app) dialogs = await app.dialogs(); } catch { /* page may be gone */ }
+            // Every page's dialogs: a scenario that opens fresh pages (AppPage.reload) keeps those of the pages it left.
+            try { if (app) dialogs = await app.allDialogs(); } catch { if (app) dialogs = [...app.pastDialogs]; /* page may be gone */ }
             const requests = recordRequests ? (app ? app.externalRequests() : []) : undefined;
             const res = rec.finish({ errors, dialogs, requests });
             manifest.scenarios[name] = { description: SCENARIOS[name].description, durationMs: Date.now() - t0, outputs: res.outputs };

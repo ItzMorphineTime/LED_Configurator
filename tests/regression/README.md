@@ -115,7 +115,7 @@ Configs are applied by importing a JSON file through `#import-input`. The harnes
 | `p2_oversize_canvas` | 6 | Phase 2: a wall wider than the browser's canvas limit (B-L4). |
 | `p2_mixed_content` | 7 | Phase 2: LED sim and panel IDs on mixed section heights (B-M5, B-L18). |
 | `p2_shortcut_filters` | 8 | Phase 2: shortcut keys in a focused select, with Ctrl, auto-repeated, and a view preset in pilot mode (B-L11, B-L25). |
-| `p2_project_v2` | 34 | Phase 2: a full project save and restore, a save with the preview off, hostile v2 logos; the only scenario with `network.json` (B-L31, B-L35, B-L36). |
+| `p2_project_v2` | 35 | Phase 2: a full project save and restore, a save with the preview off, hostile v2 logos and the stored SVG text; the only scenario with `network.json` (B-L31, B-L35, B-L36). |
 
 The seven scenarios after `ui_visual` live in [`scenarios-extra.mjs`](scenarios-extra.mjs) and are
 spread into `SCENARIOS` after the original entries. The eight `p2_*` scenarios live in
@@ -335,7 +335,9 @@ through its expected-change manifest. They follow the same DOM-only rules as the
 - **No reachable URL** is ever part of a payload: hostile URLs use the `.invalid` top-level domain,
   which never resolves. A request to one would be recorded as a `network` error, and
   `p2_project_v2/network.json` lists every request to another origin.
-- **Fresh pages** inside a scenario use `AppPage.reload()`.
+- **Fresh pages** inside a scenario use `AppPage.reload()`. Console errors and downloads keep
+  accumulating across it, and it keeps the dialogs of the page it leaves, so `dialogs.json` lists the
+  dialogs of every page of the scenario, in order.
 
 | Scenario | Steps | Records |
 |---|---|---|
@@ -346,7 +348,7 @@ through its expected-change manifest. They follow the same DOM-only rules as the
 | `p2_oversize_canvas` | Import one section of 70 × 2 panels with 1000 × 64 LEDs (a 70,000 × 128 px atlas) in section mode; `section__export-panel-ids`; `section__export-zip`; panel IDs on; screenshot `panel_ids_viewport` | `dialogs.json`, `console.json` (Export Panel IDs throws a `TypeError` today), `downloads.json`, ZIP entries and MTL (a 0-byte texture today), the screenshot |
 | `p2_mixed_content` | Import `mixed`; LED sim on (combined), screenshot; layout `square`, screenshot; panel IDs on, screenshot | 3 screenshots |
 | `p2_shortcut_filters` | LED sim on, focus `#led-layout`, press `g`; blur, Ctrl+G; preview on, `p` as three auto-repeat key downs; Escape and one `p` (pilot on from either state), click `#view-front`, screenshot | `gizmo_0{1..4}_*` (gizmo state, focused element, `#led-layout` value), `pilot_view_front` |
-| `p2_project_v2` | 1. preview on, custom filmback 30×20, focal 50, pose (2, 1.2, 4) / (5, −10, 2), safe distance on. 2. person at (1, 3), rot 45, scale 1.5; car on. 3. Add Section (so that section 1 exists), LED sim on then panel IDs on, border 12, font colour `#ff0000`, the 16×8 test PNG on section 0, a generated 2,000,000-byte 24-bit noise BMP on section 1, wireframe on. 4. `v2_first__export-json`. 5–6. fresh page, import it, record, screenshot, `v2_second__export-json`. 7. preview off (only if on), `v2_off__export-json`, fresh page, import it, preview on (only if off), record. 8. import an inline one-section v2 file whose `assets[]` hold an `https://` URL, a `data:text/html` URI, a data URI with a base64 length that is not a multiple of 4, and an SVG with `<script>`, `<foreignObject>` and an external `href` (the section's logo); `combined__export-panel-ids`, `combined__export-zip` | `camera_*`, `ui_*`, `aria_*` (every `.toggle`: `.active`, `role`, `aria-checked`, `tabindex`), `logos_*` (the list with every `data-*` attribute), `dialogs_page{1,2,3...}` (dialogs per page), the three JSON exports, the screenshot, `network.json` |
+| `p2_project_v2` | 1. preview on, custom filmback 30×20, focal 50, pose (2, 1.2, 4) / (5, −10, 2), safe distance on. 2. person at (1, 3), rot 45, scale 1.5; car on. 3. Add Section (so that section 1 exists), LED sim on then panel IDs on, border 12, font colour `#ff0000`, the 16×8 test PNG on section 0, a generated 2,000,000-byte 24-bit noise BMP on section 1, wireframe on. 4. `v2_first__export-json`. 5–6. fresh page, import it, record, screenshot, `v2_second__export-json`. 7. preview off (only if on), `v2_off__export-json`, fresh page, import it, preview on (only if off), record. 8. import an inline one-section v2 file whose `assets[]` hold an `https://` URL, a `data:text/html` URI, a data URI with a base64 length that is not a multiple of 4, and an SVG with `<script>`, `<foreignObject>` and an external `href` (the section's logo); `combined__export-panel-ids`, `combined__export-zip`; the stored SVG text, read from that archive | `camera_*`, `ui_*`, `toggle_aria_*` (the `toggle_aria` probe of 08 sections 6.18 and 8.3: every `.toggle`, `.active`, `role`, `aria-checked`, `tabindex`), `logos_*` (the list with every `data-*` attribute), `dialogs_page{1,2,3...}` (dialogs per page), the three JSON exports, the screenshot, `stored_svg_08_hostile` (every `.svg` entry and every base64 `data:image/svg+xml` URI of the archive's JSON, decoded: the DOM never shows a logo's bytes), `network.json` |
 
 **`p2_project_v2` and the request log.** The scenario sets `recordRequests: true`. `lib/app.mjs`
 then keeps the URL of every `Network.requestWillBeSent` from the scenario's first step on, except
@@ -675,7 +677,8 @@ These were observed in the original app and are part of the golden master:
 - `p2_shortcut_filters`: `g` in the focused select turns translate mode on, Ctrl+G turns it off again,
   and the three auto-repeated `p` presses leave pilot mode on (B-L11).
 - `p2_project_v2`: the JSON exports are v1 (sections and mesh mode only), so the restored page has the
-  default camera, props, display and no logos (B-L31); `network.json` is empty.
+  default camera, props, display and no logos (B-L31); the hostile file's logos are never stored, so
+  `stored_svg_08_hostile` lists no SVG; `network.json` is empty.
 
 A candidate that fixes these will report the missing error as a WARN, and the newly produced
 file as an EXTRA output (FAIL). Accept such a change deliberately through its expected-change

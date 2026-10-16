@@ -13,7 +13,8 @@
 //     (`**/*section__export-obj__*.mtl`, `**/*combined__export-*`) cover these scenarios like the config scenarios.
 //   * Payloads never reference a reachable URL (the `.invalid` top-level domain never resolves): the harness records
 //     failed requests as errors, and the opt-in request log of `p2_project_v2` (network.json) proves that none is sent.
-//   * Fresh pages inside a scenario use AppPage.reload(), so page loads never enter the request log.
+//   * Fresh pages inside a scenario use AppPage.reload(), so page loads never enter the request log; reload() keeps
+//     the dialogs of the page it leaves, so dialogs.json lists the dialogs of every page of the scenario.
 //
 // Exported as PHASE2_SCENARIOS ({ name: { description, run, recordRequests? } }) and spread into SCENARIOS after the
 // extra scenarios (see scenarios.mjs).
@@ -22,6 +23,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { CONFIGS } from './configs.mjs';
+import { readZip } from './lib/formats.mjs';
 import * as ui from './lib/uiprobe.mjs';
 
 const card = (i) => `#wall-sections > :nth-child(${i + 1})`;
@@ -228,7 +230,7 @@ function pageLogoList() {
     });
 }
 
-/** Every `.toggle`: its `.active` state and its ARIA switch attributes (B-L36). */
+/** The `toggle_aria` probe (08 sections 6.18, 8.3): every `.toggle`, its `.active` state and its ARIA switch attributes (B-L36). */
 function pageToggleAria() {
     return [...document.querySelectorAll('.toggle')].map((el) => ({
         id: el.id || null,
@@ -293,6 +295,31 @@ export function noiseBmp() {
 }
 
 const sha256hex = (data) => crypto.createHash('sha256').update(data).digest('hex');
+
+/**
+ * The stored SVG text (08 section 8.3, p2_project_v2 step 8; acceptance criterion 49), read from an Export All archive.
+ * The page never shows a logo's bytes in the DOM, so the black-box harness reads them from the export: every `.svg`
+ * entry of the archive (the 07 D6 ZIP variant stores logos as `assets/<id>.<ext>`) and every base64
+ * `data:image/svg+xml` URI in its JSON entries (the inline variant), decoded as UTF-8, in archive order.
+ * `zip` is null when the export produced no archive.
+ */
+export function storedSvgs(files) {
+    const file = files.find((d) => /\.zip$/i.test(d.filename || '') && d.data && d.data.length);
+    if (!file) return { zip: null, svgs: [] };
+    const svgs = [];
+    for (const e of readZip(file.data)) {
+        if (e.isDir) continue;
+        if (/\.svg$/i.test(e.name)) {
+            svgs.push({ source: e.name, text: e.data.toString('utf8') });
+        } else if (/\.json$/i.test(e.name)) {
+            const re = /data:image\/svg\+xml;base64,([A-Za-z0-9+/]*={0,2})/g;
+            const text = e.data.toString('utf8');
+            let m, k = 0;
+            while ((m = re.exec(text))) svgs.push({ source: `${e.name} (data URI ${k++})`, text: Buffer.from(m[1], 'base64').toString('utf8') });
+        }
+    }
+    return { zip: file.filename, svgs };
+}
 
 /** An SVG logo with active and external content: <script>, <foreignObject> and an external href (never resolvable). */
 const HOSTILE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="16" height="8" viewBox="0 0 16 8">'
@@ -510,7 +537,7 @@ async function projectV2Scenario(ctx) {
     const preload = (a) => ui.preloadFonts(a);
     const camera = (name) => record(ctx, `camera_${name}`, () => app.cameraState());
     const uiState = (name) => record(ctx, `ui_${name}`, () => app.uiState());
-    const aria = (name) => record(ctx, `aria_${name}`, () => pageCall(app, pageToggleAria));
+    const aria = (name) => record(ctx, `toggle_aria_${name}`, () => pageCall(app, pageToggleAria));
     const logos = (name) => record(ctx, `logos_${name}`, () => pageCall(app, pageLogoList));
     const dialogs = (name) => record(ctx, `dialogs_${name}`, () => app.dialogs());
     const jsonText = (files) => (files.length && files[0].data.length ? files[0].data.toString('utf8') : null);
@@ -589,12 +616,14 @@ async function projectV2Scenario(ctx) {
     await aria('07_reimported_preview_on');
 
     // 8. A hostile inline v2 file: logos from an https:// URL, a data:text/html URI, malformed base64 and an active SVG.
+    //    The stored SVG text is read from the Export All archive (storedSvgs: the DOM never shows a logo's bytes).
     await importText(ctx, 'v2_hostile_import', JSON.stringify(hostileV2File(), null, 2), 1);
     await dialogs('page3_after_hostile_import');
     await logos('08_hostile');
     await aria('08_hostile');
     await dl(ctx, 'combined__export-panel-ids', '#export-panel-ids', { expect: 1, timeoutMs: 60000 });
-    await dl(ctx, 'combined__export-zip', '#export-zip', { expect: 1, timeoutMs: 120000, quietMs: 800 });
+    const zip = await dl(ctx, 'combined__export-zip', '#export-zip', { expect: 1, timeoutMs: 120000, quietMs: 800 });
+    await record(ctx, 'stored_svg_08_hostile', async () => storedSvgs(zip));
 }
 
 export const PHASE2_SCENARIOS = {
@@ -615,7 +644,7 @@ export const PHASE2_SCENARIOS = {
         run: zeroInputsScenario,
     },
     p2_oversize_canvas: {
-        description: 'Phase 2 (B-L4): a 50,000 px wide wall; Export Panel IDs, Export All (ZIP) and the panel-ID viewport texture.',
+        description: 'Phase 2 (B-L4): a 70,000 px wide wall (wider than the 65,535 px canvas limit of the harness browser); Export Panel IDs, Export All (ZIP) and the panel-ID viewport texture.',
         run: oversizeCanvasScenario,
     },
     p2_mixed_content: {
@@ -627,7 +656,7 @@ export const PHASE2_SCENARIOS = {
         run: shortcutFiltersScenario,
     },
     p2_project_v2: {
-        description: 'Phase 2 (B-L31, B-L35, B-L36): full project save and restore (camera, props, display, panel-ID style, logos incl. a 2 MB BMP), preview-off save, hostile v2 logos; records network.json.',
+        description: 'Phase 2 (B-L31, B-L35, B-L36): full project save and restore (camera, props, display, panel-ID style, logos incl. a 2 MB BMP), preview-off save, hostile v2 logos and the stored SVG text; toggle_aria probes; records network.json.',
         run: projectV2Scenario,
         recordRequests: true,
     },
