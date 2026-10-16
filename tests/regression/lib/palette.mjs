@@ -19,7 +19,8 @@ export const SCENE_COLOURS = Object.freeze({
   faceBack: { token: '--scene-face-back', theme: ['debug', 'faceBack'] },
   vertexNormal: { token: '--scene-normals', theme: ['debug', 'vertexNormal'] },
   faceNormal: { token: '--scene-normals-face', theme: ['debug', 'faceNormal'] },
-  frame: { token: '--scene-frame', theme: ['frame'] },
+  frame: { token: '--scene-frame', theme: ['frame'] },                       // the light panel frame (06 6.7)
+  frameOnLight: { token: '--scene-frame-on-light', theme: ['frameOnLight'] },  // the dark panel frame (06 T5)
   gridCenter: { token: '--scene-grid-center', theme: ['grid', 'centerColor'] },
   gridLine: { token: '--scene-grid-line', theme: ['grid', 'color'] },
 });

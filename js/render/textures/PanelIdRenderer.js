@@ -5,6 +5,10 @@
  * section name and the section logo. Pure 2D canvas: creates no THREE objects; the materials wrap the canvases.
  * Style and logos are read at draw time, exactly like legacy read its globals. A canvas that would exceed
  * CANVAS_HARD_LIMITS is not created: the three canvas methods return null instead (08 P2-1d, B-L4, 08 6.3).
+ * Font gate (docs/improvements/06-morph-branding.md 5.6, 06 T5): before each fillText the renderer asks
+ * doc.fonts.check(font, text) with the actual text; a (font, text) pair whose web font is not loaded yet is recorded
+ * (deduplicated) for takePendingFonts(), and the first time a pair is recorded its font is requested with that text
+ * (doc.fonts.load, fire-and-forget), so the next rebuild draws it in the web font. app/fontGate.js redraws once.
  * Legacy source: index.html@cd3fd3f 1680-1708 (combined canvas), 2001-2046 (panel canvas), 2052-2187 (section
  * canvas incl. the logo).
  * Layer: render (may import vendor/three, core, legacy, domain, geometry). The theme and document are injected.
@@ -25,6 +29,10 @@ export class PanelIdRenderer {
   #logos;
   /** @type {{canvas: object}} */
   #theme;
+  /** @type {Map<string, string[]>} the (font, text) pairs drawn while their font was not loaded, by "font\ntext" */
+  #pendingFonts = new Map();
+  /** @type {Set<string>} the pairs already requested with doc.fonts.load (each once) */
+  #requestedFonts = new Set();
 
   /**
    * Stores the dependencies only (R4). Reads style and logos at draw time, exactly like legacy reads its globals.
@@ -131,16 +139,20 @@ export class PanelIdRenderer {
     }
 
     ctx.fillStyle = style.fontColor;
-    ctx.font = canvasTheme.panelLabelFont(fontSize);
+    const labelFont = canvasTheme.panelLabelFont(fontSize);
+    ctx.font = labelFont;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    this.#noteFont(labelFont, label);
     ctx.fillText(label, canvas.width / 2, canvas.height / 2);
 
     // Section name indicator (small text at bottom) if enabled
     if (style.sectionLabelEnabled && section && section.name) {
       const sectionFontSize = fontSize * 0.25;
-      ctx.font = canvasTheme.panelSectionNameFont(sectionFontSize);
+      const nameFont = canvasTheme.panelSectionNameFont(sectionFontSize);
+      ctx.font = nameFont;
       ctx.fillStyle = style.sectionLabelColor;
+      this.#noteFont(nameFont, section.name);
       ctx.fillText(section.name, canvas.width / 2, canvas.height - borderThickness - sectionFontSize);
     }
 
@@ -202,9 +214,11 @@ export class PanelIdRenderer {
         }
 
         ctx.fillStyle = style.fontColor;
-        ctx.font = canvasTheme.panelLabelFont(fontSize);
+        const labelFont = canvasTheme.panelLabelFont(fontSize);
+        ctx.font = labelFont;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
+        this.#noteFont(labelFont, label);
         ctx.fillText(label, x + panelW / 2, y + panelH / 2);
       }
     }
@@ -217,10 +231,12 @@ export class PanelIdRenderer {
       }
 
       ctx.fillStyle = style.sectionLabelColor;
-      ctx.font = canvasTheme.sectionLabelFont(sectionFontSize);
+      const nameFont = canvasTheme.sectionLabelFont(sectionFontSize);
+      ctx.font = nameFont;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.globalAlpha = canvasTheme.sectionLabelAlpha;
+      this.#noteFont(nameFont, section.name);
       ctx.fillText(section.name, canvas.width / 2, canvas.height / 2);
       ctx.globalAlpha = 1.0;
     }
@@ -234,6 +250,49 @@ export class PanelIdRenderer {
     }
 
     return canvas;
+  }
+
+  /**
+   * The (font, text) pairs drawn since the last call while their web font was not loaded (06 5.6, the font gate):
+   * each pair once, in the order first drawn. The call clears the list.
+   * Side effects: clears the pending list.
+   * @returns {string[][]} [font, text] pairs
+   */
+  takePendingFonts() {
+    const pending = [...this.#pendingFonts.values()];
+    this.#pendingFonts.clear();
+    return pending;
+  }
+
+  /**
+   * Records a (font, text) pair that is about to be drawn while doc.fonts.check(font, text) is false (the face, or
+   * the unicode-range subset the text needs, is not loaded). A document without a FontFaceSet, or a check that
+   * throws, counts as loaded. The first time a pair is recorded its font is requested with that text, so the subset
+   * is fetched; a rejection is swallowed.
+   * Side effects: may add to the pending list; may call doc.fonts.load (once per pair).
+   * @param {string} font  the ctx.font string about to be used
+   * @param {*} text       the text about to be drawn
+   */
+  #noteFont(font, text) {
+    const fonts = this.#doc.fonts;
+    const str = String(text);
+    let loaded = true;
+    try {
+      loaded = fonts?.check?.(font, str) ?? true;
+    } catch (err) {
+      loaded = true;
+    }
+    if (loaded) return;
+    const key = `${font}\n${str}`;
+    if (!this.#pendingFonts.has(key)) this.#pendingFonts.set(key, [font, str]);
+    if (this.#requestedFonts.has(key)) return;
+    this.#requestedFonts.add(key);
+    try {
+      const request = fonts?.load?.(font, str);
+      if (request && typeof request.catch === 'function') request.catch(() => {});
+    } catch (err) {
+      // a font the FontFaceSet cannot parse: nothing to load
+    }
   }
 
   /**

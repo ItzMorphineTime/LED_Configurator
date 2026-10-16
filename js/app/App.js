@@ -7,6 +7,7 @@
  * receives is buildTheme(Theme, the computed :root custom properties)) and vendor/jszip.js, and (besides the ui/
  * panels) the only one that looks up DOM ids: '#three-canvas' for SceneManager, the six preview-window ids for
  * PreviewWindow and '#debug-normals-stats' for NormalsDebugView (01 F1-2, 5.6).
+ * After the reset view it starts the font gate (app/fontGate.js, 06 T5, ARCHITECTURE 6.2 row F6-1), fire-and-forget.
  * Nothing is attached to window.
  * Legacy source: index.html@cd3fd3f 1426-1455 (init), 3884-3890 (animate: the frame tick), 4148-4489 (setupUI,
  * statement order), 5093-5095 (bootstrap).
@@ -48,6 +49,7 @@ import { CameraHub, CameraController } from './CameraController.js';
 import { PropController } from './PropController.js';
 import { Downloader, ProjectIO } from './ProjectIO.js';
 import { DebugViewController } from './DebugViewController.js';
+import { runFontGate } from './fontGate.js';
 import { byId, createDialogs } from '../ui/dom.js';
 import { HeaderStats } from '../ui/HeaderStats.js';
 import { SectionListPanel } from '../ui/SectionListPanel.js';
@@ -95,7 +97,8 @@ export class App {
     // ---- construct (R4: no THREE allocation, no DOM mutation, no listeners; lookups and bus subscriptions only) ----
     // 06 T3 (5.5): the colour leaves come from the :root custom properties of css/02-tokens.css, with the Theme.js
     // fallbacks for a missing or malformed token (one console warning per variable); no bindFonts option, so
-    // BIND_FONTS_DEFAULT applies, exactly as in the U4 parity test.
+    // BIND_FONTS_DEFAULT applies (true since 06 T5: the canvas fonts come from --font-mono / --font-ui), exactly as
+    // in the U4 parity test.
     const theme = buildTheme(Theme, (name) => win.getComputedStyle(doc.documentElement).getPropertyValue(name),
       { warn: (m) => win.console.warn(m) });
     const brand = theme.brand;
@@ -233,5 +236,12 @@ export class App {
 
     // ---- legacy setView('reset') (5095) ----
     orbit.setView('reset');
+
+    // ---- 06 T5 (5.6): the font gate, fire-and-forget (ARCHITECTURE 6.2 row F6-1). It rebuilds at most once, and only
+    // if a panel-ID canvas was drawn before its web font arrived while panel IDs are on; never in the harness. ----
+    runFontGate({
+      fonts: doc.fonts, preloadFonts: theme.canvas.preloadFonts, panelIds, wallController,
+      onError: (err) => win.console.error(err),
+    });
   }
 }

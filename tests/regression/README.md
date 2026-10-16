@@ -196,7 +196,8 @@ Before every capture the scenario does the following, so that captures are repea
 - It waits for `document.fonts.ready` and two frames.
 
 At the start of the scenario, every Google Fonts weight is preloaded, including the unicode-range
-subsets for `°×•—` (Montserrat 400-700 since 06 T4a, next to JetBrains Mono and Outfit). The text
+subsets for `°×•—` (JetBrains Mono 400-700 and Montserrat 400-700 since 06 T5; Outfit and JetBrains Mono 300
+are no longer served). The text
 snapshot's `header.logo` is the text of `.product-name` (06 T4a; the legacy `.logo-text` is gone; since 06 T4b
 "LED Configurator", with the alt texts of the lockup images in `header.brandAlt`), and `CSS_TOKENS` lists the role
 tokens of `css/02-tokens.css` layer 3. Since 06 T4b the styles also probe the lockup images, the divider and the
@@ -295,7 +296,7 @@ matches, so the press always lands well inside the handle. Each `<part>_handle.j
 2. R, drag the lowest part of the green Y ring 60 px right: `#person-rot-y` (the rotation is
    opposite to the drag, B-M12).
 3. Person off (deselects), preview on, one orbit wheel step out (distance 8 to 12, so the film camera
-   is not on the bottom edge), G, pick the orange camera body, drag the X arrow: `#camera-pos-*` and
+   is not on the bottom edge), G, pick the camera body (Signal Red since 06 T5), drag the X arrow: `#camera-pos-*` and
    the camera readouts; then R and drag the Y ring: `#camera-rot-y`.
 
 All four handles were found in both self-consistency captures of the original, so nothing is
@@ -776,7 +777,10 @@ The harness depends on this markup:
   - the children of `.viewport-overlay`, and `#camera-preview-window` itself, as the overlay rects
     that pixel searches skip;
   - the scene colours that pixel searches look for: the person (0x4488ff @ 0.85), the camera body
-    (0xff6600 @ 0.8) and the gizmo's red and green handles (0xff4444 / 0x44ff44 @ 0.35).
+    (0xc51622, opaque, with a 0x0a0a0a edge outline since 06 T5; 0xff6600 @ 0.8 before) and the gizmo's red
+    and green handles (0xff4444 / 0x44ff44 @ 0.35). The matchers of `scenarios-extra.mjs` are derived from
+    those blends over the 0x0a0a0a background (06 8.3): isGizmoRed asks g >= 24, so the anti-aliased edges of
+    the red body (g <= 22) never pass for a gizmo handle.
 
 ## Baseline facts worth knowing
 

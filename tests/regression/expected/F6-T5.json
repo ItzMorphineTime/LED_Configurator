@@ -1,0 +1,51 @@
+{
+  "commit": "F6-T5",
+  "bugs": [],
+  "expect": [
+    {
+      "output": "**/*.screenshot.png",
+      "exclude": "ui_visual/**",
+      "change": "modified",
+      "reason": "06 8.4 T5: every canvas-clipped screenshot shows the WebGL scene: background #0a0a0a, grid #333333 / #1c1c1c, the adaptive panel frames, the opaque Signal Red camera body with its edge outline, the two-tone dashed frustum and its #f7f7f5 fill, the safe-zone band, line and label, the canvas background of the panel-ID and LED-tile textures. Not 'each': a capture whose only change is the 5-level background step stays within the screenshot tolerance (reviewed: no capture may be IDENTICAL)"
+    },
+    {
+      "output": "**/*__export-panel-ids__*.png",
+      "change": "modified",
+      "each": true,
+      "reason": "06 8.4 T5: every exported panel-ID PNG: canvas background #0a0a0a, panel labels in JetBrains Mono 700 (now loaded), section names in Montserrat"
+    },
+    {
+      "output": "**/*__export-zip__*.zip",
+      "exclude": "p2_oversize_canvas/**",
+      "change": "modified",
+      "each": true,
+      "reason": "06 8.4 T5: the ZIP textures/*.png entries (the same canvas changes); every other entry must be identical (the ZIP compare lists the differing entries). The p2_oversize_canvas ZIP has no texture (the oversize section is skipped, 08 P2-1c)"
+    },
+    {
+      "output": "{camera/cam_*,gizmo_drag/camera_01_translated,gizmo_drag/camera_02_rotated,import_edge/i_empty_state,p2_project_v2/camera_01_setup,p2_project_v2/camera_06_restored,p2_project_v2/camera_07_reimported_preview_on,p2_zero_inputs/camera_zero,pilot_look/look_00_pilot_on,pilot_look/look_01_after_drag,pilot_look/look_03_pilot_off,preview_off_in_pilot/pilot_0*,preview_resize/resize_02_custom_100x10}.json",
+      "change": "modified",
+      "each": true,
+      "reason": "06 8.4 T5: the statusColor key of every cameraState record (35 files: 06 8.4 counted 31; the 08 P2-0 scenarios p2_project_v2 (3) and p2_zero_inputs (1) carry it too): rgb(0, 255, 102) -> rgb(61, 214, 140), rgb(255, 170, 0) -> rgb(255, 134, 64), rgb(255, 68, 68) -> rgb(242, 85, 90). Cross-check: compare --ignore-keys statusColor reports them IDENTICAL"
+    },
+    {
+      "output": "ui_visual/{00_initial,04_options_ledsim_camera_props,06_options_panelids_logo,07_two_sections,08_collapsed_and_4k_warning}.styles.json",
+      "change": "modified",
+      "each": true,
+      "reason": "06 8.4 T5: the computed colours of #frustum-status-text (.status-pending, var(--status-off-center)) and #safe-distance (.status-ok, var(--status-within)), or the JS-written status colour, in the states that probe the sidebar"
+    },
+    {
+      "output": "ui_visual/{04_options_ledsim_camera_props,06_options_panelids_logo,07_two_sections,08_collapsed_and_4k_warning}.sidebar.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "06 8.4 T5: the full-height sidebar captures of the states with the camera options open show the frustum status and the max distance in the new status colours"
+    },
+    {
+      "output": "ui_visual/*.viewport.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the final font URL of 06 T5 (found by the first gate run of this commit, which 06 8.4 did not list): the page captures show two JetBrains Mono DOM texts whose glyphs change with the new font file: the W of the world-space gizmo button (.gizmo-mode-btn.space, weight 700, which the T4a URL did not load, so Chrome synthesised it from 600; about 58 px at page (435-444, 191-200)) and a few edge pixels of the header stat values (weight 500, about 5 px at y 29), the same in all 8 page captures (the narrow one at x 35-44 and 735-746); the full-height sidebar captures that do not show the status readouts are identical"
+    }
+  ],
+  "mayChange": [],
+  "notes": "06 T5 (8.4): the Morph scene and canvas values. Layer 4 of css/02-tokens.css and the Theme.js fallbacks (U4) switch to 06 3.8's values, with --scene-overlay-halo and --scene-frame-on-light and their keys (frameOnLight, cameraBody.outlineColor, frustumLines.haloColor; plus the non-colour dashSize, gapSize and CanvasTheme.preloadFonts); CameraRigView draws the frustum two-tone (a solid #0a0a0a halo under a dashed #f7f7f5 core, LineSegments sharing one geometry) and gives the opaque body a #0a0a0a edge outline; LEDWallView picks each section's frame colour with render/frameColor.js; BIND_FONTS_DEFAULT is true (the canvas fonts come from --font-mono / --font-ui); the final font URL loads JetBrains Mono 400-700 and Montserrat 400-700 (Outfit and JetBrains Mono 300 dropped); the font gate (app/fontGate.js, PanelIdRenderer.takePendingFonts, ARCHITECTURE 6.2 row F6-1) never rebuilds in the harness. Must stay IDENTICAL: every gizmo_drag *_pick.json and *_handle.json, every keyboard/ui_visual pick, every OBJ/MTL/glTF/JSON export (and the non-texture ZIP entries), every probe JSON (they read their colours from the palette hook), console.json (no font or token warning). The ui_visual page captures hide the WebGL canvases and show the sidebar from the top, so they are unchanged."
+}

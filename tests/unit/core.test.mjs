@@ -414,19 +414,20 @@ describe('Theme', () => {
     assert.equal(Theme.brand, Brand);
   });
 
-  test('scene literals keep their numeric type and legacy values', () => {
+  test('scene values keep their numeric type; the Morph scene values since 06 T5 (06 3.8, 5.4)', () => {
     assert.deepEqual(SceneTheme, {
-      background: 0x0a0a0f,
-      grid: { size: 50, divisions: 50, centerColor: 0x2a2a3a, color: 0x1a1a24, position: [12.5, 0, 12.5] },
+      background: 0x0a0a0a,
+      grid: { size: 50, divisions: 50, centerColor: 0x333333, color: 0x1c1c1c, position: [12.5, 0, 12.5] },
       axesSize: 0.5,
       lights: { ambient: { color: 0xffffff, intensity: 0.3 },
                 point: { color: 0xffffff, intensity: 0.8, position: [5, 5, 10] } },
-      frame: 0x4a4a5a,
-      cameraBody: { color: 0xff6600, opacity: 0.8 },
-      frustumLines: { color: 0xffaa00, opacity: 0.7 },
-      frustumFill: { color: 0xffaa00, opacity: 0.08 },
-      safeZone: { wallColor: [0.2, 1, 0.4], thresholdColor: [1, 0.2, 0.2], floorOpacity: 0.5,
-                  lineColor: 0xff4444, lineOpacity: 0.8, labelColor: '#ff4444', labelFont: 'bold 32px Arial' },
+      frame: 0xd4d4d4,
+      frameOnLight: 0x0a0a0a,
+      cameraBody: { color: 0xc51622, opacity: 1.0, outlineColor: 0x0a0a0a },
+      frustumLines: { color: 0xf7f7f5, haloColor: 0x0a0a0a, opacity: 1.0, dashSize: 0.15, gapSize: 0.10 },
+      frustumFill: { color: 0xf7f7f5, opacity: 0.05 },
+      safeZone: { wallColor: [61 / 255, 214 / 255, 140 / 255], thresholdColor: [197 / 255, 22 / 255, 34 / 255], floorOpacity: 0.5,
+                  lineColor: 0xf2555a, lineOpacity: 0.9, labelColor: '#f2555a', labelFont: "600 32px 'Montserrat', system-ui, sans-serif" },
       person: { body: 0x4488ff, dark: 0x2244aa, opacity: 0.85 },
       car: { body: { color: 0xff4444, opacity: 0.85 }, dark: { color: 0x222222, opacity: 0.9 },
              glass: { color: 0x88ccff, opacity: 0.5 }, lights: 0xffffaa },
@@ -437,18 +438,20 @@ describe('Theme', () => {
     assert.equal(typeof SceneTheme.safeZone.labelColor, 'string');
   });
 
-  test('canvas literals and font helpers return the exact legacy strings', () => {
-    assert.equal(CanvasTheme.background, '#0a0a0f');
+  test('canvas values and font helpers return the exact strings (06 T5: JetBrains Mono and Montserrat)', () => {
+    assert.equal(CanvasTheme.background, '#0a0a0a');
     assert.deepEqual(CanvasTheme.panelBorderColors, ['#ff0000', '#00ff00', '#0000ff']);
-    assert.equal(CanvasTheme.panelLabelFont(42), "bold 42px 'JetBrains Mono', monospace");
-    assert.equal(CanvasTheme.panelSectionNameFont(17.5), "17.5px 'JetBrains Mono', monospace");
-    assert.equal(CanvasTheme.sectionLabelFont(120), "bold 120px 'Outfit', sans-serif");
+    assert.equal(CanvasTheme.panelLabelFont(42), "bold 42px 'JetBrains Mono', ui-monospace, monospace");
+    assert.equal(CanvasTheme.panelSectionNameFont(17.5), "17.5px 'JetBrains Mono', ui-monospace, monospace");
+    assert.equal(CanvasTheme.sectionLabelFont(120), "bold 120px 'Montserrat', system-ui, sans-serif");
     assert.equal(CanvasTheme.sectionLabelAlpha, 0.6);
     assert.equal(CanvasTheme.logoAlpha, 0.8);
+    assert.deepEqual(CanvasTheme.preloadFonts,
+      ["bold 32px 'JetBrains Mono'", "32px 'JetBrains Mono'", "bold 32px 'Montserrat'", "600 32px 'Montserrat'"]);
   });
 
   test('status colours, palette and brand strings', () => {
-    assert.deepEqual(UiColors, { status: { within: '#00ff66', offCenter: '#ffaa00', exceeds: '#ff4444' } });
+    assert.deepEqual(UiColors, { status: { within: '#3dd68c', offCenter: '#ff8640', exceeds: '#f2555a' } });
     assert.deepEqual(Palette.sectionColors,
       ['#00f0ff', '#ff00aa', '#00ff66', '#ff6b35', '#ffdd00', '#aa66ff', '#66ffaa', '#ff6666']);
     assert.deepEqual(Palette.cardSwatches, ['#00f0ff', '#ff00aa', '#00ff66', '#ff6b35', '#ffffff', '#ffdd00']);

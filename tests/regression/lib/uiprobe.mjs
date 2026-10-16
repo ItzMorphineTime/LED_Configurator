@@ -16,10 +16,9 @@ const MASK_CSS = '#three-canvas, #camera-preview-canvas { visibility: hidden !im
 
 // Every weight the Google Fonts URL serves, loaded up front so text revealed later (opened panels,
 // new cards) never races a web-font download. The sample text pulls in the unicode-range subsets.
-// Montserrat 400-700 since 06 T4a (06 8.3); 06 T5 drops Outfit and JetBrains Mono 300 and adds JetBrains Mono 700.
+// Montserrat 400-700 since 06 T4a; since 06 T5 JetBrains Mono 400-700 (the URL dropped Outfit and weight 300, 06 8.3).
 const FONT_FACES = [
-    ['Outfit', [300, 400, 500, 600, 700]],
-    ['JetBrains Mono', [300, 400, 500, 600]],
+    ['JetBrains Mono', [400, 500, 600, 700]],
     ['Montserrat', [400, 500, 600, 700]],
 ];
 const FONT_SAMPLE = 'AaZz09 °×•—–…→✓⚠';

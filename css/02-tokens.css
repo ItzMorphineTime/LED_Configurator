@@ -5,12 +5,14 @@
    2. Derived dark-UI primitives: this app's surfaces, borders and status hues; never used in logos.
    3. Semantic UI roles (06 3.4): components reference only these (and --morph-white-1000 for the toggle knob).
       --cta-background has exactly one consumer, .export-btn--primary (#export-zip; R-B5): Pivot Gold once per layout.
-   4. Scene, canvas and status roles (06 T3): read by theme/ThemeBridge.js into the theme App injects. Each is #rrggbb
-      and holds the Theme.js fallback of the leaves it binds (the legacy values; the U4 parity test keeps them equal)
-      until 06 T5 switches layer 4 to the brand values. --status-off-center and --status-within also colour
-      .status-pending and .status-ok, so the initial and the runtime status colours come from one token.
-      --scene-face-front, --scene-face-back, --scene-normals and --scene-normals-face are spec 01's debug-view tokens
-      with spec 01's values (01 4.6, CR-8); --scene-wall-back follows with its key in 01 F1-5.
+   4. Scene, canvas and status roles (06 T3, brand values since 06 T5, 06 3.8): read by theme/ThemeBridge.js into the
+      theme App injects. Each resolves to #rrggbb and equals the Theme.js fallback of the leaves it binds (the U4 parity
+      test keeps them equal). --scene-frame is the light panel frame and --scene-frame-on-light the dark one (06 6.7);
+      --scene-overlay-halo is the Morph Black halo of every two-tone overlay and edge outline (D15).
+      --status-off-center and --status-within also colour .status-pending and .status-ok, so the initial and the
+      runtime status colours come from one token. --scene-face-front, --scene-face-back, --scene-normals and
+      --scene-normals-face are spec 01's debug-view tokens with spec 01's values (01 4.6, CR-8; F6 changes none);
+      --scene-wall-back follows with its key in 01 F1-5.
    Not a slice of the original <style> any more (css-slices.mjs --report-only lists the difference, 07 S7);
    link order = file number. */
 :root {
@@ -66,23 +68,25 @@
     --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
     /* 4. Scene and canvas roles: read by theme/ThemeBridge.js. Values must be #rrggbb
-          (or rgba(r, g, b, a) for 'css'-kind bindings, 06 5.5). The legacy values until 06 T5. */
-    --scene-background: #0a0a0f;
-    --scene-grid-center: #2a2a3a;
-    --scene-grid-line: #1a1a24;
-    --scene-frame: #4a4a5a;
-    --scene-camera-body: #ff6600;
-    --scene-frustum: #ffaa00;
-    --scene-safe-wall: #33ff66;
-    --scene-safe-threshold: #ff3333;
-    --scene-safe-line: #ff4444;
-    --scene-safe-label: #ff4444;
+          (or rgba(r, g, b, a) for 'css'-kind bindings, 06 5.5). */
+    --scene-background: var(--morph-black-950);
+    --scene-grid-center: #333333;
+    --scene-grid-line: #1C1C1C;
+    --scene-frame: var(--morph-neutral-200);        /* light frame: dark sections and texture content (06 6.7) */
+    --scene-frame-on-light: var(--morph-black-950); /* dark frame: light sections (06 6.7) */
+    --scene-camera-body: var(--morph-red-600);
+    --scene-frustum: var(--morph-neutral-50);
+    --scene-overlay-halo: var(--morph-black-950);   /* halo of every two-tone overlay and edge outline (06 D15) */
+    --scene-safe-wall: var(--ui-green-400);
+    --scene-safe-threshold: var(--morph-red-600);
+    --scene-safe-line: var(--ui-red-400);
+    --scene-safe-label: var(--ui-red-400);
     --scene-face-front: #2f6bff;
     --scene-face-back: #ff3344;
     --scene-normals: #b8f03c;
     --scene-normals-face: #ff4fd8;
-    --canvas-background: #0a0a0f;
-    --status-within: #00ff66;
-    --status-off-center: #ffaa00;
-    --status-exceeds: #ff4444;
+    --canvas-background: var(--morph-black-950);
+    --status-within: var(--color-success);       /* also used by .status-ok */
+    --status-off-center: var(--color-warning);   /* also used by .status-pending */
+    --status-exceeds: var(--color-danger);
 }

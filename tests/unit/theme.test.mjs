@@ -2,8 +2,8 @@
 // U2 the bridged theme's shape, freezing and the runtime override (AC 8), U3 missing and malformed tokens (06 T2);
 // U4 token parity of css/02-tokens.css with the Theme.js fallbacks, U10 the Theme walk (every leaf bound, UNBRANDED, a
 // function or non-colour), U11 the UNBRANDED conventions against tests/unit/fixtures/legacy-theme.mjs (06 T3); U6 gold
-// exclusivity and legacy identity of the :root tokens, layers 1-3 (06 T4a; layer 4 and the Theme leaves join in 06 T5,
-// the palette in 06 T7).
+// exclusivity and legacy identity of the :root tokens, layers 1-3 (06 T4a), layer 4 and the Theme colour leaves (06 T5;
+// the palette joins in 06 T7). Since 06 T5 BIND_FONTS_DEFAULT is true, so U4 also compares the font leaves.
 // Run: node --test tests/unit/theme.test.mjs   (zero dependencies)
 
 import { test, describe } from 'node:test';
@@ -61,7 +61,7 @@ function tokenFor(kind, leaf) {
  * other name, like getPropertyValue for an undefined custom property.
  */
 function fullReader(overrides = {}) {
-  const tokens = { '--font-ui': "'Outfit', sans-serif", '--font-mono': "'JetBrains Mono', monospace" };
+  const tokens = { '--font-ui': "'Montserrat', system-ui, sans-serif", '--font-mono': "'JetBrains Mono', ui-monospace, monospace" };
   for (const [path, name, kind] of COLOR_BINDINGS) tokens[name] ??= tokenFor(kind, at(Theme, path));
   Object.assign(tokens, overrides);
   return (name) => (Object.prototype.hasOwnProperty.call(tokens, name) ? tokens[name] : '');
@@ -81,10 +81,11 @@ describe('U1 parseHexColor / parseCssColor', () => {
     }
   });
 
-  test('rgb01 uses parseInt(hh, 16) / 255, so the legacy safe-zone colours round-trip with Object.is (6.2)', () => {
+  test('rgb01 uses parseInt(hh, 16) / 255, so the safe-zone colours round-trip with Object.is (6.2)', () => {
     assert.deepEqual(parseHexColor('#33ff66').rgb01, [0.2, 1, 0.4]);
     assert.deepEqual(parseHexColor('#ff3333').rgb01, [1, 0.2, 0.2]);
-    assert.ok(Object.is(parseHexColor('#33ff66').rgb01[2], Theme.scene.safeZone.wallColor[2]));
+    parseHexColor('#3dd68c').rgb01.forEach((c, i) => assert.ok(Object.is(c, Theme.scene.safeZone.wallColor[i]), 'wallColor ' + i));
+    parseHexColor('#c51622').rgb01.forEach((c, i) => assert.ok(Object.is(c, Theme.scene.safeZone.thresholdColor[i]), 'thresholdColor ' + i));
   });
 
   test('parseCssColor: hex as above, canonical rgba(), and null for everything else', () => {
@@ -125,7 +126,7 @@ describe('U2 buildTheme: shape, leaf types, freezing, no mutation of Theme, the 
     }
     for (const path of UNBRANDED) assert.notEqual(at(Theme, path), undefined, path);
     assert.equal(new Set(COLOR_BINDINGS.map(([p]) => p)).size, COLOR_BINDINGS.length, 'each path bound once');
-    assert.equal(BIND_FONTS_DEFAULT, false, '06 T2-T4a: the canvas fonts are not bound yet');
+    assert.equal(BIND_FONTS_DEFAULT, true, 'since 06 T5 the canvas fonts are bound');
   });
 
   for (const bindFonts of [false, true]) {
@@ -155,12 +156,13 @@ describe('U2 buildTheme: shape, leaf types, freezing, no mutation of Theme, the 
     });
   }
 
-  test('without options buildTheme uses BIND_FONTS_DEFAULT (false): font tokens are not read', () => {
+  test('without options buildTheme uses BIND_FONTS_DEFAULT (true since 06 T5): the font tokens are read after the colours', () => {
     const read = [];
     const out = buildTheme(Theme, (name) => { read.push(name); return fullReader()(name); });
-    assert.ok(!read.includes('--font-ui') && !read.includes('--font-mono'));
-    assert.equal(out.canvas.panelLabelFont, Theme.canvas.panelLabelFont);
-    assert.deepEqual(read, COLOR_BINDINGS.map(([, name]) => name), 'every colour token read once per row, in table order');
+    assert.deepEqual(read, [...COLOR_BINDINGS, ...FONT_BINDINGS].map(([, name]) => name),
+      'every colour token, then every font token, read once per row, in table order');
+    assert.notEqual(out.canvas.panelLabelFont, Theme.canvas.panelLabelFont, 'a bound function, not the base one');
+    assert.equal(out.canvas.panelLabelFont(40), Theme.canvas.panelLabelFont(40), 'with the tokens the fallbacks hold');
   });
 
   test('bound font leaves: functions stay functions and strings stay strings', () => {
@@ -174,7 +176,8 @@ describe('U2 buildTheme: shape, leaf types, freezing, no mutation of Theme, the 
   test('override (AC 8): --scene-frame #123456 changes only the bridged scene.frame', () => {
     const out = buildTheme(Theme, fullReader({ '--scene-frame': '#123456' }), { warn: (m) => assert.fail(m) });
     assert.equal(out.scene.frame, 0x123456);
-    assert.equal(Theme.scene.frame, 0x4a4a5a, 'Theme.js is untouched');
+    assert.equal(Theme.scene.frame, 0xd4d4d4, 'Theme.js is untouched');
+    assert.equal(out.scene.frameOnLight, Theme.scene.frameOnLight, 'the dark frame has its own token');
     assert.equal(out.scene.background, Theme.scene.background);
   });
 
@@ -188,6 +191,9 @@ describe('U2 buildTheme: shape, leaf types, freezing, no mutation of Theme, the 
     assert.equal(out.canvas.background, '#0a0a0a');
     assert.equal(out.scene.frustumLines.color, 0xf7f7f5, 'one token, two leaves');
     assert.equal(out.scene.frustumFill.color, 0xf7f7f5);
+    const halo = buildTheme(Theme, fullReader({ '--scene-overlay-halo': '#123456' }));
+    assert.equal(halo.scene.cameraBody.outlineColor, 0x123456, '--scene-overlay-halo: the edge outline (06 T5)');
+    assert.equal(halo.scene.frustumLines.haloColor, 0x123456, '--scene-overlay-halo: the frustum halo (06 T5)');
   });
 
   test('a binding path that is not in the base theme is a programming error and throws', () => {
@@ -225,9 +231,11 @@ describe('U3 missing and malformed tokens: the fallback leaf, one warning per va
       if (typeof value === 'function') assert.equal(got, value, path);
       else assert.ok(Object.is(got, value), path);
     }
-    const names = [...new Set(COLOR_BINDINGS.map(([, name]) => name))];
-    assert.deepEqual(warnings, names.map((name) => WARN_TEXT(name, '')));
+    const names = [...new Set([...COLOR_BINDINGS, ...FONT_BINDINGS].map(([, name]) => name))];
+    assert.deepEqual(warnings, names.map((name) => WARN_TEXT(name, '')), 'the font tokens too (BIND_FONTS_DEFAULT true)');
     assert.equal(warnings.filter((m) => m.includes('--scene-frustum ')).length, 1, '--scene-frustum binds two leaves and warns once');
+    assert.equal(warnings.filter((m) => m.includes('--scene-overlay-halo ')).length, 1, '--scene-overlay-halo binds two leaves and warns once');
+    assert.equal(warnings.filter((m) => m.includes('--font-mono ')).length, 1, '--font-mono binds two leaves and warns once');
   });
 
   test('undefined and null readings count as missing; malformed values are reported as read (trimmed)', () => {
@@ -245,10 +253,11 @@ describe('U3 missing and malformed tokens: the fallback leaf, one warning per va
     assert.equal(out.scene.background, Theme.scene.background);
     assert.deepEqual(out.scene.safeZone.wallColor, Theme.scene.safeZone.wallColor);
     assert.equal(out.ui.status.within, Theme.ui.status.within);
-    assert.equal(out.scene.safeZone.thresholdColor[0], 1, 'the other leaves are still bridged');
+    assert.ok(Object.is(out.scene.safeZone.thresholdColor[0], 0xc5 / 255), 'the other leaves are still bridged');
   });
 
   test('the default warn is a no-op: buildTheme never throws for bad tokens', () => {
+    assert.doesNotThrow(() => buildTheme(Theme, () => ''));
     assert.doesNotThrow(() => buildTheme(Theme, () => 'garbage'));
     assert.doesNotThrow(() => buildTheme(Theme, () => undefined, { bindFonts: true }));
   });
@@ -412,18 +421,51 @@ describe('U11 conventions unchanged: UNBRANDED leaves equal their Phase-1 values
   });
 });
 
-// ---- U6 (06 T4a): gold exclusivity and legacy identity ----------------------------------------------
+// ---- U6 (06 T4a, T5): gold exclusivity and legacy identity --------------------------------------------
 
 const PIVOT_GOLD = '#F2B705';
 const LEGACY_IDENTITY = ['#00F0FF', '#FF00AA'];
-/** The layers U6 checks so far, by token prefix (06 8.1 U6: layers 1-3 from T4a). Layer 4 (--scene-*, --canvas-*,
- *  --status-*, --uv-*) still holds the legacy values until 06 T5, which adds it together with the bound Theme leaves;
- *  06 T7 adds the palette. */
-const U6_PREFIXES = ['--morph-', '--ui-', '--color-', '--cta-', '--shadow-', '--font-'];
+/** The token layers U6 checks, by prefix (06 8.1 U6): layers 1-3 since 06 T4a, layer 4 (--scene-*, --canvas-*,
+ *  --status-*, --uv-* once spec 04 adds it) since 06 T5, together with the Theme colour leaves; 06 T7 adds the palette. */
+const U6_PREFIXES = ['--morph-', '--ui-', '--color-', '--cta-', '--shadow-', '--font-', '--scene-', '--canvas-', '--status-', '--uv-'];
 /** Exempt by name: the gold primitive and its one role, which must stay Pivot Gold. */
 const GOLD_EXEMPT = new Set(['--morph-gold-500', '--cta-background']);
+/** Debug exemption (06 5.12 rule 2): spec 01's debug-view tokens and the scene.debug.* leaves skip the legacy-identity
+ *  check only (they show only in the opt-in debug view); they must still be >= 20 from gold. */
+const DEBUG_TOKENS = new Set(['--scene-normals', '--scene-normals-face', '--scene-face-front', '--scene-face-back']);
+const isDebugLeaf = (path) => path.startsWith('scene.debug.');
 
-describe('U6 gold exclusivity and legacy identity: css/02-tokens.css layers 1-3 (06 T4a)', () => {
+/**
+ * Asserts the U6 distances of one opaque colour: >= 20 from Pivot Gold, and (unless debugExempt) >= 15 from the legacy
+ * cyan and magenta.
+ */
+function assertOffBrandColours(label, rgb, { debugExempt = false } = {}) {
+  const gold = deltaE00(rgb, PIVOT_GOLD);
+  assert.ok(gold >= 20, `${label} is ${gold.toFixed(1)} from Pivot Gold (< 20)`);
+  if (debugExempt) return;
+  for (const id of LEGACY_IDENTITY) {
+    const d = deltaE00(rgb, id);
+    assert.ok(d >= 15, `${label} is ${d.toFixed(1)} from the legacy ${id} (< 15)`);
+  }
+}
+
+/** A Theme colour leaf as [r, g, b]: a 0xrrggbb number, a '#rrggbb' / 'rgba()' string (over Morph Black) or rgb01. */
+function leafRgb(value) {
+  if (typeof value === 'number') return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+  if (Array.isArray(value)) return value.map((c) => Math.round(c * 255));
+  return composite(value, '#0a0a0a');
+}
+
+/** Every colour leaf of a theme under scene, canvas and ui (06 U10's walk): bound rows and the leaves that are neither
+ *  UNBRANDED, functions nor non-colour, as [path, value]. */
+function themeColourLeaves(theme) {
+  return classifyTheme(theme)
+    .filter(({ kind, path }) => kind !== 'unbranded' && kind !== 'function' && kind !== 'non-colour'
+      && !FONT_BINDINGS.some(([p]) => p === path))
+    .map(({ path }) => [path, at(theme, path.replace(/\[(\d+)\]/g, '.$1'))]);
+}
+
+describe('U6 gold exclusivity and legacy identity: every css/02-tokens.css layer and the Theme colour leaves (06 T4a, T5)', () => {
   const { decls, token } = readTokens();
   const checked = [...decls.keys()].filter((name) => U6_PREFIXES.some((p) => name.startsWith(p)));
 
@@ -442,30 +484,45 @@ describe('U6 gold exclusivity and legacy identity: css/02-tokens.css layers 1-3 
     assert.equal(token('--morph-gold-500').toUpperCase(), PIVOT_GOLD);
   });
 
-  test('the legacy token names are gone and every layer 1-3 colour token is >= 20 from gold and >= 15 from cyan and magenta', () => {
+  test('the legacy token names are gone and every colour token of every layer is >= 20 from gold and >= 15 from cyan and magenta', () => {
     for (const legacy of ['--bg-primary', '--bg-secondary', '--bg-tertiary', '--accent-cyan', '--accent-magenta', '--accent-orange',
       '--accent-green', '--text-primary', '--text-secondary', '--text-dim', '--border-color', '--glow-cyan']) {
       assert.ok(!decls.has(legacy), `${legacy} is still declared`);
     }
+    assert.deepEqual([...decls.keys()].filter((name) => !checked.includes(name)), [], 'every :root token belongs to a checked layer');
     let colours = 0;
+    let layer4 = 0;
     for (const name of checked) {
       const value = token(name);
       if (!parseColour(value)) continue;          // shadows and fonts are not colours
       colours++;
+      if (/^--(scene|canvas|status|uv)-/.test(name)) layer4++;
       if (GOLD_EXEMPT.has(name)) continue;
-      const rgb = composite(value, '#0a0a0a');     // rgba() over Morph Black first
-      const gold = deltaE00(rgb, PIVOT_GOLD);
-      assert.ok(gold >= 20, `${name} (${value}) is ${gold.toFixed(1)} from Pivot Gold (< 20)`);
-      for (const id of LEGACY_IDENTITY) {
-        const d = deltaE00(rgb, id);
-        assert.ok(d >= 15, `${name} (${value}) is ${d.toFixed(1)} from the legacy ${id} (< 15)`);
-      }
+      assertOffBrandColours(`${name} (${value})`, composite(value, '#0a0a0a'), { debugExempt: DEBUG_TOKENS.has(name) });   // rgba() over Morph Black first
     }
-    assert.ok(colours >= 40, `only ${colours} colour tokens found in layers 1-3`);
+    assert.ok(colours >= 60, `only ${colours} colour tokens found`);
+    assert.ok(layer4 >= 20, `only ${layer4} layer-4 colour tokens found`);
   });
 
-  test('a gold-like or legacy-cyan token would fail (the check is live)', () => {
+  test('every bound Theme leaf as buildTheme returns it, and every Theme colour leaf not UNBRANDED, keeps the same distances (06 T5)', () => {
+    const bridged = buildTheme(Theme, readTokens().read);
+    for (const theme of [Theme, bridged]) {
+      const leavesFound = themeColourLeaves(theme);
+      assert.ok(leavesFound.length >= COLOR_BINDINGS.length, `only ${leavesFound.length} colour leaves found`);
+      for (const [path, value] of leavesFound) {
+        assertOffBrandColours(`${path} (${JSON.stringify(value)})`, leafRgb(value), { debugExempt: isDebugLeaf(path) });
+      }
+    }
+    for (const [path] of COLOR_BINDINGS) {
+      assertOffBrandColours(`bridged ${path}`, leafRgb(at(bridged, path)), { debugExempt: isDebugLeaf(path) });
+    }
+  });
+
+  test('a gold-like or legacy-cyan token would fail (the check is live), and the debug exemption skips only the identity check', () => {
     assert.ok(deltaE00(composite('#ffaa00', '#0a0a0a'), PIVOT_GOLD) < 20);
     assert.ok(deltaE00(composite('rgba(0, 240, 255, 0.9)', '#0a0a0a'), '#00F0FF') < 15);
+    assert.throws(() => assertOffBrandColours('legacy frustum', leafRgb(0xffaa00), { debugExempt: true }), /Pivot Gold/);
+    assert.doesNotThrow(() => assertOffBrandColours('face normal', leafRgb(0xff4fd8), { debugExempt: true }));
+    assert.throws(() => assertOffBrandColours('face normal', leafRgb(0xff4fd8)), /legacy #FF00AA/);
   });
 });

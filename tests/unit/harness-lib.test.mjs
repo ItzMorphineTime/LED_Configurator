@@ -105,12 +105,14 @@ describe('lib/palette.mjs: the live palette hook (07 C53)', () => {
     assert.equal(none.themeLoaded, false);
   });
 
-  test('the current SceneTheme resolves its legacy colours (background, frame, grid)', () => {
+  test('the current SceneTheme resolves its colours (background, both frames, grid; the 06 T5 values)', () => {
     const p = resolvePalette({ sceneTheme: JSON.parse(JSON.stringify(SceneTheme)) });
-    assert.deepEqual(p.background, [10, 10, 15]);
-    assert.deepEqual(p.frame, [74, 74, 90]);
-    assert.deepEqual(p.gridCenter, [42, 42, 58]);
-    assert.deepEqual(p.gridLine, [26, 26, 36]);
+    assert.deepEqual(p.background, [10, 10, 10]);
+    assert.deepEqual(p.frame, [212, 212, 212]);
+    assert.deepEqual(p.frameOnLight, [10, 10, 10]);
+    assert.deepEqual(p.gridCenter, [51, 51, 51]);
+    assert.deepEqual(p.gridLine, [28, 28, 28]);
+    assert.equal(p.sources.frameOnLight, 'theme');
   });
 });
 

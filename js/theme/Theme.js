@@ -1,15 +1,20 @@
 /**
  * @module theme/Theme
- * Every scene, canvas, status-colour, palette and export literal of the legacy page, copied verbatim with its
- * exact type (0x numbers stay numbers, CSS colour strings stay strings), plus the feature keys added since (SceneTheme
- * .debug, 01 F1-1). All objects and arrays are frozen.
+ * The scene, canvas, status-colour, palette and export values of the app, each with its exact type (0x numbers stay
+ * numbers, CSS colour strings stay strings), plus the feature keys added since (SceneTheme.debug, 01 F1-1). All
+ * objects and arrays are frozen.
  * Only app/App.js imports this module; every consumer receives `theme` (or one of its parts) by injection, so
  * Feature 6 swaps in a ThemeBridge-built object of the same shape in one line (never by mutating these objects): since
  * 06 T3 App injects buildTheme(Theme, the :root custom properties), and these values are its fallbacks, kept equal to
  * the tokens of css/02-tokens.css by the U4 parity test (tests/unit/theme.test.mjs).
+ * 06 T5 (docs/improvements/06-morph-branding.md 3.8, 5.4): the scene, canvas and status values are the Morph values
+ * (D15: light/dark adaptive panel frames, an opaque camera body with an edge outline, a two-tone dashed frustum), the
+ * canvas fonts are JetBrains Mono and Montserrat, and CanvasTheme.preloadFonts feeds the font gate (app/fontGate.js).
+ * The palette and the brand strings keep their Phase-1 values until 06 T6a, T6b and T7.
  * Legacy source: index.html@cd3fd3f 1379-1384, 1406, 1431, 1440-1449, 1563, 1693, 1821, 2009, 2034, 2042, 2064,
  * 2092, 2107, 2110, 2181, 2334, 2407, 2425-2426, 2518-2524, 2698-2751, 2792, 2826, 2840-2841, 2915-2917, 2960,
- * 3010, 3029-3089, 3225, 3264, 3970-3975, 4520-4549, 4557-4561, 4721, 4915-4916, 4923, 4934, 4964.
+ * 3010, 3029-3089, 3225, 3264, 3970-3975, 4520-4549, 4557-4561, 4721, 4915-4916, 4923, 4934, 4964 (where each value
+ * is used; the values that 06 T5 re-coloured are those of 06 3.8).
  * Layer: theme (imports no other directory of js/).
  */
 
@@ -30,22 +35,28 @@ function deepFreeze(value) {
 /**
  * three.js scene colours, opacities and sizes (numbers are THREE colour hex values).
  * Gizmo axis colours are a convention (X red, Y green, Z blue): never brand them.
+ * 06 T5 (3.8, D15): `frame` is the light panel frame and `frameOnLight` the dark one (LEDWallView picks one per
+ * section with render/frameColor.js); the camera body is opaque with a Morph Black edge outline; the frustum lines are
+ * a dashed light core over a solid Morph Black halo (CameraRigView).
  */
 export const SceneTheme = deepFreeze({
-  background: 0x0a0a0f,                                                     // 1431
-  grid: { size: 50, divisions: 50, centerColor: 0x2a2a3a, color: 0x1a1a24, position: [12.5, 0, 12.5] },   // 1446-1447
+  background: 0x0a0a0a,                                                     // 1431 (Morph Black)
+  grid: { size: 50, divisions: 50, centerColor: 0x333333, color: 0x1c1c1c, position: [12.5, 0, 12.5] },   // 1446-1447
   axesSize: 0.5,                                                            // 1449
   lights: { ambient: { color: 0xffffff, intensity: 0.3 },
             point: { color: 0xffffff, intensity: 0.8, position: [5, 5, 10] } },   // 1440-1443
-  frame: 0x4a4a5a,                                                          // 1563
-  cameraBody: { color: 0xff6600, opacity: 0.8 },                            // 2334
-  frustumLines: { color: 0xffaa00, opacity: 0.7 },                          // 2407
-  frustumFill: { color: 0xffaa00, opacity: 0.08 },                          // 2425-2426
-  safeZone: { wallColor: [0.2, 1, 0.4], thresholdColor: [1, 0.2, 0.2], floorOpacity: 0.5,
-              lineColor: 0xff4444, lineOpacity: 0.8, labelColor: '#ff4444', labelFont: 'bold 32px Arial' },   // 2698-2749
-  person: { body: 0x4488ff, dark: 0x2244aa, opacity: 0.85 },                // 2840-2841
+  frame: 0xd4d4d4,                                                          // 1563: the light frame (06 6.7)
+  frameOnLight: 0x0a0a0a,                                                   // 06 T5: the dark frame of light sections (6.7)
+  cameraBody: { color: 0xc51622, opacity: 1.0, outlineColor: 0x0a0a0a },    // 2334; outlineColor 06 T5 (edge outline)
+  frustumLines: { color: 0xf7f7f5, haloColor: 0x0a0a0a, opacity: 1.0, dashSize: 0.15, gapSize: 0.10 },
+                                                                            // 2407; haloColor, dashSize, gapSize 06 T5
+  frustumFill: { color: 0xf7f7f5, opacity: 0.05 },                          // 2425-2426
+  safeZone: { wallColor: [0x3d / 255, 0xd6 / 255, 0x8c / 255], thresholdColor: [0xc5 / 255, 0x16 / 255, 0x22 / 255],
+              floorOpacity: 0.5, lineColor: 0xf2555a, lineOpacity: 0.9, labelColor: '#f2555a',
+              labelFont: "600 32px 'Montserrat', system-ui, sans-serif" },   // 2698-2749
+  person: { body: 0x4488ff, dark: 0x2244aa, opacity: 0.85 },                // 2840-2841 (unchanged, 06 D12)
   car: { body: { color: 0xff4444, opacity: 0.85 }, dark: { color: 0x222222, opacity: 0.9 },
-         glass: { color: 0x88ccff, opacity: 0.5 }, lights: 0xffffaa },      // 2915-2917, 2960
+         glass: { color: 0x88ccff, opacity: 0.5 }, lights: 0xffffaa },      // 2915-2917, 2960 (unchanged, 06 D12)
   gizmo: { x: 0xff4444, y: 0x44ff44, z: 0x4444ff, idleOpacity: 0.35, hoverOpacity: 1.0, dimmedOpacity: 0.15 },
          // 3010, 3029-3089, 3225, 3264. Axis colours are a convention: never brand them.
   debug: {                                                                  // 01 F1-1 (4.6): the normals debug view
@@ -57,21 +68,25 @@ export const SceneTheme = deepFreeze({
 
 /**
  * 2D canvas colours, fonts and alphas used by the LED tiles and the panel-ID textures.
- * The font helpers return the exact legacy `ctx.font` strings for a pixel size.
+ * The font helpers return the `ctx.font` string for a pixel size (06 T5: JetBrains Mono, whose weight 700 the font URL
+ * loads since 06 T5, for the panel labels; Montserrat for the section label). `preloadFonts` are the faces the font
+ * gate loads at startup (06 5.6).
  */
 export const CanvasTheme = deepFreeze({
-  background: '#0a0a0f',                                                    // 1693, 1821, 2009, 2064
-  panelBorderColors: ['#ff0000', '#00ff00', '#0000ff'],                     // 1384 (frozen array)
-  panelLabelFont: (px) => `bold ${px}px 'JetBrains Mono', monospace`,       // 2034, 2092
-  panelSectionNameFont: (px) => `${px}px 'JetBrains Mono', monospace`,      // 2042
-  sectionLabelFont: (px) => `bold ${px}px 'Outfit', sans-serif`,            // 2107
+  background: '#0a0a0a',                                                    // 1693, 1821, 2009, 2064
+  panelBorderColors: ['#ff0000', '#00ff00', '#0000ff'],                     // 1384 (frozen array; unchanged, 06 D12)
+  panelLabelFont: (px) => `bold ${px}px 'JetBrains Mono', ui-monospace, monospace`,    // 2034, 2092
+  panelSectionNameFont: (px) => `${px}px 'JetBrains Mono', ui-monospace, monospace`,   // 2042
+  sectionLabelFont: (px) => `bold ${px}px 'Montserrat', system-ui, sans-serif`,        // 2107
   sectionLabelAlpha: 0.6,                                                   // 2110
   logoAlpha: 0.8,                                                           // 2181
+  preloadFonts: ["bold 32px 'JetBrains Mono'", "32px 'JetBrains Mono'", "bold 32px 'Montserrat'", "600 32px 'Montserrat'"],
+                                                                            // 06 T5: the font gate (app/fontGate.js)
 });
 
-/** DOM status colours of the frustum coverage readout (CSS colour strings). */
+/** DOM status colours of the frustum coverage readout (CSS colour strings; 06 T5: success, warning, danger). */
 export const UiColors = deepFreeze({
-  status: { within: '#00ff66', offCenter: '#ffaa00', exceeds: '#ff4444' },  // 2518-2524
+  status: { within: '#3dd68c', offCenter: '#ff8640', exceeds: '#f2555a' },  // 2518-2524
 });
 
 /** Section colour palette (new sections and import fallback) and the card swatch colours. */

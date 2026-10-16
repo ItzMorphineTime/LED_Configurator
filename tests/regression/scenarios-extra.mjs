@@ -284,13 +284,21 @@ const readPreviewSize = (app) => pageCall(app, pagePreviewSize);
 
 // ---- pixel search in canvas screenshots -------------------------------------------------------
 
-// Blended colours of the scene objects on the background 0x0a0a0f (MeshBasicMaterial, transparent):
-//   gizmo red   0xff4444 @ 0.35 -> ~(96, 30, 34)     gizmo green 0x44ff44 @ 0.35 -> ~(30, 96, 34)
-//   camera body 0xff6600 @ 0.80 -> ~(206, 84, 3)     person      0x4488ff @ 0.85 (see findPersonPixel)
-// The ranges also accept the same blends over the floor grid lines and the 0.08 frustum tint.
-const isGizmoRed = (r, g, b) => r >= 78 && r <= 128 && g <= 56 && b <= 60 && r - Math.max(g, b) >= 40;
+// Blended colours of the scene objects on the background 0x0a0a0a (MeshBasicMaterial; the scene colours of 06 T5,
+// 06 3.8 and 8.3, which the live palette hook reports as --scene-* tokens):
+//   gizmo red   0xff4444 @ 0.35 -> ~(96, 30, 30)     gizmo green 0x44ff44 @ 0.35 -> ~(30, 96, 30)
+//   camera body 0xc51622 @ 1.00 -> (197, 22, 34), opaque: the same over the default wall; under one or two layers of
+//               the 0.05 frustum fill (0xf7f7f5) at most (201, 44, 55)
+//   person      0x4488ff @ 0.85 (see findPersonPixel)
+// The camera body's anti-aliased edges and its Morph Black edge outline blend to (10 + 187c, 10 + 12c, 10 + 24c), for
+// example (104, 16, 22) at c = 0.5, so isGizmoRed also asks g >= 24 (real gizmo-red pixels have g >= 30 over the
+// darkest background), which keeps the two matchers disjoint. isGizmoGreen rejects the safe band's green @ 0.5
+// (~(36, 112, 75), b > 60); the gizmo_drag scenario never shows the safe band. The frustum lines (a #f7f7f5 dashed core
+// over a #0a0a0a halo) and the adaptive panel frames (#d4d4d4 / #0a0a0a) are neutral greys that no matcher accepts.
+// The ranges also accept the same blends over the floor grid lines and the 0.05 frustum tint.
+const isGizmoRed = (r, g, b) => r >= 78 && r <= 128 && g >= 24 && g <= 56 && b <= 60 && r - Math.max(g, b) >= 40;
 const isGizmoGreen = (r, g, b) => g >= 78 && g <= 128 && r <= 56 && b <= 60 && g - Math.max(r, b) >= 40;
-const isCameraBody = (r, g, b) => r >= 170 && g >= 60 && g <= 105 && b <= 45;
+const isCameraBody = (r, g, b) => r >= 150 && g <= 50 && b <= 60;
 const isPerson = (r, g, b) => b >= 200 && r >= 40 && r <= 80 && g >= 95 && g <= 170;
 
 /**

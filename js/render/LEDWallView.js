@@ -8,6 +8,8 @@
  * meshes through MaterialOverride: the content materials are stashed while a shared debug material is shown, put back
  * before every rebuild disposes the old wall, and put back around stills (withContentMaterials, 07 C48). The debug
  * materials are created by DebugMaterials on first use, so nothing changes until the shading is switched on.
+ * Panel frames are adaptive (docs/improvements/06-morph-branding.md 6.7, 06 T5): each section's frames take the light
+ * or the dark frame colour of SceneTheme, whichever contrasts more with the section colour (render/frameColor.js).
  * Legacy source: index.html@cd3fd3f 1457-1577, 1646-1678, 1710-1802.
  * Layer: render (may import vendor/three, core, legacy, domain, geometry).
  */
@@ -18,6 +20,7 @@ import { computeAtlas } from '../geometry/TextureAtlas.js';
 import { maxIndexOf, indexWidth } from '../geometry/WallMeshBuilder.js';
 import { ResourceTracker } from './ResourceTracker.js';
 import { MaterialOverride } from './MaterialOverride.js';
+import { frameColorFor } from './frameColor.js';
 
 /**
  * The argument of geometry.setIndex for a combined or section grid (08 P2-1e; the viewport side of B-L5, 08 6.2): a
@@ -80,7 +83,8 @@ export class LEDWallView {
    *          builder: import('../geometry/WallMeshBuilder.js').WallMeshBuilder,
    *          theme: {scene: object},
    *          debugMaterials: import('./DebugMaterials.js').DebugMaterials}} deps
-   *   builder: the WallMeshBuilder of the viewport profile; theme: { scene: SceneTheme } (frame colour);
+   *   builder: the WallMeshBuilder of the viewport profile; theme: { scene: SceneTheme } (the frame colours
+   *   frame and frameOnLight);
    *   debugMaterials: the shared debug-shading materials (01 F1-1; read only once a shading is set)
    */
   constructor({ sceneManager, materials, builder, theme, debugMaterials }) {
@@ -155,7 +159,7 @@ export class LEDWallView {
 
     // 4. Panel frames.
     if (display.showFrame) {
-      this.#buildFrames(layout);
+      this.#buildFrames(layout, display);
     }
 
     // 5. Scene.
@@ -304,15 +308,19 @@ export class LEDWallView {
   }
 
   /**
-   * One edge outline per panel (the inner BoxGeometry is never tracked or disposed, as legacy).
+   * One edge outline per panel (the inner BoxGeometry is never tracked or disposed, as legacy), in the section's
+   * adaptive frame colour (06 6.7: light or dark by contrast with the section colour; light on textures and in
+   * wireframe). Every change of colour, content mode or wireframe rebuilds (ARCHITECTURE 6.2), so it never goes stale.
    * Ports: index.html@cd3fd3f lines 1560-1568.
    * @param {import('../geometry/WallLayout.js').WallLayout} layout
+   * @param {import('../domain/Project.js').DisplaySettings} display
    */
-  #buildFrames(layout) {
-    layout.sections.forEach(({ panels, panelW, panelH }) => {
+  #buildFrames(layout, display) {
+    layout.sections.forEach(({ section, panels, panelW, panelH }) => {
+      const color = frameColorFor(section.color, display, this.#theme.scene);
       panels.forEach((panel) => {
         const frameGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(panelW, panelH, 0.02));
-        const frame = new THREE.LineSegments(frameGeometry, new THREE.LineBasicMaterial({ color: this.#theme.scene.frame }));
+        const frame = new THREE.LineSegments(frameGeometry, new THREE.LineBasicMaterial({ color }));
         frame.position.set(panel.x, panel.y, panel.z);
         frame.rotation.y = panel.rotY;
         this.#frameGroup.add(frame);

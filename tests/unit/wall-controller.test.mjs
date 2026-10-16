@@ -24,6 +24,7 @@ import { WallSection, SECTION_FIELDS } from '../../js/domain/WallSection.js';
 import { layoutProject } from '../../js/geometry/WallLayout.js';
 import { Palette } from '../../js/theme/Theme.js';
 import { WallController } from '../../js/app/WallController.js';
+import { runFontGate } from '../../js/app/fontGate.js';
 import { HeaderStats } from '../../js/ui/HeaderStats.js';
 import { SectionListPanel } from '../../js/ui/SectionListPanel.js';
 import { SectionLogosPanel } from '../../js/ui/SectionLogosPanel.js';
@@ -390,6 +391,25 @@ describe('rebuild policy (ARCHITECTURE.md 6.2): run counts and tile-cache clears
     assert.equal(r.project.wall.nextSectionId, -Infinity);
     assert.deepEqual(r.emitted('WALL_STATS_CHANGED'), [{ totalPixels: 0, totalPanels: 0, totalSections: 0, totalArc: 0 }]);
   });
+
+  test('row F6-1 font gate (06 5.6): one rebuild with panel IDs on, none with them off or with nothing pending', async () => {
+    const fonts = { load: async () => [] };
+    const pendingOnce = () => {
+      let pairs = [["bold 40px 'JetBrains Mono', ui-monospace, monospace", 'A1']];
+      return { takePendingFonts: () => { const out = pairs; pairs = []; return out; } };
+    };
+    const on = makeRig({ panelIds: true });
+    assert.equal(await runFontGate({ fonts, preloadFonts: [], panelIds: pendingOnce(), wallController: on.wc }), true);
+    assert.deepEqual(on.trace, P1, 'exactly one P1 run');
+    assert.equal(on.ledTiles.clears, 0);
+    const off = makeRig();
+    assert.equal(await runFontGate({ fonts, preloadFonts: [], panelIds: pendingOnce(), wallController: off.wc }), true,
+      'the gate calls rebuildIfPanelIds');
+    assert.deepEqual(off.trace, [], 'which rebuilds nothing with panel IDs off');
+    const nothing = makeRig({ panelIds: true });
+    assert.equal(await runFontGate({ fonts, preloadFonts: [], panelIds: { takePendingFonts: () => [] }, wallController: nothing.wc }), false);
+    assert.deepEqual(nothing.trace, []);
+  });
 });
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -407,6 +427,10 @@ function importsOf(rel) {
 }
 
 describe('import boundaries', () => {
+  test('app/fontGate imports nothing (06 5.6: the FontFaceSet, the renderer and the controller are injected)', () => {
+    assert.deepEqual(importsOf('js/app/fontGate.js'), []);
+  });
+
   test('WallController imports only core/, legacy/, domain/, geometry/', () => {
     const imports = importsOf('js/app/WallController.js');
     assert.ok(imports.length > 0);

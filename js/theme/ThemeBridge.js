@@ -15,16 +15,20 @@
  *   'css'   -> '#rrggbb' lowercase, or canonical 'rgba(r, g, b, a)' (accepts either; ints 0-255, a in [0, 1], printed
  *              with String(Number(a))). Used by spec 04's Theme.uv.
  * Every path exists in Theme with a leaf of the matching type (U2). The keys that later steps add land with their
- * rows: 01 F1-5 scene.wallBack (--scene-wall-back); 06 T5 frameOnLight, cameraBody.outlineColor and
- * frustumLines.haloColor; the sibling specs' keys of 06 5.12.
+ * rows: 06 T5 added scene.frameOnLight (--scene-frame-on-light), scene.cameraBody.outlineColor and
+ * scene.frustumLines.haloColor (both --scene-overlay-halo, the halo of every two-tone overlay and edge outline, D15);
+ * 01 F1-5 adds scene.wallBack (--scene-wall-back); the sibling specs add their keys of 06 5.12.
  */
 export const COLOR_BINDINGS = Object.freeze([
   ['scene.background',              '--scene-background',     'num'],
   ['scene.grid.centerColor',        '--scene-grid-center',    'num'],
   ['scene.grid.color',              '--scene-grid-line',      'num'],
   ['scene.frame',                   '--scene-frame',          'num'],
+  ['scene.frameOnLight',            '--scene-frame-on-light', 'num'],   // 06 T5 (6.7: the dark frame)
   ['scene.cameraBody.color',        '--scene-camera-body',    'num'],
+  ['scene.cameraBody.outlineColor', '--scene-overlay-halo',   'num'],   // 06 T5 (D15: the edge outline)
   ['scene.frustumLines.color',      '--scene-frustum',        'num'],
+  ['scene.frustumLines.haloColor',  '--scene-overlay-halo',   'num'],   // 06 T5 (D15: the frustum halo)
   ['scene.frustumFill.color',       '--scene-frustum',        'num'],
   ['scene.safeZone.wallColor',      '--scene-safe-wall',      'rgb01'],
   ['scene.safeZone.thresholdColor', '--scene-safe-threshold', 'rgb01'],
@@ -63,11 +67,12 @@ export const UNBRANDED = Object.freeze([
 ]);
 
 /**
- * Default of buildTheme's bindFonts option: false from 06 T2 to T4a (the canvas fonts keep the base Theme strings, so
- * a change of --font-ui / --font-mono reaches the DOM only); the 06 T5 commit flips it to true. App and the U4 parity
- * test both omit the option, so they always bind fonts identically.
+ * Default of buildTheme's bindFonts option: false from 06 T2 to T4a (the canvas fonts kept the base Theme strings, so
+ * a change of --font-ui / --font-mono reached the DOM only); true since 06 T5, so the canvas and safe-zone label fonts
+ * come from --font-mono / --font-ui like every DOM font. App and the U4 parity test both omit the option, so they
+ * always bind fonts identically.
  */
-export const BIND_FONTS_DEFAULT = false;
+export const BIND_FONTS_DEFAULT = true;
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 const RGBA_RE = /^rgba\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d*\.?\d+)\s*\)$/i;

@@ -32,7 +32,7 @@ Phase 1 turns the 3,800-line inline script and the 860-line inline stylesheet in
 
 ### 1.2 Delivery
 
-- `index.html` keeps its `<head>` exactly (including the invalid `<meta author="Joe Loe">`), keeps loading three.js r128 and JSZip 3.10.1 as **classic** scripts from the same cdnjs URLs and Google Fonts from the same URL, then links the 12 stylesheets in `css/` in numeric order. Lines 872-1276 (the `<body>` tag, the markup 873-1275 and the blank line before the script) stay byte-identical. The inline `<script>` is replaced, at the same position at the end of `<body>`, by `<script type="module" src="js/main.js"></script>`. **Phase 1 only:** this byte-identity (R8) ended with 06 T1, the first intentional markup change. Since then the stylesheet links follow the one link order of 2.1 (07 C52), ending with `css/99-utilities.css`, and the static inline `style=""` attributes are classes of that sheet; only the JS-owned `display` / `width` / `height` stay inline (static rule 12, 06 R-B2). 06 T4a changed the head (the title "Morph LED Configurator", a valid author meta, description, `theme-color`, `color-scheme`, the Open Graph text and the font URL with Montserrat); 06 T4b added the favicons, the apple-touch icon and `og:image` from `assets/brand/` (2.3), all relative to the page except the absolute `og:image`.
+- `index.html` keeps its `<head>` exactly (including the invalid `<meta author="Joe Loe">`), keeps loading three.js r128 and JSZip 3.10.1 as **classic** scripts from the same cdnjs URLs and Google Fonts from the same URL, then links the 12 stylesheets in `css/` in numeric order. Lines 872-1276 (the `<body>` tag, the markup 873-1275 and the blank line before the script) stay byte-identical. The inline `<script>` is replaced, at the same position at the end of `<body>`, by `<script type="module" src="js/main.js"></script>`. **Phase 1 only:** this byte-identity (R8) ended with 06 T1, the first intentional markup change. Since then the stylesheet links follow the one link order of 2.1 (07 C52), ending with `css/99-utilities.css`, and the static inline `style=""` attributes are classes of that sheet; only the JS-owned `display` / `width` / `height` stay inline (static rule 12, 06 R-B2). 06 T4a changed the head (the title "Morph LED Configurator", a valid author meta, description, `theme-color`, `color-scheme`, the Open Graph text and the font URL with Montserrat); 06 T4b added the favicons, the apple-touch icon and `og:image` from `assets/brand/` (2.3), all relative to the page except the absolute `og:image`; 06 T5 set the final font URL (JetBrains Mono 400-700, with the weight 700 that the canvas labels draw, and Montserrat 400-700; Outfit and JetBrains Mono 300 are no longer requested).
 - All URLs are relative (`css/...`, `js/...`) so the site works under the GitHub Pages sub-path `/LED_Configurator/`.
 - Modules obtain THREE and JSZip only through the shims `js/vendor/three.js` and `js/vendor/jszip.js`. Switching to ESM three later (importmap) is a change to `js/vendor/three.js` plus one `<script type="importmap">`.
 - `file://` no longer works (ES modules need HTTP). Local development uses any static server (see `docs/REFACTOR_PLAN.md`, "How to run locally").
@@ -50,9 +50,9 @@ Phase 1 turns the 3,800-line inline script and the 860-line inline stylesheet in
         |  (receives app controllers, interaction controllers and SceneManager by injection; imports only core, legacy, domain statics, ui/dom)
         v
       app/  use cases and ordered pipelines: WallController (rebuild = createLEDWall), CameraHub (= updateCameraFrustum),
-        |   CameraController, PropController, ProjectIO. Never calls ui; publishes mirror events.
+        |   CameraController, PropController, ProjectIO, the font gate (fontGate, 06 T5). Never calls ui; publishes mirror events.
         v
-      interaction/  orbit, keyboard, pointer ray, selection registry, transform gizmo, pilot   render/  THREE views and canvases
+      interaction/  orbit, keyboard, pointer ray, selection registry, transform gizmo, pilot   render/  THREE views and canvases (+ frameColor, pure)
         |                                                                                         |
         +-------------------------------------+---------------------------------------------------+
                                               v
@@ -161,7 +161,7 @@ Each file contains a header comment followed by the original lines **verbatim an
 | File | Original lines | Content | WP |
 |---|---|---|---|
 | `css/01-reset.css` | 12-16 | `*` reset (margin, padding, box-sizing) | WP2 |
-| `css/02-tokens.css` | 18-31 | `:root` custom properties: the single theme-token file (Feature 6 seam). 06 T3 adds layer 4 (06 5.1), the roles that `theme/ThemeBridge.js` reads: `--scene-background`, `--scene-grid-center`, `--scene-grid-line`, `--scene-frame`, `--scene-camera-body`, `--scene-frustum`, `--scene-safe-wall`, `--scene-safe-threshold`, `--scene-safe-line`, `--scene-safe-label`, spec 01's `--scene-face-front`, `--scene-face-back`, `--scene-normals`, `--scene-normals-face` (01 CR-8; `--scene-wall-back` lands with its key in 01 F1-5), `--canvas-background` and `--status-within` / `--status-off-center` / `--status-exceeds`, all `#rrggbb` holding the legacy values (the `Theme.js` fallbacks, U4) until 06 T5. 06 T4a replaced the legacy token block with layers 1-3 (06 5.1): the brand primitives `--morph-*`, the derived dark-UI primitives `--ui-*` and the semantic roles (`--color-*`, `--cta-background`, `--shadow-overlay`, `--font-ui`, `--font-mono`), which every stylesheet references; no other stylesheet holds a colour literal or a legacy token name (static rules 13 and 14) | WP2 |
+| `css/02-tokens.css` | 18-31 | `:root` custom properties: the single theme-token file (Feature 6 seam). 06 T3 adds layer 4 (06 5.1), the roles that `theme/ThemeBridge.js` reads: `--scene-background`, `--scene-grid-center`, `--scene-grid-line`, `--scene-frame`, `--scene-camera-body`, `--scene-frustum`, `--scene-safe-wall`, `--scene-safe-threshold`, `--scene-safe-line`, `--scene-safe-label`, spec 01's `--scene-face-front`, `--scene-face-back`, `--scene-normals`, `--scene-normals-face` (01 CR-8; `--scene-wall-back` lands with its key in 01 F1-5), `--canvas-background` and `--status-within` / `--status-off-center` / `--status-exceeds`, each resolving to `#rrggbb` and equal to its `Theme.js` fallback (U4). They held the legacy values until 06 T5, which switched them to the Morph values of 06 3.8 (mostly `var()` aliases of layers 1-2; spec 01's four tokens unchanged) and added `--scene-frame-on-light` (the dark panel frame of 06 6.7) and `--scene-overlay-halo` (the Morph Black halo of every two-tone overlay and edge outline, 06 D15). 06 T4a replaced the legacy token block with layers 1-3 (06 5.1): the brand primitives `--morph-*`, the derived dark-UI primitives `--ui-*` and the semantic roles (`--color-*`, `--cta-background`, `--shadow-overlay`, `--font-ui`, `--font-mono`), which every stylesheet references; no other stylesheet holds a colour literal or a legacy token name (static rules 13 and 14) | WP2 |
 | `css/03-layout.css` | 33-46 | `body` (06 T4a: `--font-ui`, role colours), `.app-container` grid; 06 T4a: the `:focus-visible` ring of buttons, selects and `.toggle` (`--color-focus-ring`, 2 px, offset 2 px) | WP2 |
 | `css/04-header.css` | 48-102 | `.header` (06 T4a: the three-column grid [lockup, history slot of 07 H2, stats]), `.brand-lockup` and `.product-name` (06 T4a; the `.logo*` rules deleted), `.brand-wordmark`, `.brand-monogram`, `.brand-divider` (06 T4b: the 144 px wordmark, the 36 px monogram shown at <= 520 px, the 1 x 24 px divider), `.header-stats`, `.stat*` | WP2 |
 | `css/05-control-panel.css` | 104-295 | `.control-panel` (+ scrollbar), section cards (`.wall-section*`, `.section-*`), `.input-field*`, `.curve-hint`, `.add-section-btn*` | WP2 |
@@ -198,9 +198,12 @@ js/
     LegacyCompat.js                        WP3   Strategies (deep-frozen switches), LegacyProfiles, legacy helpers (orDefault,
                                                  legacyHtml), unsupportedStrategy, LEGACY_SITES
   theme/
-    Theme.js                               WP3   SceneTheme, CanvasTheme, UiColors, Palette, Brand, Theme (ThemeBridge-ready shape)
+    Theme.js                               WP3   SceneTheme, CanvasTheme, UiColors, Palette, Brand, Theme (ThemeBridge-ready shape);
+                                                 06 T5: the Morph scene, canvas and status values, frameOnLight,
+                                                 cameraBody.outlineColor, frustumLines.haloColor / dashSize / gapSize,
+                                                 CanvasTheme.preloadFonts
     ThemeBridge.js                         06 T2  buildTheme(base, readVar, {warn, bindFonts}): a Theme-shaped, deep-frozen
-                                                 theme whose colour (from 06 T5 also font) leaves come from CSS custom
+                                                 theme whose colour and (since 06 T5) font leaves come from CSS custom
                                                  properties; COLOR_BINDINGS, FONT_BINDINGS, UNBRANDED, BIND_FONTS_DEFAULT,
                                                  parseHexColor, parseCssColor (pure, imports nothing; wired in App by 06 T3)
   domain/
@@ -228,14 +231,19 @@ js/
     SceneManager.js                        WP6   Scene, main camera, renderer, lights, grid, axes (explicit init()), helper registry,
                                                  LAYERS, grid toggle, resize, render loop
     LEDWallView.js                         WP6   Wall + frame groups from a WallLayout; mode dispatch; mesh tagging; section nodes;
-                                                 debug-shading override and withContentMaterials (01 F1-1)
+                                                 debug-shading override and withContentMaterials (01 F1-1); 06 T5: each
+                                                 section's frames in its adaptive frame colour
+    frameColor.js                          06 T5  relativeLuminance, contrastRatio, frameColorFor: the adaptive panel-frame
+                                                 colour (06 6.7; pure, imports nothing)
     MaterialOverride.js                    01 F1-1  Stash / restore of mesh materials under a shared override material
     DebugMaterials.js                      01 F1-1  Lazily created face-orientation and normal-colour ShaderMaterials, line material
     NormalsDebugView.js                    01 F1-1  Merged normal-line LineSegments on LAYERS.HELPERS (WALL_REBUILT subscriber)
     LEDMaterialFactory.js                  WP6   The only constructor of wall materials (panel IDs > LED sim > colour)
     textures/LEDPixelTextureFactory.js     WP6   installCanvasPolyfills, LED tile cache, 5 tile painters, tiled clones
-    textures/PanelIdRenderer.js            WP6   Panel / section / atlas panel-ID canvases (styling, section names, logos)
-    CameraRigView.js                       WP7   Film-camera rig: body (pick target), frustum lines + fill, transform; lens event
+    textures/PanelIdRenderer.js            WP6   Panel / section / atlas panel-ID canvases (styling, section names, logos);
+                                                 06 T5: takePendingFonts (the font gate's (font, text) pairs)
+    CameraRigView.js                       WP7   Film-camera rig: body (pick target), frustum lines + fill, transform; lens event;
+                                                 06 T5: the body's edge outline, the two-tone frustum (halo + dashed core)
     SafeDistanceView.js                    WP7   Safe-distance floor band, outline, "Max" sprite; exposes its group for OBJ export
     PreviewWindow.js                       WP7   Second WebGLRenderer, preview camera, preview labels, resize handle
     PropViews.js                           WP7   PropView base, PersonPropView, CarPropView (procedural meshes)
@@ -260,6 +268,8 @@ js/
     ProjectIO.js                           WP5   Downloader + export/import use cases (JSON, OBJ, glTF, PNG, ZIP, safe-distance OBJ)
     DebugViewController.js                 01 F1-1  Debug-view use cases: settings write, DEBUG_VIEW_CHANGED (the bus since 01 F1-2),
                                                  then the render call
+    fontGate.js                            06 T5  runFontGate: loads the canvas preload fonts and the pending (font, text)
+                                                 pairs, then rebuildIfPanelIds once if any was pending (6.2 row F6-1)
   ui/
     dom.js                                 WP3   byId, flipToggle, setDisplay, createDialogs
     HeaderStats.js                         WP9   #total-pixels / #total-panels / #total-sections / #total-arc
@@ -295,7 +305,8 @@ tests/
     measure-rects.mjs                      01 T2  writes the measured `rects` and `size` of the manifest entries that
                                                  carry a `measure` object (DOM rects of the candidate page per frame)
     lib/palette.mjs                        01 T2  livePalette(app): probe colours from the running page (section colours,
-                                                 --scene-* tokens, else the served SceneTheme), never literals (07 C53)
+                                                 --scene-* tokens, else the served SceneTheme), never literals (07 C53);
+                                                 06 T5: frameOnLight (--scene-frame-on-light)
     lib/probe.mjs                          01 T8  pixel probes of normals_debug: colorMask, largestComponent, probePoint,
                                                  sampleRGB, classifyFace, diffStats, withinJitter, readProbePalette
     lib/server.mjs                         WP1 (conditional edit: optional port argument for tools/serve.mjs; default unchanged)
@@ -303,16 +314,20 @@ tests/
                                                  (keeps the dialogs of the page it leaves: dialogs.json lists every page's);
                                                  01 T8: screenshotElement, pointerClick, overlayRects, keyPress modifiers / noText
                                                  and the keys n, Enter, ArrowDown (unchanged events for every existing call);
-                                                 06 T4a: FONT_PRELOADS + Montserrat (bold, 600, 400)
+                                                 06 T4a: FONT_PRELOADS + Montserrat (bold, 600, 400); 06 T5: the Outfit
+                                                 entries dropped
     ui-spec.mjs, lib/uiprobe.mjs           WP1   the ui_visual probes; 06 T4a: CSS_TOKENS = the layer-3 role tokens,
                                                  page/brand-lockup and page/product-name replace the four logo entries,
                                                  the overlay/company-logo entries deleted, header.logo reads .product-name,
                                                  FONT_FACES + Montserrat 400-700; 06 T4b: page/brand-wordmark,
                                                  page/brand-monogram, page/brand-divider (with product-name, recorded in the
-                                                 narrow state), overlay/brand-watermark, header.brandAlt
+                                                 narrow state), overlay/brand-watermark, header.brandAlt; 06 T5: FONT_FACES =
+                                                 JetBrains Mono 400-700 and Montserrat 400-700 (Outfit dropped)
     scenarios-extra.mjs                    WP1   logos, gizmo_drag, pilot_look, preview_off_in_pilot, import_edge,
                                                  name_with_panel_ids, preview_resize; 01 F1-3: normals_debug (01 8.2: content
-                                                 probes on every page, the debug view on the module build)
+                                                 probes on every page, the debug view on the module build); 06 T5: the
+                                                 gizmo_drag colour matchers for the Morph scene (isCameraBody for the opaque
+                                                 Signal Red body, isGizmoRed g >= 24 against its anti-aliased edges)
     scenarios-phase2.mjs                   08 P2-0  the eight p2_* scenarios of 08 8.3, captured against the unfixed code
     expected/                              08 P2-0  <commit-id>.json expected-change manifests (one per golden-changing commit,
                                                  any spec); _nondeterminism.json, the only standing allowance
@@ -356,7 +371,8 @@ tests/
                                                  harness files (GOLDEN_DIR; Strategies.mesh.*); since 08 P2-1b it writes the
                                                  synthetic 70,000-vertex glTF to the git-ignored unit/out/ (manual validator check)
     camera-hub.test.mjs                    WP7   CameraHub/CameraController pipeline order with spies
-    wall-controller.test.mjs               WP9   rebuild policy: run counts and tile-cache clears for the 24 legacy sites;
+    wall-controller.test.mjs               WP9   rebuild policy: run counts and tile-cache clears for the 24 legacy sites
+                                                 (06 T5: and row F6-1 through runFontGate);
                                                  legacy parity runs the legacy source with TEMPLATE_EDITS applied (06 T1: the
                                                  class map of the logo rows and the offset hint; 06 T4c: the British copy of
                                                  the card and of the logo position options)
@@ -394,13 +410,25 @@ tests/
                                                  parsed, var() chains resolved, every bridged leaf Object.is its fallback),
                                                  U10 the Theme walk, U11 the UNBRANDED conventions; 06 T4a: U6 gold
                                                  exclusivity and legacy identity of the layer 1-3 tokens (CIEDE2000 >= 20
-                                                 from Pivot Gold, >= 15 from the legacy cyan and magenta; layer 4 and the
-                                                 Theme leaves in 06 T5, the palette in 06 T7)
+                                                 from Pivot Gold, >= 15 from the legacy cyan and magenta); 06 T5: U6 over
+                                                 every token layer and the Theme colour leaves (spec 01's debug colours
+                                                 exempt from the identity check only; the palette in 06 T7), and
+                                                 BIND_FONTS_DEFAULT true, so U4 compares the font leaves too
     contrast.test.mjs                      06 T4a  U5 contrast (spec 07's X2 file): every UI pair of 06 3.12 from the parsed
                                                  tokens (text, red text and icons, status, on-colour, Signal Red graphics on
                                                  opaque surfaces, the focus ring, the red indicators' Morph Black neighbours,
                                                  chip text over any scene, the active swatch rings) and the forbidden pairs
                                                  below 3:1 as documentation; the scene rows join in 06 T7
+    scene-overlays.test.mjs                06 T5  U13 frameColor.js (the palette's frame choices, textures and wireframe,
+                                                 free strings, a 4,096-colour sweep >= 3.65:1) and LEDWallView's per-section
+                                                 frame colours; U12 the two-tone frustum of CameraRigView (LineSegments
+                                                 sharing one geometry, halo then dashed core, line distances increasing on
+                                                 every segment, no LineLoop with a LineDashedMaterial) and the body's edge
+                                                 outline (fake THREE with r128's computeLineDistances)
+    font-gate.test.mjs                     06 T5  runFontGate with fakes (0 or exactly 1 rebuildIfPanelIds, each pending
+                                                 pair loaded with its text, failures tolerated, never rejects) and
+                                                 PanelIdRenderer.takePendingFonts (checked with the actual texts,
+                                                 deduplicated, cleared by the take, each pair requested once)
     fixtures/legacy-theme.mjs              06 T3  the Phase-1 values of the UNBRANDED leaves and spec 01's face-orientation
                                                  colours (U11)
     fixtures/css-tokens.mjs                06 T4a  the :root declarations of css/02-tokens.css with var() resolution (U4,
@@ -600,21 +628,23 @@ export const LEGACY_SITES
 
 ### 3.4 `js/theme/Theme.js`
 
-Every scene, canvas and export literal, copied verbatim with its exact type (number vs string), plus the feature keys written as literal keys inside the frozen objects (never assigned afterwards): `SceneTheme.debug` (01 F1-1, 01 4.6: `faceFront: 0x2f6bff`, `faceBack: 0xff3344`, `vertexNormal: 0xb8f03c`, `faceNormal: 0xff4fd8`, `lineBaseFactor: 0.35`; spec 06's ThemeBridge must produce the same keys, 01 CR-8). `SceneTheme.wallBack` follows with 01 F1-5. Only `App.js` imports this module; every consumer receives `theme` (or one of its parts) by injection, so Feature 6 swaps in a ThemeBridge-built object **of the same shape** in one line (no mutation of these frozen objects); 06 T3 made that swap, and these values are the fallbacks of the tokens of `css/02-tokens.css`, kept equal by the U4 parity test (ThemeBridge below).
+Every scene, canvas and export literal, copied verbatim with its exact type (number vs string), plus the feature keys written as literal keys inside the frozen objects (never assigned afterwards): `SceneTheme.debug` (01 F1-1, 01 4.6: `faceFront: 0x2f6bff`, `faceBack: 0xff3344`, `vertexNormal: 0xb8f03c`, `faceNormal: 0xff4fd8`, `lineBaseFactor: 0.35`; spec 06's ThemeBridge must produce the same keys, 01 CR-8). `SceneTheme.wallBack` follows with 01 F1-5. Since 06 T5 the scene, canvas and status values are the Morph values of docs/improvements/06-morph-branding.md 3.8 and 5.4 (the palette and the brand strings follow in 06 T6a, T6b and T7), with the keys `frameOnLight`, `cameraBody.outlineColor`, `frustumLines.haloColor`, `frustumLines.dashSize` / `gapSize` and `CanvasTheme.preloadFonts`. Only `App.js` imports this module; every consumer receives `theme` (or one of its parts) by injection, so Feature 6 swaps in a ThemeBridge-built object **of the same shape** in one line (no mutation of these frozen objects); 06 T3 made that swap, and these values are the fallbacks of the tokens of `css/02-tokens.css`, kept equal by the U4 parity test (ThemeBridge below).
 
 ```js
 export const SceneTheme = Object.freeze({
-  background: 0x0a0a0f,                                                     // 1431
-  grid: { size: 50, divisions: 50, centerColor: 0x2a2a3a, color: 0x1a1a24, position: [12.5, 0, 12.5] },   // 1446-1447
+  background: 0x0a0a0a,                                                     // 1431 (06 T5 values from here on, 06 3.8)
+  grid: { size: 50, divisions: 50, centerColor: 0x333333, color: 0x1c1c1c, position: [12.5, 0, 12.5] },   // 1446-1447
   axesSize: 0.5,                                                            // 1449
   lights: { ambient: { color: 0xffffff, intensity: 0.3 },
             point: { color: 0xffffff, intensity: 0.8, position: [5, 5, 10] } },   // 1440-1443
-  frame: 0x4a4a5a,                                                          // 1563
-  cameraBody: { color: 0xff6600, opacity: 0.8 },                            // 2334
-  frustumLines: { color: 0xffaa00, opacity: 0.7 },                          // 2407
-  frustumFill: { color: 0xffaa00, opacity: 0.08 },                          // 2425-2426
-  safeZone: { wallColor: [0.2, 1, 0.4], thresholdColor: [1, 0.2, 0.2], floorOpacity: 0.5,
-              lineColor: 0xff4444, lineOpacity: 0.8, labelColor: '#ff4444', labelFont: 'bold 32px Arial' },   // 2698-2749
+  frame: 0xd4d4d4,                                                          // 1563: the light frame (06 6.7)
+  frameOnLight: 0x0a0a0a,                                                   // 06 T5: the dark frame of light sections
+  cameraBody: { color: 0xc51622, opacity: 1.0, outlineColor: 0x0a0a0a },    // 2334; outlineColor 06 T5
+  frustumLines: { color: 0xf7f7f5, haloColor: 0x0a0a0a, opacity: 1.0, dashSize: 0.15, gapSize: 0.10 },   // 2407
+  frustumFill: { color: 0xf7f7f5, opacity: 0.05 },                          // 2425-2426
+  safeZone: { wallColor: [0x3d / 255, 0xd6 / 255, 0x8c / 255], thresholdColor: [0xc5 / 255, 0x16 / 255, 0x22 / 255],
+              floorOpacity: 0.5, lineColor: 0xf2555a, lineOpacity: 0.9, labelColor: '#f2555a',
+              labelFont: "600 32px 'Montserrat', system-ui, sans-serif" },   // 2698-2749
   person: { body: 0x4488ff, dark: 0x2244aa, opacity: 0.85 },                // 2840-2841
   car: { body: { color: 0xff4444, opacity: 0.85 }, dark: { color: 0x222222, opacity: 0.9 },
          glass: { color: 0x88ccff, opacity: 0.5 }, lights: 0xffffaa },      // 2915-2917, 2960
@@ -622,16 +652,17 @@ export const SceneTheme = Object.freeze({
          // 3010, 3029-3089, 3225, 3264. Axis colours are a convention: never brand them.
 });
 export const CanvasTheme = Object.freeze({
-  background: '#0a0a0f',                                                    // 1693, 1821, 2009, 2064
-  panelBorderColors: ['#ff0000', '#00ff00', '#0000ff'],                     // 1384 (frozen array)
-  panelLabelFont: (px) => `bold ${px}px 'JetBrains Mono', monospace`,       // 2034, 2092
-  panelSectionNameFont: (px) => `${px}px 'JetBrains Mono', monospace`,      // 2042
-  sectionLabelFont: (px) => `bold ${px}px 'Outfit', sans-serif`,            // 2107
+  background: '#0a0a0a',                                                    // 1693, 1821, 2009, 2064
+  panelBorderColors: ['#ff0000', '#00ff00', '#0000ff'],                     // 1384 (frozen array; unchanged, 06 D12)
+  panelLabelFont: (px) => `bold ${px}px 'JetBrains Mono', ui-monospace, monospace`,    // 2034, 2092
+  panelSectionNameFont: (px) => `${px}px 'JetBrains Mono', ui-monospace, monospace`,   // 2042
+  sectionLabelFont: (px) => `bold ${px}px 'Montserrat', system-ui, sans-serif`,        // 2107
   sectionLabelAlpha: 0.6,                                                   // 2110
   logoAlpha: 0.8,                                                           // 2181
+  preloadFonts: ["bold 32px 'JetBrains Mono'", "32px 'JetBrains Mono'", "bold 32px 'Montserrat'", "600 32px 'Montserrat'"],   // 06 T5
 });
 export const UiColors = Object.freeze({
-  status: { within: '#00ff66', offCenter: '#ffaa00', exceeds: '#ff4444' },  // 2518-2524
+  status: { within: '#3dd68c', offCenter: '#ff8640', exceeds: '#f2555a' },  // 2518-2524
 });
 export const Palette = Object.freeze({
   sectionColors: ['#00f0ff', '#ff00aa', '#00ff66', '#ff6b35', '#ffdd00', '#aa66ff', '#66ffaa', '#ff6666'],   // 1379-1382
@@ -656,14 +687,14 @@ export const Theme = Object.freeze({ scene: SceneTheme, canvas: CanvasTheme, ui:
 
 #### `js/theme/ThemeBridge.js` (06 T2; docs/improvements/06-morph-branding.md 5.5, 6.2)
 
-Pure (no DOM, no THREE, imports nothing; layer `theme`). It builds an object of `Theme`'s exact shape whose colour leaves (and, once `BIND_FONTS_DEFAULT` is `true` in 06 T5, the canvas and safe-zone font leaves) come from CSS custom properties read through an injected reader; every other leaf is copied from the base theme. 06 D7: the CSS tokens are the runtime source, `Theme.js` holds the identical fallbacks, and a permanent colour change is the token and its fallback in one commit, kept equal by the U4 parity test (06 T3).
+Pure (no DOM, no THREE, imports nothing; layer `theme`). It builds an object of `Theme`'s exact shape whose colour leaves (and, since `BIND_FONTS_DEFAULT` became `true` in 06 T5, the canvas and safe-zone font leaves) come from CSS custom properties read through an injected reader; every other leaf is copied from the base theme. 06 D7: the CSS tokens are the runtime source, `Theme.js` holds the identical fallbacks, and a permanent colour change is the token and its fallback in one commit, kept equal by the U4 parity test (06 T3).
 
 ```js
 export const COLOR_BINDINGS   // frozen [path, cssVar, kind] rows; kind 'num' (0xrrggbb), 'hex' ('#rrggbb'), 'rgb01' ([r, g, b] / 255),
                               // 'css' ('#rrggbb' or canonical 'rgba(r, g, b, a)'); every path is an existing Theme leaf of that type
 export const FONT_BINDINGS    // frozen [path, '--font-ui' | '--font-mono', make(fontFamilyList)] rows (canvas fonts, safe-zone label)
 export const UNBRANDED        // the colour leaves that are functional conventions: lights, person, car, gizmo axes, panel-ID borders
-export const BIND_FONTS_DEFAULT = false;   // flipped to true by 06 T5; App and U4 both omit the option
+export const BIND_FONTS_DEFAULT = true;    // false from 06 T2 to T4a, true since 06 T5; App and U4 both omit the option
 export function parseHexColor(raw)   // {hex, num, rgb01} | null; exactly /^#[0-9a-fA-F]{6}$/ after trim; rgb01 = parseInt(hh, 16) / 255
 export function parseCssColor(raw)   // '#rrggbb' | 'rgba(r, g, b, a)' | null
 /** Fresh objects and arrays, deep-frozen; function leaves shared with base by reference and never frozen (base is
@@ -676,7 +707,7 @@ export function buildTheme(base, readVar, { warn = () => {}, bindFonts = BIND_FO
 
 **Wiring (06 T3):** `App` builds `theme = buildTheme(Theme, (name) => win.getComputedStyle(doc.documentElement).getPropertyValue(name), { warn: (m) => win.console.warn(m) })` (section 7; no `bindFonts` option, so `BIND_FONTS_DEFAULT` applies, as in U4), and every consumer receives that object instead of `Theme`, with unchanged constructor signatures. While the layer-4 tokens hold the legacy values the bridged theme equals `Theme` leaf for leaf (U4), so the switch is not observable. A missing or malformed token keeps the `Theme.js` fallback of its leaves and warns once on the console (06 3.11).
 
-The 06 T2 rows bind the legacy scene, canvas and status colours (`scene.background`, `grid.centerColor`, `grid.color`, `frame`, `cameraBody.color`, `frustumLines.color` and `frustumFill.color` (both `--scene-frustum`), `safeZone.wallColor` / `thresholdColor` (`rgb01`), `safeZone.lineColor`, `safeZone.labelColor`, `canvas.background`, `ui.status.*`); 06 T3 adds spec 01's `scene.debug.faceFront`, `faceBack`, `vertexNormal` and `faceNormal` (01 CR-8; not `UNBRANDED`). The keys that later steps add land with their rows (01 F1-5: `scene.wallBack` with `--scene-wall-back`; 06 T5: `frameOnLight`, `cameraBody.outlineColor`, `frustumLines.haloColor`; the sibling specs' keys of 06 5.12). Tests: `theme.test.mjs` U1-U3 (06 T2), U4 token parity, U10 (every Theme leaf under `scene`, `canvas`, `ui` is bound, `UNBRANDED`, a function or non-colour by its key) and U11 (`UNBRANDED` leaves equal their Phase-1 values in `tests/unit/fixtures/legacy-theme.mjs`) (06 T3).
+The 06 T2 rows bind the legacy scene, canvas and status colours (`scene.background`, `grid.centerColor`, `grid.color`, `frame`, `cameraBody.color`, `frustumLines.color` and `frustumFill.color` (both `--scene-frustum`), `safeZone.wallColor` / `thresholdColor` (`rgb01`), `safeZone.lineColor`, `safeZone.labelColor`, `canvas.background`, `ui.status.*`); 06 T3 adds spec 01's `scene.debug.faceFront`, `faceBack`, `vertexNormal` and `faceNormal` (01 CR-8; not `UNBRANDED`). The keys that later steps add land with their rows: 06 T5 added `scene.frameOnLight` (`--scene-frame-on-light`), `scene.cameraBody.outlineColor` and `scene.frustumLines.haloColor` (both `--scene-overlay-halo`, which therefore warns once when missing) and flipped `BIND_FONTS_DEFAULT`, so the four `FONT_BINDINGS` leaves come from `--font-mono` / `--font-ui` (equal to the `Theme.js` strings, U4); 01 F1-5 adds `scene.wallBack` with `--scene-wall-back`; the sibling specs add their keys of 06 5.12. Tests: `theme.test.mjs` U1-U3 (06 T2), U4 token parity, U10 (every Theme leaf under `scene`, `canvas`, `ui` is bound, `UNBRANDED`, a function or non-colour by its key) and U11 (`UNBRANDED` leaves equal their Phase-1 values in `tests/unit/fixtures/legacy-theme.mjs`) (06 T3).
 
 ### 3.5 Domain (pure)
 
@@ -1258,7 +1289,7 @@ export class LEDWallView {
    *     materials.beginRebuild()   (08 P2-1d: the panel-ID fallback warning is given once per section and rebuild)
    *     meshMode === 'combined' -> #buildCombined; === 'section' -> #buildSections;
    *     ELSE -> #buildPanels   LEGACY(B-L8): any unknown imported mode renders as panels   (1551-1557)
-   *  4. if (display.showFrame) #buildFrames(layout)                                         (1559-1569)
+   *  4. if (display.showFrame) #buildFrames(layout, display)   (06 T5: adaptive colours)     (1559-1569)
    *  5. sceneManager.add(wallGroup); if (display.showFrame) sceneManager.add(frameGroup)    (1571-1572)
    *  6. (01 F1-1) if (#shading !== 'content') #applyShading()   (a direct step, not a subscription, R2)
    *  @param {{layout: WallLayout, meshMode: string, display: DisplaySettings}} args */
@@ -1282,7 +1313,7 @@ Builders (private, allocation order = legacy statement order, R5):
 - `#buildCombined(layout, sections, atlas)` (1579-1678; `sections` is the array step 3 already mapped): `g = builder.combinedGrid(layout, atlas)`; `geometry = new THREE.BufferGeometry()`; `setAttribute('position', new THREE.Float32BufferAttribute(g.positions, 3))`, then `'normal'` (3), `'uv'` (2), `setIndex(indexAttribute(g.indices))`; colours: per section `const color = new THREE.Color(section.color)` and for `row <= panelRows`, `col <= panelCols` push `color.r, color.g, color.b`; `setAttribute('color', ...)`; `material = materials.combined(sections, atlas)`; `mesh = new THREE.Mesh(geometry, material)`; `mesh.userData = { kind: 'led-wall', mode: 'combined', sectionRanges: g.sectionRanges }`; `wallGroup.add(mesh)`.
 - `#buildSections(layout, atlas)` (1710-1774): per `sl` (index `i`): `grid = builder.sectionGrid(sl, { uv: 'unit' })`; `new THREE.BufferGeometry()` + position/normal/uv attributes + `setIndex(indexAttribute(grid.indices))`; `material = materials.section(sl.section, sl.sectionIndex, atlas.entries[i].startCol)`; mesh; `userData = { kind: 'led-wall', mode: 'section', sectionId: sl.sectionId, sectionIndex: i }`; add.
 - `#buildPanels(layout, atlas)` (1776-1802): per `sl`, per `panel` of `sl.panels`: `geometry = new THREE.PlaneGeometry(sl.panelW, sl.panelH)`; `material = materials.panel(sl.section, sl.sectionIndex, atlas.entries[i].startCol + panel.col, panel.row)` (raw `+`, B-L8); mesh; `position.set(panel.x, panel.y, panel.z)`; `rotation.y = panel.rotY`; `userData = { kind: 'led-wall', mode: 'panel', sectionId, sectionIndex, col: panel.col, row: panel.row }`; add.
-- `#buildFrames(layout)` (1560-1568): per panel: `new THREE.EdgesGeometry(new THREE.BoxGeometry(sl.panelW, sl.panelH, 0.02))`, `new THREE.LineSegments(frameGeometry, new THREE.LineBasicMaterial({ color: theme.scene.frame }))`, position, `rotation.y`, `frameGroup.add`. (The inner BoxGeometry is not tracked, as legacy never disposed it.)
+- `#buildFrames(layout, display)` (1560-1568): per section `color = frameColorFor(sl.section.color, display, theme.scene)` (06 T5, 6.7: `theme.scene.frame` (light) or `theme.scene.frameOnLight` (dark), whichever contrasts more with the section colour; light with panel IDs, LED sim, HDRI content (spec 05) or wireframe, and for a colour that is not `#rrggbb`; >= 3.65:1 for any colour); per panel: `new THREE.EdgesGeometry(new THREE.BoxGeometry(sl.panelW, sl.panelH, 0.02))`, `new THREE.LineSegments(frameGeometry, new THREE.LineBasicMaterial({ color }))`, position, `rotation.y`, `frameGroup.add`. (The inner BoxGeometry is not tracked, as legacy never disposed it.) Every change of colour, content mode or wireframe rebuilds (6.2), so the frame colour never goes stale.
 
 `userData` tags are non-observable (the wall is never raycast in Phase 1).
 
@@ -1421,6 +1452,12 @@ export class PanelIdRenderer {   // pure 2D canvas; creates no THREE objects; sh
   panelSize(section)
   sectionSize(section, overrideScale)
   atlasSize(sections, atlas = computeAtlas(sections))
+  /** 06 T5 (06 5.6, the font gate): before each fillText (panel label, section name, section label) the renderer calls
+   *  doc.fonts?.check?.(font, text) with the actual text (a missing FontFaceSet or a throwing check counts as loaded);
+   *  a false check records [font, text] (deduplicated, in draw order) and, the first time a pair is recorded, calls
+   *  doc.fonts.load(font, text) fire-and-forget (rejection swallowed). takePendingFonts() returns the recorded pairs and
+   *  clears the list. Drawing itself is unchanged. */
+  takePendingFonts()
 }
 ```
 
@@ -1433,24 +1470,30 @@ export class CameraRigView {
   get group()
   get bodyMesh()     // legacy cameraBodyMesh: set by create(), NEVER nulled by remove() (legacy 2536-2548)
   /** Verbatim 2321-2344: if (group) { sceneManager.removeHelper(group); disposeObject3D(group) }; group = new THREE.Group();
-   *  bodyGeom = new THREE.BoxGeometry(0.15, 0.1, 0.2); bodyMat = MeshBasicMaterial({color, transparent: true, opacity});
-   *  bodyMesh = new THREE.Mesh(bodyGeom, bodyMat); bodyMesh.position.z = 0.15; group.add(bodyMesh);
+   *  bodyGeom = new THREE.BoxGeometry(0.15, 0.1, 0.2); bodyMat = MeshBasicMaterial({color, transparent: opacity < 1, opacity});
+   *  bodyMesh = new THREE.Mesh(bodyGeom, bodyMat); bodyMesh.position.z = 0.15;
+   *  (06 T5, D15) bodyMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(bodyGeom),
+   *    new THREE.LineBasicMaterial({ color: cameraBody.outlineColor })))   (the edge outline; never picked); group.add(bodyMesh);
    *  this.rebuildFrustum(cine)   (first build: emits CAMERA_LENS_CHANGED, the duplicate legacy write is kept);
    *  sceneManager.addHelper(group); this.updateTransform(cine) */
   create(cine)
   /** Verbatim 2346-2429 minus the dead wallIntersectionPlane branch:
-   *  remove + dispose the previous lines and fill (if any); hFov = cine.hFov(); vFov = cine.vFov();
+   *  remove + dispose the previous lines (halo and core: the shared geometry, both materials) and fill (if any);
+   *  hFov = cine.hFov(); vFov = cine.vFov();
    *  bus.emit(CAMERA_LENS_CHANGED, { hFov, vFov, filmbackWidth: cine.filmbackWidth, filmbackHeight: cine.filmbackHeight })
    *    (exactly at the legacy readout point 2369-2371);
    *  frustumDepth = Strategies.frustumDepthM (15, LEGACY(B-L33)); nearPlane = 0.2; corners and the 24 line vertices in
-   *  legacy push order; lines: BufferGeometry + Float32BufferAttribute + LineSegments(LineBasicMaterial{color, transparent, opacity 0.7});
+   *  legacy push order; lines (06 T5, two-tone, 06 6.6): one BufferGeometry + Float32BufferAttribute, drawn by the halo
+   *  LineSegments(LineBasicMaterial{haloColor, transparent: opacity < 1, opacity}) at renderOrder RENDER_ORDER.DEFAULT
+   *  and the core LineSegments(LineDashedMaterial{color, dashSize, gapSize, transparent, opacity}) at
+   *  RENDER_ORDER.RIG_CORE, with core.computeLineDistances() (each segment its own distance range; never a LineLoop);
    *  fill: BufferGeometry + BufferAttribute(Float32Array of the 30 vertices) + Mesh(MeshBasicMaterial{color, transparent,
    *  opacity 0.08, side: DoubleSide, depthWrite: false}); both added to group. */
   rebuildFrustum(cine)
   /** Verbatim 2431-2449: if (!group) return; position.set(posX, posY, posZ); rotation.order = 'YXZ';
    *  rotation.set(rotX * Math.PI / 180, rotY * Math.PI / 180, rotZ * Math.PI / 180) */
   updateTransform(cine)
-  /** Verbatim 2536-2548: if (group) { sceneManager.removeHelper(group); disposeObject3D(group); group = lines = fill = null }.
+  /** Verbatim 2536-2548: if (group) { sceneManager.removeHelper(group); disposeObject3D(group); group = linesHalo = linesCore = fill = null }.
    *  Does not touch the safe-distance group (B-M8, tagged at CameraController.setPreviewEnabled). bodyMesh keeps its
    *  stale reference. */
   remove()
@@ -2388,7 +2431,7 @@ export class App {
   /** @param {{doc: Document, win: Window}} deps */
   constructor({ doc, win })
   /** Runs section 7 exactly: construct (no side effects except bus subscriptions), then the legacy init() phase,
-   *  the legacy setupUI() phase and setView('reset'). Nothing is attached to window. */
+   *  the legacy setupUI() phase and setView('reset'), then (06 T5) starts the font gate. Nothing is attached to window. */
   start()
 }
 ```
@@ -2422,7 +2465,7 @@ Writers listed here are the only allowed writers (checked by `tests/static/check
 | `panelFontSize` (1296) | `Project.panelIdStyle.fontSize` | same |
 | `cameraPreviewEnabled` (1299) | `Project.camera.enabled` | `CameraController.setPreviewEnabled` |
 | `previewCameraGroup` (1300) | `CameraRigView.group` (`exists`) | `CameraRigView.create/remove` |
-| `frustumHelper` (1301) | `CameraRigView` private `#lines` | `CameraRigView.rebuildFrustum/remove` |
+| `frustumHelper` (1301) | `CameraRigView` private `#linesHalo` / `#linesCore` (06 T5: the two-tone frustum, one shared geometry) | `CameraRigView.rebuildFrustum/remove` |
 | `frustumOutline` (1302) | `CameraRigView` private `#fill` (it is the fill mesh) | same |
 | `wallIntersectionPlane` (1303) | **dropped (dead)**: never created, only nulled (2546) and null-checked (2358-2362) | - |
 | `filmbackPresets` (1306) | `domain/CineCamera.js FILMBACK_PRESETS` (frozen) | - |
@@ -2598,8 +2641,9 @@ This table is the documentation of `WallController`'s rebuild policy and is repe
 | 22 | 2292 | logo position change | `SectionLogosPanel` | `rebuildIfPanelIds` | iff the entry exists and panel IDs | - |
 | 23 | 2303 | logo scale change | `SectionLogosPanel` | `rebuildIfPanelIds` | iff the entry exists and panel IDs | write-back always |
 | 24 | 5002 | import `FileReader.onload` | `ExportPanel` -> `ProjectIO` | `applyImport` | always, inside the `try` | labels iff `mesh_mode`, `WALL_SECTIONS_CHANGED{import}` |
+| F6-1 | - | web fonts settled (06 5.6, the font gate) | `App.start` (`runFontGate`, fire-and-forget after the reset view) | `rebuildIfPanelIds` | iff a panel-ID canvas was drawn with a pending (font, text) **and** panel IDs are on (at most once; never in the harness) | none |
 
-No other path calls `rebuild()`. Never de-duplicate or debounce (row 8 rebuilds twice per click; rows 3, 16, 19 rebuild on every `input` event).
+No other path calls `rebuild()` (row F6-1 is the one call site added since Phase 1 so far). Never de-duplicate or debounce (row 8 rebuilds twice per click; rows 3, 16, 19 rebuild on every `input` event).
 
 **Row ids** (07 §0.4, applied by 07 D0). Rows 1-24 are the legacy call sites and keep their numbers; tests and specs cite them by number (for example rows 3, 16 and 19). Every row added after Phase 1 carries a **named id** `<owner>-<n>` instead of the next free number, so rows from specs that land in any order never collide:
 - `F<k>-<n>` for feature spec 0k (Feature k), `X<i>-<n>` for spec 09's item X<i>;
@@ -2757,7 +2801,7 @@ Reproduces `init(); setupUI(); setView('reset');` (5093-5095). `main.js` has alr
 ```
 // ---- construct (R4: no THREE allocation, no DOM mutation, no listeners; bus subscriptions only) ----
 theme = buildTheme(Theme, (name) => win.getComputedStyle(doc.documentElement).getPropertyValue(name),
-                   { warn: (m) => win.console.warn(m) });   // 06 T3 (was theme = Theme); bindFonts: BIND_FONTS_DEFAULT
+                   { warn: (m) => win.console.warn(m) });   // 06 T3 (was theme = Theme); bindFonts: BIND_FONTS_DEFAULT (true since 06 T5)
 brand = theme.brand; bus = new EventBus(); dialogs = createDialogs(win)
 project = Project.createDefault()
 frameBounds = () => framingBounds(project); colorToRgb = (s) => new THREE.Color(s)
@@ -2826,6 +2870,10 @@ debugControls.bind(); debugControls.bindShortcuts()   // 01 F1-2: after every le
 
 // ---- legacy setView('reset') (5095) ----
 orbit.setView('reset')
+
+// ---- 06 T5 (06 5.6): the font gate, fire-and-forget (6.2 row F6-1; it rebuilds at most once, never in the harness) ----
+runFontGate({ fonts: doc.fonts, preloadFonts: theme.canvas.preloadFonts, panelIds, wallController,
+              onError: (err) => win.console.error(err) })
 ```
 `display`, `style`, `logos`, `cine`, `person`, `car` are `project.display`, `project.panelIdStyle`, `project.logos`, `project.camera`, `project.person`, `project.car`. Listener order on shared targets after bootstrap: canvas `mousedown`/`mousemove`/`mouseup`/`wheel`: orbit then router; canvas `mouseleave`: orbit only; document `keydown`: keyboard state, then shortcuts, then the debug view's N / Shift+N (01 F1-2); document `keyup`: keyboard state; window: `resize` (SceneManager), `blur` (KeyboardState), `mouseup` (router); document `mousemove`/`mouseup`: preview resize, added on the first preview enable. While the debug popover is open (01 F1-2) the document also has a capture-phase `keydown` (Escape only) and a capture-phase `pointerdown` (outside close), and the window a `resize` listener; all three are removed on close.
 
@@ -3021,7 +3069,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 | Observation | Affects | Single place after Phase 1 |
 |---|---|---|
 | In pilot mode the main camera keeps the viewport aspect, so its horizontal FOV differs from the preview and the frustum | pilot screenshots | `PilotCameraDriver.enterView` (sets only `fov`) |
-| JetBrains Mono is drawn at weight 700 on canvases although only 300-600 are loaded, and canvas drawing does not wait for `document.fonts.load` | panel-ID textures, PNG/ZIP exports, screenshots | `Theme.CanvasTheme.panelLabelFont` (+ `PanelIdRenderer` draw timing) |
+| Font-gate limitations (06 T5 loads JetBrains Mono 700 and redraws the panel IDs once when the web fonts settle, 6.2 row F6-1): text drawn after the gate has settled (for example a section renamed to a name in a font subset not yet cached) uses the fallback font until the next rebuild, which `PanelIdRenderer` prepares by requesting that subset on the first draw; the safe-distance label sprite is not redrawn by the gate, only on the next camera change | panel-ID textures, PNG/ZIP exports drawn before the font arrives; the safe-distance label | `app/fontGate.js` + `PanelIdRenderer.takePendingFonts` |
 | `cameraBodyMesh` is not nulled by `removeCameraPreview`; picking relies on the preview flag | picking | `CameraRigView.bodyMesh` / `CameraController.isPickable` |
 | The frustum geometry is built twice on the first enable (duplicate lens readout) | DOM write count only | `CameraHub.refresh` + `CameraRigView.create` |
 | Delivery timing (new with ES modules, not a legacy defect): the inline script was parser-blocking and created the renderer before the first paint; the module graph loads asynchronously, so the browser can paint the static markup (empty stats, no cards) before `App.start()` runs. The final DOM, canvas and every output are unchanged; the overlay badge text composited over the canvas can differ by 1 level in a few glyph pixels (accepted jitter, section 10) | first frames only; overlay glyph pixels in screenshots | `index.html` script tag (`blocking="render"` or a head placement would be a delivery change) |
@@ -3037,7 +3085,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 | **3. Configurable pivot + offset** | `WallPivot`/`PivotMode` in `Wall` (identity); `WallLayout.firstEdge/lastEdge/bounds()/pivotPoint(mode)` including "middle of entire wall" = midpoint of the first section's first edge and the last section's last edge on the floor; the single `framingBounds` switch for the four flat-bounds consumers; the single `layoutProject()` entry. | A baked translation in `layoutProject`: stage frame `−(P.x, 0, P.z)`, export frame `−P`, P = anchor + offset (1.4). The raw walk is translated first, and spec 02's `applySectionOffsets(out)` builds its section matrices from the translated layout (07 C32). **No wall root transform, ever:** the identity `wallGroup` transform is a unit-tested invariant (03 §5.1, §5.9 #2). `ui/PivotPanel`; a pivot Selectable + marker view; switch `framingBounds` to pivot/bounds (fixes B-L2); optional re-expression of camera/prop poses; schema v2. |
 | **4. Clean 0..1 UVs + UV viewer/editor** | UV strategies in one builder function per consumer; `TextureAtlas` as the single source of offsets, widths and start columns (yields per-section `uvRects`); `PanelIdRenderer.sectionCanvas()` for the viewer background; mesh tags; the selection registry; `PreviewWindow`'s resize handle as the floating-panel pattern. | `'per-section'` / `'atlas-pixel-accurate'` strategies (fix B-M5/B-M6) and a baked per-section `uvTransform`; glTF TEXCOORD_0; `ui/UVViewer.js` (2D canvas; subscribes to `SELECTION_CHANGED` and `WALL_REBUILT`); `ui/FloatingPanel.js` extracted from `PreviewWindow`. |
 | **5. HDRI projection (+ reflective car)** | `DisplaySettings.content` enum (`'color' \| 'ledSim' \| 'panelIds'`, ready for `'hdri'`); `LEDMaterialFactory` as the only wall-material constructor; `ResourceTracker` for HDR/PMREM disposal; `SceneManager` owns the main renderer and the helper registry; the second renderer is encapsulated in `PreviewWindow`; `PropView` base with `buildMesh()`; `CineCamera` lens math for the default projection point. | `ContentMode.HDRI` + `render/HdriProjectionMaterial.js` (wall and dome); `ui/HdriPanel.js` + the projection-point Selectable (`'hdri-point'`, kind `'projector'`, 07 C36); the second renderer is replaced by spec 07's `PreviewPass` (scissor rendering, R1/R2; `SceneManager` keeps only `setEnvironment` and `setPunctualLightScale`), which excludes `LAYERS.HELPERS` (B-M9/B-M11, first fixed by 08 P2-10 or 07 R1/R2, 07 C31); the backdrop dome on `LAYERS.ENVIRONMENT`; `GltfCarPropView extends CarPropView`; colour management in `render/ColorManagement.js` as per-material patches (Option L on r128; Option G after 07 U3b); loaders from 07's `vendor/three-addons.js` factories (spec 05 §5.11 #17). |
-| **6. Morph branding** | `css/02-tokens.css` holds every `:root` token; `Theme.js` holds every scene/canvas colour, font, palette and export string, and every consumer receives it by injection from `App`; header and watermark markup in one place in `index.html`. | Role-based tokens; `theme/ThemeBridge.js` reading CSS variables into an object of `Theme`'s shape (one line in `App`); new `Brand` strings and filenames (+ a JSON `generator` field in v2); Morph logo SVG, favicon, valid author meta; inline styles -> classes; card swatches from `Palette`; re-baseline `ui_visual` and exports separately. Gizmo axis colours stay XYZ = RGB. Landed so far (docs/improvements/06-morph-branding.md 8.4): T1 (the static inline styles of `index.html` and the two panel templates became the classes of `css/99-utilities.css`, linked last; dead CSS removed; `css-slices.mjs --report-only`; static rule 12; `compare.mjs --ignore-keys`), T2 (`theme/ThemeBridge.js`, pure and not wired, with U1-U3), T3 (layer-4 tokens with the legacy values and spec 01's four debug tokens, ThemeBridge wired in `App`, `.status-*` on `--status-*`, U4/U10/U11), T4a (the ungated Morph chrome: token layers 1-3 with the brand values and every stylesheet on role tokens, static rules 13-15; the text-only `<h1>` header in the three-column grid; the third-party logo deleted; the head metas and Montserrat; the component states of 06 3.5, including the opaque selection badge at `bottom: 64px`, B-L24; U5 in `contrast.test.mjs`, U6), T4b (the owner-approved brand artwork: the six app files in `assets/brand/` with `NOTICE.md`, the favicons, the apple-touch icon and `og:image`, the wordmark lockup with the monogram at <= 520 px, the viewport watermark hidden in pilot mode, static rule 16), T4c (British English in the visible labels and tooltips: "Colour", "Centre", and "Panel Angle (°)" for the one label that wrapped). |
+| **6. Morph branding** | `css/02-tokens.css` holds every `:root` token; `Theme.js` holds every scene/canvas colour, font, palette and export string, and every consumer receives it by injection from `App`; header and watermark markup in one place in `index.html`. | Role-based tokens; `theme/ThemeBridge.js` reading CSS variables into an object of `Theme`'s shape (one line in `App`); new `Brand` strings and filenames (+ a JSON `generator` field in v2); Morph logo SVG, favicon, valid author meta; inline styles -> classes; card swatches from `Palette`; re-baseline `ui_visual` and exports separately. Gizmo axis colours stay XYZ = RGB. Landed so far (docs/improvements/06-morph-branding.md 8.4): T1 (the static inline styles of `index.html` and the two panel templates became the classes of `css/99-utilities.css`, linked last; dead CSS removed; `css-slices.mjs --report-only`; static rule 12; `compare.mjs --ignore-keys`), T2 (`theme/ThemeBridge.js`, pure and not wired, with U1-U3), T3 (layer-4 tokens with the legacy values and spec 01's four debug tokens, ThemeBridge wired in `App`, `.status-*` on `--status-*`, U4/U10/U11), T4a (the ungated Morph chrome: token layers 1-3 with the brand values and every stylesheet on role tokens, static rules 13-15; the text-only `<h1>` header in the three-column grid; the third-party logo deleted; the head metas and Montserrat; the component states of 06 3.5, including the opaque selection badge at `bottom: 64px`, B-L24; U5 in `contrast.test.mjs`, U6), T4b (the owner-approved brand artwork: the six app files in `assets/brand/` with `NOTICE.md`, the favicons, the apple-touch icon and `og:image`, the wordmark lockup with the monogram at <= 520 px, the viewport watermark hidden in pilot mode, static rule 16), T4c (British English in the visible labels and tooltips: "Colour", "Centre", and "Panel Angle (°)" for the one label that wrapped), T5 (the Morph scene and canvas: layer-4 brand values with `--scene-frame-on-light` and `--scene-overlay-halo`, adaptive panel frames, the outlined opaque camera body, the two-tone dashed frustum, JetBrains Mono 700 and Montserrat on the canvases with `BIND_FONTS_DEFAULT` true, the font gate of row F6-1). |
 
 ---
 
@@ -3257,3 +3305,14 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 
 **06 T4a3, the selection badge clears a wrapped help badge (review follow-up of 06 T4a, B-L24)** (manifest `tests/regression/expected/F6-T4a3.json`, an invariance gate: empty `expect`; at both harness sizes the help badge is one line, so the anchored value is exactly 64 px):
 - 2.1: the help text wraps to two lines (46 px instead of 32 px) wherever the viewport is narrower than about 673 px (windows of about 901-1072 px, and below about 673 px in the single-column layout), and the fixed `bottom: 64px` of `.selection-indicator` then overlapped the help badge by 2 px, B-L24's symptom (06 AC 17: "never overlap"). `.viewport-info` now carries `anchor-name: --help-badge` (`07-viewport.css`) and `.selection-indicator` `bottom: calc(anchor(--help-badge top, 52px) + 12px)` after its `bottom: 64px` fallback (`09-viewport-tools.css`): 12 px above the help badge at every width (measured at 1600, 1100, 1024, 960, 800, 600 and 380 px). 06 2.4, 5.2 and AC 17 say so. The 8.2 row keeps its `bottom: 64px` wording (the value at every width where the help text fits on one line).
+
+**06 T5, the Morph scene and canvas (docs/improvements/06-morph-branding.md 3.8, 5.1, 5.4-5.7, 6.6, 6.7, 8.1, 8.3, 8.4)** (manifest `tests/regression/expected/F6-T5.json`: every canvas-clipped screenshot, every exported panel-ID PNG and ZIP texture, the `statusColor` key of the 35 `cameraState` records, the `ui_visual` styles of the states that probe the status readouts and the sidebar captures that show them):
+- 1.2: the final font URL (JetBrains Mono 400-700, Montserrat 400-700; no Outfit, no JetBrains Mono 300).
+- 1.3, 2.2: `render/frameColor.js` (pure, imports nothing) and `app/fontGate.js` (app layer, imports nothing; everything injected).
+- 2.1, 3.4: layer 4 of `css/02-tokens.css` and the `Theme.js` fallbacks hold the Morph values of 06 3.8, with `--scene-frame-on-light` / `frameOnLight` and `--scene-overlay-halo` / `cameraBody.outlineColor` and `frustumLines.haloColor` (new `COLOR_BINDINGS` rows), the non-colour keys `frustumLines.dashSize` / `gapSize` and `CanvasTheme.preloadFonts`; `BIND_FONTS_DEFAULT` is `true`, so the canvas and safe-zone fonts come from `--font-mono` / `--font-ui`.
+- 3.7: `LEDWallView.#buildFrames(layout, display)` gives each section's frames its adaptive colour; `CameraRigView` draws the frustum as a halo `LineSegments` under a dashed core `LineSegments` on one geometry (`RENDER_ORDER.DEFAULT` / `RIG_CORE`) and gives the opaque body an edge outline child; `PanelIdRenderer.takePendingFonts`.
+- 3.12, 6.2, 7: `App.start` ends with `runFontGate` (row F6-1: `rebuildIfPanelIds` at most once, iff a panel-ID canvas was drawn with a pending (font, text) and panel IDs are on; never in the harness, where every font is preloaded and every text is ASCII).
+- 4: `frustumHelper` is `#linesHalo` / `#linesCore`.
+- 2.3: `scene-overlays.test.mjs` (U12, U13), `font-gate.test.mjs`, the row-F6-1 case of `wall-controller.test.mjs`, `theme.test.mjs` U6 over every layer and the Theme colour leaves; the harness font lists, the palette hook's `frameOnLight` and the `gizmo_drag` colour matchers.
+- 8.4: the JetBrains Mono 700 row is reduced to the two font-gate limitations.
+- 9: Feature 6's landed steps.

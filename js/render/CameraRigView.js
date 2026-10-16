@@ -1,9 +1,14 @@
 /**
  * @module render/CameraRigView
- * The film-camera rig in the viewport (legacy `previewCameraGroup`): the orange body box (the pick target), the
- * frustum lines and the translucent frustum fill, and the rig transform. Publishes the lens readout
+ * The film-camera rig in the viewport (legacy `previewCameraGroup`): the body box (the pick target) with its edge
+ * outline, the frustum lines and the translucent frustum fill, and the rig transform. Publishes the lens readout
  * (CAMERA_LENS_CHANGED) at the legacy DOM-write point of updateFrustumGeometry. The rig is a registered helper
  * (SceneManager.addHelper), on layer 0 like every helper in Phase 1.
+ * 06 T5 (docs/improvements/06-morph-branding.md 3.8, 5.7, 6.6, D15): the body is Signal Red (opaque at the theme's
+ * opacity 1.0) with a 1 px Morph Black edge outline, a child LineSegments of the body that is never picked; the
+ * frustum lines are two-tone: a solid Morph Black halo (LineBasicMaterial, render order DEFAULT) under a dashed light
+ * core (LineDashedMaterial, RENDER_ORDER.RIG_CORE), two LineSegments sharing one geometry, so each segment carries its
+ * own line distances and no closing edge squeezes a dash cycle (never LineLoop, 06 6.6).
  * Legacy source: index.html@cd3fd3f 2321-2344 (createCameraPreview), 2346-2429 (updateFrustumGeometry),
  * 2431-2449 (updateCameraPreviewTransform), 2536-2548 (removeCameraPreview).
  * Layer: render (may import vendor/three, core, legacy, domain, geometry).
@@ -13,6 +18,7 @@ import THREE from '../vendor/three.js';
 import { Events } from '../core/EventBus.js';
 import { Strategies } from '../legacy/LegacyCompat.js';
 import { disposeObject3D } from './ResourceTracker.js';
+import { RENDER_ORDER } from '../core/renderOrder.js';
 
 /**
  * The eight frustum corners in camera space, each [x, y, z] (the camera looks down -Z).
@@ -34,8 +40,10 @@ export class CameraRigView {
   #group = null;
   /** @type {THREE.Mesh|null} legacy `cameraBodyMesh`: set by create(), never nulled (legacy 2536-2548) */
   #bodyMesh = null;
-  /** @type {THREE.LineSegments|null} legacy `frustumHelper` (the frustum lines) */
-  #lines = null;
+  /** @type {THREE.LineSegments|null} legacy `frustumHelper`, first half: the solid halo of the frustum lines (06 T5) */
+  #linesHalo = null;
+  /** @type {THREE.LineSegments|null} legacy `frustumHelper`, second half: the dashed core (same geometry as the halo) */
+  #linesCore = null;
   /** @type {THREE.Mesh|null} legacy `frustumOutline` (it is the frustum fill mesh) */
   #fill = null;
 
@@ -44,7 +52,8 @@ export class CameraRigView {
    * Side effects: none.
    * @param {{sceneManager: import('./SceneManager.js').SceneManager, bus: import('../core/EventBus.js').EventBus,
    *          theme: {scene: object}}} deps
-   *   theme: { scene: SceneTheme } (cameraBody, frustumLines, frustumFill)
+   *   theme: { scene: SceneTheme } (cameraBody incl. outlineColor, frustumLines incl. haloColor, dashSize and gapSize,
+   *   frustumFill)
    */
   constructor({ sceneManager, bus, theme }) {
     this.#sceneManager = sceneManager;
@@ -76,7 +85,8 @@ export class CameraRigView {
    * the scene as a helper and applies the pose. The dispose branch for an existing group is unreachable through
    * CameraHub (it creates only when the rig is missing) and is kept verbatim.
    * Ports: index.html@cd3fd3f lines 2321-2344.
-   * Side effects: allocates THREE objects (group, body geometry, material, mesh, then the frustum); emits
+   * Side effects: allocates THREE objects (group, body geometry, material, mesh, the outline's edges geometry,
+   *   material and LineSegments, then the frustum); emits
    *   CAMERA_LENS_CHANGED (via rebuildFrustum; the hub's next rebuildFrustum emits it again, as legacy wrote the
    *   readout twice on the first enable); adds the group to the scene.
    * @param {import('../domain/CineCamera.js').CineCamera} cine
@@ -93,9 +103,13 @@ export class CameraRigView {
     // Camera body (simple box), positioned behind the camera view point so it does not block the view
     const body = this.#theme.scene.cameraBody;
     const bodyGeom = new THREE.BoxGeometry(0.15, 0.1, 0.2);
-    const bodyMat = new THREE.MeshBasicMaterial({ color: body.color, transparent: true, opacity: body.opacity });
+    const bodyMat = new THREE.MeshBasicMaterial({ color: body.color, transparent: body.opacity < 1, opacity: body.opacity });
     this.#bodyMesh = new THREE.Mesh(bodyGeom, bodyMat);
     this.#bodyMesh.position.z = 0.15;
+    // 06 T5 (D15, 6.6): a 1 px edge outline in the halo colour, so the red body keeps >= 3:1 on any section colour.
+    // A child of the body: it moves with it and disposeObject3D(group) disposes it; pickMeshes() never returns it.
+    const outline = new THREE.LineSegments(new THREE.EdgesGeometry(bodyGeom), new THREE.LineBasicMaterial({ color: body.outlineColor }));
+    this.#bodyMesh.add(outline);
     this.#group.add(this.#bodyMesh);
 
     // Frustum wireframe and fill
@@ -111,18 +125,21 @@ export class CameraRigView {
    * `wallIntersectionPlane` branch of legacy (2358-2362) is dropped: that object was never created.
    * Requires the group to exist (callers: create() and CameraHub.refresh after create()).
    * Ports: index.html@cd3fd3f lines 2346-2429.
-   * Side effects: removes and disposes the previous lines and fill; emits CAMERA_LENS_CHANGED
-   *   {hFov, vFov, filmbackWidth, filmbackHeight} (radians, mm); allocates the line geometry, line material,
-   *   LineSegments, then the fill geometry, fill material and Mesh, and adds both to the group.
+   * Side effects: removes and disposes the previous lines (halo and core) and fill; emits CAMERA_LENS_CHANGED
+   *   {hFov, vFov, filmbackWidth, filmbackHeight} (radians, mm); allocates the line geometry, the halo material and
+   *   LineSegments, the core material and LineSegments (with their line distances), then the fill geometry, fill
+   *   material and Mesh, and adds them to the group.
    * @param {import('../domain/CineCamera.js').CineCamera} cine
    * @returns {void}
    */
   rebuildFrustum(cine) {
-    // Remove old frustum
-    if (this.#lines) {
-      this.#group.remove(this.#lines);
-      this.#lines.geometry.dispose();
-      this.#lines.material.dispose();
+    // Remove old frustum (the halo and the core share one geometry)
+    if (this.#linesHalo) {
+      this.#group.remove(this.#linesHalo);
+      this.#group.remove(this.#linesCore);
+      this.#linesHalo.geometry.dispose();
+      this.#linesHalo.material.dispose();
+      this.#linesCore.material.dispose();
     }
     if (this.#fill) {
       this.#group.remove(this.#fill);
@@ -144,8 +161,11 @@ export class CameraRigView {
     const nearPlane = 0.2;
 
     const corners = this.#corners(hFov, vFov, nearPlane, frustumDepth);
-    this.#lines = this.#buildLines(corners);
-    this.#group.add(this.#lines);
+    const { halo, core } = this.#buildLines(corners);
+    this.#linesHalo = halo;
+    this.#linesCore = core;
+    this.#group.add(halo);
+    this.#group.add(core);
     this.#fill = this.#buildFill(corners);
     this.#group.add(this.#fill);
   }
@@ -190,7 +210,8 @@ export class CameraRigView {
       this.#sceneManager.removeHelper(this.#group);
       disposeObject3D(this.#group);
       this.#group = null;
-      this.#lines = null;
+      this.#linesHalo = null;
+      this.#linesCore = null;
       this.#fill = null;
     }
   }
@@ -237,10 +258,15 @@ export class CameraRigView {
   }
 
   /**
-   * The frustum wireframe: near rectangle, far rectangle, then the four connecting edges (24 vertices).
+   * The frustum wireframe: near rectangle, far rectangle, then the four connecting edges (24 vertices, 12
+   * independent segments), drawn twice from one geometry (06 T5, 6.6): the solid halo first (render order DEFAULT),
+   * then the dashed core (RENDER_ORDER.RIG_CORE) at equal depth, which wins under the default LessEqual depth test, so
+   * the line alternates light dashes and dark gaps. LineSegments.computeLineDistances gives every segment its own
+   * distance range, so no dash cycle is squeezed into a closing edge. Opaque while the theme opacity is 1.
    * Ports: index.html@cd3fd3f lines 2383-2407.
    * @param {FrustumCorners} corners
-   * @returns {THREE.LineSegments} allocated as geometry, then material, then LineSegments
+   * @returns {{halo: THREE.LineSegments, core: THREE.LineSegments}} allocated as geometry, halo material, halo
+   *   LineSegments, core material, core LineSegments
    */
   #buildLines({ nearTL, nearTR, nearBL, nearBR, farTL, farTR, farBL, farBR }) {
     const frustumVertices = [];
@@ -253,9 +279,19 @@ export class CameraRigView {
     frustumVertices.push(...nearTL, ...farTL, ...nearTR, ...farTR, ...nearBL, ...farBL, ...nearBR, ...farBR);
 
     const style = this.#theme.scene.frustumLines;
+    const transparent = style.opacity < 1;
     const frustumGeom = new THREE.BufferGeometry();
     frustumGeom.setAttribute('position', new THREE.Float32BufferAttribute(frustumVertices, 3));
-    return new THREE.LineSegments(frustumGeom, new THREE.LineBasicMaterial({ color: style.color, transparent: true, opacity: style.opacity }));
+    const halo = new THREE.LineSegments(frustumGeom, new THREE.LineBasicMaterial({
+      color: style.haloColor, transparent, opacity: style.opacity,
+    }));
+    halo.renderOrder = RENDER_ORDER.DEFAULT;
+    const core = new THREE.LineSegments(frustumGeom, new THREE.LineDashedMaterial({
+      color: style.color, dashSize: style.dashSize, gapSize: style.gapSize, transparent, opacity: style.opacity,
+    }));
+    core.renderOrder = RENDER_ORDER.RIG_CORE;
+    core.computeLineDistances();
+    return { halo, core };
   }
 
   /**

@@ -9,7 +9,8 @@
  * Layer: app (may import core, legacy, domain, geometry; collaborators are injected).
  *
  * Rebuild policy (ARCHITECTURE.md 6.2): this module is the only place, besides the bootstrap, that decides wall
- * rebuilds. The 24 legacy `createLEDWall()` call sites map to these calls:
+ * rebuilds. The 24 legacy `createLEDWall()` call sites map to these calls (rows added after Phase 1 carry named ids,
+ * ARCHITECTURE.md 6.2):
  *
  * | #  | Legacy | Trigger                          | Controller call(s)                   | Rebuild                                 | Other steps, in order                                   |
  * |----|--------|----------------------------------|--------------------------------------|-----------------------------------------|---------------------------------------------------------|
@@ -37,9 +38,11 @@
  * | 22 | 2292   | logo position change             | rebuildIfPanelIds                    | iff the entry exists and panel IDs      | -                                                       |
  * | 23 | 2303   | logo scale change                | rebuildIfPanelIds                    | iff the entry exists and panel IDs      | write-back always                                       |
  * | 24 | 5002   | import FileReader.onload         | applyImport                          | always, inside the import `try`         | labels iff mesh_mode, WALL_SECTIONS_CHANGED{import}     |
+ * | F6-1 | -    | web fonts settled (App.start, runFontGate) | rebuildIfPanelIds          | iff a panel-ID canvas was drawn with a pending (font, text) and panel IDs are on | none |
  *
- * No other path calls rebuild(). Never de-duplicate or debounce: row 8 rebuilds twice per click and rows 3, 16
- * and 19 rebuild on every `input` event, exactly like legacy.
+ * No other path calls rebuild() (row F6-1, the font gate of 06 5.6, calls rebuildIfPanelIds at most once after the
+ * web fonts settled). Never de-duplicate or debounce: row 8 rebuilds twice per click and rows 3, 16 and 19 rebuild
+ * on every `input` event, exactly like legacy.
  */
 import { Events } from '../core/EventBus.js';
 import { layoutProject } from '../geometry/WallLayout.js';
@@ -316,7 +319,8 @@ export class WallController {
   }
 
   /**
-   * `if (panelIdsEnabled) createLEDWall();` of the style inputs and the logo handlers.
+   * `if (panelIdsEnabled) createLEDWall();` of the style inputs and the logo handlers (rows 14-23), and the font
+   * gate's one corrective redraw (row F6-1, app/fontGate.js).
    * Ports: index.html@cd3fd3f lines 4203, 4208, 4212, 4217, 4222, 4226, 2272, 2285, 2292, 2303.
    * Side effects: rebuild() iff panel IDs are on.
    */
