@@ -7,6 +7,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { DebugViewControls, announcement, popoverPlacement } from '../../js/ui/DebugViewControls.js';
 import { DebugViewController } from '../../js/app/DebugViewController.js';
@@ -518,5 +519,14 @@ describe('announcement and popoverPlacement (pure)', () => {
     // Smallest downward fit: 325 + 326 + 20 = 671 px.
     assert.equal(popoverPlacement({ top: 0, height: 671 }, { top: 325, bottom: 365 }, 326).placement, 'down');
     assert.equal(popoverPlacement({ top: 0, height: 670 }, { top: 325, bottom: 365 }, 326).placement, 'up');
+  });
+});
+
+describe('DebugViewControls: import boundary (01 8.1, ARCHITECTURE.md 3.11)', () => {
+  test('imports only core/ (EventBus, typingTarget) and ui/dom.js, never legacy/, domain/, app/ or render/', () => {
+    const src = readFileSync(new URL('../../js/ui/DebugViewControls.js', import.meta.url), 'utf8');
+    const specs = [...src.matchAll(/^\s*import\s+(?:[^'";]*?\s+from\s+)?['"]([^'"]+)['"]/gm)].map((m) => m[1]);
+    assert.ok(specs.length > 0);
+    for (const spec of specs) assert.match(spec, /^(\.\.\/core\/[\w.-]+\.js|\.\/dom\.js)$/, spec);
   });
 });
