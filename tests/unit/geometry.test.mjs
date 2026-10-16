@@ -631,8 +631,8 @@ describe('quadIndices and the builder profiles', () => {
     assert.deepEqual(quadIndices(10, 11, 20, 21), [10, 20, 21, 10, 21, 11]);
   });
 
-  test('quadIndices throws unsupportedStrategy for any other winding', () => {
-    assert.throws(() => quadIndices(0, 1, 3, 2, 'ccw'), unsupported('mesh.winding', 'ccw'));
+  test("quadIndices throws unsupportedStrategy for any winding other than 'ccw' and 'legacy-cw'", () => {
+    assert.throws(() => quadIndices(0, 1, 3, 2, 'cw'), unsupported('mesh.winding', 'cw'));
     assert.throws(() => quadIndices(0, 1, 3, 2, null), unsupported('mesh.winding', null));
   });
 
@@ -881,5 +881,144 @@ describe('framingBounds and the Feature 3 seams', () => {
     assert.ok(project.wall instanceof Wall);
     assert.deepEqual(layoutProject(project).flatEdges(), []);
     assert.deepEqual(framingBounds(project), { totalWidth: 0, maxHeight: 0 });
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// Stage-facing winding and normals (B-H1, B-H2, B-L3; docs/improvements/08-bugfix-roadmap.md 6.4, P2-2)
+// ---------------------------------------------------------------------------------------------------------------
+
+/**
+ * Seeded walls with integer inputs only (01 6.3: string and fractional counts give garbage geometry, B-L8 / B-L15):
+ * 1-4 sections, cols 1-50, rows 1-20, curves -30..30 (about 30 % flat), offsets -180..180, widths 100-1000 mm.
+ */
+function integerWalls(seed, count) {
+  const rand = rng(seed);
+  const int = (lo, hi) => lo + Math.floor(rand() * (hi - lo + 1));
+  const walls = [];
+  for (let w = 0; w < count; w++) {
+    const n = int(1, 4);
+    const sections = [];
+    for (let i = 0; i < n; i++) {
+      sections.push(new WallSection({
+        id: i, name: `S${i}`, panelCols: int(1, 50), panelRows: rand() < 0.8 ? int(1, 4) : int(5, 20),
+        panelWidth: int(100, 1000), panelHeight: int(100, 1000), ledX: 32, ledY: 32,
+        curveIntensity: rand() < 0.3 ? 0 : int(-30, 30), angleOffset: int(-180, 180), color: '#00f0ff',
+      }));
+    }
+    walls.push({ label: `int#${w}`, sections });
+  }
+  return walls;
+}
+
+/** The seeded integer walls plus the harness configurations (all integer, imported as the harness does). */
+const INTEGER_WALLS = [...integerWalls(0x2a2a, 200), ...CONFIG_WALLS];
+
+const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const len3 = (a) => Math.sqrt(dot3(a, a));
+
+/**
+ * The orientation check of tools/check-orientation.mjs over one grid: for every triangle (a, b, c) of `indices`
+ * (relative to `base`), the geometric normal (b - a) x (c - a) against the stored normal of each corner.
+ * @returns {{triangles: number, failures: number, minCos: number, first: string|null}}
+ */
+function orientation({ positions, normals, indices }, base = 0) {
+  const p = (i) => [positions[3 * (i - base)], positions[3 * (i - base) + 1], positions[3 * (i - base) + 2]];
+  const n = (i) => [normals[3 * (i - base)], normals[3 * (i - base) + 1], normals[3 * (i - base) + 2]];
+  const r = { triangles: 0, failures: 0, minCos: Infinity, first: null };
+  for (let k = 0; k < indices.length; k += 3) {
+    const t = [indices[k], indices[k + 1], indices[k + 2]];
+    const g = cross3(sub3(p(t[1]), p(t[0])), sub3(p(t[2]), p(t[0])));
+    r.triangles++;
+    for (const i of t) {
+      const cos = dot3(g, n(i)) / (len3(g) * len3(n(i)));
+      if (!(cos > 0)) {
+        r.failures++;
+        if (!r.first) r.first = `triangle ${k / 3} (${t.join(', ')}): cos ${cos} at vertex ${i}`;
+        break;
+      }
+      r.minCos = Math.min(r.minCos, cos);
+    }
+  }
+  return r;
+}
+
+describe('stage-facing winding (B-H1, B-H2; 08 6.4)', () => {
+  test("quadIndices 'ccw' is [bl, br, tr, bl, tr, tl]; panel quads (BL=0, BR=1, TR=2, TL=3) give [0, 1, 2, 0, 2, 3]", () => {
+    assert.deepEqual(quadIndices(10, 11, 20, 21, 'ccw'), [10, 11, 21, 10, 21, 20]);
+    assert.deepEqual(quadIndices(0, 1, 3, 2, 'ccw'), [0, 1, 2, 0, 2, 3]);
+    const ccw = new WallMeshBuilder({ ...LegacyProfiles.mesh.obj, winding: 'ccw' });
+    for (const v of [0, 1, 5, 1001]) assert.deepEqual(ccw.panelQuadIndices(v), [v, v + 1, v + 2, v, v + 2, v + 3]);
+  });
+
+  test('per quad, the ccw triangles are the legacy-cw triangles with their last two vertices swapped (same bl-tr diagonal)', () => {
+    const rand = rng(0x51de);
+    for (let k = 0; k < 2000; k++) {
+      const bl = Math.floor(rand() * 1e6), br = bl + 1, tl = bl + 2 + Math.floor(rand() * 60), tr = tl + 1;
+      const now = quadIndices(bl, br, tl, tr, 'ccw');
+      const old = quadIndices(bl, br, tl, tr, 'legacy-cw');
+      const swap = ([a, b, c]) => [a, c, b];
+      assert.deepEqual(now.slice(0, 3), swap(old.slice(3, 6)), 'new triangle 0 = legacy triangle 1, last two swapped');
+      assert.deepEqual(now.slice(3, 6), swap(old.slice(0, 3)), 'new triangle 1 = legacy triangle 0, last two swapped');
+    }
+  });
+
+  test('08 6.4 proof: a flat quad BL (0,0,0), BR (w,0,0), TR (w,h,0) faces +Z with ccw and -Z with legacy-cw', () => {
+    const w = 0.5, h = 0.25;
+    const P = [[0, 0, 0], [w, 0, 0], [0, h, 0], [w, h, 0]];   // bl, br, tl, tr
+    const face = (winding) => {
+      const q = quadIndices(0, 1, 2, 3, winding);
+      return [0, 3].map((k) => cross3(sub3(P[q[k + 1]], P[q[k]]), sub3(P[q[k + 2]], P[q[k]])));
+    };
+    for (const g of face('ccw')) assert.deepEqual(g, [0, 0, w * h]);
+    for (const g of face('legacy-cw')) assert.deepEqual(g, [0, 0, -w * h]);
+  });
+
+  test("the production viewport profile winds 'ccw' (08 P2-2a); LegacyProfiles keeps 'legacy-cw'", () => {
+    assert.equal(Strategies.mesh.viewport.winding, 'ccw');
+    assert.equal(LegacyProfiles.mesh.viewport.winding, 'legacy-cw');
+    const grid = new WallMeshBuilder(Strategies.mesh.viewport).sectionGrid(SMALL_LAYOUT.sections[0]);
+    const legacyGrid = viewport.sectionGrid(SMALL_LAYOUT.sections[0]);
+    assert.deepEqual(grid.positions, legacyGrid.positions);
+    assert.equal(grid.indices.length, legacyGrid.indices.length);
+    assert.deepEqual(grid.indices.slice(0, 6), [0, 1, 4, 0, 4, 3]);
+    assert.deepEqual(legacyGrid.indices.slice(0, 6), [0, 3, 4, 0, 4, 1]);
+  });
+
+  test('integer layouts: every production viewport triangle faces along its stored vertex normals; legacy-cw faces away', (t) => {
+    const prod = new WallMeshBuilder(Strategies.mesh.viewport);
+    let triangles = 0, minCos = Infinity;
+    for (const { label, sections } of INTEGER_WALLS) {
+      for (const sl of computeWallLayout(sections).sections) {
+        const r = orientation(prod.sectionGrid(sl));
+        assert.equal(r.failures, 0, `${label} section ${sl.sectionIndex}: ${r.first}`);
+        triangles += r.triangles;
+        minCos = Math.min(minCos, r.minCos);
+        const legacy = orientation(viewport.sectionGrid(sl));
+        assert.equal(legacy.failures, legacy.triangles, `${label} section ${sl.sectionIndex}: legacy-cw should face away everywhere`);
+      }
+    }
+    t.diagnostic(`${triangles} triangles over ${INTEGER_WALLS.length} walls; minimum cos(face, vertex normal) ${minCos}`);
+    assert.ok(triangles > 100000);
+  });
+
+  test('panel quads: the ccw corners BL, BR, TR, TL face along the facing normal for every heading', () => {
+    const b = new WallMeshBuilder({ winding: 'ccw', panelNormal: 'facing' });
+    for (const { sections } of INTEGER_WALLS.slice(0, 60)) {
+      for (const sl of computeWallLayout(sections).sections) {
+        for (const panel of sl.panels) {
+          const c = b.panelCorners(panel, sl.panelW, sl.panelH).map(({ x, y, z }) => [x, y, z]);
+          const nrm = b.panelFacingNormal(panel);
+          const n = [nrm.x, nrm.y, nrm.z];
+          const q = b.panelQuadIndices(0);
+          for (const k of [0, 3]) {
+            const g = cross3(sub3(c[q[k + 1]], c[q[k]]), sub3(c[q[k + 2]], c[q[k]]));
+            assert.ok(dot3(g, n) / len3(g) > 0.999999, `heading ${panel.rotY}`);
+          }
+        }
+      }
+    }
   });
 });

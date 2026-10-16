@@ -196,12 +196,13 @@ export class LEDMaterialFactory {
   }
 
   /**
-   * The `side` of every wall material (the LEGACY_SITES site `LEDMaterialFactory.js#side`). A constant: no ids,
-   * cannot throw in Phase 1.
+   * The `side` of every wall material (`Strategies.mesh.viewport.side`; no LEGACY_SITES entry since 08 P2-2a). A
+   * constant: no ids, cannot throw for the shipped value.
    * @returns {number} THREE.DoubleSide
    */
   #side() {
-    // LEGACY(B-H1): DoubleSide conceals the inverted winding.
+    // DoubleSide is a design choice since 08 P2-2a (B-H1 fixed: the strips are wound counter-clockwise toward the
+    // stage), not a concealment: the orbit camera can go behind the wall. 'front' is a later Feature 1/5 option.
     switch (Strategies.mesh.viewport.side) {
       case 'double':
         return THREE.DoubleSide;

@@ -1,0 +1,20 @@
+{
+  "commit": "P2-2a",
+  "bugs": ["B-H1"],
+  "expect": [],
+  "mayChange": [
+    { "output": "toggles/01_wireframe.screenshot.png", "change": "modified",
+      "reason": "08 6.4 wireframe exception: r128 builds the wireframe line pairs of each triangle in index order (a,b), (b,c), (c,a); the 'ccw' quads have the same edge set and the same bl-tr diagonal, but four of their six edges are drawn in the opposite direction. Seen: 134 px along the wall's bottom and left edges, where the wall lines coincide with the red X and green Y axis lines and the coincident line now wins" },
+    { "output": "{default,flat3,concave_offsets,convex,mixed,box_corner,p2_mixed_content}/panel_ids_combined.screenshot.png", "change": "modified",
+      "reason": "textured wall (panel IDs): the rasteriser interpolates the UVs from the reordered triangle vertices ((bl, br, tr) instead of (bl, tr, br)), so a few fragments round to a neighbouring texel blend. Seen: max channel difference 1, 10-50 px per screenshot, no coverage change" },
+    { "output": "toggles/{03_ledsim_single-dot,04_ledsim_rgb-triangle,04_ledsim_rgb-stripe,04_ledsim_rgb-horizontal,04_ledsim_square,04_ledsim_single-dot,05_ledsim_section,07_panelids_combined,08_panelids_section}.screenshot.png", "change": "modified",
+      "reason": "textured wall (LED sim, panel IDs): UV interpolation rounding from the reordered vertices, as above. Seen: max channel difference 1, 2-35 px per screenshot" },
+    { "output": "{logos/01_uploaded_combined,name_with_panel_ids/name_02_typed,p2_shortcut_filters/pilot_view_front}.screenshot.png", "change": "modified",
+      "reason": "textured wall (panel IDs, LED sim): UV interpolation rounding from the reordered vertices, as above. Seen: max channel difference 1, 11-12 px per screenshot" },
+    { "output": "toggles/17_view_top.screenshot.png", "change": "modified",
+      "reason": "the top view sees the wall almost edge-on, so its triangles are nearly degenerate in screen space and the rasteriser's edge evaluation from the reordered vertices flips the coverage of one anti-aliased pixel at a section junction. Seen: 1 px, (743, 478)" },
+    { "output": "large_wall/final__export-zip__led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen so far: L2_PanelIDs.png (1995, 948), L3_PanelIDs.png (1970, 1003), L4_PanelIDs.png (2026, 858), 1 px each, 3840x1920); this commit changes only the viewport index order" }
+  ],
+  "notes": "invariance (08 8.1 step 4, criterion 8): mesh.viewport.winding 'ccw' re-orders the two triangles of every combined/section viewport quad along the same bl-tr diagonal ((bl, br, tr), (bl, tr, tl) instead of (bl, tl, tr), (bl, tr, br)); the materials are unlit MeshBasicMaterial with DoubleSide, and no export reads the viewport profile. The first gate run showed that 'filled pixels cannot change' (08 6.4, revision before this commit) holds for coverage and plain colours but not bit for bit for interpolated attributes: the textured screenshots above differ by 1 level in a few dozen pixels and one edge-on pixel flips; each was reviewed and is declared here (08 8.1 rules), and 08 6.4 is corrected in the same commit"
+}

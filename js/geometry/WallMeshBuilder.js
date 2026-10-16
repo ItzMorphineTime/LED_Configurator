@@ -16,10 +16,14 @@ import { unsupportedStrategy } from '../legacy/LegacyCompat.js';
 
 /**
  * The 6 indices of one grid quad (two triangles).
- * The same function reproduces all 8 legacy index sites: viewport 1638 / 1749, OBJ 4599-4600 / 4648-4649,
- * glTF 4844 / 4863, and panel quads with corners BL=0, BR=1, TR=2, TL=3: quadIndices(0, 1, 3, 2) = [0, 3, 2, 0, 2, 1]
- * (glTF 4887) and OBJ `v, v+3, v+2 / v, v+2, v+1` = quadIndices(v, v+1, v+3, v+2) (4705-4706).
- * Feature 1 adds 'ccw' -> [bl, br, tr, bl, tr, tl] (which gives panel [0, 1, 2, 0, 2, 3]).
+ *   'ccw' (08 6.4, 08 P2-2a): [bl, br, tr, bl, tr, tl], counter-clockwise seen from the side the stored normals
+ *     point to (+Z for a flat wall, the stage); panel quads with corners BL=0, BR=1, TR=2, TL=3 give [0, 1, 2, 0, 2, 3].
+ *   'legacy-cw': [bl, tl, tr, bl, tr, br], the Phase-1 order, kept for the LegacyProfiles oracle tests. It reproduces
+ *     all 8 legacy index sites: viewport 1638 / 1749, OBJ 4599-4600 / 4648-4649, glTF 4844 / 4863, and panel quads:
+ *     quadIndices(0, 1, 3, 2) = [0, 3, 2, 0, 2, 1] (glTF 4887) and OBJ `v, v+3, v+2 / v, v+2, v+1` =
+ *     quadIndices(v, v+1, v+3, v+2) (4705-4706).
+ * Both split the quad along the bl-tr diagonal: 'ccw' triangle 0 is 'legacy-cw' triangle 1 with its last two vertices
+ * swapped, and 'ccw' triangle 1 is 'legacy-cw' triangle 0 swapped the same way.
  * Side effects: none.
  * @param {number} bl  bottom-left vertex index
  * @param {number} br  bottom-right vertex index
@@ -27,13 +31,17 @@ import { unsupportedStrategy } from '../legacy/LegacyCompat.js';
  * @param {number} tr  top-right vertex index
  * @param {string} [winding='legacy-cw']  a profile's `winding`
  * @returns {number[]} a new 6-element array
- * @throws {Error} unsupportedStrategy('mesh.winding', winding) for any value other than 'legacy-cw'
+ * @throws {Error} unsupportedStrategy('mesh.winding', winding) for any value other than 'ccw' and 'legacy-cw'
  */
 export function quadIndices(bl, br, tl, tr, winding = 'legacy-cw') {
   switch (winding) {
+    case 'ccw':
+      // 08 6.4: (br - bl) x (tr - bl) points along the stored normals (+Z for a flat wall). Viewport since 08 P2-2a
+      // (B-H1 fixed).
+      return [bl, br, tr, bl, tr, tl];
     case 'legacy-cw':
-      // LEGACY(B-H1, B-H2): (bl, tl, tr) / (bl, tr, br) is clockwise seen from +Z, against the +Z normals of the
-      // viewport (hidden by DoubleSide) and of every export.
+      // LEGACY(B-H2): (bl, tl, tr) / (bl, tr, br) is clockwise seen from +Z, against the +Z normals of every export.
+      // It was the viewport order too until 08 P2-2a (B-H1); kept for the LegacyProfiles oracle tests.
       return [bl, tl, tr, bl, tr, br];
     default:
       throw unsupportedStrategy('mesh.winding', winding);
@@ -322,6 +330,7 @@ export class WallMeshBuilder {
 
   /**
    * The 6 indices of a panel quad whose corners (panelCorners order BL, BR, TR, TL) start at `base`.
+   * 'ccw': [base, base + 1, base + 2, base, base + 2, base + 3];
    * 'legacy-cw': [base, base + 3, base + 2, base, base + 2, base + 1] (glTF 4887 with base 0, OBJ 4705-4706).
    * Side effects: none.
    * @param {number} base

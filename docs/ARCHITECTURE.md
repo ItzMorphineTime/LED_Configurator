@@ -90,6 +90,7 @@ Direction of communication:
 - Units are metres. Section sizes are stored in millimetres and converted with `MM_TO_M = 0.001` (the 8 legacy `const scale = 0.001` sites: 1479, 2488, 2552, 2591, 3757, 4493, 4912, 4920).
 - Y is up; the wall stands on the floor `y = 0`; sections are bottom-aligned.
 - The wall front faces **+Z** (default orbit camera, film camera, safe-distance floor all on +Z).
+- **Front faces (08 6.4):** triangles are wound counter-clockwise seen from the front (+Z for a flat wall), and normals point to the stage. The viewport strips follow this since 08 P2-2a (`mesh.viewport.winding = 'ccw'`; panel mode's `PlaneGeometry` always did); the OBJ and glTF writers follow in 08 P2-2c and P2-2d and keep the Phase-1 clockwise order until then (B-H2). The normals are never negated: the safe zone, coverage and camera code depend on +Z being the front.
 - The world origin is the first section's first bottom edge vertex (implicit pivot `bottom-left`; the layout frame L below, which is also the stage and export frame while the pivot is the default). `ledWallGroup` keeps an identity transform; vertices are baked in world space.
 - Angles: section fields are degrees; the layout walk works in radians with the legacy association `(deg * Math.PI) / 180`.
 - Euler order for the film camera, preview camera and local gizmo: `'YXZ'` with (tilt = rotX, pan = rotY, roll = rotZ).
@@ -375,12 +376,13 @@ The single home of every output-affecting legacy switch and helper. The file hea
 ```js
 export const Strategies = deepFreeze({
   mesh: {
-    viewport: { winding: 'legacy-cw', normals: 'right-panel', combinedUV: 'atlas-u-full-v', side: 'double' },
+    viewport: { winding: 'ccw', normals: 'right-panel', combinedUV: 'atlas-u-full-v', side: 'double' },
     obj:      { winding: 'legacy-cw', normals: 'none', stripNormals: 'constant-z',
                 combinedUV: 'per-section-overlap', panelNormal: 'facing' },
     gltf:     { winding: 'legacy-cw', normals: 'none', attributes: ['POSITION'], indexType: 'auto',
                 doubleSided: 'omit' },             // 'omit' = the material object has NO doubleSided key
-  },                                               // gltf.indexType: 'auto' since 08 P2-1b (B-L5), Phase-1 'uint16'
+  },                                               // gltf.indexType: 'auto' since 08 P2-1b (B-L5), Phase-1 'uint16';
+                                                   // viewport.winding: 'ccw' since 08 P2-2a (B-H1), Phase-1 'legacy-cw'
   exportCombinedColor: 'first-section',            // B-L6
   mtlTextureNaming: 'index',                       // B-M2
   zipTextureNaming: 'sanitized-name',              // B-L14 (no de-duplication)
@@ -428,7 +430,7 @@ export const legacyHtml = (s) => s;
  *  Entries whose site is not under js/ (CSS, markup) are documentation-only. */
 export const LEGACY_SITES
 ```
-`deepFreeze` is module-private. `LegacyProfiles` is not a switch: it has no read site in `js/` and is not covered by the `Strategies` rule of the static check; when a Phase-2 commit flips a `Strategies.mesh.*` key, the builder keeps the legacy case for it (08 5.1 rule 3), and global keys (`exportCombinedColor`, ...) cannot be injected, so the oracle cases that depend on a retired global key become explicit expected-value tests in that commit (08 P2-1a retired `gltfBase64` and deleted `legacySpreadBase64`; `tests/unit/io.test.mjs` injects a verbatim copy of that encoder into its oracle exporter). The `behaviour` and `fix` strings of each `LEGACY_SITES` entry are the 8.2 cell texts with only the markdown escape `\|` unescaped to `|` (inline backticks are kept as written); the 8.2 register is stored once and expanded per 8.3 site. Phase 1 implements only the legacy value of every key, except the `dispose.*` keys flipped by the non-observable Phase 1C clean-ups (8.1; a landed fix keeps its 8.2 row and loses its 8.3 rows, so `LEGACY_SITES` no longer lists it). Phase 2 retires keys as 08 4.1 lists them (the key, its switch and its 8.1 row are deleted in the fixing commit); retired so far: `gltfBase64` (08 P2-1a); flipped so far: `mesh.gltf.indexType` (`'auto'`, 08 P2-1b). Every leaf key (arrays such as `mesh.gltf.attributes` and `previewRendererSize` are leaves) has the read site given in section 8.1 and spelled out in that module's entry below; how it is read (switch-and-throw, value, array comparison) follows section 1.5.
+`deepFreeze` is module-private. `LegacyProfiles` is not a switch: it has no read site in `js/` and is not covered by the `Strategies` rule of the static check; when a Phase-2 commit flips a `Strategies.mesh.*` key, the builder keeps the legacy case for it (08 5.1 rule 3), and global keys (`exportCombinedColor`, ...) cannot be injected, so the oracle cases that depend on a retired global key become explicit expected-value tests in that commit (08 P2-1a retired `gltfBase64` and deleted `legacySpreadBase64`; `tests/unit/io.test.mjs` injects a verbatim copy of that encoder into its oracle exporter). The `behaviour` and `fix` strings of each `LEGACY_SITES` entry are the 8.2 cell texts with only the markdown escape `\|` unescaped to `|` (inline backticks are kept as written); the 8.2 register is stored once and expanded per 8.3 site. Phase 1 implements only the legacy value of every key, except the `dispose.*` keys flipped by the non-observable Phase 1C clean-ups (8.1; a landed fix keeps its 8.2 row and loses its 8.3 rows, so `LEGACY_SITES` no longer lists it). Phase 2 retires keys as 08 4.1 lists them (the key, its switch and its 8.1 row are deleted in the fixing commit); retired so far: `gltfBase64` (08 P2-1a); flipped so far: `mesh.gltf.indexType` (`'auto'`, 08 P2-1b), `mesh.viewport.winding` (`'ccw'`, 08 P2-2a). Every leaf key (arrays such as `mesh.gltf.attributes` and `previewRendererSize` are leaves) has the read site given in section 8.1 and spelled out in that module's entry below; how it is read (switch-and-throw, value, array comparison) follows section 1.5.
 
 ### 3.4 `js/theme/Theme.js`
 
@@ -814,12 +816,14 @@ export class WallLayout {
 
 #### `js/geometry/WallMeshBuilder.js`: the one owner of winding, normals and UVs
 ```js
-/** winding 'legacy-cw' -> [bl, tl, tr, bl, tr, br]  LEGACY(B-H1, B-H2). Any other value throws
- *  unsupportedStrategy('mesh.winding', winding) (the key style of 'mesh.normals', 'mesh.combinedUV', 'mesh.panelNormal').
- *  The same function reproduces all 8 legacy index sites: viewport 1638 / 1749, OBJ 4599-4600 / 4648-4649,
- *  glTF 4844 / 4863, and panel quads with corners BL=0, BR=1, TR=2, TL=3: quadIndices(0, 1, 3, 2) = [0, 3, 2, 0, 2, 1]
- *  (glTF 4887) and OBJ `v, v+3, v+2 / v, v+2, v+1` = quadIndices(v, v+1, v+3, v+2) (4705-4706).
- *  Feature 1 adds 'ccw' -> [bl, br, tr, bl, tr, tl] (which gives panel [0, 1, 2, 0, 2, 3]). */
+/** winding 'ccw' (08 6.4; the viewport since 08 P2-2a) -> [bl, br, tr, bl, tr, tl], which gives panel [0, 1, 2, 0, 2, 3];
+ *  winding 'legacy-cw' -> [bl, tl, tr, bl, tr, br]  LEGACY(B-H2) (the Phase-1 order, kept for LegacyProfiles). Any other
+ *  value throws unsupportedStrategy('mesh.winding', winding) (the key style of 'mesh.normals', 'mesh.combinedUV',
+ *  'mesh.panelNormal'). 'legacy-cw' reproduces all 8 legacy index sites: viewport 1638 / 1749, OBJ 4599-4600 /
+ *  4648-4649, glTF 4844 / 4863, and panel quads with corners BL=0, BR=1, TR=2, TL=3: quadIndices(0, 1, 3, 2) =
+ *  [0, 3, 2, 0, 2, 1] (glTF 4887) and OBJ `v, v+3, v+2 / v, v+2, v+1` = quadIndices(v, v+1, v+3, v+2) (4705-4706).
+ *  Both split along the bl-tr diagonal: 'ccw' triangle 0 is 'legacy-cw' triangle 1 with its last two vertices swapped,
+ *  and 'ccw' triangle 1 is 'legacy-cw' triangle 0 swapped the same way (08 6.4). */
 export function quadIndices(bl, br, tl, tr, winding = 'legacy-cw')
 
 /** The largest value of an index array by a loop (no spread); NaN entries are skipped; [] gives -Infinity. (08 P2-1b) */
@@ -877,7 +881,8 @@ export class WallMeshBuilder {
    *   TR {x: panel.x + (hw) * cos,  y: panel.y + hh, z: panel.z - (hw) * sin},
    *   TL {x: panel.x + (-hw) * cos, y: panel.y + hh, z: panel.z - (-hw) * sin}] */
   panelCorners(panel, panelW, panelH)
-  /** quadIndices(base, base + 1, base + 3, base + 2, profile.winding): [base, base+3, base+2, base, base+2, base+1] */
+  /** quadIndices(base, base + 1, base + 3, base + 2, profile.winding): 'ccw' [base, base+1, base+2, base, base+2, base+3];
+   *  'legacy-cw' [base, base+3, base+2, base, base+2, base+1] */
   panelQuadIndices(base)
   /** switch (this.profile.panelNormal) { case 'facing': return {x: Math.sin(panel.rotY), y: 0, z: Math.cos(panel.rotY)};
    *  default: throw unsupportedStrategy('mesh.panelNormal', ...) }  (4698-4699; only the OBJ profile defines panelNormal) */
@@ -1065,8 +1070,8 @@ export class LEDMaterialFactory {   // the ONLY constructor of wall materials (l
    *  ledSim: ledTiles.tiled(section.ledX, section.ledY, section.color); else colour (as section()) */
   panel(section, sectionIndex, globalCol, row)
 
-  /** private: the `side` of every wall material (the LEGACY_SITES site `LEDMaterialFactory.js#side`).
-   *  LEGACY(B-H1): DoubleSide conceals the inverted winding.
+  /** private: the `side` of every wall material. DoubleSide is a design choice since 08 P2-2a (B-H1 fixed: the strips
+   *  are wound counter-clockwise toward the stage; the orbit can go behind the wall), so the method has no tag.
    *  switch (Strategies.mesh.viewport.side) { case 'double': return THREE.DoubleSide;
    *    default: throw unsupportedStrategy('mesh.viewport.side', Strategies.mesh.viewport.side) } */
   #side()
@@ -2466,8 +2471,8 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 
 | Key = Phase-1 value | Bug | Preserved behaviour | Read by (exact read; the statement is in the module's section-3 entry) | How read (1.5) | The later fix |
 |---|---|---|---|---|---|
-| `mesh.viewport.winding = 'legacy-cw'` | B-H1 | Combined/section strips wound `(bl, tl, tr)/(bl, tr, br)` (clockwise from +Z) against +Z normals | viewport `WallMeshBuilder` (`LEDWallView`'s builder): `sectionGrid` passes `this.profile.winding` to `quadIndices` | switch in `quadIndices` | add `'ccw'` and flip (Feature 1); panel mode (PlaneGeometry) is already correct |
-| `mesh.viewport.side = 'double'` | B-H1 | DoubleSide hides the winding | `LEDMaterialFactory.#side()`: `Strategies.mesh.viewport.side` | switch | optional `'front'` after the winding fix |
+| `mesh.viewport.winding = 'ccw'` (08 P2-2a; Phase-1 value `'legacy-cw'`, kept as a case for `LegacyProfiles`) | B-H1 (fixed) | Landed: combined/section strips wound `(bl, br, tr)/(bl, tr, tl)`, counter-clockwise toward the stage (08 6.4); `'legacy-cw'` wound them `(bl, tl, tr)/(bl, tr, br)` (clockwise from +Z) against +Z normals | viewport `WallMeshBuilder` (`LEDWallView`'s builder): `sectionGrid` passes `this.profile.winding` to `quadIndices` | switch in `quadIndices` | landed in 08 P2-2a (invariance gate, empty `expect`: the same diagonal and unlit DoubleSide materials keep coverage and plain colours; the reviewed `mayChange` screenshots are the wireframe line directions, 1-level UV-interpolation rounding on textured walls and one edge-on pixel, 08 6.4); panel mode (`PlaneGeometry`) was already correct |
+| `mesh.viewport.side = 'double'` | – (design choice since 08 P2-2a) | DoubleSide: the orbit can go behind the wall (it no longer hides a winding defect, B-H1 is fixed) | `LEDMaterialFactory.#side()`: `Strategies.mesh.viewport.side` | switch | optional `'front'` (Feature 1 F1-5 with its back shell, or Feature 5) |
 | `mesh.viewport.normals = 'right-panel'` | B-L3 | Vertex normal = panel to the right; last column copies the previous | `WallMeshBuilder.sectionGrid`: `opts.normals ?? this.profile.normals` | switch | `'averaged'` |
 | `mesh.viewport.combinedUV = 'atlas-u-full-v'` | B-M5 | Combined V = row/rows for every section | `WallMeshBuilder.combinedGrid`: `this.profile.combinedUV` | switch | `'atlas-pixel-accurate'` / `'per-section'` (Feature 4) |
 | `mesh.obj.winding = 'legacy-cw'` | B-H2 | OBJ strip faces and panel faces `v, v+3, v+2 / v, v+2, v+1` | OBJ `WallMeshBuilder`: `sectionGrid` and `panelQuadIndices` pass `this.profile.winding` to `quadIndices` | switch in `quadIndices` | flip with the viewport (Feature 1) |
@@ -2504,7 +2509,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 
 | Bug | Preserved behaviour (behaviour-inventory id) | Single site | Fix lands as |
 |---|---|---|---|
-| B-H1 | Viewport strip winding vs normals (C-5) | `Strategies.mesh.viewport.winding/side` | flip profile (Feature 1) |
+| B-H1 | Viewport strip winding vs normals (C-5) | `Strategies.mesh.viewport.winding` (fixed; `side` stays `'double'` as a design choice) | Landed in 08 P2-2a (`mesh.viewport.winding = 'ccw'`; `mesh.viewport.side = 'double'` stays as a design choice; no tag site) |
 | B-H2 | Export winding, constant/contradicting normals, no doubleSided (R-5, S-2) | `Strategies.mesh.obj/gltf` | flip profiles + normal writers |
 | B-H3 | glTF RangeError; ZIP dies silently (S-3, U-4) | `GltfExporter`'s default encoder; `ProjectIO` exports (fixed; `Strategies.gltfBase64` retired) | Landed in 08 P2-1a (`chunkedBase64` encoder; `ProjectIO.#runExport` reports every export failure; no tag site) |
 | B-H4 | Preview off in pilot: alert, stuck in pilot (O-8) | `CameraController.setPreviewEnabled` (order) + `PilotController.toggle` guard | exit pilot before clearing `enabled` |
@@ -2589,7 +2594,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/geometry/WallLayout.js#computeWallLayout` | B-L1 |
 | `js/geometry/WallLayout.js#flatEdges` | B-M15 |
 | `js/geometry/WallLayout.js#framingBounds` | B-L2, B-M10 |
-| `js/geometry/WallMeshBuilder.js#quadIndices` | B-H1, B-H2 |
+| `js/geometry/WallMeshBuilder.js#quadIndices` | B-H2 |
 | `js/geometry/WallMeshBuilder.js#sectionGrid` | B-L3, B-L15, B-L8 |
 | `js/geometry/WallMeshBuilder.js#combinedGrid` | B-M5 |
 | `js/geometry/TextureAtlas.js#panelPxPerLed` | B-M16 |
@@ -2602,7 +2607,6 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/io/GltfExporter.js#addMesh` | B-H2, B-M7 |
 | `js/render/SceneManager.js#addHelper` | B-M11 |
 | `js/render/LEDWallView.js#rebuild` | B-L8 |
-| `js/render/LEDMaterialFactory.js#side` | B-H1 |
 | `js/render/LEDMaterialFactory.js#combined` | B-M5, B-L18 |
 | `js/render/textures/LEDPixelTextureFactory.js#tile` | B-L18, B-L20 |
 | `js/render/textures/PanelIdRenderer.js#panelCanvas` | B-L19, B-M16 |
@@ -2641,7 +2645,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `css/09-viewport-tools.css` (header comment; documentation-only) | B-L24 |
 | `index.html` (markup, untagged; documentation-only) | B-L36 |
 
-Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14) and B-L5 (08 P2-1b; its only site was the tag in `GltfExporter.addMesh`, which keeps B-H2 and B-M7) and B-L4 (08 P2-1c; its sites were the tags in `ProjectIO.exportPanelIds`, which has no tag left, and `ProjectIO.exportZIP`, which keeps B-L14; its viewport half never had a tag and is fixed by 08 P2-1d). B-L24 has two documentation-only entries, one per stylesheet: the header comment of each of the two stylesheets carries a paragraph `Legacy note B-L24 (documentation-only, preserved): ...`, which does not use the reserved token `LEGACY(` (CSS is untagged; rule 6 scans only `js/`); grep `B-L24` or `Legacy note` to find it.
+Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14) and B-L5 (08 P2-1b; its only site was the tag in `GltfExporter.addMesh`, which keeps B-H2 and B-M7) and B-L4 (08 P2-1c; its sites were the tags in `ProjectIO.exportPanelIds`, which has no tag left, and `ProjectIO.exportZIP`, which keeps B-L14; its viewport half never had a tag and is fixed by 08 P2-1d) and B-H1 (08 P2-2a; its sites were the tags in `WallMeshBuilder.quadIndices`, which keeps B-H2 until 08 P2-2d, and `LEDMaterialFactory.side`, whose `'double'` value is now a design choice). B-L24 has two documentation-only entries, one per stylesheet: the header comment of each of the two stylesheets carries a paragraph `Legacy note B-L24 (documentation-only, preserved): ...`, which does not use the reserved token `LEGACY(` (CSS is untagged; rule 6 scans only `js/`); grep `B-L24` or `Legacy note` to find it.
 
 How rule 6 reads these rows (as implemented in `tests/static/check.mjs`): the comparison is per file, so a tag may sit in a private helper that only the named method calls (for example `ProjectSerializer.#readV1` for `#read`, `ObjExporter.#writeCombined` / `#stripNormalLine` for `#write`, `GltfExporter.#writeCombined` for `#write`); a tag wrapped across JSDoc continuation lines counts as one tag (placeholders are still rejected); and a row whose `js/` file does not exist is reported, so a typo in a site path cannot bypass the check.
 
@@ -2664,7 +2668,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 
 | Feature | What exists after Phase 1 | What the feature adds |
 |---|---|---|
-| **1. Normals flipped by default + normals debug view** | One winding function (`quadIndices`) and per-consumer profiles in `Strategies.mesh` used by the viewport, OBJ and glTF; `side` in the viewport profile; `LEDWallView.meshes()`; `WALL_REBUILT`; `SceneManager.addHelper` + `LAYERS`; `ResourceTracker`; the toolbar button pattern. | `'ccw'` winding and `'averaged'` normals in `WallMeshBuilder` (flip all three profiles in one commit, re-baseline exports); OBJ per-vertex `vn` and glTF NORMAL branches; `render/NormalsDebugView.js` (LineSegments from attributes x `matrixWorld`, subscribes to `WALL_REBUILT`, registered as a helper, disposed with a tracker); a `#toggle-normals` view button and a `.view-btn.active` rule (B-L24). |
+| **1. Normals flipped by default + normals debug view** | One winding function (`quadIndices`) and per-consumer profiles in `Strategies.mesh` used by the viewport, OBJ and glTF; `side` in the viewport profile; `LEDWallView.meshes()`; `WALL_REBUILT`; `SceneManager.addHelper` + `LAYERS`; `ResourceTracker`; the toolbar button pattern. | The flips are Phase-2 commits 08 P2-2a–d, one consumer per commit (`docs/improvements/08-bugfix-roadmap.md`): `'ccw'` winding and `'averaged'` normals in `WallMeshBuilder`, OBJ per-vertex `vn` and the glTF `NORMAL` attribute. Feature 1 adds the debug view and options only: `render/NormalsDebugView.js` (LineSegments from attributes x `matrixWorld`, subscribes to `WALL_REBUILT`, registered as a helper, disposed with a tracker); a `#toggle-normals` view button and a `.view-btn.active` rule (B-L24). |
 | **2. Section selection, property editing, per-section offsets** | `WallSection` with stable ids; `SectionLayout.postTransform` hook (null, never fed back into the cursor); mesh tags `userData.{kind, mode, sectionId, sectionIndex, col, row}` and combined `sectionRanges`; `LEDWallView.sectionNodes()`; the `Selectable` registry and generic gizmo; field rule tables; `WallController` as the single writer of section state; mirror events to cards; `ProjectSerializer.read` version-dispatch point. | `WallSection.offset {position, rotation}` + rules; `layoutProject` builds per-section `postTransforms`; the builder applies them to positions/normals; `LEDWallView` adds per-section groups (section/panel) or bakes (combined) and a transform-only update path; `WallSectionSelectable` (pick by `userData` / `faceIndex` -> `sectionRanges`); select-on-click (B-M14 fix); a `section:changed` event emitted by `WallController` so cards, an inspector and the UV viewer update reactively; safe distance per section instead of `flatEdges()`; schema v2. Exporters follow automatically through the layout. |
 | **3. Configurable pivot + offset** | `WallPivot`/`PivotMode` in `Wall` (identity); `WallLayout.firstEdge/lastEdge/bounds()/pivotPoint(mode)` including "middle of entire wall" = midpoint of the first section's first edge and the last section's last edge on the floor; the single `framingBounds` switch for the four flat-bounds consumers; the single `layoutProject()` entry. | A baked translation in `layoutProject`: stage frame `−(P.x, 0, P.z)`, export frame `−P`, P = anchor + offset (1.4). The raw walk is translated first, and spec 02's `applySectionOffsets(out)` builds its section matrices from the translated layout (07 C32). **No wall root transform, ever:** the identity `wallGroup` transform is a unit-tested invariant (03 §5.1, §5.9 #2). `ui/PivotPanel`; a pivot Selectable + marker view; switch `framingBounds` to pivot/bounds (fixes B-L2); optional re-expression of camera/prop poses; schema v2. |
 | **4. Clean 0..1 UVs + UV viewer/editor** | UV strategies in one builder function per consumer; `TextureAtlas` as the single source of offsets, widths and start columns (yields per-section `uvRects`); `PanelIdRenderer.sectionCanvas()` for the viewer background; mesh tags; the selection registry; `PreviewWindow`'s resize handle as the floating-panel pattern. | `'per-section'` / `'atlas-pixel-accurate'` strategies (fix B-M5/B-M6) and a baked per-section `uvTransform`; glTF TEXCOORD_0; `ui/UVViewer.js` (2D canvas; subscribes to `SELECTION_CHANGED` and `WALL_REBUILT`); `ui/FloatingPanel.js` extracted from `PreviewWindow`. |
@@ -2775,3 +2779,10 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 **08 P2-1e, B-L5 landed for the viewport** (manifest `tests/regression/expected/P2-1e.json`, an invariance gate: empty `expect`; the viewport index width had no tag, 08 2.2 observation):
 - 3.7: `LEDWallView`'s combined and section builders pass `indexAttribute(indices)`, a `THREE.Uint32BufferAttribute` once the largest index reaches 65,535 (`indexWidth`, `maxIndexOf`), else the plain array as before; no harness wall reaches it, so every output is unchanged. 2.3: `materials.test.mjs` covers 65,535 and 65,536 vertices in both modes.
 - 8.1, 8.2: the B-L5 row records both landings (P2-1b glTF, P2-1e viewport). With P2-1e the P2-1 batch (B-H3, B-L5, B-L4) is complete.
+
+**08 P2-2a, B-H1 landed** (manifest `tests/regression/expected/P2-2a.json`, an invariance gate: empty `expect`; reviewed `mayChange` screenshots: `toggles/01_wireframe` for its line directions, the textured-wall screenshots whose UVs are interpolated from the reordered vertices (at most 1 level, a few dozen pixels each) and one edge-on pixel of `toggles/17_view_top`; 08 6.4 is corrected to say so):
+- 1.4: the front-face convention (counter-clockwise seen from the front, normals toward the stage; 08 5.5).
+- 3.3, 8.1: `Strategies.mesh.viewport.winding` is `'ccw'`; `'legacy-cw'` stays a supported case for `LegacyProfiles` (08 5.1 rule 3). `mesh.viewport.side = 'double'` stays as a design choice (08 4.1), and its 8.1 row no longer names a bug.
+- 3.6: `quadIndices` gains `case 'ccw'` (`[bl, br, tr, bl, tr, tl]`; panel quads `[0, 1, 2, 0, 2, 3]`), the same bl-tr diagonal as `'legacy-cw'`, whose tag keeps only B-H2 until 08 P2-2d. 3.7: `LEDMaterialFactory.#side` loses its tag.
+- 8.2: the B-H1 row is kept with a `Landed` fix cell; 8.3: B-H1 leaves `WallMeshBuilder.js#quadIndices` and the row `LEDMaterialFactory.js#side` is deleted.
+- 9: the Feature 1 row (08 5.5): the flips are the Phase-2 commits 08 P2-2a–d; Feature 1 adds the debug view and options only.

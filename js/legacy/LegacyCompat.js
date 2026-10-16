@@ -39,12 +39,13 @@ function deepFreeze(value) {
  */
 export const Strategies = deepFreeze({
   mesh: {
-    viewport: { winding: 'legacy-cw', normals: 'right-panel', combinedUV: 'atlas-u-full-v', side: 'double' },
+    viewport: { winding: 'ccw', normals: 'right-panel', combinedUV: 'atlas-u-full-v', side: 'double' },
     obj:      { winding: 'legacy-cw', normals: 'none', stripNormals: 'constant-z',
                 combinedUV: 'per-section-overlap', panelNormal: 'facing' },
     gltf:     { winding: 'legacy-cw', normals: 'none', attributes: ['POSITION'], indexType: 'auto',
                 doubleSided: 'omit' },             // 'omit' = the material object has NO doubleSided key
-  },                                               // gltf.indexType: 'auto' since 08 P2-1b (B-L5), Phase-1 'uint16'
+  },                                               // gltf.indexType: 'auto' since 08 P2-1b (B-L5), Phase-1 'uint16';
+                                                   // viewport.winding: 'ccw' since 08 P2-2a (B-H1), Phase-1 'legacy-cw'
   exportCombinedColor: 'first-section',            // B-L6
   mtlTextureNaming: 'index',                       // B-M2
   zipTextureNaming: 'sanitized-name',              // B-L14 (no de-duplication)
@@ -123,7 +124,7 @@ export const legacyHtml = (s) => s;
  */
 const QUIRKS = deepFreeze({
   'B-H1': ['Viewport strip winding vs normals (C-5)',
-    'flip profile (Feature 1)'],
+    'Landed in 08 P2-2a (`mesh.viewport.winding = \'ccw\'`; `mesh.viewport.side = \'double\'` stays as a design choice; no tag site)'],
   'B-H2': ['Export winding, constant/contradicting normals, no doubleSided (R-5, S-2)',
     'flip profiles + normal writers'],
   'B-H3': ['glTF RangeError; ZIP dies silently (S-3, U-4)',
@@ -263,7 +264,7 @@ const TAG_SITES = deepFreeze([
   ['js/geometry/WallLayout.js#computeWallLayout', ['B-L1']],
   ['js/geometry/WallLayout.js#flatEdges', ['B-M15']],
   ['js/geometry/WallLayout.js#framingBounds', ['B-L2', 'B-M10']],
-  ['js/geometry/WallMeshBuilder.js#quadIndices', ['B-H1', 'B-H2']],
+  ['js/geometry/WallMeshBuilder.js#quadIndices', ['B-H2']],
   ['js/geometry/WallMeshBuilder.js#sectionGrid', ['B-L3', 'B-L15', 'B-L8']],
   ['js/geometry/WallMeshBuilder.js#combinedGrid', ['B-M5']],
   ['js/geometry/TextureAtlas.js#panelPxPerLed', ['B-M16']],
@@ -276,7 +277,6 @@ const TAG_SITES = deepFreeze([
   ['js/io/GltfExporter.js#addMesh', ['B-H2', 'B-M7']],
   ['js/render/SceneManager.js#addHelper', ['B-M11']],
   ['js/render/LEDWallView.js#rebuild', ['B-L8']],
-  ['js/render/LEDMaterialFactory.js#side', ['B-H1']],
   ['js/render/LEDMaterialFactory.js#combined', ['B-M5', 'B-L18']],
   ['js/render/textures/LEDPixelTextureFactory.js#tile', ['B-L18', 'B-L20']],
   ['js/render/textures/PanelIdRenderer.js#panelCanvas', ['B-L19', 'B-M16']],
