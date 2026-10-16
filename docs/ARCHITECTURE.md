@@ -59,7 +59,7 @@ Phase 1 turns the 3,800-line inline script and the 860-line inline stylesheet in
       io/        pure writers/readers: ProjectSerializer (v1), ObjExporter, GltfExporter          (THREE-free, DOM-free)
       geometry/  pure: WallLayout, WallMeshBuilder, TextureAtlas, PanelNaming, NormalLines        (THREE-free, DOM-free)
       domain/    pure entities: Project, Wall, WallSection, CineCamera, Prop, LogoLibrary, ...     (THREE-free, DOM-free)
-      core/ EventBus + Events, typingTarget, renderOrder     legacy/ LegacyCompat (Strategies, legacy helpers, LEGACY_SITES)     theme/ Theme constants
+      core/ EventBus + Events, typingTarget, renderOrder     legacy/ LegacyCompat (Strategies, legacy helpers, LEGACY_SITES)     theme/ Theme constants, ThemeBridge (pure)
       vendor/ three.js, jszip.js shims (window.THREE / window.JSZip)
 ```
 
@@ -199,6 +199,10 @@ js/
                                                  legacyHtml), unsupportedStrategy, LEGACY_SITES
   theme/
     Theme.js                               WP3   SceneTheme, CanvasTheme, UiColors, Palette, Brand, Theme (ThemeBridge-ready shape)
+    ThemeBridge.js                         06 T2  buildTheme(base, readVar, {warn, bindFonts}): a Theme-shaped, deep-frozen
+                                                 theme whose colour (from 06 T5 also font) leaves come from CSS custom
+                                                 properties; COLOR_BINDINGS, FONT_BINDINGS, UNBRANDED, BIND_FONTS_DEFAULT,
+                                                 parseHexColor, parseCssColor (pure, imports nothing; wired in App by 06 T3)
   domain/
     WallSection.js                         WP3   WallSection entity (legacy field names, field rules, derived labels), MM_TO_M
     Wall.js                                WP3   Wall (ordered sections, id allocator, totals, legacy flat bounds), WallPivot, PivotMode
@@ -365,6 +369,10 @@ tests/
     materials.test.mjs                     08 P2-1d  PanelIdRenderer sizes and null canvases, LEDMaterialFactory's colour
                                                  fallback and its warning, LEDWallView's index attribute (08 P2-1e)
                                                  (fake THREE installed as window.THREE)
+    theme.test.mjs                         06 T2  theme/ThemeBridge (06 8.1): U1 colour parsing, U2 the bridged theme's
+                                                 shape, leaf types, freezing (functions shared, never frozen) and the
+                                                 --scene-frame override (AC 8), U3 missing / malformed tokens (the fallback
+                                                 leaf, one warning per variable)
   fixtures/
     normals-max-wall.json                  01 T1  the largest importable wall (200 sections of 50 x 20, v1, combined) for the
                                                  manual normals cap timing (01 8.3); written by tools/make-cap-wall.mjs
@@ -594,6 +602,27 @@ export const Brand = Object.freeze({
 export const Theme = Object.freeze({ scene: SceneTheme, canvas: CanvasTheme, ui: UiColors, palette: Palette, brand: Brand });
 ```
 (All nested objects and arrays are frozen, through a module-private `deepFreeze` of `Theme.js` itself, because `theme/` may not import `legacy/`; the three font-helper functions of `CanvasTheme` are values and stay unfrozen. The OBJ `mtllib led-wall-config.mtl` line is written from `Brand.files.mtl`.)
+
+#### `js/theme/ThemeBridge.js` (06 T2; docs/improvements/06-morph-branding.md 5.5, 6.2)
+
+Pure (no DOM, no THREE, imports nothing; layer `theme`). It builds an object of `Theme`'s exact shape whose colour leaves (and, once `BIND_FONTS_DEFAULT` is `true` in 06 T5, the canvas and safe-zone font leaves) come from CSS custom properties read through an injected reader; every other leaf is copied from the base theme. 06 D7: the CSS tokens are the runtime source, `Theme.js` holds the identical fallbacks, and a permanent colour change is the token and its fallback in one commit, kept equal by the U4 parity test (06 T3).
+
+```js
+export const COLOR_BINDINGS   // frozen [path, cssVar, kind] rows; kind 'num' (0xrrggbb), 'hex' ('#rrggbb'), 'rgb01' ([r, g, b] / 255),
+                              // 'css' ('#rrggbb' or canonical 'rgba(r, g, b, a)'); every path is an existing Theme leaf of that type
+export const FONT_BINDINGS    // frozen [path, '--font-ui' | '--font-mono', make(fontFamilyList)] rows (canvas fonts, safe-zone label)
+export const UNBRANDED        // the colour leaves that are functional conventions: lights, person, car, gizmo axes, panel-ID borders
+export const BIND_FONTS_DEFAULT = false;   // flipped to true by 06 T5; App and U4 both omit the option
+export function parseHexColor(raw)   // {hex, num, rgb01} | null; exactly /^#[0-9a-fA-F]{6}$/ after trim; rgb01 = parseInt(hh, 16) / 255
+export function parseCssColor(raw)   // '#rrggbb' | 'rgba(r, g, b, a)' | null
+/** Fresh objects and arrays, deep-frozen; function leaves shared with base by reference and never frozen (base is
+ *  never mutated). Never throws for a missing or malformed token: that leaf keeps the base value, and warn is called
+ *  once per variable name with `ThemeBridge: ${name} is missing or invalid (${JSON.stringify(raw)}); using the Theme.js
+ *  fallback`. A binding path missing from base is a table error and throws. */
+export function buildTheme(base, readVar, { warn = () => {}, bindFonts = BIND_FONTS_DEFAULT } = {})
+```
+
+The 06 T2 rows bind the legacy scene, canvas and status colours (`scene.background`, `grid.centerColor`, `grid.color`, `frame`, `cameraBody.color`, `frustumLines.color` and `frustumFill.color` (both `--scene-frustum`), `safeZone.wallColor` / `thresholdColor` (`rgb01`), `safeZone.lineColor`, `safeZone.labelColor`, `canvas.background`, `ui.status.*`). The keys that later steps add land with their rows (06 T5: `frameOnLight`, `cameraBody.outlineColor`, `frustumLines.haloColor`; the sibling specs' keys of 06 5.12).
 
 ### 3.5 Domain (pure)
 
@@ -2954,7 +2983,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 | **3. Configurable pivot + offset** | `WallPivot`/`PivotMode` in `Wall` (identity); `WallLayout.firstEdge/lastEdge/bounds()/pivotPoint(mode)` including "middle of entire wall" = midpoint of the first section's first edge and the last section's last edge on the floor; the single `framingBounds` switch for the four flat-bounds consumers; the single `layoutProject()` entry. | A baked translation in `layoutProject`: stage frame `−(P.x, 0, P.z)`, export frame `−P`, P = anchor + offset (1.4). The raw walk is translated first, and spec 02's `applySectionOffsets(out)` builds its section matrices from the translated layout (07 C32). **No wall root transform, ever:** the identity `wallGroup` transform is a unit-tested invariant (03 §5.1, §5.9 #2). `ui/PivotPanel`; a pivot Selectable + marker view; switch `framingBounds` to pivot/bounds (fixes B-L2); optional re-expression of camera/prop poses; schema v2. |
 | **4. Clean 0..1 UVs + UV viewer/editor** | UV strategies in one builder function per consumer; `TextureAtlas` as the single source of offsets, widths and start columns (yields per-section `uvRects`); `PanelIdRenderer.sectionCanvas()` for the viewer background; mesh tags; the selection registry; `PreviewWindow`'s resize handle as the floating-panel pattern. | `'per-section'` / `'atlas-pixel-accurate'` strategies (fix B-M5/B-M6) and a baked per-section `uvTransform`; glTF TEXCOORD_0; `ui/UVViewer.js` (2D canvas; subscribes to `SELECTION_CHANGED` and `WALL_REBUILT`); `ui/FloatingPanel.js` extracted from `PreviewWindow`. |
 | **5. HDRI projection (+ reflective car)** | `DisplaySettings.content` enum (`'color' \| 'ledSim' \| 'panelIds'`, ready for `'hdri'`); `LEDMaterialFactory` as the only wall-material constructor; `ResourceTracker` for HDR/PMREM disposal; `SceneManager` owns the main renderer and the helper registry; the second renderer is encapsulated in `PreviewWindow`; `PropView` base with `buildMesh()`; `CineCamera` lens math for the default projection point. | `ContentMode.HDRI` + `render/HdriProjectionMaterial.js` (wall and dome); `ui/HdriPanel.js` + the projection-point Selectable (`'hdri-point'`, kind `'projector'`, 07 C36); the second renderer is replaced by spec 07's `PreviewPass` (scissor rendering, R1/R2; `SceneManager` keeps only `setEnvironment` and `setPunctualLightScale`), which excludes `LAYERS.HELPERS` (B-M9/B-M11, first fixed by 08 P2-10 or 07 R1/R2, 07 C31); the backdrop dome on `LAYERS.ENVIRONMENT`; `GltfCarPropView extends CarPropView`; colour management in `render/ColorManagement.js` as per-material patches (Option L on r128; Option G after 07 U3b); loaders from 07's `vendor/three-addons.js` factories (spec 05 §5.11 #17). |
-| **6. Morph branding** | `css/02-tokens.css` holds every `:root` token; `Theme.js` holds every scene/canvas colour, font, palette and export string, and every consumer receives it by injection from `App`; header and watermark markup in one place in `index.html`. | Role-based tokens; `theme/ThemeBridge.js` reading CSS variables into an object of `Theme`'s shape (one line in `App`); new `Brand` strings and filenames (+ a JSON `generator` field in v2); Morph logo SVG, favicon, valid author meta; inline styles -> classes; card swatches from `Palette`; re-baseline `ui_visual` and exports separately. Gizmo axis colours stay XYZ = RGB. Landed so far (docs/improvements/06-morph-branding.md 8.4): T1 (the static inline styles of `index.html` and the two panel templates became the classes of `css/99-utilities.css`, linked last; dead CSS removed; `css-slices.mjs --report-only`; static rule 12; `compare.mjs --ignore-keys`). |
+| **6. Morph branding** | `css/02-tokens.css` holds every `:root` token; `Theme.js` holds every scene/canvas colour, font, palette and export string, and every consumer receives it by injection from `App`; header and watermark markup in one place in `index.html`. | Role-based tokens; `theme/ThemeBridge.js` reading CSS variables into an object of `Theme`'s shape (one line in `App`); new `Brand` strings and filenames (+ a JSON `generator` field in v2); Morph logo SVG, favicon, valid author meta; inline styles -> classes; card swatches from `Palette`; re-baseline `ui_visual` and exports separately. Gizmo axis colours stay XYZ = RGB. Landed so far (docs/improvements/06-morph-branding.md 8.4): T1 (the static inline styles of `index.html` and the two panel templates became the classes of `css/99-utilities.css`, linked last; dead CSS removed; `css-slices.mjs --report-only`; static rule 12; `compare.mjs --ignore-keys`), T2 (`theme/ThemeBridge.js`, pure and not wired, with U1-U3). |
 
 ---
 
@@ -3128,4 +3157,9 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 2.1: `css/99-utilities.css`, linked last (07 C52's link order), holds the classes that replaced the static inline styles; the dead `.grid-lines` (07, with its commented-out element) and `.section-color-0..7` (10) are deleted; `css-slices.mjs` runs `--report-only` (07 S7).
 - 2.2, 3.11: the `SectionListPanel` template gives the offset hint `curve-hint curve-hint--small`; `SectionLogosPanel` sets `div.className = 'logo-row'` and its template uses `logo-row__title`, `logo-row__label` and `logo-row__input`. The legacy-parity tests apply the same declared edits (`TEMPLATE_EDITS`) to the legacy source, so every other byte and DOM write is still compared.
 - 2.3, 10: static rule 12 (06 R-B2: inline styles of `index.html` declare only `display`, `width`, `height`, without tokens or colour literals) with `index.html` fixtures in `good/` and `bad/`; `css-slices.mjs --report-only` in the static gate and in CI; `compare.mjs --ignore-keys` (06 8.3) and its tests.
+- 9: Feature 6's landed steps.
+
+**06 T2, ThemeBridge without wiring (docs/improvements/06-morph-branding.md 5.5, 6.2, 8.4)** (manifest `tests/regression/expected/F6-T2.json`, an invariance gate: empty `expect`; nothing imports the new module until 06 T3):
+- 1.3, 2.2, 3.4: `theme/ThemeBridge.js` (pure, layer `theme`, imports nothing): `COLOR_BINDINGS` (the legacy scene, canvas and status colours), `FONT_BINDINGS`, `UNBRANDED`, `BIND_FONTS_DEFAULT = false`, `parseHexColor`, `parseCssColor` and `buildTheme`, whose `deepFreeze` skips functions so the shared `CanvasTheme` font helpers stay unfrozen.
+- 2.3: `tests/unit/theme.test.mjs` (U1-U3, including the `--scene-frame` override of 06 AC 8).
 - 9: Feature 6's landed steps.
