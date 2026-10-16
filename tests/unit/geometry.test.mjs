@@ -16,7 +16,7 @@ import { Wall, PivotMode } from '../../js/domain/Wall.js';
 import { Project } from '../../js/domain/Project.js';
 import { LegacyProfiles, Strategies, unsupportedStrategy } from '../../js/legacy/LegacyCompat.js';
 import { computeWallLayout, layoutProject, framingBounds, SectionLayout, WallLayout } from '../../js/geometry/WallLayout.js';
-import { quadIndices, WallMeshBuilder } from '../../js/geometry/WallMeshBuilder.js';
+import { quadIndices, WallMeshBuilder, maxIndexOf, indexWidth } from '../../js/geometry/WallMeshBuilder.js';
 import { computeAtlas, sectionPxPerLed, panelPxPerLed } from '../../js/geometry/TextureAtlas.js';
 import {
   columnLabel, panelLabel, exportSectionName, exportPanelName, sanitizeFilename, zipTextureFileName, mtlTextureFile,
@@ -723,6 +723,44 @@ describe('quadIndices and the builder profiles', () => {
     const gs = obj.sectionGrid(str);
     assert.equal(gs.vertexAdvance, 101 * 2);
     assert.deepEqual(gs.indices.slice(0, 6), [0, 101, 102, 0, 102, 1]);
+  });
+});
+
+describe('index width (B-L5, 08 6.2)', () => {
+  /** One flat section of cols x rows panels: (cols + 1) * (rows + 1) grid vertices. */
+  const grid = (cols, rows) => {
+    const section = new WallSection({ id: 0, name: 'Big', panelCols: cols, panelRows: rows, panelWidth: 500, panelHeight: 500,
+      ledX: 8, ledY: 8, curveIntensity: 0, angleOffset: 0, color: '#00f0ff' });
+    return new WallMeshBuilder(Strategies.mesh.gltf).sectionGrid(computeWallLayout([section]).sections[0]);
+  };
+
+  test("indexWidth: 'uint32' at or above 65,535 (the 5123 restart value), 'uint16' below", () => {
+    assert.equal(indexWidth(65534), 'uint16');
+    assert.equal(indexWidth(65535), 'uint32');
+    assert.equal(indexWidth(65536), 'uint32');
+    assert.equal(indexWidth(0), 'uint16');
+    assert.equal(indexWidth(-Infinity), 'uint16', 'empty index array');
+    assert.equal(indexWidth(4294967294), 'uint32');
+  });
+
+  test('maxIndexOf: a loop (no spread), NaN skipped, -Infinity for []', () => {
+    assert.equal(maxIndexOf([]), -Infinity);
+    assert.equal(maxIndexOf([3, NaN, 7, 1]), 7);
+    assert.equal(maxIndexOf(new Uint32Array([5, 70000, 2])), 70000);
+    const big = new Array(2000000).fill(1);
+    big[1234567] = 99;
+    assert.equal(maxIndexOf(big), 99, 'two million entries (a spread would overflow the stack)');
+  });
+
+  test('grids of exactly 65,535 and 65,536 vertices pick Uint16 and Uint32', () => {
+    const below = grid(254, 256);     // 255 x 257 = 65,535 vertices, largest index 65,534
+    assert.equal(below.positions.length / 3, 65535);
+    assert.equal(maxIndexOf(below.indices), 65534);
+    assert.equal(indexWidth(maxIndexOf(below.indices)), 'uint16');
+    const at = grid(255, 255);        // 256 x 256 = 65,536 vertices, largest index 65,535
+    assert.equal(at.positions.length / 3, 65536);
+    assert.equal(maxIndexOf(at.indices), 65535);
+    assert.equal(indexWidth(maxIndexOf(at.indices)), 'uint32');
   });
 });
 

@@ -1,0 +1,10 @@
+{
+  "commit": "P2-1b",
+  "bugs": ["B-L5"],
+  "expect": [],
+  "mayChange": [
+    { "output": "large_wall/final__export-zip__led-wall-export.zip", "change": "modified",
+      "reason": "the bistable export-PNG pixels documented by P2-0b and seen in the P2-5a gate: textures/L3_PanelIDs.png (1970, 1003) and L4_PanelIDs.png (2026, 858), 1 level, 1 px each (3840x1920); this commit changes no texture" }
+  ],
+  "notes": "invariance: mesh.gltf.indexType 'auto' picks Uint16 (5123) for every harness glTF, whose largest index is far below 65,535, so every output is unchanged; the Uint32 path is covered by the unit tests at 65,535 / 65,536 / 70,000 vertices"
+}

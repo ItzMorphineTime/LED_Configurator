@@ -41,6 +41,34 @@ export function quadIndices(bl, br, tl, tr, winding = 'legacy-cw') {
 }
 
 /**
+ * The largest value of an index array, found with a loop (no spread: an index array can hold millions of entries).
+ * NaN entries (B-L8 garbage) are skipped, as every comparison with NaN is false; an empty array gives -Infinity.
+ * Side effects: none.
+ * @param {ArrayLike<number>} indices
+ * @returns {number}
+ */
+export function maxIndexOf(indices) {
+  let max = -Infinity;
+  for (let i = 0; i < indices.length; i++) {
+    if (indices[i] > max) max = indices[i];
+  }
+  return max;
+}
+
+/**
+ * The index component width an index buffer needs (08 6.2, B-L5 fixed in 08 P2-1b). glTF 2.0 forbids an index equal
+ * to the maximum of its component type (65,535 for UNSIGNED_SHORT 5123), because it is the primitive-restart value,
+ * which WebGL2 always applies; so 32-bit indices are needed AT or above 65,535, not only above it.
+ * Used by the glTF writer (profile indexType 'auto') and the viewport index attribute (08 P2-1e).
+ * Side effects: none.
+ * @param {number} maxIndex  the largest index (maxIndexOf)
+ * @returns {'uint16'|'uint32'} 'uint32' when maxIndex >= 65535, else 'uint16'
+ */
+export function indexWidth(maxIndex) {
+  return maxIndex >= 65535 ? 'uint32' : 'uint16';
+}
+
+/**
  * Appends the 'right-panel' vertex normal (nx, 0, nz) of grid column `col`: the normal of the panel to the right
  * of the edge; the last column uses the previous edge pair. Verbatim 1607-1625 (== 1723-1739). For panelCols = 0
  * the else-branch reads edges[-1] and throws the legacy TypeError. Module-private.

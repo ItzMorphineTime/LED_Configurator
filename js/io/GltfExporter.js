@@ -9,6 +9,7 @@
  */
 
 import { exportSectionName, exportPanelName } from '../geometry/PanelNaming.js';
+import { maxIndexOf, indexWidth } from '../geometry/WallMeshBuilder.js';
 import { Strategies, unsupportedStrategy } from '../legacy/LegacyCompat.js';
 
 /**
@@ -221,9 +222,20 @@ export class GltfExporter {
     let indexComponentType;
     switch (profile.indexType) {
       case 'uint16':
-        // LEGACY(B-L5): indices are always Uint16 (componentType 5123); above 65,535 vertices they wrap silently.
+        // uint16: Phase-1 behaviour (B-L5: always Uint16, componentType 5123, wrapping above 65,535 vertices), kept
+        // for the LegacyProfiles oracle tests.
         IndexArray = Uint16Array;
         indexComponentType = 5123;
+        break;
+      case 'auto':
+        // 08 P2-1b (B-L5, 08 6.2): Uint32 (5125) as soon as the largest index reaches 65,535, the 5123 restart value.
+        if (indexWidth(maxIndexOf(indices)) === 'uint32') {
+          IndexArray = Uint32Array;
+          indexComponentType = 5125;
+        } else {
+          IndexArray = Uint16Array;
+          indexComponentType = 5123;
+        }
         break;
       default:
         throw unsupportedStrategy('mesh.gltf.indexType', profile.indexType);

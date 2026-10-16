@@ -24,7 +24,8 @@ import { WallSection } from '../../js/domain/WallSection.js';
 import { Project } from '../../js/domain/Project.js';
 import { LegacyProfiles, Strategies, unsupportedStrategy } from '../../js/legacy/LegacyCompat.js';
 import { layoutProject } from '../../js/geometry/WallLayout.js';
-import { WallMeshBuilder } from '../../js/geometry/WallMeshBuilder.js';
+import { WallMeshBuilder, maxIndexOf } from '../../js/geometry/WallMeshBuilder.js';
+import { checkGltfDocument } from '../../tools/check-gltf.mjs';
 import { computeAtlas } from '../../js/geometry/TextureAtlas.js';
 import { zipTextureFileName } from '../../js/geometry/PanelNaming.js';
 import { ProjectSerializer } from '../../js/io/ProjectSerializer.js';
@@ -797,6 +798,82 @@ describe('chunkedBase64 (B-H3, 08 6.1)', () => {
     const gltf = GLTF.write(writeArgs);
     assert.equal(json2(gltf), json2(makeGltf(Strategies.mesh.gltf, nodeBase64).write(writeArgs)));
     assert.equal(Buffer.from(gltf.buffers[0].uri.split(',')[1], 'base64').length, gltf.buffers[0].byteLength);
+  });
+});
+
+describe("glTF index width: mesh.gltf.indexType 'auto' (B-L5, 08 6.2)", () => {
+  /** A project with one flat section of cols x rows panels in meshMode. */
+  const bigProject = (cols, rows, meshMode) => projectOf([new WallSection({ id: 0, name: 'Big', panelCols: cols, panelRows: rows,
+    panelWidth: 500, panelHeight: 500, ledX: 8, ledY: 8, curveIntensity: 0, angleOffset: 0, color: '#00f0ff' })], meshMode);
+  const writeArgs = (project) => ({ sections: project.wall.sections, meshMode: project.meshMode, layout: layoutProject(project) });
+  /** The decoded index array of mesh m (primitive 0) and its component type. */
+  const indicesOf = (doc, m = 0) => {
+    const accessor = doc.accessors[doc.meshes[m].primitives[0].indices];
+    const view = doc.bufferViews[accessor.bufferView];
+    const bytes = Buffer.from(doc.buffers[0].uri.split(',')[1], 'base64');
+    const Ctor = accessor.componentType === 5125 ? Uint32Array : Uint16Array;
+    const copy = bytes.buffer.slice(bytes.byteOffset + view.byteOffset, bytes.byteOffset + view.byteOffset + accessor.count * Ctor.BYTES_PER_ELEMENT);
+    return { componentType: accessor.componentType, indices: Array.from(new Ctor(copy)) };
+  };
+  const builderIndices = (project) => new WallMeshBuilder(Strategies.mesh.gltf).sectionGrid(layoutProject(project).sections[0]).indices;
+
+  test("the production profile is 'auto'; LegacyProfiles keeps 'uint16'", () => {
+    assert.equal(Strategies.mesh.gltf.indexType, 'auto');
+    assert.equal(LegacyProfiles.mesh.gltf.indexType, 'uint16');
+  });
+
+  test('65,535 vertices (largest index 65,534): componentType 5123, byte-identical to the Phase-1 profile', () => {
+    for (const mode of ['combined', 'section']) {
+      const project = bigProject(254, 256, mode);
+      const doc = GLTF.write(writeArgs(project));
+      const { componentType, indices } = indicesOf(doc);
+      assert.equal(componentType, 5123, mode);
+      assert.equal(maxIndexOf(indices), 65534);
+      assert.deepEqual(indices, builderIndices(project));
+      assert.equal(json2(doc), json2(makeGltf(LegacyProfiles.mesh.gltf).write(writeArgs(project))), `${mode}: same text as 'uint16'`);
+    }
+  });
+
+  test('65,536 vertices (largest index 65,535): componentType 5125, indices round-trip exactly', () => {
+    for (const mode of ['combined', 'section']) {
+      const project = bigProject(255, 255, mode);
+      const doc = GLTF.write(writeArgs(project));
+      const { componentType, indices } = indicesOf(doc);
+      assert.equal(componentType, 5125, mode);
+      assert.equal(maxIndexOf(indices), 65535);
+      assert.deepEqual(indices, builderIndices(project));
+      assert.deepEqual(checkGltfDocument(doc), [], 'no 65,535 restart value in a 5123 accessor any more');
+      // The Phase-1 profile wraps nothing here but writes the restart value 65,535 into a 5123 accessor.
+      const legacy = makeGltf(LegacyProfiles.mesh.gltf).write(writeArgs(project));
+      assert.equal(indicesOf(legacy).componentType, 5123);
+      assert.ok(checkGltfDocument(legacy).some((e) => /65535|restart/.test(e)), checkGltfDocument(legacy).join('; '));
+    }
+  });
+
+  test('a synthetic 70,000-vertex combined export: 5125 indices, passes tools/check-gltf (written to tests/unit/out/)', () => {
+    const project = bigProject(279, 249, 'combined');   // 280 x 250 = 70,000 vertices
+    const doc = GLTF.write(writeArgs(project));
+    assert.equal(doc.accessors[0].count, 70000);
+    const { componentType, indices } = indicesOf(doc);
+    assert.equal(componentType, 5125);
+    assert.equal(maxIndexOf(indices), 69999);
+    assert.deepEqual(indices, builderIndices(project));
+    assert.deepEqual(checkGltfDocument(doc), []);
+    // For the manual Khronos glTF-Validator check of 08 8.6 (tests/unit/out/ is git-ignored).
+    const outDir = path.join(HERE, 'out');
+    fs.mkdirSync(outDir, { recursive: true });
+    fs.writeFileSync(path.join(outDir, 'p2-1b-70000-vertices.gltf'), json2(doc));
+  });
+
+  test('every harness config, in every mode, writes the same glTF text as the Phase-1 index type', () => {
+    for (const [label, project] of handPicked()) {
+      for (const mode of MODES) {
+        if (label === 'empty wall' && mode === 'combined') continue;   // the legacy TypeError, in both
+        project.meshMode = mode;
+        assert.equal(json2(GLTF.write(writeArgs(project))), json2(makeGltf(LegacyProfiles.mesh.gltf).write(writeArgs(project))),
+          `${label} [${mode}]`);
+      }
+    }
   });
 });
 

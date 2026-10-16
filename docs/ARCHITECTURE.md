@@ -196,7 +196,8 @@ js/
   geometry/
     WallLayout.js                          WP4   The single cursor walk: computeWallLayout, layoutProject, framingBounds,
                                                  SectionLayout, WallLayout (flatEdges, firstEdge/lastEdge, bounds, pivotPoint)
-    WallMeshBuilder.js                     WP4   quadIndices + WallMeshBuilder: the one owner of winding, normals, UVs, panel quads
+    WallMeshBuilder.js                     WP4   quadIndices + WallMeshBuilder: the one owner of winding, normals, UVs, panel quads;
+                                                 maxIndexOf, indexWidth (index component width, 08 P2-1b)
     TextureAtlas.js                        WP4   computeAtlas (LED totals, px/LED, start columns, x offsets, UV offsets),
                                                  sectionPxPerLed, panelPxPerLed
     PanelNaming.js                         WP4   Column letters, panel labels, export object names, filename sanitising, texture names
@@ -284,7 +285,8 @@ tests/
                                                  since 08 P2-0 the oracle builders are injected with LegacyProfiles.mesh.*
     oracle/legacy-io.mjs                   WP5   verbatim THREE-free copies of generateAllSectionsGeometry, OBJ, glTF, JSON writers
     io.test.mjs                            WP5   byte equality vs oracle (LegacyProfiles.mesh.*, since 08 P2-0) and vs golden
-                                                 harness files (GOLDEN_DIR; Strategies.mesh.*)
+                                                 harness files (GOLDEN_DIR; Strategies.mesh.*); since 08 P2-1b it writes the
+                                                 synthetic 70,000-vertex glTF to the git-ignored unit/out/ (manual validator check)
     camera-hub.test.mjs                    WP7   CameraHub/CameraController pipeline order with spies
     wall-controller.test.mjs               WP9   rebuild policy: run counts and tile-cache clears for the 24 legacy sites
     compare.test.mjs                       08 P2-0  compare.mjs --expect semantics and JITTER on synthetic output trees
@@ -373,9 +375,9 @@ export const Strategies = deepFreeze({
     viewport: { winding: 'legacy-cw', normals: 'right-panel', combinedUV: 'atlas-u-full-v', side: 'double' },
     obj:      { winding: 'legacy-cw', normals: 'none', stripNormals: 'constant-z',
                 combinedUV: 'per-section-overlap', panelNormal: 'facing' },
-    gltf:     { winding: 'legacy-cw', normals: 'none', attributes: ['POSITION'], indexType: 'uint16',
+    gltf:     { winding: 'legacy-cw', normals: 'none', attributes: ['POSITION'], indexType: 'auto',
                 doubleSided: 'omit' },             // 'omit' = the material object has NO doubleSided key
-  },
+  },                                               // gltf.indexType: 'auto' since 08 P2-1b (B-L5), Phase-1 'uint16'
   exportCombinedColor: 'first-section',            // B-L6
   mtlTextureNaming: 'index',                       // B-M2
   zipTextureNaming: 'sanitized-name',              // B-L14 (no de-duplication)
@@ -423,7 +425,7 @@ export const legacyHtml = (s) => s;
  *  Entries whose site is not under js/ (CSS, markup) are documentation-only. */
 export const LEGACY_SITES
 ```
-`deepFreeze` is module-private. `LegacyProfiles` is not a switch: it has no read site in `js/` and is not covered by the `Strategies` rule of the static check; when a Phase-2 commit flips a `Strategies.mesh.*` key, the builder keeps the legacy case for it (08 5.1 rule 3), and global keys (`exportCombinedColor`, ...) cannot be injected, so the oracle cases that depend on a retired global key become explicit expected-value tests in that commit (08 P2-1a retired `gltfBase64` and deleted `legacySpreadBase64`; `tests/unit/io.test.mjs` injects a verbatim copy of that encoder into its oracle exporter). The `behaviour` and `fix` strings of each `LEGACY_SITES` entry are the 8.2 cell texts with only the markdown escape `\|` unescaped to `|` (inline backticks are kept as written); the 8.2 register is stored once and expanded per 8.3 site. Phase 1 implements only the legacy value of every key, except the `dispose.*` keys flipped by the non-observable Phase 1C clean-ups (8.1; a landed fix keeps its 8.2 row and loses its 8.3 rows, so `LEGACY_SITES` no longer lists it). Phase 2 retires keys as 08 4.1 lists them (the key, its switch and its 8.1 row are deleted in the fixing commit); retired so far: `gltfBase64` (08 P2-1a). Every leaf key (arrays such as `mesh.gltf.attributes` and `previewRendererSize` are leaves) has the read site given in section 8.1 and spelled out in that module's entry below; how it is read (switch-and-throw, value, array comparison) follows section 1.5.
+`deepFreeze` is module-private. `LegacyProfiles` is not a switch: it has no read site in `js/` and is not covered by the `Strategies` rule of the static check; when a Phase-2 commit flips a `Strategies.mesh.*` key, the builder keeps the legacy case for it (08 5.1 rule 3), and global keys (`exportCombinedColor`, ...) cannot be injected, so the oracle cases that depend on a retired global key become explicit expected-value tests in that commit (08 P2-1a retired `gltfBase64` and deleted `legacySpreadBase64`; `tests/unit/io.test.mjs` injects a verbatim copy of that encoder into its oracle exporter). The `behaviour` and `fix` strings of each `LEGACY_SITES` entry are the 8.2 cell texts with only the markdown escape `\|` unescaped to `|` (inline backticks are kept as written); the 8.2 register is stored once and expanded per 8.3 site. Phase 1 implements only the legacy value of every key, except the `dispose.*` keys flipped by the non-observable Phase 1C clean-ups (8.1; a landed fix keeps its 8.2 row and loses its 8.3 rows, so `LEGACY_SITES` no longer lists it). Phase 2 retires keys as 08 4.1 lists them (the key, its switch and its 8.1 row are deleted in the fixing commit); retired so far: `gltfBase64` (08 P2-1a); flipped so far: `mesh.gltf.indexType` (`'auto'`, 08 P2-1b). Every leaf key (arrays such as `mesh.gltf.attributes` and `previewRendererSize` are leaves) has the read site given in section 8.1 and spelled out in that module's entry below; how it is read (switch-and-throw, value, array comparison) follows section 1.5.
 
 ### 3.4 `js/theme/Theme.js`
 
@@ -816,6 +818,13 @@ export class WallLayout {
  *  (glTF 4887) and OBJ `v, v+3, v+2 / v, v+2, v+1` = quadIndices(v, v+1, v+3, v+2) (4705-4706).
  *  Feature 1 adds 'ccw' -> [bl, br, tr, bl, tr, tl] (which gives panel [0, 1, 2, 0, 2, 3]). */
 export function quadIndices(bl, br, tl, tr, winding = 'legacy-cw')
+
+/** The largest value of an index array by a loop (no spread); NaN entries are skipped; [] gives -Infinity. (08 P2-1b) */
+export function maxIndexOf(indices)
+/** 08 6.2 (B-L5): maxIndex >= 65535 ? 'uint32' : 'uint16'. 65,535 is the restart value of 5123 (forbidden by glTF 2.0,
+ *  applied by WebGL2), so 32-bit indices start AT it. Read by GltfExporter (indexType 'auto', 08 P2-1b) and LEDWallView
+ *  (08 P2-1e). */
+export function indexWidth(maxIndex)
 
 export class WallMeshBuilder {
   /** @param {object} profile  one of Strategies.mesh.viewport | .obj | .gltf (stored as given; App passes the frozen object).
@@ -1546,12 +1555,13 @@ export class GltfExporter {
    *  meshes: [], accessors: [], bufferViews: [], buffers: [], materials: [] } (this key order).
    *  #addMesh(name, vertices, indices, color) verbatim 4737-4828. Its strategy reads come first (constants; they cannot
    *  throw in Phase 1): `if (profile.attributes.length !== 1 || profile.attributes[0] !== 'POSITION') throw
-   *  unsupportedStrategy('mesh.gltf.attributes', profile.attributes)`; switch (profile.indexType) { case 'uint16': ...;
-   *  default: throw }; switch (profile.doubleSided) { case 'omit': ...; default: throw }. Then: material {name: name +
+   *  unsupportedStrategy('mesh.gltf.attributes', profile.attributes)`; switch (profile.indexType) { case 'uint16': Uint16
+   *  (5123; the Phase-1 case, kept for LegacyProfiles); case 'auto' (08 P2-1b): indexWidth(maxIndexOf(indices)) === 'uint32' ?
+   *  Uint32Array, 5125 : Uint16Array, 5123; default: throw }; switch (profile.doubleSided) { case 'omit': ...; default: throw }. Then: material {name: name +
    *  "_Material", pbrMetallicRoughness: {baseColorFactor: [r, g, b, 1.0], metallicFactor: 0.0, roughnessFactor: 0.8}} with
    *  NO doubleSided key ('omit', LEGACY(B-H2)); Float32Array POSITION view (target 34962) + 4-byte padding;
-   *  min/max from the float64 `vertices`; Uint16Array indices (componentType 5123, 'uint16', LEGACY(B-L5))
-   *  view (target 34963) + padding; accessors; mesh {name, primitives: [{attributes: {POSITION}, indices, material}]}
+   *  min/max from the float64 `vertices`; the index array chosen above (B-L5 fixed in 08 P2-1b: 'auto' writes 5125 once
+   *  the largest index reaches 65,535) view (target 34963) + padding; accessors; mesh {name, primitives: [{attributes: {POSITION}, indices, material}]}
    *  (['POSITION'] only, LEGACY(B-M7)); node {name, mesh}; scenes[0].nodes.push.
    *  combined: per section builder.sectionGrid(sl, {indexBase: indexOffset (starts 0), uv: null}) appended to allVertices /
    *    allIndices with loops; AFTER the loop the colour, LEGACY(B-L6): switch (Strategies.exportCombinedColor) {
@@ -2428,7 +2438,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `mesh.gltf.winding = 'legacy-cw'` | B-H2 | glTF strip indices and panel `[0, 3, 2, 0, 2, 1]` | glTF `WallMeshBuilder`: `sectionGrid` and `panelQuadIndices` pass `this.profile.winding` to `quadIndices` | switch in `quadIndices` | flip (Feature 1) |
 | `mesh.gltf.normals = 'none'` | B-M7 | glTF grids carry no normals | `WallMeshBuilder.sectionGrid` (glTF builder): `this.profile.normals` | switch | NORMAL attribute (with `attributes`) |
 | `mesh.gltf.attributes = ['POSITION']` | B-M7 | No NORMAL, no TEXCOORD_0 | `GltfExporter.#addMesh`: `profile.attributes` | array: equal to `['POSITION']` or throw | add NORMAL / TEXCOORD_0 |
-| `mesh.gltf.indexType = 'uint16'` | B-L5 | Always Uint16 (5123), wraps above 65,535 vertices | `GltfExporter.#addMesh`: `profile.indexType` | switch | `'auto'` (Uint32 when needed) |
+| `mesh.gltf.indexType = 'auto'` (08 P2-1b; Phase-1 value `'uint16'`, kept as a case for `LegacyProfiles`) | B-L5 (fixed) | Landed: Uint32 (5125) as soon as the largest index reaches 65,535 (`indexWidth`, 08 6.2); `'uint16'` always wrote 5123 and wrapped above 65,535 vertices | `GltfExporter.#addMesh`: `profile.indexType` | switch | landed in 08 P2-1b (invariance gate: every harness glTF is unchanged); the viewport index attribute follows in 08 P2-1e |
 | `mesh.gltf.doubleSided = 'omit'` | B-H2 | The material object has **no** `doubleSided` key | `GltfExporter.#addMesh`: `profile.doubleSided` | switch | `'true'` writes `doubleSided: true` |
 | `exportCombinedColor = 'first-section'` | B-L6 | Combined MTL Kd and glTF baseColor from `sections[0]` (TypeError on an empty wall) | `ObjExporter.write` (first statement of the combined branch) and `GltfExporter.write` (after the combined loop): `Strategies.exportCombinedColor`, each at its legacy colour point | switch | per-section materials or COLOR_0 |
 | `mtlTextureNaming = 'index'` | B-M2 | `map_Kd textures/Wall_<i>_PanelIDs.png` | `PanelNaming.mtlTextureFile`: `Strategies.mtlTextureNaming` | switch | use `zipTextureFileName` |
@@ -2479,7 +2489,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | B-L2 | Flat bounds for target/reset/D (H-3, J-1, J-9) | `Strategies.framingBounds` | true bounds / pivot |
 | B-L3 | Right-panel normals | `Strategies.mesh.viewport.normals` | `'averaged'` |
 | B-L4 | No canvas-size guard (`toBlob` null throws, ZIP `data:,`) | `ProjectIO.exportPanelIds/exportZIP` (tag) | budget + message |
-| B-L5 | Uint16 glTF indices | `Strategies.mesh.gltf.indexType` | Uint32 when needed |
+| B-L5 | Uint16 glTF indices | `Strategies.mesh.gltf.indexType` (fixed) | Landed in 08 P2-1b (glTF `mesh.gltf.indexType = 'auto'`, `indexWidth`; no tag site); the viewport index attribute: 08 P2-1e |
 | B-L6 | Combined exports use section 0's colour | `Strategies.exportCombinedColor` | per-section |
 | B-L7 | MTL second download, textures missing | `Strategies.mtlDownloadDelayMs` | bundle |
 | B-L8 | No import validation; unknown mode renders as panels; raw coercion | `Strategies.importValidation` + `LEDWallView.rebuild` dispatch `else` (tag) + `WallSection` constructor (tag) | validator |
@@ -2549,7 +2559,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/io/ProjectSerializer.js#read` | B-L8, B-M4 |
 | `js/io/ObjExporter.js#write` | B-H2, B-M6, B-L6, B-L8 |
 | `js/io/GltfExporter.js#write` | B-L6, B-L8 |
-| `js/io/GltfExporter.js#addMesh` | B-H2, B-M7, B-L5 |
+| `js/io/GltfExporter.js#addMesh` | B-H2, B-M7 |
 | `js/render/SceneManager.js#addHelper` | B-M11 |
 | `js/render/LEDWallView.js#rebuild` | B-L8 |
 | `js/render/LEDMaterialFactory.js#side` | B-H1 |
@@ -2592,7 +2602,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `css/09-viewport-tools.css` (header comment; documentation-only) | B-L24 |
 | `index.html` (markup, untagged; documentation-only) | B-L36 |
 
-Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14). B-L24 has two documentation-only entries, one per stylesheet: the header comment of each of the two stylesheets carries a paragraph `Legacy note B-L24 (documentation-only, preserved): ...`, which does not use the reserved token `LEGACY(` (CSS is untagged; rule 6 scans only `js/`); grep `B-L24` or `Legacy note` to find it.
+Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14) and B-L5 (08 P2-1b; its only site was the tag in `GltfExporter.addMesh`, which keeps B-H2 and B-M7). B-L24 has two documentation-only entries, one per stylesheet: the header comment of each of the two stylesheets carries a paragraph `Legacy note B-L24 (documentation-only, preserved): ...`, which does not use the reserved token `LEGACY(` (CSS is untagged; rule 6 scans only `js/`); grep `B-L24` or `Legacy note` to find it.
 
 How rule 6 reads these rows (as implemented in `tests/static/check.mjs`): the comparison is per file, so a tag may sit in a private helper that only the named method calls (for example `ProjectSerializer.#readV1` for `#read`, `ObjExporter.#writeCombined` / `#stripNormalLine` for `#write`, `GltfExporter.#writeCombined` for `#write`); a tag wrapped across JSDoc continuation lines counts as one tag (placeholders are still rejected); and a row whose `js/` file does not exist is reported, so a typo in a site path cannot bypass the check.
 
@@ -2705,3 +2715,9 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 3.9: `GltfExporter`'s default encoder is the exported `chunkedBase64` (08 6.1); the `gltfBase64` switch is retired (3.3, 8.1 row deleted) and `legacySpreadBase64` is deleted (2.2, 3.3). Every glTF the legacy encoder could write is byte-identical.
 - 3.10, 6.13, 7: every export runs as `#runExport(label, fn)`, which turns a throw or a rejection into the M-EXP-1 alert plus a console warning; `exportPanelIds` awaits `toBlob`; the ZIP body is the private `#writeZip`; `Downloader` takes `win` and revokes the object URL in a 0 ms timer (the 8.4 observation "revoked synchronously" is removed).
 - 8.2: the B-H3 row is kept with a `Landed` fix cell; 8.3: the row `LegacyCompat.js#legacySpreadBase64` is deleted and B-H3 leaves `GltfExporter.js#write` and `ProjectIO.js#exportZIP`.
+
+**08 P2-1b, B-L5 landed for glTF** (manifest `tests/regression/expected/P2-1b.json`, an invariance gate: empty `expect`):
+- 3.3, 8.1: `Strategies.mesh.gltf.indexType` is `'auto'`; `'uint16'` stays a supported case for `LegacyProfiles` (08 5.1 rule 3).
+- 2.2, 3.6: `WallMeshBuilder.js` exports `maxIndexOf(indices)` and `indexWidth(maxIndex)` (08 6.2: 32-bit indices from 65,535 on, the 5123 restart value).
+- 3.9: `GltfExporter.#addMesh` writes Uint32 (5125) indices when the largest index reaches 65,535 and Uint16 (5123) otherwise; every harness glTF keeps 5123 and is unchanged. 2.3: `io.test.mjs` writes the synthetic 70,000-vertex glTF of 08 8.6 to `tests/unit/out/` (git-ignored).
+- 8.2: the B-L5 row is kept with a `Landed` fix cell (the viewport index attribute, untagged, follows in 08 P2-1e); 8.3: B-L5 leaves `GltfExporter.js#addMesh`.

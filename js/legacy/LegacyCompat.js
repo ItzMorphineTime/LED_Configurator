@@ -29,10 +29,12 @@ function deepFreeze(value) {
 
 /**
  * Deep-frozen compatibility switches. Phase 1 implements only these values: the legacy value of every key, except
- * the `dispose.*` keys flipped by the non-observable Phase 1C clean-ups (ARCHITECTURE.md 8.1). Each leaf key is read at
- * the single site named in ARCHITECTURE.md 8.1; enumerated keys are read with switch-and-throw, the numeric
- * keys and the `dispose.*` booleans are used as values, `mesh.gltf.attributes` is compared with ['POSITION'],
- * and the `mesh.*` profiles are injected into the mesh builder and exporters as `profile`.
+ * the `dispose.*` keys flipped by the non-observable Phase 1C clean-ups (ARCHITECTURE.md 8.1). Phase 2 flips or retires
+ * keys one fix at a time (docs/improvements/08-bugfix-roadmap.md 4.1); a flipped `mesh.*` key keeps its legacy case
+ * for `LegacyProfiles`. Each leaf key is read at the single site named in ARCHITECTURE.md 8.1; enumerated keys are
+ * read with switch-and-throw, the numeric keys and the `dispose.*` booleans are used as values,
+ * `mesh.gltf.attributes` is compared with ['POSITION'], and the `mesh.*` profiles are injected into the mesh builder
+ * and exporters as `profile`.
  * No module of WP3 reads any key.
  */
 export const Strategies = deepFreeze({
@@ -40,9 +42,9 @@ export const Strategies = deepFreeze({
     viewport: { winding: 'legacy-cw', normals: 'right-panel', combinedUV: 'atlas-u-full-v', side: 'double' },
     obj:      { winding: 'legacy-cw', normals: 'none', stripNormals: 'constant-z',
                 combinedUV: 'per-section-overlap', panelNormal: 'facing' },
-    gltf:     { winding: 'legacy-cw', normals: 'none', attributes: ['POSITION'], indexType: 'uint16',
+    gltf:     { winding: 'legacy-cw', normals: 'none', attributes: ['POSITION'], indexType: 'auto',
                 doubleSided: 'omit' },             // 'omit' = the material object has NO doubleSided key
-  },
+  },                                               // gltf.indexType: 'auto' since 08 P2-1b (B-L5), Phase-1 'uint16'
   exportCombinedColor: 'first-section',            // B-L6
   mtlTextureNaming: 'index',                       // B-M2
   zipTextureNaming: 'sanitized-name',              // B-L14 (no de-duplication)
@@ -171,7 +173,7 @@ const QUIRKS = deepFreeze({
   'B-L4': ['No canvas-size guard (`toBlob` null throws, ZIP `data:,`)',
     'budget + message'],
   'B-L5': ['Uint16 glTF indices',
-    'Uint32 when needed'],
+    'Landed in 08 P2-1b (glTF `mesh.gltf.indexType = \'auto\'`, `indexWidth`; no tag site); the viewport index attribute: 08 P2-1e'],
   'B-L6': ['Combined exports use section 0\'s colour',
     'per-section'],
   'B-L7': ['MTL second download, textures missing',
@@ -271,7 +273,7 @@ const TAG_SITES = deepFreeze([
   ['js/io/ProjectSerializer.js#read', ['B-L8', 'B-M4']],
   ['js/io/ObjExporter.js#write', ['B-H2', 'B-M6', 'B-L6', 'B-L8']],
   ['js/io/GltfExporter.js#write', ['B-L6', 'B-L8']],
-  ['js/io/GltfExporter.js#addMesh', ['B-H2', 'B-M7', 'B-L5']],
+  ['js/io/GltfExporter.js#addMesh', ['B-H2', 'B-M7']],
   ['js/render/SceneManager.js#addHelper', ['B-M11']],
   ['js/render/LEDWallView.js#rebuild', ['B-L8']],
   ['js/render/LEDMaterialFactory.js#side', ['B-H1']],
