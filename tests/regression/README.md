@@ -488,7 +488,13 @@ Byte-identical files report `IDENTICAL`. Otherwise:
   self-consistency runs; see [Phase 2 re-baselining](#phase-2-re-baselining)), plus the outputs
   added since, each by its own allowlist commit with its evidence:
   `p2_curved_safe_distance/concave_offsets` (1 level, 4 px on the help badge and the preview
-  footer's resolution label, between the baseline promoted by P2-0 and a full run of the same build).
+  footer's resolution label, between the baseline promoted by P2-0 and a full run of the same build);
+  `p2_curved_safe_distance/convex` (1 level, 2 px on the help badge and the preview footer, between the
+  two runs of the 06 T4a build) and `toggles/14_car_default` (1 level, 7 px on the help badge, between two
+  runs of the 06 T4b build). The rect-limited entries of 06 T4b's manifest (a watermark rectangle on
+  every canvas capture) judge every pixel outside their rectangles, so they tolerate only this list
+  within its bounds: jitter on any other output, or above the bounds (one run of the 06 T4b build showed
+  9 px on `toggles/15_car_moved`), fails them, and the gate run is repeated.
 - **Export PNG pixels in `large_wall`'s ZIP.** The 3840 × 1920 section textures of
   `large_wall/final__export-zip__led-wall-export.zip` show single bistable pixels that flip by
   1 level between runs of the same build: `textures/L2_PanelIDs.png` (1995, 948),
