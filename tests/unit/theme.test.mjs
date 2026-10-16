@@ -3,7 +3,8 @@
 // U4 token parity of css/02-tokens.css with the Theme.js fallbacks, U10 the Theme walk (every leaf bound, UNBRANDED, a
 // function or non-colour), U11 the UNBRANDED conventions against tests/unit/fixtures/legacy-theme.mjs (06 T3); U6 gold
 // exclusivity and legacy identity of the :root tokens, layers 1-3 (06 T4a), layer 4 and the Theme colour leaves (06 T5;
-// the palette joins in 06 T7). Since 06 T5 BIND_FONTS_DEFAULT is true, so U4 also compares the font leaves.
+// the palette joins in 06 T7). Since 06 T5 BIND_FONTS_DEFAULT is true, so U4 also compares the font leaves. U9 the
+// brand strings (06 T6a).
 // Run: node --test tests/unit/theme.test.mjs   (zero dependencies)
 
 import { test, describe } from 'node:test';
@@ -524,5 +525,39 @@ describe('U6 gold exclusivity and legacy identity: every css/02-tokens.css layer
     assert.throws(() => assertOffBrandColours('legacy frustum', leafRgb(0xffaa00), { debugExempt: true }), /Pivot Gold/);
     assert.doesNotThrow(() => assertOffBrandColours('face normal', leafRgb(0xff4fd8), { debugExempt: true }));
     assert.throws(() => assertOffBrandColours('face normal', leafRgb(0xff4fd8)), /legacy #FF00AA/);
+  });
+});
+
+// ---- U9 (06 T6a): the brand strings ------------------------------------------------------------------
+
+/** Every string leaf of a value, as [path, string]. */
+const stringLeaves = (value) => leaves(value).filter(([, v]) => typeof v === 'string');
+
+describe('U9 Brand strings (06 T6a; the file names join in 06 T6b)', () => {
+  test('every Brand string is printable ASCII plus newlines (several OBJ importers read files as Latin-1)', () => {
+    const found = stringLeaves(Theme.brand);
+    assert.ok(found.length >= 15, `only ${found.length} Brand strings`);
+    for (const [path, s] of found) assert.match(s, /^[\x20-\x7e\n]*$/, `brand.${path}`);
+  });
+
+  test('Brand.jsonGenerator is frozen, holds exactly { name }, and its name is the product name (06 4.2)', () => {
+    assert.ok(Object.isFrozen(Theme.brand.jsonGenerator));
+    assert.deepEqual(Object.keys(Theme.brand.jsonGenerator), ['name']);
+    assert.equal(Theme.brand.jsonGenerator.name, Theme.brand.productName);
+    assert.equal(Theme.brand.productName, 'Morph LED Configurator');
+  });
+
+  test('the export headers and the glTF generator name the product; the comment headers are OBJ comments ending in newlines', () => {
+    const b = Theme.brand;
+    assert.equal(b.gltfGenerator, b.productName, 'glTF asset.generator: the name, no version (06 Q12)');
+    for (const key of ['objHeader', 'objGeneratorLine', 'mtlHeader', 'safeDistanceObjHeader']) {
+      assert.ok(b[key].includes(b.productName), `${key} names the product`);
+      for (const line of b[key].split('\n').filter(Boolean)) assert.match(line, /^# /, `${key}: "${line}" is an OBJ comment`);
+    }
+    assert.ok(b.objHeader.endsWith('\n') && !b.objHeader.endsWith('\n\n'), 'objHeader: one line (the mesh-mode line follows)');
+    for (const key of ['objGeneratorLine', 'mtlHeader', 'safeDistanceObjHeader']) assert.ok(b[key].endsWith('\n\n'), `${key}: a blank line follows`);
+    assert.equal(b.shortName, 'LED Configurator');
+    assert.equal(b.company, 'Morph');
+    assert.match(b.homepage, /^https:\/\/[a-z0-9.-]+\/[A-Za-z_]+\/$/);
   });
 });
