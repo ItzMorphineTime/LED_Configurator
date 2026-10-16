@@ -1,7 +1,10 @@
 // Unit tests for the structural export checkers of docs/improvements/08-bugfix-roadmap.md section 8.2:
-// tools/check-orientation.mjs (OBJ and glTF face orientation against the vertex normals) and tools/check-gltf.mjs
-// (the structural subset of the Khronos glTF rules, including the Math.fround rule for POSITION min/max).
+// tools/check-orientation.mjs (OBJ and glTF face orientation against the vertex normals; since 01 T1 also the .obj and
+// .gltf entries of ZIP archives and directories walked recursively) and tools/check-gltf.mjs (the structural subset of
+// the Khronos glTF rules, including the Math.fround rule for POSITION min/max).
 // Hand-built good files pass; a reversed triangle, a 65,535 index in UNSIGNED_SHORT and a misaligned bufferView fail.
+// Also tools/make-cap-wall.mjs (01 T1): the committed tests/fixtures/normals-max-wall.json is its output and imports as
+// the largest importable wall (200 sections of 50 x 20 panels, combined).
 // Run: node --test tests/unit/tools.test.mjs   (zero dependencies)
 
 import { test, describe, after } from 'node:test';
@@ -12,8 +15,16 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-import { checkObjText, checkGltfOrientation } from '../../tools/check-orientation.mjs';
+import { checkObjText, checkGltfOrientation, checkOrientationZip, checkOrientationPaths, collectFiles } from '../../tools/check-orientation.mjs';
 import { checkGltfDocument } from '../../tools/check-gltf.mjs';
+import { CAP_WALL, DEFAULT_OUT as CAP_WALL_FILE, capWallText } from '../../tools/make-cap-wall.mjs';
+import { ProjectSerializer } from '../../js/io/ProjectSerializer.js';
+import { Project } from '../../js/domain/Project.js';
+import { Palette } from '../../js/theme/Theme.js';
+import { Strategies } from '../../js/legacy/LegacyCompat.js';
+import { layoutProject } from '../../js/geometry/WallLayout.js';
+import { WallMeshBuilder } from '../../js/geometry/WallMeshBuilder.js';
+import { computeAtlas } from '../../js/geometry/TextureAtlas.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const TOOLS = path.resolve(HERE, '..', '..', 'tools');
@@ -95,9 +106,48 @@ const goodGltf = () => gltf({ positions: QUAD, normals: UP, uvs: [0, 0, 1, 0, 1,
 
 const write = (name, content) => {
   const p = path.join(TMP, name);
-  fs.writeFileSync(p, typeof content === 'string' ? content : JSON.stringify(content, null, 2));
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, Buffer.isBuffer(content) || typeof content === 'string' ? content : JSON.stringify(content, null, 2));
   return p;
 };
+
+/** CRC-32 (IEEE), for the stored ZIP below. */
+function crc32(buf) {
+  let c = 0xffffffff;
+  for (const byte of buf) {
+    c ^= byte;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  }
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+/** A minimal ZIP archive with stored (uncompressed) entries: [[name, string|Buffer], ...]; a name ending in '/' is a directory. */
+function storedZip(entries) {
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+  for (const [name, content] of entries) {
+    const nameBuf = Buffer.from(name, 'utf8');
+    const data = Buffer.from(content ?? '');
+    const crc = crc32(data);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4); local.writeUInt16LE(0, 8);
+    local.writeUInt32LE(crc, 14); local.writeUInt32LE(data.length, 18); local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(nameBuf.length, 26);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0); central.writeUInt16LE(20, 4); central.writeUInt16LE(20, 6); central.writeUInt16LE(0, 10);
+    central.writeUInt32LE(crc, 16); central.writeUInt32LE(data.length, 20); central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(nameBuf.length, 28); central.writeUInt32LE(offset, 42);
+    locals.push(local, nameBuf, data);
+    centrals.push(central, nameBuf);
+    offset += 30 + nameBuf.length + data.length;
+  }
+  const cd = Buffer.concat(centrals);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(entries.length, 8); end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(cd.length, 12); end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, cd, end]);
+}
 
 // ---- check-orientation -----------------------------------------------------------------------------
 
@@ -141,6 +191,55 @@ describe('tools/check-orientation.mjs', () => {
     assert.equal(bad.status, 1);
     assert.match(bad.stdout, /FAIL {2}.*reversed\.obj :: Quad: 1 of 2 triangles \(facing away 1\)/);
     assert.equal(run().status, 2);
+  });
+
+  const REVERSED_OBJ = GOOD_OBJ.replace('f 1//1 3//1 4//1', 'f 1//1 4//1 3//1');
+
+  test('ZIP archives (01 T1): every .obj and .gltf entry is checked, other entries and directories are skipped', () => {
+    const zip = write('bundle.zip', storedZip([['textures/', ''], ['textures/a.png', 'png'], ['led-wall-config.obj', GOOD_OBJ],
+      ['led-wall-config.gltf', JSON.stringify(goodGltf())], ['led-wall-config.json', '{}'], ['nested/reversed.obj', REVERSED_OBJ]]));
+    const results = checkOrientationZip(zip);
+    assert.deepEqual(results.map((r) => r.file), [`${zip}!led-wall-config.obj`, `${zip}!led-wall-config.gltf`, `${zip}!nested/reversed.obj`]);
+    assert.deepEqual(results.map((r) => r.objects.map((o) => [o.name, o.failures])),
+      [[['Quad', 0], ['Polygon', 0]], [['Quad', 0]], [['Quad', 1], ['Polygon', 0]]]);
+    const broken = checkOrientationZip(write('broken.zip', 'not a zip archive'));
+    assert.equal(broken.length, 1);
+    assert.match(broken[0].error, /cannot read ZIP/);
+    const unparsable = checkOrientationZip(write('unparsable.zip', storedZip([['x.gltf', '{ not json']])));
+    assert.match(unparsable[0].error, /cannot check/);
+  });
+
+  test('directories (01 T1): walked recursively for *.obj, *.gltf and *.zip, sorted by name at each level', () => {
+    const root = path.join(TMP, 'tree');
+    write('tree/b/inner.obj', GOOD_OBJ);
+    write('tree/a.gltf', goodGltf());
+    write('tree/b/c/deep.zip', storedZip([['e.obj', GOOD_OBJ]]));
+    write('tree/b/notes.txt', 'skip me');
+    write('tree/b.zip.entries/f.obj', GOOD_OBJ);
+    const rel = (f) => path.relative(root, f).split(path.sep).join('/');
+    assert.deepEqual(collectFiles([root]).map(rel), ['a.gltf', 'b/c/deep.zip', 'b/inner.obj', 'b.zip.entries/f.obj']);
+    const results = checkOrientationPaths([root]);
+    assert.deepEqual(results.map((r) => rel(r.file)), ['a.gltf', 'b/c/deep.zip!e.obj', 'b/inner.obj', 'b.zip.entries/f.obj']);
+    assert.ok(results.every((r) => !r.error && r.objects.every((o) => o.failures === 0)));
+    assert.deepEqual(collectFiles([path.join(root, 'missing.obj')]), [path.join(root, 'missing.obj')]);
+    assert.match(checkOrientationPaths([path.join(root, 'missing.obj')])[0].error, /cannot check/);
+  });
+
+  test('command line with a directory and a ZIP: exit 1 on any failure; --failures-only prints only FAIL lines and the summary', () => {
+    const run = (...args) => spawnSync(process.execPath, [path.join(TOOLS, 'check-orientation.mjs'), ...args], { encoding: 'utf8' });
+    const dir = path.join(TMP, 'cli');
+    write('cli/ok.obj', GOOD_OBJ);
+    write('cli/archive.zip', storedZip([['ok.gltf', JSON.stringify(goodGltf())]]));
+    const good = run(dir);
+    assert.equal(good.status, 0, good.stdout);
+    assert.match(good.stdout, /PASS {2}.*archive\.zip!ok\.gltf :: Quad \(2 triangles\)/);
+    assert.match(good.stdout, /3\/3 object\(s\) pass/);
+    write('cli/sub/reversed.obj', REVERSED_OBJ);
+    const bad = run('--failures-only', dir);
+    assert.equal(bad.status, 1);
+    assert.deepEqual(bad.stdout.trim().split(/\r?\n/).map((l) => l.slice(0, 6)), ['FAIL  ', '4/5 ob']);
+    assert.match(bad.stdout, /reversed\.obj :: Quad: 1 of 2 triangles/);
+    assert.equal(run('--bogus', dir).status, 2);
   });
 });
 
@@ -206,5 +305,33 @@ describe('tools/check-gltf.mjs', () => {
     assert.equal(bad.status, 1);
     assert.match(bad.stdout, /FAIL {2}.*restart\.gltf/);
     assert.equal(run().status, 2);
+  });
+});
+
+// ---- make-cap-wall ---------------------------------------------------------------------------------
+
+describe('tools/make-cap-wall.mjs and tests/fixtures/normals-max-wall.json (01 T1, 8.3)', () => {
+  test('the committed fixture is the generator output (line endings aside), and --check says so', () => {
+    assert.equal(fs.readFileSync(CAP_WALL_FILE, 'utf8').replace(/\r\n/g, '\n'), capWallText());
+    const check = spawnSync(process.execPath, [path.join(TOOLS, 'make-cap-wall.mjs'), '--check'], { encoding: 'utf8' });
+    assert.equal(check.status, 0, check.stdout);
+    const stale = write('stale-cap-wall.json', '{}');
+    assert.equal(spawnSync(process.execPath, [path.join(TOOLS, 'make-cap-wall.mjs'), '--check', '--out', stale], { encoding: 'utf8' }).status, 1);
+  });
+
+  test('it imports as 200 v1 sections of 50 x 20 panels in combined mode: 214,200 vertices and 200,000 quads', () => {
+    const doc = JSON.parse(fs.readFileSync(CAP_WALL_FILE, 'utf8'));
+    assert.equal(doc.version, '1.0');
+    assert.equal(doc.mesh_mode, 'combined');
+    assert.deepEqual(CAP_WALL, { sections: 200, panelCols: 50, panelRows: 20, panelWidth: 500, panelHeight: 500, ledX: 32, ledY: 32 });
+    const { sections, meshMode } = new ProjectSerializer({ palette: Palette }).read(doc);
+    assert.equal(meshMode, 'combined');
+    assert.equal(sections.length, 200);
+    assert.ok(sections.every((s) => s.panelCols === 50 && s.panelRows === 20 && s.curveIntensity === 0), 'every section is 50 x 20, flat');
+    const project = Project.createDefault();
+    project.wall.replaceAll(sections);
+    const grid = new WallMeshBuilder(Strategies.mesh.viewport).combinedGrid(layoutProject(project), computeAtlas(sections));
+    assert.equal(grid.positions.length / 3, 214200);
+    assert.equal(grid.indices.length / 6, 200000);
   });
 });

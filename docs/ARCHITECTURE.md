@@ -293,15 +293,26 @@ tests/
     camera-hub.test.mjs                    WP7   CameraHub/CameraController pipeline order with spies
     wall-controller.test.mjs               WP9   rebuild policy: run counts and tile-cache clears for the 24 legacy sites
     compare.test.mjs                       08 P2-0  compare.mjs --expect semantics and JITTER on synthetic output trees
-    tools.test.mjs                         08 P2-0  tools/check-orientation.mjs and tools/check-gltf.mjs on hand-built files
+    tools.test.mjs                         08 P2-0  tools/check-orientation.mjs and tools/check-gltf.mjs on hand-built files;
+                                                 since 01 T1 the ZIP and directory forms, and tools/make-cap-wall.mjs against
+                                                 the committed fixture
+    export-orientation.test.mjs            01 T1  the orientation oracle (01 AC 1): every OBJ/glTF under GOLDEN_DIR, ZIP
+                                                 entries included (the open 08 defects listed with their fixing commit),
+                                                 and 500 seeded integer walls through the OBJ and glTF writers, all modes
     typing-target.test.mjs                 08 P2-9b  the 07 3.8 truth table of core/typingTarget.js (plain objects) and the
                                                  InputState re-exports (fake THREE)
     materials.test.mjs                     08 P2-1d  PanelIdRenderer sizes and null canvases, LEDMaterialFactory's colour
                                                  fallback and its warning, LEDWallView's index attribute (08 P2-1e)
                                                  (fake THREE installed as window.THREE)
+  fixtures/
+    normals-max-wall.json                  01 T1  the largest importable wall (200 sections of 50 x 20, v1, combined) for the
+                                                 manual normals cap timing (01 8.3); written by tools/make-cap-wall.mjs
 tools/
   serve.mjs                                WP1   zero-dependency static server for local development (correct .js MIME type)
-  check-orientation.mjs                    08 P2-0  OBJ/glTF face orientation against the vertex normals (01 8.1, 08 8.2)
+  check-orientation.mjs                    08 P2-0  OBJ/glTF face orientation against the vertex normals (01 8.1, 08 8.2);
+                                                 01 T1: ZIP entries and directories walked recursively, --failures-only
+  make-cap-wall.mjs                        01 T1  writes tests/fixtures/normals-max-wall.json (--check: compares) with the app's
+                                                 JSON v1 writer
   check-gltf.mjs                           08 P2-0  structural glTF subset: bounds, alignment, index values, POSITION min/max
                                                  after Math.fround, unit NORMALs, TEXCOORD_0 count, references (08 8.2)
 .github/
@@ -2856,3 +2867,6 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 1.3, 2.2, 3.2: `js/core/typingTarget.js isTypingTarget(t)`, the one typing guard with the 07 3.8 truth table (07 C18; 08 P2-9b is its one named owner, 07 C52): text-like `INPUT`, `SELECT`, `TEXTAREA`, contenteditable and anything inside an open dialog are typing; checkbox, radio, button, submit, reset, color, file and range inputs are not. 2.3: `tests/unit/typing-target.test.mjs`.
 - 3.8: `InputState` re-exports it as `isTypingTarget` and as `isShortcutIgnoredTarget` (until 07 I1; 01 CR-9), and `ViewportInput.attachShortcuts` ignores a key when `isTypingTarget(e.target) || e.ctrlKey || e.metaKey || e.altKey || e.repeat` (08 6.11; Shift is allowed). `KeyboardState` (movement) is unchanged.
 - 8.2: the B-L11 row is kept with a `Landed` fix cell; 8.3: the rows `InputState.js#isShortcutIgnoredTarget` and `ViewportInput.js#attachShortcuts` are deleted, so `LEGACY_SITES` no longer lists B-L11.
+
+**01 F1-0a, orientation tooling (01 T1)** (manifest `tests/regression/expected/F1-0a.json`, an invariance gate: empty `expect`; no application or harness file changes):
+- 2.3: `tools/check-orientation.mjs` checks the `.obj` and `.gltf` entries of ZIP archives and walks directories recursively (`--failures-only` prints only the failures); `tests/unit/export-orientation.test.mjs` (the orientation oracle of 01 AC 1 over `GOLDEN_DIR` and 500 seeded integer walls; the golden objects that still fail for open 08 defects, B-L29, B-L8 and B-L15, are listed with their fixing commit and must keep failing until that commit deletes the row); `tools/make-cap-wall.mjs` and `tests/fixtures/normals-max-wall.json` (01 8.3).

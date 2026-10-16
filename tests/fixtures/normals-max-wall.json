@@ -1,0 +1,4211 @@
+{
+  "version": "1.0",
+  "sections": [
+    {
+      "name": "Wall 1",
+      "id": 0,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 2",
+      "id": 1,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 3",
+      "id": 2,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 4",
+      "id": 3,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 5",
+      "id": 4,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 6",
+      "id": 5,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 7",
+      "id": 6,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 8",
+      "id": 7,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    },
+    {
+      "name": "Wall 9",
+      "id": 8,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 10",
+      "id": 9,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 11",
+      "id": 10,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 12",
+      "id": 11,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 13",
+      "id": 12,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 14",
+      "id": 13,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 15",
+      "id": 14,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 16",
+      "id": 15,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    },
+    {
+      "name": "Wall 17",
+      "id": 16,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 18",
+      "id": 17,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 19",
+      "id": 18,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 20",
+      "id": 19,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 21",
+      "id": 20,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 22",
+      "id": 21,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 23",
+      "id": 22,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 24",
+      "id": 23,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    },
+    {
+      "name": "Wall 25",
+      "id": 24,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 26",
+      "id": 25,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 27",
+      "id": 26,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 28",
+      "id": 27,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 29",
+      "id": 28,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 30",
+      "id": 29,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 31",
+      "id": 30,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 32",
+      "id": 31,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    },
+    {
+      "name": "Wall 33",
+      "id": 32,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 34",
+      "id": 33,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 35",
+      "id": 34,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 36",
+      "id": 35,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 37",
+      "id": 36,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 38",
+      "id": 37,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 39",
+      "id": 38,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 40",
+      "id": 39,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    },
+    {
+      "name": "Wall 41",
+      "id": 40,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 42",
+      "id": 41,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 43",
+      "id": 42,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 44",
+      "id": 43,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 45",
+      "id": 44,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 46",
+      "id": 45,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 47",
+      "id": 46,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 48",
+      "id": 47,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    },
+    {
+      "name": "Wall 49",
+      "id": 48,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 50",
+      "id": 49,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 51",
+      "id": 50,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 52",
+      "id": 51,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 53",
+      "id": 52,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 54",
+      "id": 53,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 55",
+      "id": 54,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 56",
+      "id": 55,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    },
+    {
+      "name": "Wall 57",
+      "id": 56,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 58",
+      "id": 57,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 59",
+      "id": 58,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 60",
+      "id": 59,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 61",
+      "id": 60,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 62",
+      "id": 61,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 63",
+      "id": 62,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 64",
+      "id": 63,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    },
+    {
+      "name": "Wall 65",
+      "id": 64,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 66",
+      "id": 65,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 67",
+      "id": 66,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 68",
+      "id": 67,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 69",
+      "id": 68,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 70",
+      "id": 69,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 71",
+      "id": 70,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 72",
+      "id": 71,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    },
+    {
+      "name": "Wall 73",
+      "id": 72,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 74",
+      "id": 73,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 75",
+      "id": 74,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 76",
+      "id": 75,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 77",
+      "id": 76,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 78",
+      "id": 77,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 79",
+      "id": 78,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 80",
+      "id": 79,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    },
+    {
+      "name": "Wall 81",
+      "id": 80,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 82",
+      "id": 81,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 83",
+      "id": 82,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 84",
+      "id": 83,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 85",
+      "id": 84,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 86",
+      "id": 85,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 87",
+      "id": 86,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 88",
+      "id": 87,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    },
+    {
+      "name": "Wall 89",
+      "id": 88,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 90",
+      "id": 89,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 91",
+      "id": 90,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 92",
+      "id": 91,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 93",
+      "id": 92,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 94",
+      "id": 93,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 95",
+      "id": 94,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 96",
+      "id": 95,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    },
+    {
+      "name": "Wall 97",
+      "id": 96,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 98",
+      "id": 97,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 99",
+      "id": 98,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 100",
+      "id": 99,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 101",
+      "id": 100,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 102",
+      "id": 101,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 103",
+      "id": 102,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 104",
+      "id": 103,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    },
+    {
+      "name": "Wall 105",
+      "id": 104,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 106",
+      "id": 105,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 107",
+      "id": 106,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 108",
+      "id": 107,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 109",
+      "id": 108,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 110",
+      "id": 109,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 111",
+      "id": 110,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 112",
+      "id": 111,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    },
+    {
+      "name": "Wall 113",
+      "id": 112,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 114",
+      "id": 113,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 115",
+      "id": 114,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 116",
+      "id": 115,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 117",
+      "id": 116,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 118",
+      "id": 117,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 119",
+      "id": 118,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 120",
+      "id": 119,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    },
+    {
+      "name": "Wall 121",
+      "id": 120,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 122",
+      "id": 121,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 123",
+      "id": 122,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 124",
+      "id": 123,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 125",
+      "id": 124,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 126",
+      "id": 125,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 127",
+      "id": 126,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 128",
+      "id": 127,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    },
+    {
+      "name": "Wall 129",
+      "id": 128,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 130",
+      "id": 129,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 131",
+      "id": 130,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 132",
+      "id": 131,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 133",
+      "id": 132,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 134",
+      "id": 133,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 135",
+      "id": 134,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 136",
+      "id": 135,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    },
+    {
+      "name": "Wall 137",
+      "id": 136,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 138",
+      "id": 137,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 139",
+      "id": 138,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 140",
+      "id": 139,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 141",
+      "id": 140,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 142",
+      "id": 141,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 143",
+      "id": 142,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 144",
+      "id": 143,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    },
+    {
+      "name": "Wall 145",
+      "id": 144,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 146",
+      "id": 145,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 147",
+      "id": 146,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 148",
+      "id": 147,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 149",
+      "id": 148,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 150",
+      "id": 149,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 151",
+      "id": 150,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 152",
+      "id": 151,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    },
+    {
+      "name": "Wall 153",
+      "id": 152,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 154",
+      "id": 153,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 155",
+      "id": 154,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 156",
+      "id": 155,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 157",
+      "id": 156,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 158",
+      "id": 157,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 159",
+      "id": 158,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 160",
+      "id": 159,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    },
+    {
+      "name": "Wall 161",
+      "id": 160,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 162",
+      "id": 161,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 163",
+      "id": 162,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 164",
+      "id": 163,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 165",
+      "id": 164,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 166",
+      "id": 165,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 167",
+      "id": 166,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 168",
+      "id": 167,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    },
+    {
+      "name": "Wall 169",
+      "id": 168,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 170",
+      "id": 169,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 171",
+      "id": 170,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 172",
+      "id": 171,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 173",
+      "id": 172,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 174",
+      "id": 173,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 175",
+      "id": 174,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 176",
+      "id": 175,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    },
+    {
+      "name": "Wall 177",
+      "id": 176,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 178",
+      "id": 177,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 179",
+      "id": 178,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 180",
+      "id": 179,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 181",
+      "id": 180,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 182",
+      "id": 181,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 183",
+      "id": 182,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 184",
+      "id": 183,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    },
+    {
+      "name": "Wall 185",
+      "id": 184,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 186",
+      "id": 185,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 187",
+      "id": 186,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 188",
+      "id": 187,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 189",
+      "id": 188,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 190",
+      "id": 189,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 191",
+      "id": 190,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 192",
+      "id": 191,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    },
+    {
+      "name": "Wall 193",
+      "id": 192,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00f0ff"
+    },
+    {
+      "name": "Wall 194",
+      "id": 193,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff00aa"
+    },
+    {
+      "name": "Wall 195",
+      "id": 194,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#00ff66"
+    },
+    {
+      "name": "Wall 196",
+      "id": 195,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6b35"
+    },
+    {
+      "name": "Wall 197",
+      "id": 196,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ffdd00"
+    },
+    {
+      "name": "Wall 198",
+      "id": 197,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#aa66ff"
+    },
+    {
+      "name": "Wall 199",
+      "id": 198,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#66ffaa"
+    },
+    {
+      "name": "Wall 200",
+      "id": 199,
+      "panel": {
+        "columns": 50,
+        "rows": 20,
+        "width_mm": 500,
+        "height_mm": 500
+      },
+      "led_resolution": {
+        "x": 32,
+        "y": 32,
+        "pixel_pitch_mm": 15.63
+      },
+      "curvature": {
+        "type": "flat",
+        "angle_degrees": 0,
+        "angle_offset_degrees": 0
+      },
+      "color": "#ff6666"
+    }
+  ],
+  "mesh_mode": "combined",
+  "totals": {
+    "sections": 200,
+    "total_panels": 200000,
+    "total_pixels": 204800000
+  }
+}

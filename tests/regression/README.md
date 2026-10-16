@@ -495,8 +495,9 @@ node tests/regression/run.mjs --root . --out tests/regression/output/candidate
 # 3. Gate: every diff declared, every declared change happened (also loads expected/_nondeterminism.json).
 node tests/regression/compare.mjs tests/regression/output/baseline tests/regression/output/candidate \
      --expect tests/regression/expected/<commit-id>.json --verbose
-#    Export commits also run the structural checks on the candidate outputs:
-node tools/check-orientation.mjs tests/regression/output/candidate/*/*.obj tests/regression/output/candidate/*/*.gltf
+#    Export commits also run the structural checks on the candidate outputs (check-orientation walks the directory,
+#    ZIP entries included, since 01 T1):
+node tools/check-orientation.mjs --failures-only tests/regression/output/candidate
 node tools/check-gltf.mjs tests/regression/output/candidate/*/*.gltf
 
 # 4. Review every EXPECTED diff (PNGs side by side, OBJ/glTF text, dialogs, console).
@@ -582,10 +583,18 @@ then the summary.
 
 **Structural checkers** (Node, no dependencies; see their file headers):
 
-- `node tools/check-orientation.mjs <file.obj|file.gltf ...>`: for every triangle, the geometric
-  normal of its counter-clockwise winding has a positive dot product with the vertex normal at each
-  of its three vertices; one PASS/FAIL line per object, exit 1 on any failure. A face without vertex
-  normals fails. Today every OBJ and glTF fails it (B-H1, B-H2) until 08 P2-2.
+- `node tools/check-orientation.mjs [--failures-only] <file.obj|file.gltf|file.zip|directory ...>`: for
+  every triangle, the geometric normal of its counter-clockwise winding has a positive dot product with
+  the vertex normal at each of its three vertices; one PASS/FAIL line per object (`--failures-only`:
+  only the FAIL lines and the summary), exit 1 on any failure. A face without vertex normals fails.
+  Since 01 T1 a directory is walked recursively for `*.obj`, `*.gltf` and `*.zip`, and each archive's
+  `.obj` and `.gltf` entries are checked (reported as `<archive>!<entry>`), so
+  `node tools/check-orientation.mjs --failures-only tests/regression/output/baseline` checks every
+  export of a capture. Since 08 P2-2 every wall export passes; what still fails is owned by later 08
+  commits and listed in `tests/unit/export-orientation.test.mjs` (`OPEN_DEFECTS`): the safe-distance
+  floor OBJs (no `vn`, B-L29, 08 P2-5b), `import_edge`'s `ii_combined` and `ii_section` OBJ and glTF
+  (string counts, B-L8, 08 P2-3b) and `p2_zero_inputs`' combined OBJ (2.5 columns, B-L15, 08 P2-8a).
+  That test runs the same check over `GOLDEN_DIR` and over 500 seeded integer walls in every mesh mode.
 - `node tools/check-gltf.mjs <file.gltf ...>`: buffer, bufferView and accessor bounds, component and
   4-byte alignment, index values below the vertex count and never the primitive-restart value,
   `POSITION` min/max compared after `Math.fround`, unit `NORMAL`s, the `TEXCOORD_0` count, and the

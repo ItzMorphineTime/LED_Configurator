@@ -145,7 +145,7 @@ The authoritative plan is `docs/improvements/08-bugfix-roadmap.md` (batch cards 
 B-L24 is fixed by Feature 1 (01 T7) and Feature 6 (06 T4a). Phase 3 feature tasks merge as soon as their own gates have merged (08 section 1.1), interleaved with these commits, one merge at a time, each through the same gate.
 
 ### Phase 3: features
-Suggested order: **1** normals debug view (after the B-H1/B-H2 fix), **6** Morph branding (independent; can run any time after Phase 1), **3** configurable pivot, **2** section selection and per-section offsets, **4** clean UVs and the UV viewer/editor, **5** HDRI projection and the reflective car (needs the single-renderer preview and the helpers layer). ARCHITECTURE.md section 9 lists, per feature, what already exists after Phase 1 and what the feature adds.
+Suggested order: **1** normals debug view (after the B-H1/B-H2 fix), **6** Morph branding (independent; can run any time after Phase 1), **3** configurable pivot, **2** section selection and per-section offsets, **4** clean UVs and the UV viewer/editor, **5** HDRI projection and the reflective car (needs the single-renderer preview and the helpers layer). ARCHITECTURE.md section 9 lists, per feature, what already exists after Phase 1 and what the feature adds. Feature 1 (docs/improvements/01-normals.md section 8.4 steps) landed so far: F1-0a (orientation tooling: check-orientation over ZIPs and directories, the export-orientation test, the cap-wall fixture).
 
 ## 6. Verification strategy
 

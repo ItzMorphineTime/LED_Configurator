@@ -1,17 +1,22 @@
 #!/usr/bin/env node
 // Face-orientation check (specified in docs/improvements/01-normals.md section 8.1, shipped by
-// docs/improvements/08-bugfix-roadmap.md P2-0, section 8.2). Node only, no dependencies.
-//   node tools/check-orientation.mjs <file.obj|file.gltf> [...]
+// docs/improvements/08-bugfix-roadmap.md P2-0, section 8.2; ZIP archives and directories added by 01 T1, F1-0a).
+// Node only, no dependencies.
+//   node tools/check-orientation.mjs [--failures-only] <file.obj|file.gltf|file.zip|directory> [...]
+// A directory is walked recursively for *.obj, *.gltf and *.zip files, in sorted order. A ZIP archive is opened and each
+// of its .obj and .gltf entries is checked (a glTF entry must embed its buffers); other entries are skipped.
 // For every triangle of every object, the geometric normal of its counter-clockwise winding, (b - a) x (c - a), must
 // have a positive dot product with the vertex normal stored at each of its three vertices. A triangle fails when a
 // vertex faces away (dot < 0), is perpendicular or the triangle is degenerate (dot = 0), or has no vertex normal at all
 // (an OBJ face without `/n` references, a glTF primitive without NORMAL). Polygons are fan-triangulated.
-// Prints one PASS/FAIL line per object (OBJ `o`/`g` groups; glTF mesh primitives).
+// Prints one PASS/FAIL line per object (OBJ `o`/`g` groups; glTF mesh primitives); a ZIP entry is named
+// `<archive>!<entry>`. --failures-only prints only the FAIL lines and the summary.
 // Exit code: 0 = every object passes, 1 = at least one failing triangle (or an unreadable file), 2 = usage error.
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { loadBuffers, readAccessor } from './check-gltf.mjs';
+import { readZip } from '../tests/regression/lib/formats.mjs';
 
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
@@ -128,32 +133,96 @@ export function checkGltfOrientation(doc, { baseDir = null } = {}) {
     return reports;
 }
 
+/** OBJ or glTF text, by the extension of `name` (`baseDir` resolves external glTF buffers; null inside a ZIP). */
+function checkText(name, text, baseDir) {
+    if (/\.gltf$/i.test(name)) return checkGltfOrientation(JSON.parse(text), { baseDir });
+    return checkObjText(text);
+}
+
 /** Check one .obj or .gltf file. Returns { file, objects: ObjectReport[], error? }. */
 export function checkOrientationFile(file) {
     try {
-        const text = fs.readFileSync(file, 'utf8');
-        if (/\.gltf$/i.test(file)) return { file, objects: checkGltfOrientation(JSON.parse(text), { baseDir: path.dirname(file) }) };
-        if (/\.obj$/i.test(file)) return { file, objects: checkObjText(text) };
-        return { file, objects: [], error: 'not an .obj or .gltf file' };
+        if (!/\.(obj|gltf)$/i.test(file)) return { file, objects: [], error: 'not an .obj, .gltf or .zip file' };
+        return { file, objects: checkText(file, fs.readFileSync(file, 'utf8'), path.dirname(file)) };
     } catch (e) {
         return { file, objects: [], error: `cannot check: ${e.message}` };
     }
 }
 
+/**
+ * Check one ZIP archive: every .obj and .gltf entry, in archive order (directories and other entries are skipped).
+ * Returns [{ file: '<archive>!<entry>', objects: ObjectReport[], error? }]; an unreadable archive gives one item with
+ * an error, an archive without such entries gives none.
+ */
+export function checkOrientationZip(file) {
+    let entries;
+    try {
+        entries = readZip(fs.readFileSync(file));
+    } catch (e) {
+        return [{ file, objects: [], error: `cannot read ZIP: ${e.message}` }];
+    }
+    const out = [];
+    for (const e of entries) {
+        if (e.isDir || !/\.(obj|gltf)$/i.test(e.name)) continue;
+        const name = `${file}!${e.name}`;
+        try {
+            out.push({ file: name, objects: checkText(e.name, e.data.toString('utf8'), null) });
+        } catch (err) {
+            out.push({ file: name, objects: [], error: `cannot check: ${err.message}` });
+        }
+    }
+    return out;
+}
+
+/**
+ * Expand command-line paths: a directory becomes every *.obj, *.gltf and *.zip file below it (recursive, sorted by
+ * name at each level, so the report is stable); any other path is kept as given (a missing one reports an error).
+ * @param {string[]} paths
+ * @returns {string[]}
+ */
+export function collectFiles(paths) {
+    const out = [];
+    const byName = (a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+    const walk = (dir) => {
+        for (const d of fs.readdirSync(dir, { withFileTypes: true }).sort(byName)) {
+            const full = path.join(dir, d.name);
+            if (d.isDirectory()) walk(full);
+            else if (d.isFile() && /\.(obj|gltf|zip)$/i.test(d.name)) out.push(full);
+        }
+    };
+    for (const p of paths) {
+        let st = null;
+        try { st = fs.statSync(p); } catch { /* the checker reports it */ }
+        if (st && st.isDirectory()) walk(p); else out.push(p);
+    }
+    return out;
+}
+
+/**
+ * Check files, ZIP archives and directories (01 T1). Returns [{ file, objects, error? }] with every ZIP expanded into
+ * its .obj and .gltf entries.
+ * @param {string[]} paths
+ */
+export function checkOrientationPaths(paths) {
+    return collectFiles(paths).flatMap((f) => (/\.zip$/i.test(f) ? checkOrientationZip(f) : [checkOrientationFile(f)]));
+}
+
 export function main(argv = process.argv.slice(2), log = console.log) {
     const files = argv.filter((a) => !a.startsWith('--'));
-    if (!files.length || argv.includes('--help')) {
-        log('Usage: node tools/check-orientation.mjs <file.obj|file.gltf> [...]');
-        return files.length ? 0 : 2;
+    const unknown = argv.filter((a) => a.startsWith('--') && a !== '--help' && a !== '--failures-only');
+    if (!files.length || argv.includes('--help') || unknown.length) {
+        if (unknown.length) log(`Unknown option ${unknown.join(', ')}`);
+        log('Usage: node tools/check-orientation.mjs [--failures-only] <file.obj|file.gltf|file.zip|directory> [...]');
+        return files.length && !unknown.length ? 0 : 2;
     }
+    const quiet = argv.includes('--failures-only');
     let failedObjects = 0, failedFiles = 0, total = 0;
-    for (const f of files) {
-        const { objects, error } = checkOrientationFile(f);
+    for (const { file: f, objects, error } of checkOrientationPaths(files)) {
         if (error) { failedFiles++; log(`FAIL  ${f}: ${error}`); continue; }
-        if (!objects.length) log(`PASS  ${f}: no triangles`);
+        if (!objects.length && !quiet) log(`PASS  ${f}: no triangles`);
         for (const o of objects) {
             total++;
-            if (!o.failures) { log(`PASS  ${f} :: ${o.name} (${o.triangles} triangles)`); continue; }
+            if (!o.failures) { if (!quiet) log(`PASS  ${f} :: ${o.name} (${o.triangles} triangles)`); continue; }
             failedObjects++;
             const why = Object.entries(o.reasons).map(([k, n]) => `${k} ${n}`).join(', ');
             log(`FAIL  ${f} :: ${o.name}: ${o.failures} of ${o.triangles} triangles (${why}); first: ${o.first}`);

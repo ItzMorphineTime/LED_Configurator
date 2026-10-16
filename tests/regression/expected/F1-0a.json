@@ -1,0 +1,10 @@
+{
+  "commit": "F1-0a",
+  "bugs": [],
+  "expect": [],
+  "mayChange": [
+    { "output": "large_wall/final__export-zip__led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen so far: L2_PanelIDs.png (1995, 948), L3_PanelIDs.png (1970, 1003), L4_PanelIDs.png (2026, 858), 1 px each, 3840x1920); this commit changes no app or harness code" }
+  ],
+  "notes": "01 F1-0 (tooling), first commit: T1 (tools/check-orientation.mjs over ZIP entries and directories, tests/unit/export-orientation.test.mjs, tools/make-cap-wall.mjs and tests/fixtures/normals-max-wall.json). No application or harness file changes, so every output must stay identical (invariance)."
+}

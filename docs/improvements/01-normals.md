@@ -1177,8 +1177,8 @@ void main() {
 
 This is the acceptance oracle for orientation. It parses OBJ text, decodes glTF data URIs and opens ZIPs with `readZip` from `tests/regression/lib/formats.mjs`.
 
-- **Golden:** walks `GOLDEN_DIR` **recursively** (`**/*.obj`, `**/*.gltf`, `**/*.zip`; this covers the `*.zip.entries/` folders and the ZIP files of `logos`, the config scenarios and others). For every triangle it asserts `dot(geometric normal, vertex normal) > 0` at all three vertices.
-- **Fuzz:** 500 integer walls with random σ, through the in-memory OBJ and glTF exporters, all three mesh modes.
+- **Golden:** walks `GOLDEN_DIR` **recursively** (`**/*.obj`, `**/*.gltf`, `**/*.zip`; this covers the `*.zip.entries/` folders and the ZIP files of `logos`, the config scenarios and others). For every triangle it asserts `dot(geometric normal, vertex normal) > 0` at all three vertices. **Open defects (as landed in F1-0a):** this spec's hard prerequisites 08 P2-3b and P2-5b, and 08 P2-8a, land after F1-0 in this repository, so the golden objects they own still fail: the safe-distance floor OBJs (no `vn`, B-L29, P2-5b), `import_edge`'s `ii_combined`/`ii_section` OBJ and glTF (string counts, B-L8, P2-3b) and `p2_zero_inputs`' combined OBJ (2.5 columns, B-L15, P2-8a). The test lists them in `OPEN_DEFECTS` (pattern, bug id, fixing commit) and requires each row to still match a failing object, so the commit that fixes one deletes its row; every other object must pass.
+- **Fuzz:** 500 integer walls with random σ, through the in-memory OBJ and glTF exporters, all three mesh modes. Until T9a adds `faceOrientation`, every section is stage-facing (σ = +1); T9a adds the random σ per section to the same fuzz.
 - The same parser backs `tools/check-orientation.mjs <file|dir>...`. 08 P2-0 ships the OBJ/glTF file form; T1 extends it to ZIP files (entries read with `readZip`) and to directories (recursive). It prints per-object pass/fail and exits 1 on any failure. Pipeline users can run it on their own exports.
 
 **Other unit tests**
@@ -1296,7 +1296,7 @@ Every step is one commit. Each one uses **08 §8.1's procedure verbatim** (steps
 
 Three Feature 1 additions apply to every step:
 
-- `node tools/check-orientation.mjs tests/regression/output/baseline` must pass after promotion. It walks recursively, so ZIP entries are covered.
+- `node tools/check-orientation.mjs tests/regression/output/baseline` must pass after promotion. It walks recursively, so ZIP entries are covered. Until 08 P2-3b, P2-5b and P2-8a land, its only failures are the `OPEN_DEFECTS` objects of `export-orientation.test.mjs` (8.1).
 - **Harness-code steps** (F1-3) follow the README rule "re-capture both baselines": capture twice, require the two captures to compare at 0 FAIL, then promote the new scenario into `baseline` **and** `baseline2`.
 - **Harness tooling that does not change outputs** (T2's `measure-rects.mjs`, the `rects` field of `--expect` manifest entries and the palette hook, T10's `run.mjs --probe-backfaces`, which is off by default and writes outside `baseline`) needs no re-capture: the step's ordinary full candidate run, without the flag, must show only that step's manifest.
 
@@ -1332,7 +1332,7 @@ The candidate rectangles contain the baseline ones: the column only gains button
 
 | Step (commit) | Tasks | Expected manifest (`expect` / `mayChange`) | Must stay identical |
 |---|---|---|---|
-| **F1-0** tooling | T1, T2 | none: no app change. The unit and golden tests run, and `check-orientation` passes on the current baseline. | everything |
+| **F1-0** tooling | T1, T2 | none: no app change. The unit and golden tests run, and `check-orientation` passes on the current baseline (except the `OPEN_DEFECTS` objects, 8.1). F1-0 lands as two commits with empty manifests: **F1-0a** (T1) and **F1-0b** (T2, the second commit of the harness-only series, 08 §8.2 and its feature-gate row F1 T2). | everything |
 | **F1-1** debug core (no UI) | T3-T6 | **empty** (invariance; `camera.layers.enable(HELPERS)` changes nothing while nothing is on `HELPERS`) | everything |
 | **F1-2** debug UI | T7 | `expect` (glob entries, `modified`): `ui_visual/*.text.json` (badge "N=normals"); every `#three-canvas` capture (glob `*/*.screenshot.png` minus `ui_visual/**`) and `ui_visual/*.viewport.screenshot.png` (both contain the toolbar column, where `#toggle-grid` now shows `.active`, and the badge). `mayChange`: `ui_visual/*.styles.json`. Gate: `compare.mjs --expect tests/regression/expected/F1-2.json --diff-bbox`, whose screenshot entries carry the measured per-frame `rects` above. Any differing pixel outside them is a FAIL. | all exports and state files; `ui_visual/*.sidebar.screenshot.png` (the sidebar does not change until F1-4); every pixel outside the measured rectangles (debug is off by default) |
 | **F1-3** harness | T8 | `added`: `normals_debug/**` | every other output (full run, 0 diff); the two captures of `normals_debug` compare at 0 FAIL (WARN within the documented overlay jitter only; the scenario's own JSON verdicts are jitter-proof, 8.2) |
@@ -1380,7 +1380,7 @@ Suggested `expect` patterns for P2-2c and d: `{default,flat3,concave_offsets,con
 
 ## 9. Acceptance criteria
 
-1. **Export orientation.** After F1-0, `export-orientation.test.mjs` and `tools/check-orientation.mjs` pass for every OBJ and glTF under `GOLDEN_DIR`, searched recursively (including every ZIP and `*.zip.entries/` file), and for 500 fuzzed integer walls with random reversed sections in all three modes. The check is `dot(geometric normal, vertex normal) > 0` at all three vertices of every triangle.
+1. **Export orientation.** After F1-0, `export-orientation.test.mjs` and `tools/check-orientation.mjs` pass for every OBJ and glTF under `GOLDEN_DIR`, searched recursively (including every ZIP and `*.zip.entries/` file; until 08 P2-3b, P2-5b and P2-8a land, except the `OPEN_DEFECTS` objects of 8.1, which must still fail), and for 500 fuzzed integer walls with random reversed sections (from T9a; stage-facing before) in all three modes. The check is `dot(geometric normal, vertex normal) > 0` at all three vertices of every triangle.
 2. **Normal properties.** The 6.3 properties hold over the integer fuzz:
    - unit length within 1e-12;
    - flat sections within 1e-12 of `σ·(−sin a, 0, cos a)` and `Object.is`-equal to σ × `'right-panel'` (given CR-1);
