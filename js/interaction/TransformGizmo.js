@@ -12,6 +12,7 @@ import THREE from '../vendor/three.js';
 import { Events } from '../core/EventBus.js';
 import { Strategies } from '../legacy/LegacyCompat.js';
 import { disposeObject3D } from '../render/ResourceTracker.js';
+import { RENDER_ORDER } from '../core/renderOrder.js';
 
 /** @typedef {import('./SelectionManager.js').Selectable} Selectable */
 
@@ -198,7 +199,7 @@ export class TransformGizmo {
     // LEGACY(B-L26): pilot mode does not hide or skip the gizmo; it is built and rendered as usual.
     const gizmoGroup = new THREE.Group();
     this.#group = gizmoGroup;
-    gizmoGroup.renderOrder = 999;
+    gizmoGroup.renderOrder = RENDER_ORDER.GIZMO;   // 999, the legacy value (core/renderOrder.js, 01 5.5)
     this.#handles = {};
 
     const scale = 0.7; // Larger gizmos

@@ -26,6 +26,8 @@
  *   8  every leaf of Strategies is referenced (`Strategies.<path>`, or `profile.<leaf>` under mesh.<consumer>.)
  *   9  js/core, legacy, theme, domain, geometry, io contain no THREE / document / window identifier
  *  10  domain fields are assigned outside js/domain/ only where the ALLOWLIST below permits it
+ *  11  no numeric renderOrder literal >= 900 outside js/core/renderOrder.js, the render-order registry
+ *      (docs/improvements/01-normals.md 5.5, CR-10; 07 S10): `x.renderOrder = 999` or `renderOrder: 995`
  *
  * "Identifier" means a token of code: comments and the text of string, template and regex literals
  * are blanked first (the code inside template `${...}` is kept), and a name after `.` or `?.` is a
@@ -48,6 +50,13 @@ export const ALLOWLIST = Object.freeze([
     { file: 'js/app/CameraController.js', receiver: 'display', field: 'showSafeDistance' },
     { file: 'js/app/CameraController.js', receiver: 'cine', field: 'enabled' },
     { file: 'js/app/PropController.js', receiver: 'prop', field: 'visible' },
+    // DebugViewSettings (01 F1-1): written only by the debug-view use cases.
+    { file: 'js/app/DebugViewController.js', receiver: 'settings', field: 'shading' },
+    { file: 'js/app/DebugViewController.js', receiver: 'normals', field: 'enabled' },
+    { file: 'js/app/DebugViewController.js', receiver: 'normals', field: 'vertex' },
+    { file: 'js/app/DebugViewController.js', receiver: 'normals', field: 'face' },
+    { file: 'js/app/DebugViewController.js', receiver: 'normals', field: 'lengthScale' },
+    { file: 'js/app/DebugViewController.js', receiver: 'normals', field: 'onTop' },
 ].map(Object.freeze));
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -65,6 +74,7 @@ const RULE_TITLES = Object.freeze({
     8: 'Strategies reference',
     9: 'pure layer',
     10: 'domain field write',
+    11: 'render order literal',
 });
 
 /**
@@ -105,10 +115,14 @@ const DOMAIN_FIELDS = Object.freeze(['posX', 'posY', 'posZ', 'rotX', 'rotY', 'ro
     'focalLength', 'enabled', 'visible', 'scale', 'content', 'wireframe', 'showFrame', 'ledLayout', 'showGrid', 'showSafeDistance',
     'meshMode', 'nextSectionId', 'panelCols', 'panelRows', 'panelWidth', 'panelHeight', 'ledX', 'ledY', 'curveIntensity',
     'angleOffset', 'name', 'color', 'borderThickness', 'fontSize', 'fontColor', 'sectionLabelEnabled', 'sectionLabelFontSize',
-    'sectionLabelColor']);
+    'sectionLabelColor', 'shading', 'vertex', 'face', 'lengthScale', 'onTop']);
 const DOMAIN_RECEIVERS = new Set(['project', 'wall', 'section', 'sections[...]', 'cine', 'prop', 'person', 'car', 'display',
-    'panelIdStyle', 'style']);
+    'panelIdStyle', 'style', 'settings', 'normals']);
 const ASSIGNMENT_OPS = ['>>>=', '**=', '<<=', '>>=', '&&=', '||=', '??=', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '++', '--'];
+
+/** Rule 11: the only file that may hold renderOrder literals of 900 and above (relative to js/). */
+const RENDER_ORDER_FILE = 'core/renderOrder.js';
+const RENDER_ORDER_MIN = 900;
 
 /** Rule 7: the one event that may have no subscriber (the feature seam, ARCHITECTURE.md 5.1 rule 7). */
 const UNSUBSCRIBED_EVENTS = new Set(['WALL_REBUILT']);
@@ -717,6 +731,45 @@ function checkDomainWrites(mod, ctx) {
     }
 }
 
+/** A numeric literal token (decimal, exponent, hex, binary, octal; numeric separators allowed). */
+const NUMBER_TOKEN_RE = /(?<![\w$.])(?:0[xX][\da-fA-F_]+|0[bB][01_]+|0[oO][0-7_]+|(?:\d[\d_]*(?:\.[\d_]*)?|\.\d[\d_]*)(?:[eE][+-]?\d+)?)(?![\w$])/g;
+
+/**
+ * Rule 11: `renderOrder` assignments and object-literal properties whose right-hand side (up to the end of the
+ * statement or property: `;`, `,` or `}` at its own depth, or the end of the line) contains a numeric literal
+ * >= 900. Comments and string contents are already blanked, so only code counts.
+ */
+function checkRenderOrder(mod, ctx) {
+    if (mod.jsRel === RENDER_ORDER_FILE) return;
+    const { code } = mod.lx;
+    for (const m of code.matchAll(/(?<![\w$])renderOrder(?![\w$])/g)) {
+        let k = nextNonSpace(code, m.index + m[0].length);
+        if (k < 0) continue;
+        if (code[k] === '=' && code[k + 1] !== '=' && code[k + 1] !== '>') k++;
+        else if (code[k] === ':') k++;
+        else continue;
+        let depth = 0;
+        let end = k;
+        for (; end < code.length; end++) {
+            const c = code[end];
+            if (c === '(' || c === '[' || c === '{') depth++;
+            else if (c === ')' || c === ']' || c === '}') { if (depth === 0) break; depth--; }
+            else if ((c === ';' || c === ',') && depth === 0) break;
+            else if (c === '\n' && depth === 0) break;
+        }
+        const rhs = code.slice(k, end);
+        for (const n of rhs.matchAll(NUMBER_TOKEN_RE)) {
+            // A unary minus (after an operator, a bracket or the start of the expression) makes the literal negative.
+            const before = rhs.slice(0, n.index).trimEnd();
+            const negative = before.endsWith('-') && !/[\w$)\]]$/.test(before.slice(0, -1).trimEnd());
+            const value = (negative ? -1 : 1) * Number(n[0].replace(/_/g, ''));
+            if (value >= RENDER_ORDER_MIN) {
+                ctx.report(mod.rel, mod.lx.lineOf(m.index), 11, `renderOrder literal ${n[0]} (>= ${RENDER_ORDER_MIN}) outside js/${RENDER_ORDER_FILE}: use a RENDER_ORDER slot (01 5.5)`);
+            }
+        }
+    }
+}
+
 // ---- runner -----------------------------------------------------------------------------------
 
 /**
@@ -749,6 +802,7 @@ export async function runChecks(rootDir) {
         collectLookups(mod, ctx);
         checkModuleState(mod, ctx);
         checkDomainWrites(mod, ctx);
+        checkRenderOrder(mod, ctx);
     }
     checkLookups(ctx);
 
@@ -815,6 +869,11 @@ const EXPECTED_BAD = Object.freeze([
     ['js/app/WallController.js', 10, 'write to cine.posX'],
     ['js/ui/PanelA.js', 10, 'write to style.fontSize'],
     ['js/ui/PanelA.js', 10, 'write to style.borderThickness'],
+    ['js/app/WallController.js', 10, 'write to normals.onTop'],
+    ['js/app/WallController.js', 10, 'write to settings.shading'],
+    ['js/interaction/Gizmo.js', 11, 'renderOrder literal 999'],
+    ['js/interaction/Gizmo.js', 11, 'renderOrder literal 9.95e2'],
+    ['js/interaction/Gizmo.js', 11, 'renderOrder literal 0x3e3'],
 ]);
 
 async function selfTest() {

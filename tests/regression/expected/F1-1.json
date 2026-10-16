@@ -1,0 +1,10 @@
+{
+  "commit": "F1-1",
+  "bugs": [],
+  "expect": [],
+  "mayChange": [
+    { "output": "large_wall/final__export-zip__led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen so far: L2_PanelIDs.png (1995, 948), L3_PanelIDs.png (1970, 1003), L4_PanelIDs.png (2026, 858), 1 px each, 3840x1920); this commit changes no export and no texture" }
+  ],
+  "notes": "01 F1-1 (T3-T6), invariance (01 8.4, AC 4 and 18): the debug core has no UI, so no debug option is ever switched on in a scenario. DebugMaterials and NormalsDebugView allocate nothing with a THREE id until used (the scratch Matrix3 has none), MaterialOverride restores nothing while empty, camera.layers.enable(HELPERS) changes no pixel while nothing is on HELPERS, and RENDER_ORDER.GIZMO is the legacy 999. No Events key and no DOM id is added."
+}

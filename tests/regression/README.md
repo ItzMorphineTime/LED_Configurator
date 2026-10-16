@@ -802,8 +802,9 @@ exempt): import layering, relative and case-exact `.js` specifiers, `window` /
 `document` only in the vendor shims, `ui/dom.js`, `app/App.js` and `main.js`, DOM-id lookups only in
 `ui/` and `App.js` with one owner per id, no module-level `let` / `var`, `LEGACY(B-xx)` tags equal to
 `LEGACY_SITES`, every `Events` key emitted and subscribed, every `Strategies` leaf referenced, no
-THREE / DOM in the pure layers, and domain fields written only by their owners (plus the
-`ALLOWLIST` at the top of the file). Each violation is printed as `file:line: [rule N] message`,
+THREE / DOM in the pure layers, domain fields written only by their owners (plus the
+`ALLOWLIST` at the top of the file), and, since 01 F1-1, no numeric `renderOrder` literal of 900 or more outside
+`js/core/renderOrder.js` (rule 11). Each violation is printed as `file:line: [rule N] message`,
 and the exit code is 1 if there is any. Rule 6 also reports a `LEGACY_SITES` entry whose file under
 `js/` does not exist.
 

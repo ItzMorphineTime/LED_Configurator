@@ -12,6 +12,7 @@ import { ContentMode, DisplaySettings, PanelIdStyle, Project } from '../../js/do
 import { LogoLibrary } from '../../js/domain/LogoLibrary.js';
 import { FILMBACK_PRESETS, CineCamera } from '../../js/domain/CineCamera.js';
 import { Prop, PersonProp, CarProp } from '../../js/domain/Prop.js';
+import { DebugShading, SHADING_CYCLE, DebugViewSettings } from '../../js/domain/DebugViewSettings.js';
 
 /** The raw input grid required by the work package. */
 const INPUTS = ['', '0', '-0', '1', '2.5', '50', '51', '-3', 'abc', '1e3', ' 7 ', '0x10', 'NaN', 'Infinity', '-181', '361'];
@@ -1053,5 +1054,47 @@ describe('Prop', () => {
     same(prop.rotY, 0 - 12.5, 'rotY -= angle');
     assert.equal(prop.rotateBy('y', 400), true);
     same(prop.rotY, -12.5 + 400, 'unclamped, like legacy');
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// DebugViewSettings (docs/improvements/01-normals.md 4.4, 8.1; 01 F1-1)
+// ---------------------------------------------------------------------------------------------------------------
+
+describe('DebugViewSettings', () => {
+  test('defaults: shading content; lines off, vertex lines on, face lines off, x1, depth-tested', () => {
+    const s = new DebugViewSettings();
+    assert.equal(s.shading, 'content');
+    assert.deepEqual(s.normals, { enabled: false, vertex: true, face: false, lengthScale: 1, onTop: false });
+    assert.deepEqual(DebugShading, { CONTENT: 'content', FACE_ORIENTATION: 'faceOrientation', NORMAL_COLORS: 'normalColors' });
+    assert.deepEqual(SHADING_CYCLE, ['content', 'faceOrientation', 'normalColors']);
+    assert.ok(Object.isFrozen(DebugShading) && Object.isFrozen(SHADING_CYCLE));
+  });
+
+  test('parseLengthScale over 0, "", NaN, -1, 0.1, 0.3, "2.6", 9 gives 1, 1, 1, 1, 0.25, 0.25, 2.5, 4', () => {
+    const inputs = [0, '', NaN, -1, 0.1, 0.3, '2.6', 9];
+    assert.deepEqual(inputs.map((v) => DebugViewSettings.parseLengthScale(v)), [1, 1, 1, 1, 0.25, 0.25, 2.5, 4]);
+    assert.equal(DebugViewSettings.parseLengthScale('1.125'), 1.25, 'rounded to the 0.25 step (half up)');
+    assert.equal(DebugViewSettings.parseLengthScale(undefined), 1);
+    assert.equal(DebugViewSettings.parseLengthScale('abc'), 1);
+  });
+
+  test('nextShading cycles content -> faceOrientation -> normalColors -> content; an unknown value goes back to content', () => {
+    const s = new DebugViewSettings();
+    const seen = [];
+    for (let i = 0; i < 4; i++) { s.shading = s.nextShading(); seen.push(s.shading); }
+    assert.deepEqual(seen, ['faceOrientation', 'normalColors', 'content', 'faceOrientation']);
+    s.shading = 'bogus';
+    assert.equal(s.nextShading(), 'content');
+  });
+
+  test('snapshot is a frozen copy that later writes do not change', () => {
+    const s = new DebugViewSettings();
+    const snap = s.snapshot();
+    assert.ok(Object.isFrozen(snap) && Object.isFrozen(snap.normals));
+    assert.notEqual(snap.normals, s.normals);
+    s.normals.enabled = true;
+    s.shading = 'normalColors';
+    assert.deepEqual(snap, { shading: 'content', normals: { enabled: false, vertex: true, face: false, lengthScale: 1, onTop: false } });
   });
 });

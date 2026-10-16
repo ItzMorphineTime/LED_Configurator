@@ -4,6 +4,10 @@
  * Three builders reproduce the legacy mesh modes ('combined', 'section', anything else = panels) with the legacy
  * THREE allocation order (geometry -> texture -> material -> mesh), because three r128 sorts draw calls by ids
  * allocated from global counters (R4, R5). No extra parent, renderable or layer is introduced (R6).
+ * The normals debug view's shading (docs/improvements/01-normals.md 5.2, F1-1) is a material override on the LED
+ * meshes through MaterialOverride: the content materials are stashed while a shared debug material is shown, put back
+ * before every rebuild disposes the old wall, and put back around stills (withContentMaterials, 07 C48). The debug
+ * materials are created by DebugMaterials on first use, so nothing changes until the shading is switched on.
  * Legacy source: index.html@cd3fd3f 1457-1577, 1646-1678, 1710-1802.
  * Layer: render (may import vendor/three, core, legacy, domain, geometry).
  */
@@ -13,6 +17,7 @@ import { Strategies } from '../legacy/LegacyCompat.js';
 import { computeAtlas } from '../geometry/TextureAtlas.js';
 import { maxIndexOf, indexWidth } from '../geometry/WallMeshBuilder.js';
 import { ResourceTracker } from './ResourceTracker.js';
+import { MaterialOverride } from './MaterialOverride.js';
 
 /**
  * The argument of geometry.setIndex for a combined or section grid (08 P2-1e; the viewport side of B-L5, 08 6.2): a
@@ -58,6 +63,14 @@ export class LEDWallView {
   #wallGroup = null;
   /** @type {THREE.Group|null} legacy `frameGroup` */
   #frameGroup = null;
+  /** @type {import('./DebugMaterials.js').DebugMaterials} the shared debug-shading materials (01 F1-1) */
+  #debugMaterials;
+  /** The stash of the content materials while a debug shading is shown (no THREE allocation). */
+  #override = new MaterialOverride();
+  /** @type {string} the current debug shading: 'content' | 'faceOrientation' | 'normalColors' */
+  #shading = 'content';
+  /** @type {import('../domain/Project.js').DisplaySettings|null} the display of the last rebuild (wireframe) */
+  #display = null;
 
   /**
    * Stores the dependencies only (R4): nothing is allocated until rebuild().
@@ -65,14 +78,17 @@ export class LEDWallView {
    * @param {{sceneManager: import('./SceneManager.js').SceneManager,
    *          materials: import('./LEDMaterialFactory.js').LEDMaterialFactory,
    *          builder: import('../geometry/WallMeshBuilder.js').WallMeshBuilder,
-   *          theme: {scene: object}}} deps
-   *   builder: the WallMeshBuilder of the viewport profile; theme: { scene: SceneTheme } (frame colour)
+   *          theme: {scene: object},
+   *          debugMaterials: import('./DebugMaterials.js').DebugMaterials}} deps
+   *   builder: the WallMeshBuilder of the viewport profile; theme: { scene: SceneTheme } (frame colour);
+   *   debugMaterials: the shared debug-shading materials (01 F1-1; read only once a shading is set)
    */
-  constructor({ sceneManager, materials, builder, theme }) {
+  constructor({ sceneManager, materials, builder, theme, debugMaterials }) {
     this.#sceneManager = sceneManager;
     this.#materials = materials;
     this.#builder = builder;
     this.#theme = theme;
+    this.#debugMaterials = debugMaterials;
   }
 
   /** Side effects: none. @returns {THREE.Group|null} legacy `ledWallGroup` (null before the first rebuild) */
@@ -91,14 +107,21 @@ export class LEDWallView {
   /**
    * Replaces the wall: disposes the previous groups, builds the new meshes for the mesh mode, builds the frames
    * if shown, and adds the groups to the scene. The layout walk, stats, orbit target and camera hub of legacy
-   * createLEDWall are the caller's (WallController.rebuild, P1).
+   * createLEDWall are the caller's (WallController.rebuild, P1). With a debug shading on (01 F1-1), step 0 puts the
+   * content materials back first, so step 1 disposes the real materials and never the shared debug ones, and step 6
+   * shows the shading on the new meshes.
    * Ports: index.html@cd3fd3f lines 1458-1477, 1551-1572.
-   * Side effects: scene removals/additions; THREE allocations and dispose events; canvases for panel IDs and LED tiles.
+   * Side effects: scene removals/additions; THREE allocations and dispose events; canvases for panel IDs and LED tiles;
+   *   mesh.material writes (debug shading).
    * @param {{layout: import('../geometry/WallLayout.js').WallLayout, meshMode: *,
    *          display: import('../domain/Project.js').DisplaySettings}} args
    * @returns {void}
    */
   rebuild({ layout, meshMode, display }) {
+    // 0. Put the content materials back (01 F1-1), so step 1 never disposes the shared debug materials.
+    this.#override.restore();
+    this.#display = display;
+
     // 1. Remove and dispose the previous wall group, then the previous frame group (legacy 1458-1474), with the
     // policy read in step 2 of the previous rebuild.
     if (this.#tracker) this.#tracker.dispose();
@@ -138,6 +161,52 @@ export class LEDWallView {
     // 5. Scene.
     this.#sceneManager.add(wallGroup);
     if (display.showFrame) this.#sceneManager.add(frameGroup);
+
+    // 6. The debug shading survives rebuilds (01 F1-1): a direct step, not a subscription (R2).
+    if (this.#shading !== 'content') this.#applyShading();
+  }
+
+  /**
+   * Shows a debug shading over every LED mesh (01 3.3, 5.2): 'content' puts the content materials back; any other
+   * mode shows its shared DebugMaterials material (wireframe following display.wireframe) on every mesh of meshes().
+   * Orthogonal to the wall content mode; kept across rebuilds (rebuild step 6). Idempotent. Emits nothing.
+   * Side effects: mesh.material writes; may create the debug material (first use).
+   * @param {string} mode  'content' | 'faceOrientation' | 'normalColors'
+   * @returns {void}
+   */
+  setDebugShading(mode) {
+    this.#shading = mode;
+    this.#applyShading();
+  }
+
+  /**
+   * Runs `fn` with the content materials on the wall (07 C48): stills and screenshots never show the debug shading
+   * unless the caller asks for it. With an override shown it is removed, `fn` runs, and the shading is shown again
+   * (also when `fn` throws); otherwise `fn` just runs. Synchronous.
+   * Side effects: mesh.material writes around fn; whatever fn does.
+   * @template T
+   * @param {() => T} fn
+   * @returns {T} fn's result
+   */
+  withContentMaterials(fn) {
+    if (!this.#override.active) return fn();
+    this.#override.restore();
+    try {
+      return fn();
+    } finally {
+      this.#applyShading();
+    }
+  }
+
+  /** Shows the current shading: restore for 'content', else the shared debug material on every LED mesh. */
+  #applyShading() {
+    if (this.#shading === 'content') {
+      this.#override.restore();
+      return;
+    }
+    const material = this.#debugMaterials.forShading(this.#shading);
+    material.wireframe = !!(this.#display && this.#display.wireframe);
+    this.#override.apply(this.meshes(), material);
   }
 
   /**

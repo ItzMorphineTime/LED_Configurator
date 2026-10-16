@@ -17,6 +17,7 @@ import { EventBus } from '../core/EventBus.js';
 import { Strategies } from '../legacy/LegacyCompat.js';
 import { Theme } from '../theme/Theme.js';
 import { Project } from '../domain/Project.js';
+import { DebugViewSettings } from '../domain/DebugViewSettings.js';
 import { framingBounds } from '../geometry/WallLayout.js';
 import { WallMeshBuilder } from '../geometry/WallMeshBuilder.js';
 import { SceneManager } from '../render/SceneManager.js';
@@ -28,6 +29,8 @@ import { CameraRigView } from '../render/CameraRigView.js';
 import { SafeDistanceView } from '../render/SafeDistanceView.js';
 import { PreviewWindow } from '../render/PreviewWindow.js';
 import { PersonPropView, CarPropView } from '../render/PropViews.js';
+import { DebugMaterials } from '../render/DebugMaterials.js';
+import { NormalsDebugView } from '../render/NormalsDebugView.js';
 import { InteractionState, KeyboardState, PointerRay } from '../interaction/InputState.js';
 import { OrbitController } from '../interaction/OrbitController.js';
 import { SelectionManager } from '../interaction/SelectionManager.js';
@@ -41,6 +44,7 @@ import { WallController } from './WallController.js';
 import { CameraHub, CameraController } from './CameraController.js';
 import { PropController } from './PropController.js';
 import { Downloader, ProjectIO } from './ProjectIO.js';
+import { DebugViewController } from './DebugViewController.js';
 import { byId, createDialogs } from '../ui/dom.js';
 import { HeaderStats } from '../ui/HeaderStats.js';
 import { SectionListPanel } from '../ui/SectionListPanel.js';
@@ -106,9 +110,17 @@ export class App {
     const ledTiles = new LEDPixelTextureFactory({ doc, display, theme });
     const panelIds = new PanelIdRenderer({ doc, style, logos, theme });
     const materials = new LEDMaterialFactory({ display, panelIds, ledTiles, win });
+    // The normals debug view (01 F1-1, 5.7): settings, lazily created materials, the wall override and the lines.
+    // Nothing is allocated until a debug option is switched on; the lines view subscribes WALL_REBUILT before the
+    // bootstrap rebuild, so it caches the first layout.
+    const debugSettings = new DebugViewSettings();
+    const debugMaterials = new DebugMaterials({ theme });
     const wallView = new LEDWallView({
-      sceneManager, materials, builder: new WallMeshBuilder(Strategies.mesh.viewport), theme,
+      sceneManager, materials, builder: new WallMeshBuilder(Strategies.mesh.viewport), theme, debugMaterials,
     });
+    const normalsView = new NormalsDebugView({ sceneManager, bus, settings: debugSettings, materials: debugMaterials, theme });
+    // F1-1 has no bus, no event and no UI: 01 T7 (F1-2) adds the bus, DEBUG_VIEW_CHANGED and DebugViewControls.
+    const debugController = new DebugViewController({ settings: debugSettings, wallView, normalsView });
     const rig = new CameraRigView({ sceneManager, bus, theme });
     const safeDistance = new SafeDistanceView({ sceneManager, doc, theme });
     const preview = new PreviewWindow({

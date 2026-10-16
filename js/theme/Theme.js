@@ -1,7 +1,8 @@
 /**
  * @module theme/Theme
  * Every scene, canvas, status-colour, palette and export literal of the legacy page, copied verbatim with its
- * exact type (0x numbers stay numbers, CSS colour strings stay strings). All objects and arrays are frozen.
+ * exact type (0x numbers stay numbers, CSS colour strings stay strings), plus the feature keys added since (SceneTheme
+ * .debug, 01 F1-1). All objects and arrays are frozen.
  * Only app/App.js imports this module; every consumer receives `theme` (or one of its parts) by injection, so
  * Feature 6 swaps in a ThemeBridge-built object of the same shape in one line (never by mutating these objects).
  * Legacy source: index.html@cd3fd3f 1379-1384, 1406, 1431, 1440-1449, 1563, 1693, 1821, 2009, 2034, 2042, 2064,
@@ -45,6 +46,11 @@ export const SceneTheme = deepFreeze({
          glass: { color: 0x88ccff, opacity: 0.5 }, lights: 0xffffaa },      // 2915-2917, 2960
   gizmo: { x: 0xff4444, y: 0x44ff44, z: 0x4444ff, idleOpacity: 0.35, hoverOpacity: 1.0, dimmedOpacity: 0.15 },
          // 3010, 3029-3089, 3225, 3264. Axis colours are a convention: never brand them.
+  debug: {                                                                  // 01 F1-1 (4.6): the normals debug view
+    faceFront: 0x2f6bff, faceBack: 0xff3344,                                // face orientation (convention colours; never brand them)
+    vertexNormal: 0xb8f03c, faceNormal: 0xff4fd8,                           // normal-line tips (lime, magenta)
+    lineBaseFactor: 0.35,                                                   // line base colour = tip x factor
+  },
 });
 
 /**

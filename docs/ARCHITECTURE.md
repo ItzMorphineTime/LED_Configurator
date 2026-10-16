@@ -57,9 +57,9 @@ Phase 1 turns the 3,800-line inline script and the 860-line inline stylesheet in
         +-------------------------------------+---------------------------------------------------+
                                               v
       io/        pure writers/readers: ProjectSerializer (v1), ObjExporter, GltfExporter          (THREE-free, DOM-free)
-      geometry/  pure: WallLayout, WallMeshBuilder, TextureAtlas, PanelNaming                     (THREE-free, DOM-free)
+      geometry/  pure: WallLayout, WallMeshBuilder, TextureAtlas, PanelNaming, NormalLines        (THREE-free, DOM-free)
       domain/    pure entities: Project, Wall, WallSection, CineCamera, Prop, LogoLibrary, ...     (THREE-free, DOM-free)
-      core/ EventBus + Events, typingTarget     legacy/ LegacyCompat (Strategies, legacy helpers, LEGACY_SITES)     theme/ Theme constants
+      core/ EventBus + Events, typingTarget, renderOrder     legacy/ LegacyCompat (Strategies, legacy helpers, LEGACY_SITES)     theme/ Theme constants
       vendor/ three.js, jszip.js shims (window.THREE / window.JSZip)
 ```
 
@@ -182,6 +182,8 @@ js/
   core/
     EventBus.js                            WP3   Events catalogue (frozen) + synchronous EventBus (throws on unknown event names)
     typingTarget.js                        08 P2-9b  isTypingTarget(t): the one typing guard (07 3.8 truth table; 07 C18, C52)
+    renderOrder.js                         01 F1-1  RENDER_ORDER: every non-default renderOrder slot of every spec (01 5.5,
+                                                 CR-10); static rule 11 forbids literals >= 900 elsewhere
   legacy/
     LegacyCompat.js                        WP3   Strategies (deep-frozen switches), LegacyProfiles, legacy helpers (orDefault,
                                                  legacyHtml), unsupportedStrategy, LEGACY_SITES
@@ -195,6 +197,8 @@ js/
     CineCamera.js                          WP3   Film camera: lens, pose, enabled flag, FILMBACK_PRESETS, FOV/coverage/safe-D math,
                                                  field rules, gizmo/pilot pose arithmetic
     Prop.js                                WP3   Prop base (pose, visibility, field rules, gizmo arithmetic), PersonProp, CarProp
+    DebugViewSettings.js                   01 F1-1  DebugShading, SHADING_CYCLE, DebugViewSettings (normals debug view
+                                                 preferences; not persisted)
   geometry/
     WallLayout.js                          WP4   The single cursor walk: computeWallLayout, layoutProject, framingBounds,
                                                  SectionLayout, WallLayout (flatEdges, firstEdge/lastEdge, bounds, pivotPoint)
@@ -203,11 +207,17 @@ js/
     TextureAtlas.js                        WP4   computeAtlas (LED totals, px/LED, start columns, x offsets, UV offsets),
                                                  sectionPxPerLed, panelPxPerLed; CANVAS_HARD_LIMITS, canvasFits (08 P2-1c)
     PanelNaming.js                         WP4   Column letters, panel labels, export object names, filename sanitising, texture names
+    NormalLines.js                         01 F1-1  Normal-line arithmetic: auto length, cap + decimation stride, line counts,
+                                                 vertex / face line writers (no allocation), upload size, stats text
   render/
     ResourceTracker.js                     WP6   disposeObject3D(root, {maps}) + ResourceTracker
     SceneManager.js                        WP6   Scene, main camera, renderer, lights, grid, axes (explicit init()), helper registry,
                                                  LAYERS, grid toggle, resize, render loop
-    LEDWallView.js                         WP6   Wall + frame groups from a WallLayout; mode dispatch; mesh tagging; section nodes
+    LEDWallView.js                         WP6   Wall + frame groups from a WallLayout; mode dispatch; mesh tagging; section nodes;
+                                                 debug-shading override and withContentMaterials (01 F1-1)
+    MaterialOverride.js                    01 F1-1  Stash / restore of mesh materials under a shared override material
+    DebugMaterials.js                      01 F1-1  Lazily created face-orientation and normal-colour ShaderMaterials, line material
+    NormalsDebugView.js                    01 F1-1  Merged normal-line LineSegments on LAYERS.HELPERS (WALL_REBUILT subscriber)
     LEDMaterialFactory.js                  WP6   The only constructor of wall materials (panel IDs > LED sim > colour)
     textures/LEDPixelTextureFactory.js     WP6   installCanvasPolyfills, LED tile cache, 5 tile painters, tiled clones
     textures/PanelIdRenderer.js            WP6   Panel / section / atlas panel-ID canvases (styling, section names, logos)
@@ -234,6 +244,7 @@ js/
                                                  (preview/lens/pose use cases, Selectable 'camera')
     PropController.js                      WP7   Prop use cases (show/hide, fields, transform, Selectable 'person'/'car')
     ProjectIO.js                           WP5   Downloader + export/import use cases (JSON, OBJ, glTF, PNG, ZIP, safe-distance OBJ)
+    DebugViewController.js                 01 F1-1  Debug-view use cases: settings write, then the render call (no bus until F1-2)
   ui/
     dom.js                                 WP3   byId, flipToggle, setDisplay, createDialogs
     HeaderStats.js                         WP9   #total-pixels / #total-panels / #total-sections / #total-arc
@@ -276,7 +287,8 @@ tests/
                                                  "Phase 2 re-baselining" procedure)
   static/
     check.mjs                              WP1   layering, DOM-id ownership, call-time globals, import case, LEGACY parity,
-                                                 Strategies references, event subscribers, module-level state, domain field writers
+                                                 Strategies references, event subscribers, module-level state, domain field writers;
+                                                 01 F1-1: rule 11, no renderOrder literal >= 900 outside core/renderOrder.js
     fixtures/                              WP1   synthetic trees used to self-test check.mjs
     css-slices.mjs                         WP2   proves css/*.css == original lines 12-869 (normalised) in link order
                                                  (normalisation: CSS whitespace only, i.e. space, tab, LF, CR, FF; each file
@@ -300,6 +312,11 @@ tests/
     wall-controller.test.mjs               WP9   rebuild policy: run counts and tile-cache clears for the 24 legacy sites
     compare.test.mjs                       08 P2-0  compare.mjs --expect semantics and JITTER on synthetic output trees;
                                                  01 T2: rects, size, exclude and --diff-bbox on synthetic PNG pairs
+    normal-lines.test.mjs                  01 F1-1  NormalLines: auto length table, strides, 6.6 line counts, writers, stats
+                                                 strings, the AC 14a cap benchmark (200 sections x 50x20)
+    material-override.test.mjs             01 F1-1  MaterialOverride with plain objects (Material[] kept; restore before dispose)
+    led-wall-view.test.mjs                 01 F1-1  LEDWallView debug shading and withContentMaterials (fake THREE)
+    debug-view-controller.test.mjs         01 F1-1  DebugViewController: model write, then exactly one render call (spies)
     harness-lib.test.mjs                   01 T2  measure-rects.mjs (measure objects, rectangles, formatting) and
                                                  lib/palette.mjs (colour parsing, token / SceneTheme resolution)
     tools.test.mjs                         08 P2-0  tools/check-orientation.mjs and tools/check-gltf.mjs on hand-built files;
@@ -403,6 +420,13 @@ export function isTypingTarget(t)
 ```
 Consumers: `interaction/InputState.js` re-exports it (also as `isShortcutIgnoredTarget` until 07 I1), `ViewportInput.attachShortcuts` (through that re-export), 01 T7's `DebugViewControls.bindShortcuts`; 07 I1 adds `isMovementBlockedTarget(t)` to the same module.
 
+**`js/core/renderOrder.js`** (01 F1-1, 01 5.5 and CR-10; 07 0.4): the single registry of every non-default `Object3D.renderOrder` slot of every spec. Static rule 11: no numeric `renderOrder` literal >= 900 anywhere else under `js/`; lower values may be written in place and are listed here for documentation.
+```js
+export const RENDER_ORDER = Object.freeze({ HDRI_BACKDROP: -1e6, DEFAULT: 0, RIG_CORE: 1, INNER_FRUSTUM_OVERLAY: 990, MEASURE: 992,
+  HDRI_MARKER: 993, UV_HOVER_OUTLINE: 994, NORMAL_LINES_ON_TOP: 995, PIVOT_MARKER: 996, HIGHLIGHT_HALO: 997, SECTION_HIGHLIGHT: 998,
+  GIZMO: 999 });   // each slot is used by its owning spec when it lands; TransformGizmo uses GIZMO (the legacy 999)
+```
+
 ### 3.3 `js/legacy/LegacyCompat.js`
 
 The single home of every output-affecting legacy switch and helper. The file header comment points to section 8 of this document as the human-readable register.
@@ -473,7 +497,7 @@ export const LEGACY_SITES
 
 ### 3.4 `js/theme/Theme.js`
 
-Every scene, canvas and export literal, copied verbatim with its exact type (number vs string). Only `App.js` imports this module; every consumer receives `theme` (or one of its parts) by injection, so Feature 6 swaps in a ThemeBridge-built object **of the same shape** in one line (no mutation of these frozen objects).
+Every scene, canvas and export literal, copied verbatim with its exact type (number vs string), plus the feature keys written as literal keys inside the frozen objects (never assigned afterwards): `SceneTheme.debug` (01 F1-1, 01 4.6: `faceFront: 0x2f6bff`, `faceBack: 0xff3344`, `vertexNormal: 0xb8f03c`, `faceNormal: 0xff4fd8`, `lineBaseFactor: 0.35`; spec 06's ThemeBridge must produce the same keys, 01 CR-8). `SceneTheme.wallBack` follows with 01 F1-5. Only `App.js` imports this module; every consumer receives `theme` (or one of its parts) by injection, so Feature 6 swaps in a ThemeBridge-built object **of the same shape** in one line (no mutation of these frozen objects).
 
 ```js
 export const SceneTheme = Object.freeze({
@@ -790,6 +814,21 @@ export class PersonProp extends Prop { constructor() { super({ kind: 'person', l
 export class CarProp    extends Prop { constructor() { super({ kind: 'car',    label: 'Car',    posX: 4, posZ: 3, gizmoAnchorY: 0.5 }); } }
 ```
 
+#### `js/domain/DebugViewSettings.js` (01 F1-1, 01 4.4)
+```js
+export const DebugShading = Object.freeze({ CONTENT: 'content', FACE_ORIENTATION: 'faceOrientation', NORMAL_COLORS: 'normalColors' });
+export const SHADING_CYCLE = Object.freeze(['content', 'faceOrientation', 'normalColors']);
+export class DebugViewSettings {      // viewer preferences: never serialised, reset on reload (01 Q7)
+  shading = 'content';
+  normals = { enabled: false, vertex: true, face: false, lengthScale: 1, onTop: false };
+  /** v = parseFloat(raw); !Number.isFinite(v) || v <= 0 -> 1; else Math.min(4, Math.max(0.25, Math.round(v * 4) / 4)) */
+  static parseLengthScale(raw)
+  nextShading()                     // SHADING_CYCLE[(indexOf(shading) + 1) % 3]
+  snapshot()                        // frozen {shading, normals: {...normals}} for event payloads (01 T7)
+}
+```
+Its fields are written only by `app/DebugViewController.js` (section 4).
+
 ### 3.6 Geometry (pure)
 
 #### `js/geometry/WallLayout.js`: the single cursor walk
@@ -986,6 +1025,20 @@ export function mtlTextureFile(i)
 ```
 
 
+#### `js/geometry/NormalLines.js` (01 F1-1, 01 5.2, 6.6, 6.7; imports nothing)
+```js
+export const MAX_NORMAL_LINES = 150000;
+export function autoNormalLength(layout, scale = 1)   // min(max(0.5 p_min, 0.01 d), 0.04 d) x scale, clamped to [0.005, 5] m; 0 when empty
+export function decimationStride(total, cap = MAX_NORMAL_LINES)   // Math.max(1, Math.ceil(total / cap))
+export function countNormalLines(meshes, { vertex, face })        // {vertexLines, faceLines}: vertices; quads (6 indices) or triangles
+export function writeVertexNormalLines(out, src, opts)  // p = M x, n = normalize(N n); kept iff out.seen++ % stride === 0; no allocation
+export function writeFaceNormalLines(out, src, opts)    // per quad: winding-derived area-weighted normal from the centroid
+export function uploadCount(written)                    // 6 * written (updateRange.count of both attributes)
+export function formatCount(n)                          // '3,444' (fixed regex, no Intl)
+export function formatNormalStats({ vertexLines, faceLines, total, stride, lengthM, vertex, face, empty })   // {text, warning} (01 3.5)
+```
+Matrices arrive as plain column-major arrays (`Matrix4.elements`, `Matrix3.elements`); `out = {positions, colors, count, seen}` holds the caller's reused `Float32Array`s.
+
 ### 3.7 Render (THREE views and canvases)
 
 All render modules import THREE via `import THREE from '../vendor/three.js'` (`../../vendor/three.js` under `textures/`). They receive `theme` parts by injection and never import `theme/`.
@@ -1012,7 +1065,8 @@ Policies: `LEDWallView` tracks only its two group roots with `disposeMaps: Strat
 
 #### `js/render/SceneManager.js`
 ```js
-export const LAYERS = Object.freeze({ DEFAULT: 0, HELPERS: 1 });   // Feature 1/5 seam; NOT applied in Phase 1 (R6)
+export const LAYERS = Object.freeze({ DEFAULT: 0, HELPERS: 1 });   // Feature 1/5 seam; existing helpers stay on layer 0 (R6);
+                                                                   // since 01 F1-1 the normal lines live on HELPERS
 
 export class SceneManager {
   /** deps only (R4): no THREE allocation in the constructor.
@@ -1022,6 +1076,7 @@ export class SceneManager {
   /** Legacy init body 1427-1449, same statement order:
    *  container = canvas.parentElement; scene = new THREE.Scene(); scene.background = new THREE.Color(theme.scene.background);
    *  camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000); camera.position.set(0, 0, 8);
+   *  camera.layers.enable(LAYERS.HELPERS)   (01 F1-1, 5.5: only the normal lines are on HELPERS; no id, no pixel change)
    *  renderer = new THREE.WebGLRenderer({ canvas, antialias: true }); renderer.setSize(container.clientWidth, container.clientHeight);
    *  renderer.setPixelRatio(Math.min(win.devicePixelRatio, 2));
    *  scene.add(new THREE.AmbientLight(0xffffff, 0.3)); pointLight = new THREE.PointLight(0xffffff, 0.8); pointLight.position.set(5, 5, 10);
@@ -1057,11 +1112,13 @@ State: `#scene`, `#camera`, `#renderer`, `#grid`, `#axes`, `#helpers: Set`. The 
 ```js
 export class LEDWallView {
   /** @param {{sceneManager: SceneManager, materials: LEDMaterialFactory, builder: WallMeshBuilder (viewport profile),
-   *           theme: {scene: SceneTheme}}} deps */
-  constructor({ sceneManager, materials, builder, theme })
+   *           theme: {scene: SceneTheme}, debugMaterials: DebugMaterials}} deps   (debugMaterials: 01 F1-1) */
+  constructor({ sceneManager, materials, builder, theme, debugMaterials })
   get wallGroup(); get frameGroup()     // legacy ledWallGroup / frameGroup
 
   /** Legacy createLEDWall body minus layout and tail (1458-1477, 1551-1572), in this order:
+   *  0. (01 F1-1) #override.restore(): the content materials go back before step 1, so a rebuild disposes the real
+   *     materials and never the shared debug ones; #display = display
    *  1. #tracker.dispose() (the previous rebuild's tracker, if any): for the previous wall group then the previous frame
    *     group: sceneManager.remove(group)
    *     then disposeObject3D(group, {maps: Strategies.dispose.wallTextures}) (true since Phase 1C H1, the B-H5 fix:
@@ -1076,8 +1133,16 @@ export class LEDWallView {
    *     ELSE -> #buildPanels   LEGACY(B-L8): any unknown imported mode renders as panels   (1551-1557)
    *  4. if (display.showFrame) #buildFrames(layout)                                         (1559-1569)
    *  5. sceneManager.add(wallGroup); if (display.showFrame) sceneManager.add(frameGroup)    (1571-1572)
+   *  6. (01 F1-1) if (#shading !== 'content') #applyShading()   (a direct step, not a subscription, R2)
    *  @param {{layout: WallLayout, meshMode: string, display: DisplaySettings}} args */
   rebuild({ layout, meshMode, display })
+
+  /** 01 F1-1 (01 5.2). 'content': #override.restore(). Otherwise mat = debugMaterials.forShading(mode);
+   *  mat.wireframe = display.wireframe; #override.apply(meshes(), mat). Idempotent; kept across rebuilds; no event. */
+  setDebugShading(mode)
+  /** 07 C48: stills and screenshots. Override shown: #override.restore(); try { return fn() } finally { #applyShading() };
+   *  otherwise fn(). Synchronous; PreviewPass.capture (07 R4) and 09's captureCanvas call it unless include.debug. */
+  withContentMaterials(fn)
 
   /** Feature seams (non-observable in Phase 1): */
   meshes()          // Mesh[] children of wallGroup, in add order
@@ -1095,6 +1160,45 @@ Builders (private, allocation order = legacy statement order, R5):
 `userData` tags are non-observable (the wall is never raycast in Phase 1).
 
 `indexAttribute(indices)` (module-private, 08 P2-1e; the viewport side of B-L5, 08 6.2): `indexWidth(maxIndexOf(indices)) === 'uint32' ? new THREE.Uint32BufferAttribute(indices, 1) : indices`. Below a largest index of 65,535 the plain array is passed as before, and r128's `setIndex` stores it as Uint16 (no output changes); r128 alone switches to Uint32 only above 65,535, so a combined mesh of exactly 65,536 vertices would have stored the primitive-restart value 65,535 in a Uint16 index and lost a triangle. Panel mode uses `PlaneGeometry` (4 vertices) and is unaffected.
+
+#### `js/render/MaterialOverride.js` (01 F1-1; imports nothing, Node-tested with plain objects)
+```js
+export class MaterialOverride {
+  apply(meshes, material)   // per mesh: stash mesh.material once (a Material[] by reference), then mesh.material = material
+  restore()                 // every stashed material back on its mesh, stash cleared; @returns the count
+  get active()              // stash not empty
+}
+```
+
+#### `js/render/DebugMaterials.js` (01 F1-1, 01 6.8)
+```js
+export class DebugMaterials {
+  constructor({ theme })    // no allocation (R4): every material is created on first use, so nothing changes until used
+  faceOrientation()         // shared ShaderMaterial, DoubleSide: gl_FrontFacing ? uFront : uBack (theme.scene.debug), shaded
+  normalColors()            // shared ShaderMaterial, DoubleSide: world normal * 0.5 + 0.5 (modelMatrix * vec4(normal, 0.0))
+  forShading(mode)          // 'content' -> null; 'faceOrientation' | 'normalColors' -> the material; else RangeError
+  lineMaterial({ onTop })   // shared LineBasicMaterial({vertexColors: true, toneMapped: false}); depthTest = !onTop
+  dispose()                 // App teardown only; never called by a wall rebuild
+}
+```
+
+#### `js/render/NormalsDebugView.js` (01 F1-1, 01 5.2, 6.7)
+```js
+export class NormalsDebugView {
+  /** Subscribes WALL_REBUILT ({layout, view}) => { #last = {layout, view}; if (settings.normals.enabled) sync() } (R3: only its
+   *  own LineSegments and stats element). elements.stats is optional (#debug-normals-stats arrives with 01 T7).
+   *  Allocates nothing with a THREE id (one scratch Matrix3, a Float64Array(9), reused descriptors). */
+  constructor({ sceneManager, bus, settings, materials, theme, elements = {} })
+  get object3D(); get stats()
+  /** Off or no rebuild seen: remove. On: count, stride, length (keepLength for live drags), grow buffers to
+   *  min(150,000, max(1024, nextPow2(kept))) lines, write vertex then face lines per mesh with one running counter, upload
+   *  the written prefix (updateRange), setDrawRange; the LineSegments is on LAYERS.HELPERS only, raycast no-op,
+   *  frustumCulled false, matrixAutoUpdate false, userData.helper, renderOrder RENDER_ORDER.NORMAL_LINES_ON_TOP or
+   *  DEFAULT, added with sceneManager.addHelper; timed by performance mark/measure 'normals:sync' (latest only). */
+  sync({ keepLength = false } = {})
+  dispose()                 // removeHelper, geometry.dispose(); the shared line material stays
+}
+```
 
 #### `js/render/LEDMaterialFactory.js`
 ```js
@@ -1445,7 +1549,7 @@ export class TransformGizmo {
   /** 3182-3193: space = space === 'world' ? 'local' : 'world'; bus.emit(GIZMO_SPACE_CHANGED, {space}); if (group) updateOrientation() */
   toggleSpace()
   /** Verbatim createGizmo 2997-3099: if (group) { sceneManager.removeHelper(group); [dispose per Strategies.dispose.gizmo]; group = null }
-   *  if (!target || !mode) return; group = new THREE.Group(); group.renderOrder = 999; handles = {};
+   *  if (!target || !mode) return; group = new THREE.Group(); group.renderOrder = RENDER_ORDER.GIZMO (999, core/renderOrder.js); handles = {};
    *  translate arrows / rotate tori built in the exact legacy allocation order (material per axis via the private
    *  material(color) factory: MeshBasicMaterial{color, transparent: true, opacity: idleOpacity, depthTest: false, depthWrite: false});
    *  updateOrientation(); updatePosition(); sceneManager.addHelper(group).
@@ -1878,6 +1982,21 @@ export class ProjectIO {
 ```
 
 
+#### `js/app/DebugViewController.js` (01 F1-1, 01 5.2)
+```js
+export class DebugViewController {
+  /** F1-1: no bus and no event; each use case writes DebugViewSettings, then makes its one render call. 01 T7 (F1-2) adds
+   *  `bus` and emits DEBUG_VIEW_CHANGED between the two, together with its subscriber DebugViewControls (5.1 rule 7). */
+  constructor({ settings, wallView, normalsView })
+  toggleNormals()                        // normals.enabled = !enabled; normalsView.sync(); @returns the new state
+  setNormalLineKinds({ vertex, face })   // the booleans given; normalsView.sync()
+  setLengthScale(raw)                    // normals.lengthScale = DebugViewSettings.parseLengthScale(raw); sync(); @returns it
+  setOnTop(on)                           // normals.onTop = !!on; normalsView.sync()
+  setShading(mode)                       // shading = DebugShading value or 'content'; wallView.setDebugShading(shading)
+  cycleShading()                         // setShading(settings.nextShading())
+}
+```
+
 ### 3.11 UI (DOM panels)
 
 Every panel follows the same shape:
@@ -2195,6 +2314,10 @@ Writers listed here are the only allowed writers (checked by `tests/static/check
 | DOM gizmo button classes/text/title, `#selection-indicator.visible` + `.selected-name`, `#pilot-info.visible` | DOM (`ViewportToolbar` mirrors) | `ViewportToolbar` |
 | DOM inline `style.display` of option blocks, `#custom-filmback`, `#export-safe-distance`, `#camera-preview-window`; `#frustum-status-text` colour; preview window size and canvas inline size | DOM, owned by the module that writes it (`WallDisplayPanel`, `CameraPanel`, `PropControls`, `PreviewWindow`) | owners |
 
+| (01 F1-1, not legacy) normals debug view settings | `DebugViewSettings.shading`, `.normals.enabled`, `.normals.vertex`, `.normals.face`, `.normals.lengthScale`, `.normals.onTop` (not persisted) | `DebugViewController` only (its use cases; static rule 10 ALLOWLIST) |
+| (01 F1-1, not legacy) the debug-shading override | `LEDWallView` private `#shading`, `#override` (`MaterialOverride` stash) and the wall meshes' `.material` | `LEDWallView.setDebugShading/rebuild/withContentMaterials` (through `MaterialOverride`) |
+| (01 F1-1, not legacy) the normal lines | `NormalsDebugView.object3D` (its `LineSegments` and buffers), `#last` | `NormalsDebugView` (its `WALL_REBUILT` handler, `sync`, `dispose`) |
+
 `InteractionState` is a shared read surface; its writers are listed above. `Project` and its parts are read by many modules but written only through the methods listed.
 
 ---
@@ -2219,7 +2342,7 @@ Writers listed here are the only allowed writers (checked by `tests/static/check
 | `wall:sectionsChanged` (`WALL_SECTIONS_CHANGED`) | `{reason: 'add'\|'delete'\|'import', addedId?}` | `WallController.addSection/deleteSection` right after the model change (legacy re-render point 4105 / 4134); `applyImport` (4998) | `SectionListPanel` (snapshot, render, restore; or render + expandFirst for import), `SectionLogosPanel` (render iff `reason !== 'import'` and panel IDs are on) |
 | `wall:sectionRenamed` (`WALL_SECTION_RENAMED`) | `{}` | `WallController.commitRename()` only when panel IDs are on (4020) | `SectionLogosPanel` (render) |
 | `wall:meshModeChanged` (`WALL_MESH_MODE_CHANGED`) | `{mode}` | `WallController.setMeshMode` (after the model write, 4160) and `applyImport` iff `meshMode` is truthy (4992-4995) | `WallDisplayPanel` (label `.active` by equality; idempotent after a click) |
-| `wall:rebuilt` (`WALL_REBUILT`) | `{layout: WallLayout, meshMode, view: LEDWallView}` | `WallController.rebuild()` last step (after the hub) | none in Phase 1 (seam for Features 1, 2, 4, 5) |
+| `wall:rebuilt` (`WALL_REBUILT`) | `{layout: WallLayout, meshMode, view: LEDWallView}` | `WallController.rebuild()` last step (after the hub) | `NormalsDebugView` (01 F1-1: caches `{layout, view}`, re-syncs the lines while they are on); seam for Features 2, 4, 5 |
 | `display:contentChanged` (`DISPLAY_CONTENT_CHANGED`) | `{toggled: 'ledSim'\|'panelIds', on: boolean, forcedOff: boolean}` | `WallController.setLedSim/setPanelIds` after the model update, before cache clear and rebuild (4170-4176, 4190-4197) | `WallDisplayPanel` (option blocks, forced-off toggle), `SectionLogosPanel` (render iff `toggled === 'panelIds' && on`) |
 | `camera:previewChanged` (`CAMERA_PREVIEW_CHANGED`) | `{enabled}` | `CameraController.setPreviewEnabled` after `cine.enabled = on` (4233) | `CameraPanel` (`#camera-preview-options` display) |
 | `camera:filmbackChanged` (`CAMERA_FILMBACK_CHANGED`) | `{key}` | `CameraController.setFilmback` after `cine.applyPreset` (4254-4262) | `CameraPanel` (`#custom-filmback`, size inputs) |
@@ -2472,7 +2595,11 @@ sceneManager = new SceneManager({ canvas: byId(doc, 'three-canvas'), win, displa
 pointerRay = new PointerRay({ sceneManager })
 ledTiles = new LEDPixelTextureFactory({ doc, display, theme }); panelIds = new PanelIdRenderer({ doc, style, logos, theme })
 materials = new LEDMaterialFactory({ display, panelIds, ledTiles, win })
-wallView = new LEDWallView({ sceneManager, materials, builder: new WallMeshBuilder(Strategies.mesh.viewport), theme })
+debugSettings = new DebugViewSettings(); debugMaterials = new DebugMaterials({ theme })        // 01 F1-1 (no allocation)
+wallView = new LEDWallView({ sceneManager, materials, builder: new WallMeshBuilder(Strategies.mesh.viewport), theme, debugMaterials })
+normalsView = new NormalsDebugView({ sceneManager, bus, settings: debugSettings, materials: debugMaterials, theme })
+                                                       // subscribes WALL_REBUILT before the bootstrap rebuild; no stats element yet
+debugController = new DebugViewController({ settings: debugSettings, wallView, normalsView })   // no bus, no event (F1-1)
 rig = new CameraRigView({ sceneManager, bus, theme }); safeDistance = new SafeDistanceView({ sceneManager, doc, theme })
 preview = new PreviewWindow({ doc, win, cine, elements: { windowEl: #camera-preview-window, canvas: #camera-preview-canvas,
                               resizeHandle: #camera-preview-resize, info: #camera-preview-info, fov: #camera-preview-fov,
@@ -2735,7 +2862,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 
 | Feature | What exists after Phase 1 | What the feature adds |
 |---|---|---|
-| **1. Normals flipped by default + normals debug view** | One winding function (`quadIndices`) and per-consumer profiles in `Strategies.mesh` used by the viewport, OBJ and glTF; `side` in the viewport profile; `LEDWallView.meshes()`; `WALL_REBUILT`; `SceneManager.addHelper` + `LAYERS`; `ResourceTracker`; the toolbar button pattern. | The flips are Phase-2 commits 08 P2-2a–d, one consumer per commit (`docs/improvements/08-bugfix-roadmap.md`): `'ccw'` winding and `'averaged'` normals in `WallMeshBuilder`, OBJ per-vertex `vn` and the glTF `NORMAL` attribute. Feature 1 adds the debug view and options only: `render/NormalsDebugView.js` (LineSegments from attributes x `matrixWorld`, subscribes to `WALL_REBUILT`, registered as a helper, disposed with a tracker); a `#toggle-normals` view button and a `.view-btn.active` rule (B-L24). |
+| **1. Normals flipped by default + normals debug view** | One winding function (`quadIndices`) and per-consumer profiles in `Strategies.mesh` used by the viewport, OBJ and glTF; `side` in the viewport profile; `LEDWallView.meshes()`; `WALL_REBUILT`; `SceneManager.addHelper` + `LAYERS`; `ResourceTracker`; the toolbar button pattern. | The flips are Phase-2 commits 08 P2-2a–d, one consumer per commit (`docs/improvements/08-bugfix-roadmap.md`): `'ccw'` winding and `'averaged'` normals in `WallMeshBuilder`, OBJ per-vertex `vn` and the glTF `NORMAL` attribute. Feature 1 adds the debug view and options only: `render/NormalsDebugView.js` (LineSegments from attributes x `matrixWorld`, subscribes to `WALL_REBUILT`, registered as a helper, disposed with a tracker); a `#toggle-normals` view button and a `.view-btn.active` rule (B-L24). Landed so far (docs/improvements/01-normals.md 8.4): F1-0a and F1-0b (tooling), F1-1 (the debug core without UI: `NormalLines`, `NormalsDebugView`, `DebugMaterials`, `MaterialOverride`, `LEDWallView.setDebugShading` / `withContentMaterials`, `DebugViewSettings`, `DebugViewController`, `core/renderOrder.js`). |
 | **2. Section selection, property editing, per-section offsets** | `WallSection` with stable ids; `SectionLayout.postTransform` hook (null, never fed back into the cursor); mesh tags `userData.{kind, mode, sectionId, sectionIndex, col, row}` and combined `sectionRanges`; `LEDWallView.sectionNodes()`; the `Selectable` registry and generic gizmo; field rule tables; `WallController` as the single writer of section state; mirror events to cards; `ProjectSerializer.read` version-dispatch point. | `WallSection.offset {position, rotation}` + rules; `layoutProject` builds per-section `postTransforms`; the builder applies them to positions/normals; `LEDWallView` adds per-section groups (section/panel) or bakes (combined) and a transform-only update path; `WallSectionSelectable` (pick by `userData` / `faceIndex` -> `sectionRanges`); select-on-click (B-M14 fix); a `section:changed` event emitted by `WallController` so cards, an inspector and the UV viewer update reactively; safe distance per section instead of `flatEdges()`; schema v2. Exporters follow automatically through the layout. |
 | **3. Configurable pivot + offset** | `WallPivot`/`PivotMode` in `Wall` (identity); `WallLayout.firstEdge/lastEdge/bounds()/pivotPoint(mode)` including "middle of entire wall" = midpoint of the first section's first edge and the last section's last edge on the floor; the single `framingBounds` switch for the four flat-bounds consumers; the single `layoutProject()` entry. | A baked translation in `layoutProject`: stage frame `−(P.x, 0, P.z)`, export frame `−P`, P = anchor + offset (1.4). The raw walk is translated first, and spec 02's `applySectionOffsets(out)` builds its section matrices from the translated layout (07 C32). **No wall root transform, ever:** the identity `wallGroup` transform is a unit-tested invariant (03 §5.1, §5.9 #2). `ui/PivotPanel`; a pivot Selectable + marker view; switch `framingBounds` to pivot/bounds (fixes B-L2); optional re-expression of camera/prop poses; schema v2. |
 | **4. Clean 0..1 UVs + UV viewer/editor** | UV strategies in one builder function per consumer; `TextureAtlas` as the single source of offsets, widths and start columns (yields per-section `uvRects`); `PanelIdRenderer.sectionCanvas()` for the viewer background; mesh tags; the selection registry; `PreviewWindow`'s resize handle as the floating-panel pattern. | `'per-section'` / `'atlas-pixel-accurate'` strategies (fix B-M5/B-M6) and a baked per-section `uvTransform`; glTF TEXCOORD_0; `ui/UVViewer.js` (2D canvas; subscribes to `SELECTION_CHANGED` and `WALL_REBUILT`); `ui/FloatingPanel.js` extracted from `PreviewWindow`. |
@@ -2749,7 +2876,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 | Gate | Command | Passes when |
 |---|---|---|
 | Unit (pure layers) | `node --test "tests/unit/**/*.test.mjs"` (quoted glob; Node 22.7+: Node 21+ treats `--test` arguments as globs, so the directory form `node --test tests/unit/` fails with "Cannot find module", and the typeless `js/*.js` modules (there is no package.json) load as ESM only through module-syntax detection, unflagged since Node 22.7; the glob does not match the `oracle/*.mjs` helpers) | all green. Required per module: rule tables equal the legacy expressions over a seeded grid (0, '', NaN, negatives, fractions, numeric strings); `computeWallLayout`, `WallMeshBuilder`, `TextureAtlas`, `PanelNaming` equal the verbatim oracle with `Object.is` on every number over fuzzed sections (string fields, fractional cols, NaN/duplicate ids, empty walls); `ObjExporter`, `GltfExporter`, `ProjectSerializer` produce **byte-identical** text/JSON to the oracle (the oracle comparisons inject `LegacyProfiles.mesh.*`, the exact Phase-1 profiles, from 08 P2-0 on) and to the golden harness files of `default` and the 6 config scenarios in all 3 modes (when `GOLDEN_DIR` exists); `CameraHub`/`CameraController` step order with spies; `WallController` rebuild counts for every row of 6.2. Two Node-vs-Chrome facts the byte comparisons handle: (1) the goldens were captured in Chrome, whose `Math.atan2` is correctly rounded, while Node 24's V8 still uses fdlibm's `atan2` (last-ulp differences for about 20% of arguments), so any Node-side byte comparison of full-precision `atan2`-derived values against a Chrome golden (the panel-mode glTF accessor min/max of curved walls) installs a correctly rounded `atan2` for the duration of the test; (2) the NaN bit pattern written into a `Float32Array` is implementation-defined (B-L8 garbage imports give NaN positions), so the oracle fuzz canonicalises NaN inside float32 POSITION views on both sides before comparing; the goldens contain no NaN and are compared raw. |
-| Static | `node tests/static/check.mjs`, `node tests/static/css-slices.mjs` | layering table; DOM-id ownership; no `window`/`document` globals outside `vendor/`, `ui/dom.js`, `App.js`, `main.js` (injected `doc`/`win` everywhere else); import specifiers relative, `.js`, case-exact; no module-level `let`/`var`; LEGACY parity (8.3); every `Strategies` leaf referenced (8.1); every `Events` key emitted and (except `WALL_REBUILT`) subscribed; domain fields written only by the writers of section 4; CSS slices reproduce lines 12-869. Interpretation (as implemented): a `window`/`document` token in a pure-layer file is reported under both the globals rule and the purity rule; the domain-writer rule treats every assignment operator as a write (`=`, all compound and logical assignments, `++`, `--`). |
+| Static | `node tests/static/check.mjs`, `node tests/static/css-slices.mjs` | layering table; DOM-id ownership; no `window`/`document` globals outside `vendor/`, `ui/dom.js`, `App.js`, `main.js` (injected `doc`/`win` everywhere else); import specifiers relative, `.js`, case-exact; no module-level `let`/`var`; LEGACY parity (8.3); every `Strategies` leaf referenced (8.1); every `Events` key emitted and (except `WALL_REBUILT`) subscribed; domain fields written only by the writers of section 4; no numeric `renderOrder` literal >= 900 outside `core/renderOrder.js` (rule 11, 01 F1-1; every spec, 07 S10); CSS slices reproduce lines 12-869. Interpretation (as implemented): a `window`/`document` token in a pure-layer file is reported under both the globals rule and the purity rule; the domain-writer rule treats every assignment operator as a write (`=`, all compound and logical assignments, `++`, `--`). |
 | Golden master | `node tests/regression/run.mjs --root . --out <cand>` (always a full run) then `node tests/regression/compare.mjs <baseline> <cand> --expect tests/regression/expected/<commit-id>.json` (Phase 2 onwards; Phase 1 compared without `--expect`) | exit 0. **Phase 2 onwards (08 P2-0; every spec, every golden-changing commit): the baseline of a commit is the harness output of its parent commit (08 8.1); every golden-changing commit carries an expected-change manifest `tests/regression/expected/<commit-id>.json`, in which every difference must be declared and every declared change must happen (a within-tolerance PASS never satisfies an entry; an invariance commit has an empty `expect` list); `tests/regression/expected/_nondeterminism.json` is the only standing allowance (the overlay-glyph jitter described below, reported as `JITTER` within at most 1 level and 8 pixels on the listed screenshots); `run.mjs --only` is for local iteration and never produces a promoted baseline; export commits also run `tools/check-orientation.mjs` and `tools/check-gltf.mjs` on the candidate outputs; a step whose screenshots may change only in known regions (01 F1-2, 06 T4b, 07 I4a) declares measured `rects` and `size` on its `--expect` entries (01 T2: every differing pixel inside them and the capture of that size, or FAIL) and is reviewed with `--diff-bbox`. The procedure is documented in `tests/regression/README.md` ("Phase 2 re-baselining").** Phase 1: the baseline is captured from the pristine `index.html@cd3fd3f` (twice, self-consistent), including the extra scenarios of `tests/regression/scenarios-extra.mjs`. The only accepted WARNs are the 1-level overlay-glyph jitters documented in `tests/regression/README.md` ("Known nondeterminism"): a maximum channel difference of 1 in a few pixels that all lie on glyphs of DOM text composited over a WebGL canvas (the help badge, the pilot banner, the camera preview window's header and footer labels). Each such pixel is bistable: it flips between the same two values, in both directions, between captures. The original shows it too (between its two baseline captures, and in the `keyboard` screenshots WP1 first documented). With ES-module delivery the page can paint before `App.start()` runs (8.4), and the flips occur more often; they occur equally with the verbatim legacy script loaded as a module (integration step I-1). A same-browser A/B run showed identical overlay-free canvas pixels and an identical draw list (object, material and geometry ids, and draw order) for the original and the candidate. Any other WARN, a difference above 1 level, or a pixel outside those overlays is investigated and never accepted by re-capturing the baseline. |
 | Continuous integration (07 G1) | `.github/workflows/ci.yml` on every push to `refactor/**` and `feature/**`, on every pull request, and as the reusable check of the later deploy workflow | the Static gate (`check.mjs`, `css-slices.mjs`) and the Unit gate pass on Node 22 with no `npm install`; the golden-file unit tests skip there (no `GOLDEN_DIR`), so the golden master stays a local gate (08 8.1) until 07 G4 runs it in CI |
 | Manual (not automatable) | side by side with the original | WASD/QE orbit and pilot fly incl. the inverted vertical (B-M13); hover highlight; window resize; a GitHub Pages smoke test (case-sensitive paths, sub-path URLs). |
@@ -2883,3 +3010,10 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 **01 F1-0b, rect allowances and the palette hook (01 T2; the second commit of the harness-only series, 07 C57)** (manifest `tests/regression/expected/F1-0b.json`, an invariance gate: empty `expect`; no application change, no capture changes):
 - 2.3: `compare.mjs` manifest entries gain `exclude` and the rect allowances `rects` + `size` (a difference is accepted only when every differing pixel lies inside the rectangles and the image has the entry's frame size; otherwise FAIL), and `--diff-bbox`; `tests/regression/measure-rects.mjs` writes the measured rectangles of the entries that carry a `measure` object; `tests/regression/lib/palette.mjs` (`livePalette`, 07 C53); `tests/unit/harness-lib.test.mjs`; the rect section of `compare.test.mjs`.
 - 10: rect-limited re-baselines (01 F1-2, 06 T4b, 07 I4a) declare measured `rects` on their `--expect` entries.
+
+**01 F1-1, the normals debug core without UI (01 T3-T6)** (manifest `tests/regression/expected/F1-1.json`, an invariance gate: empty `expect`; nothing is allocated, rendered or listened to until a debug option is switched on, and F1-1 adds no switch):
+- 1.3, 2.2, 3.2: `core/renderOrder.js` (`RENDER_ORDER`, 01 5.5, CR-10), used by `TransformGizmo` (`RENDER_ORDER.GIZMO` = the legacy 999; 3.8); 10, 2.3: static rule 11 (no `renderOrder` literal >= 900 elsewhere) and rule 10's writers of `DebugViewSettings`.
+- 3.4: `SceneTheme.debug` (01 4.6). 3.5: `DebugViewSettings`. 3.6: `NormalLines`.
+- 3.7: `SceneManager.init` enables `LAYERS.HELPERS` on the main camera (only the normal lines use it); `LEDWallView` gains `debugMaterials`, rebuild steps 0 (restore) and 6 (re-apply), `setDebugShading` and `withContentMaterials` (07 C48); new `MaterialOverride`, `DebugMaterials`, `NormalsDebugView` (the first `WALL_REBUILT` subscriber, 5.2).
+- 3.10, 7: `DebugViewController` (no bus and no event until F1-2) and its construction in `App`; 4: the debug-view state rows. No `Events` key and no DOM id is added (01 AC 18).
+- 2.3: `normal-lines`, `material-override`, `led-wall-view` and `debug-view-controller` tests; `core.test.mjs` (SceneTheme, RENDER_ORDER) and `domain.test.mjs` (DebugViewSettings).

@@ -1,7 +1,7 @@
 /**
  * @module app/WallController
  * Fixture (bad): rule 1 (only main.js may import App.js), rule 7 (an unknown Events key),
- * rule 10 (domain fields written outside js/domain/ without an ALLOWLIST entry).
+ * rule 10 (domain fields written outside js/domain/ without an ALLOWLIST entry, DebugViewSettings included).
  */
 import { App } from './App.js';
 import { Events } from '../core/EventBus.js';
@@ -15,7 +15,9 @@ export class WallController {
         this.#bus = bus;
     }
 
-    rename(section, wall, sections, cine) {
+    rename(section, wall, sections, cine, settings) {
+        settings.normals.onTop = true;
+        settings.shading = 'faceOrientation';
         section.name = 'x';
         ++wall.nextSectionId;
         sections[0].panelCols = 1;

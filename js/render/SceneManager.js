@@ -11,8 +11,9 @@
 import THREE from '../vendor/three.js';
 
 /**
- * Render layers (Feature 1/5 seam). NOT applied in Phase 1 (R6): every object, helpers included, stays on
- * layer 0, so the camera preview keeps rendering the helpers (B-M11, tagged at addHelper).
+ * Render layers (Feature 1/5 seam). The existing helpers are not moved (R6): grid, axes, rig, safe distance and gizmo
+ * stay on layer 0, so the camera preview keeps rendering them (B-M11, tagged at addHelper). Since 01 F1-1 the main
+ * camera also sees HELPERS, the layer of the normal lines (NormalsDebugView), which the preview camera never sees.
  */
 export const LAYERS = Object.freeze({ DEFAULT: 0, HELPERS: 1 });
 
@@ -61,7 +62,8 @@ export class SceneManager {
 
   /**
    * Creates the scene, camera, renderer, lights, grid and axes in the legacy statement order (THREE ids are
-   * allocated from global counters, so the order is part of the output: R5).
+   * allocated from global counters, so the order is part of the output: R5). The camera also renders LAYERS.HELPERS
+   * (01 F1-1; Layers carry no id).
    * Ports: index.html@cd3fd3f lines 1427-1449.
    * Side effects: allocates the WebGL context on the canvas, sizes the canvas, adds the lights, grid and axes
    * to the scene.
@@ -77,6 +79,9 @@ export class SceneManager {
 
     this.#camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000);
     this.#camera.position.set(0, 0, 8);
+    // 01 F1-1 (5.5): the main (and pilot) view renders LAYERS.HELPERS, where only the normal lines live. Nothing else
+    // is on that layer, so this changes no pixel; the preview camera keeps layer 0 only.
+    this.#camera.layers.enable(LAYERS.HELPERS);
 
     this.#renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.#renderer.setSize(container.clientWidth, container.clientHeight);

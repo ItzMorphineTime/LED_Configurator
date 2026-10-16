@@ -9,6 +9,7 @@ import { dirname, join, resolve, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { Events, EventBus } from '../../js/core/EventBus.js';
+import { RENDER_ORDER } from '../../js/core/renderOrder.js';
 import {
   Strategies, unsupportedStrategy, orDefault, legacyHtml, LEGACY_SITES,
 } from '../../js/legacy/LegacyCompat.js';
@@ -425,6 +426,7 @@ describe('Theme', () => {
       car: { body: { color: 0xff4444, opacity: 0.85 }, dark: { color: 0x222222, opacity: 0.9 },
              glass: { color: 0x88ccff, opacity: 0.5 }, lights: 0xffffaa },
       gizmo: { x: 0xff4444, y: 0x44ff44, z: 0x4444ff, idleOpacity: 0.35, hoverOpacity: 1.0, dimmedOpacity: 0.15 },
+      debug: { faceFront: 0x2f6bff, faceBack: 0xff3344, vertexNormal: 0xb8f03c, faceNormal: 0xff4fd8, lineBaseFactor: 0.35 },   // 01 F1-1 (4.6)
     });
     assert.equal(typeof SceneTheme.background, 'number');
     assert.equal(typeof SceneTheme.safeZone.labelColor, 'string');
@@ -632,5 +634,27 @@ describe('WP3 module layering and purity', () => {
       const siteIds = new Set(LEGACY_SITES.filter((e) => e.site.startsWith(`${file}#`)).map((e) => e.id));
       assert.deepEqual(tagIds, siteIds, file);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// core/renderOrder (docs/improvements/01-normals.md 5.5, CR-10; 01 F1-1)
+// ---------------------------------------------------------------------------------------------------------------
+
+describe('RENDER_ORDER', () => {
+  test('is the frozen registry of every overlay slot of every spec, with unique values', () => {
+    assert.ok(Object.isFrozen(RENDER_ORDER));
+    assert.deepEqual(RENDER_ORDER, {
+      HDRI_BACKDROP: -1e6, DEFAULT: 0, RIG_CORE: 1, INNER_FRUSTUM_OVERLAY: 990, MEASURE: 992, HDRI_MARKER: 993,
+      UV_HOVER_OUTLINE: 994, NORMAL_LINES_ON_TOP: 995, PIVOT_MARKER: 996, HIGHLIGHT_HALO: 997, SECTION_HIGHLIGHT: 998,
+      GIZMO: 999,
+    });
+    const values = Object.values(RENDER_ORDER);
+    assert.equal(new Set(values).size, values.length, 'no two slots share a value');
+  });
+
+  test('the gizmo keeps the legacy 999 and the lines on top sit below every selection overlay', () => {
+    assert.equal(RENDER_ORDER.GIZMO, 999);
+    for (const k of ['PIVOT_MARKER', 'HIGHLIGHT_HALO', 'SECTION_HIGHLIGHT', 'GIZMO']) assert.ok(RENDER_ORDER.NORMAL_LINES_ON_TOP < RENDER_ORDER[k], k);
   });
 });
