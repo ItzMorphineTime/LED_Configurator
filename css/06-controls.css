@@ -1,10 +1,16 @@
 /* 06-controls.css: index.html@cd3fd3f lines 297-444 (global sections, mesh-mode options, toggles, FIRST .export-btn block).
-   The first .export-btn block (lines 425-444, with its :hover) stays here: it supplies width: 100%,
+   The first .export-btn block (lines 425-444) stays here: it supplies width: 100%,
    which the second block in 11-export.css (lines 824-843) does not override. Do not merge them.
-   Contiguous slice of the original <style>; link order = file number. Do not reorder rules across files. */
+   06 T4a (06 3.4, 3.5): role tokens. The section-title bar, the selected mesh-mode border and radio dot and the
+   toggle's on-track are Signal Red (--color-accent) on opaque surfaces of at most #161616, never on a tint. The
+   toggle keeps its geometry: its off ring is an inset shadow, so the box size does not change. The first .export-btn
+   block is the neutral base (no gradient, no lift); .export-btn--primary is the one Pivot Gold element of the layout
+   (#export-zip, R-B5), with a Morph Black inner ring on hover.
+   Slice of the original <style>, rewritten to role tokens (css-slices.mjs --report-only lists the difference, 07 S7);
+   link order = file number. Do not reorder rules across files. */
 .global-section {
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-color);
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border-subtle);
     border-radius: 10px;
     padding: 14px;
     margin-bottom: 16px;
@@ -14,8 +20,8 @@
     font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 1.5px;
-    color: var(--text-secondary);
+    letter-spacing: 0.14em;
+    color: var(--color-text-primary);
     margin-bottom: 14px;
     display: flex;
     align-items: center;
@@ -26,8 +32,8 @@
     content: '';
     width: 3px;
     height: 12px;
-    background: var(--accent-magenta);
-    border-radius: 2px;
+    background: var(--color-accent);
+    border-radius: 0;
 }
 
 .mesh-mode-select {
@@ -42,20 +48,20 @@
     align-items: center;
     gap: 10px;
     padding: 10px 12px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
     border-radius: 6px;
     cursor: pointer;
     transition: all 0.2s ease;
 }
 
 .mesh-mode-option:hover {
-    border-color: var(--accent-cyan);
+    border-color: var(--color-border-strong);
 }
 
 .mesh-mode-option.active {
-    background: rgba(0, 240, 255, 0.1);
-    border-color: var(--accent-cyan);
+    background: var(--color-surface-1);
+    border-color: var(--color-accent);
 }
 
 .mesh-mode-option input {
@@ -65,13 +71,13 @@
 .mesh-mode-radio {
     width: 16px;
     height: 16px;
-    border: 2px solid var(--border-color);
+    border: 2px solid var(--color-border-strong);
     border-radius: 50%;
     position: relative;
 }
 
 .mesh-mode-option.active .mesh-mode-radio {
-    border-color: var(--accent-cyan);
+    border-color: var(--color-accent);
 }
 
 .mesh-mode-option.active .mesh-mode-radio::after {
@@ -81,7 +87,7 @@
     left: 3px;
     width: 6px;
     height: 6px;
-    background: var(--accent-cyan);
+    background: var(--color-accent);
     border-radius: 50%;
 }
 
@@ -103,7 +109,8 @@
 .toggle {
     width: 44px;
     height: 24px;
-    background: var(--bg-primary);
+    background: var(--color-bg-app);
+    box-shadow: inset 0 0 0 1px var(--color-border-strong);
     border-radius: 12px;
     cursor: pointer;
     position: relative;
@@ -111,7 +118,8 @@
 }
 
 .toggle.active {
-    background: var(--accent-cyan);
+    background: var(--color-accent);
+    box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 .toggle::after {
@@ -119,7 +127,7 @@
     position: absolute;
     width: 18px;
     height: 18px;
-    background: white;
+    background: var(--morph-white-1000);
     border-radius: 50%;
     top: 3px;
     left: 3px;
@@ -133,20 +141,25 @@
 .export-btn {
     width: 100%;
     padding: 14px;
-    background: linear-gradient(135deg, var(--accent-cyan), var(--accent-magenta));
+    background: var(--color-surface-2);
     border: none;
     border-radius: 8px;
-    color: white;
-    font-family: 'Outfit', sans-serif;
+    color: var(--color-text-primary);
+    font-family: var(--font-ui);
     font-size: 13px;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 0.06em;
     cursor: pointer;
     transition: all 0.3s ease;
 }
 
-.export-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 30px rgba(0, 240, 255, 0.3);
+.export-btn--primary {
+    background: var(--cta-background);
+    color: var(--color-on-cta);
+    font-weight: 700;
+}
+
+.export-btn--primary:hover {
+    box-shadow: inset 0 0 0 2px var(--color-on-cta);
 }

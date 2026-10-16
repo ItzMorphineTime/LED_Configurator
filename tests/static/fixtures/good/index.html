@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Static-check fixture (rule 12, 06 R-B2): only display, width and height may stay inline. -->
+<!-- Static-check fixture (rule 12, 06 R-B2): only display, width and height may stay inline; (rule 15, 06 R-B5) one primary CTA. -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -11,6 +11,8 @@
     <div id="window" class="preview-window" style="display: none; width: 320px; height: 180px;">
         <canvas id="canvas" style='width: 100%; height: 100%'></canvas>
     </div>
+    <!-- <button class="export-btn export-btn--primary">a comment is not markup</button> -->
+    <button class="export-btn export-btn--primary" id="export-zip">Export All (ZIP)</button>
     <div data-style="color: red;" class="readout-row">text with style="color: red" in it is not an attribute of a tag</div>
 </body>
 </html>

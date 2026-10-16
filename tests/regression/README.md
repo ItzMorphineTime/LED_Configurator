@@ -196,7 +196,9 @@ Before every capture the scenario does the following, so that captures are repea
 - It waits for `document.fonts.ready` and two frames.
 
 At the start of the scenario, every Google Fonts weight is preloaded, including the unicode-range
-subsets for `°×•—`.
+subsets for `°×•—` (Montserrat 400-700 since 06 T4a, next to JetBrains Mono and Outfit). The text
+snapshot's `header.logo` is the text of `.product-name` (06 T4a; the legacy `.logo-text` is gone), and
+`CSS_TOKENS` lists the role tokens of `css/02-tokens.css` layer 3.
 
 Two self-consistency runs from the original app produced byte-identical outputs for all 35 files.
 
@@ -732,10 +734,10 @@ The harness depends on this markup:
   dispatched click event, with blob or data URLs. Downloads made any other way, such as
   `showSaveFilePicker`, would show up as missing outputs.
 - **`ui_visual`:**
-  - It uses every selector in [`ui-spec.mjs`](ui-spec.mjs), for example `.header`, `.logo-text span`,
-    `.stat-value`, `.control-panel`, `.global-section`, `.toggle`, `.mesh-mode-option`,
+  - It uses every selector in [`ui-spec.mjs`](ui-spec.mjs), for example `.header`, `.brand-lockup`,
+    `.product-name`, `.stat-value`, `.control-panel`, `.global-section`, `.toggle`, `.mesh-mode-option`,
     `.input-field`, `.export-btn.secondary`, `.camera-info`, `.frustum-status`, `.view-btn`,
-    `.gizmo-mode-btn`, `.gizmo-divider`, `.company-logo`, `.subsection-title`, the
+    `.gizmo-mode-btn`, `.gizmo-divider`, `.subsection-title`, the
     `.section-logo-*` classes, and the card classes `.section-header`, `.section-title`,
     `.section-summary`, `.section-toggle`, `.section-content`, `.section-row(.single)`,
     `.curve-hint`, `.section-color-picker`, `.color-swatch-small`, `.color-input-custom` and

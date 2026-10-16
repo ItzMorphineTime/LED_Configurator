@@ -1,17 +1,18 @@
 /* css/features/debug-view.css: the normals debug view (docs/improvements/01-normals.md 3.1-3.5, 5.1; 01 F1-2).
    Linked in the css/features/* block of 07 C52's link order (after 11-export.css, before 12-responsive.css); it
-   carries its own @media rules. Colours only through the 02-tokens.css custom properties (spec 06 R-B1); the legend
-   swatches read --swatch, which DebugViewControls sets from theme.scene.debug.
+   carries its own @media rules. Colours only through the role tokens of 02-tokens.css (spec 06 R-B1, 5.12 rule 4;
+   06 T4a migrated this file from the legacy tokens); the legend swatches read --swatch, which DebugViewControls sets
+   from theme.scene.debug.
    .view-btn.active is the .view-btn.active half of B-L24 (this file is its one named owner, 07 C52): #toggle-grid
-   has toggled the class since the original page, but no rule styled it. The badge-overlap half stays open
-   (06 T4a; css/07-viewport.css and css/09-viewport-tools.css keep their notes). */
+   has toggled the class since the original page, but no rule styled it. 06 T4a maps it to role tokens (06 3.5: a
+   strong border and a primary icon on the overlay chip) and landed the badge-overlap half in
+   css/09-viewport-tools.css. */
 
 /* ---- toolbar column ------------------------------------------------------------------------------ */
 
 .view-btn.active {
-    background: var(--bg-tertiary);
-    border-color: var(--accent-cyan);
-    color: var(--accent-cyan);
+    border-color: var(--color-border-strong);
+    color: var(--color-text-primary);
 }
 
 /* 1 px line with 4 px margins: 9 px in the column (3.1 fit check). */
@@ -19,7 +20,7 @@
     width: 100%;
     height: 1px;
     flex-shrink: 0;
-    background: var(--border-color);
+    background: var(--color-border-strong);
     margin: 4px 0;
 }
 
@@ -34,11 +35,11 @@
     overflow-y: auto;
     box-sizing: border-box;
     padding: 12px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
     border-radius: 8px;
-    box-shadow: 0 8px 24px var(--bg-primary);
-    color: var(--text-primary);
+    box-shadow: var(--shadow-overlay);
+    color: var(--color-text-primary);
     font-size: 12px;
     pointer-events: all;
     z-index: 110;
@@ -66,7 +67,7 @@
     margin: 0;
     font-size: 13px;
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--color-text-primary);
 }
 
 .debug-popover-close {
@@ -76,7 +77,7 @@
     background: none;
     border: 1px solid transparent;
     border-radius: 4px;
-    color: var(--text-secondary);
+    color: var(--color-text-secondary);
     font: inherit;
     font-size: 16px;
     line-height: 1;
@@ -84,8 +85,8 @@
 }
 
 .debug-popover-close:hover {
-    border-color: var(--accent-cyan);
-    color: var(--accent-cyan);
+    border-color: var(--color-text-secondary);
+    color: var(--color-text-primary);
 }
 
 .debug-popover-group {
@@ -107,7 +108,7 @@
     font-weight: 600;
     letter-spacing: 1px;
     text-transform: uppercase;
-    color: var(--text-secondary);
+    color: var(--color-text-secondary);
 }
 
 .debug-popover-option {
@@ -121,7 +122,7 @@
 .debug-popover-option input,
 .debug-popover-range input {
     margin: 0;
-    accent-color: var(--accent-cyan);
+    accent-color: var(--color-accent);
     cursor: pointer;
 }
 
@@ -135,9 +136,9 @@
 
 .debug-popover-range-value {
     min-width: 36px;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
-    color: var(--accent-cyan);
+    color: var(--color-text-primary);
 }
 
 .debug-popover-range input {
@@ -149,14 +150,14 @@
 .debug-normals-stats {
     min-height: 32px;
     margin: 8px 0 0;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
     line-height: 16px;
-    color: var(--text-secondary);
+    color: var(--color-text-secondary);
 }
 
 .debug-normals-stats.warning {
-    color: var(--accent-orange);
+    color: var(--color-warning);
 }
 
 /* ---- top-centre stack and legend (07 C51) --------------------------------------------------------- */
@@ -187,12 +188,12 @@
     flex-direction: column;
     gap: 4px;
     padding: 6px 12px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
     border-radius: 6px;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
-    color: var(--text-secondary);
+    color: var(--color-text-secondary);
     pointer-events: auto;
     cursor: help;
 }
@@ -206,7 +207,7 @@
 }
 
 .debug-legend-name {
-    color: var(--text-primary);
+    color: var(--color-text-primary);
     font-weight: 600;
 }
 
@@ -221,11 +222,12 @@
     width: 10px;
     height: 10px;
     border-radius: 2px;
-    background: var(--swatch, var(--text-dim));
+    background: var(--swatch, var(--color-text-disabled));
 }
 
-/* The notes carry information (3.3: wireframe, camera preview), so they keep --text-secondary (5.5:1 on
-   --bg-secondary; --text-dim is 2.2:1, below WCAG AA for 11 px text) and are set apart by italics. */
+/* The notes carry information (3.3: wireframe, camera preview), so they keep the secondary text colour
+   (--color-text-secondary, 7.49:1 on --color-surface-1; the disabled text colour would fall below WCAG AA for 11 px
+   text) and are set apart by italics. */
 .debug-legend-note {
     font-style: italic;
 }

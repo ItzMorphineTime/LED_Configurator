@@ -217,7 +217,7 @@ const QUIRKS = deepFreeze({
   'B-L23': ['Local gizmo orientation stale (N-10)',
     'also re-orient'],
   'B-L24': ['Badge overlaps help badge (the `.view-btn.active` half landed in 01 F1-2)',
-    'CSS change + `ui_visual` re-baseline (06 T4a)'],
+    'Landed in 06 T4a (`.selection-indicator` at `bottom: 64px`, stacked above `.viewport-info`; the `.view-btn.active` half in 01 F1-2; no tag site)'],
   'B-L25': ['View presets work in pilot (W-2)',
     'guard'],
   'B-L26': ['Gizmo visible in pilot',
@@ -313,8 +313,6 @@ const TAG_SITES = deepFreeze([
   ['js/ui/SectionLogosPanel.js#onUpload', ['B-L35']],
   ['js/ui/SectionLogosPanel.js#constructor', ['B-L21']],
   ['js/ui/WallDisplayPanel.js#bind', ['B-L13']],
-  ['css/07-viewport.css', ['B-L24']],          // header comment; documentation-only
-  ['css/09-viewport-tools.css', ['B-L24']],    // header comment; documentation-only
   ['index.html', ['B-L36']],                   // markup, untagged; documentation-only
 ]);
 

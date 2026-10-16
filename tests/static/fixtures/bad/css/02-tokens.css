@@ -1,0 +1,5 @@
+/* Static-check fixture (rule 14, 06 R-B3a): a legacy token name, even in the token file. */
+:root {
+    --accent-cyan: #00f0ff;
+    --cta-background: #F2B705;
+}

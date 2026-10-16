@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Static-check fixture (rule 12, 06 R-B2): every inline style below must be reported. -->
+<!-- Static-check fixture (rule 12, 06 R-B2): every inline style below must be reported; (rule 14) legacy residue; (rule 15) two primary CTAs. -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -11,5 +11,7 @@
     <div id="window" style="display: none; width: var(--preview-width); height: 180px;"></div>
     <div id="swatch" style='height: 24px; width: #123456'></div>
     <svg width="10" height="10" viewBox="0 0 10 10" style="opacity: 0.5;"></svg>
+    <button class="export-btn export-btn--primary" id="export-zip">Export All (ZIP)</button>
+    <button class="export-btn--primary secondary">Fivefold</button>
 </body>
 </html>

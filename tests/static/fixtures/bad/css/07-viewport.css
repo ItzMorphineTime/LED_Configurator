@@ -1,0 +1,17 @@
+/* Static-check fixture (rules 13-15): colour literals in declaration values, legacy residue, two CTA references. */
+.company-logo {
+    fill: #b85618;
+    background: rgba(0, 240, 255, 0.05);
+}
+
+.panel {
+    color: rgb(1, 2, 3);
+    border-color: hsl(0 0% 0%);
+    outline: 1px solid var(--border-color);
+}
+
+.export-btn--primary { background: var(--cta-background); }
+
+@media (max-width: 900px) {
+    .export-btn--primary:hover { box-shadow: 0 0 0 2px var( --cta-background ); }
+}

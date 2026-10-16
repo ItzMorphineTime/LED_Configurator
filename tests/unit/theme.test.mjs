@@ -1,24 +1,23 @@
 // Unit tests for theme/ThemeBridge (docs/improvements/06-morph-branding.md 5.5, 6.2 and 8.1): U1 colour parsing,
 // U2 the bridged theme's shape, freezing and the runtime override (AC 8), U3 missing and malformed tokens (06 T2);
 // U4 token parity of css/02-tokens.css with the Theme.js fallbacks, U10 the Theme walk (every leaf bound, UNBRANDED, a
-// function or non-colour), U11 the UNBRANDED conventions against tests/unit/fixtures/legacy-theme.mjs (06 T3).
+// function or non-colour), U11 the UNBRANDED conventions against tests/unit/fixtures/legacy-theme.mjs (06 T3); U6 gold
+// exclusivity and legacy identity of the :root tokens, layers 1-3 (06 T4a; layer 4 and the Theme leaves join in 06 T5,
+// the palette in 06 T7).
 // Run: node --test tests/unit/theme.test.mjs   (zero dependencies)
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { Theme } from '../../js/theme/Theme.js';
 import { LEGACY_UNBRANDED, FACE_ORIENTATION } from './fixtures/legacy-theme.mjs';
+import { rootDeclarations, resolveVar, readTokens } from './fixtures/css-tokens.mjs';
+import { parseColour, composite, deltaE00 } from './fixtures/colour-math.mjs';
 import {
   COLOR_BINDINGS, FONT_BINDINGS, UNBRANDED, BIND_FONTS_DEFAULT, parseHexColor, parseCssColor, buildTheme,
 } from '../../js/theme/ThemeBridge.js';
 
 // ---- helpers -------------------------------------------------------------------------------------
-
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /** The leaf at a dotted path ('scene.safeZone.wallColor'), or undefined. */
 const at = (root, path) => path.split('.').reduce((node, key) => (node == null ? undefined : node[key]), root);
@@ -272,41 +271,6 @@ describe('U3 missing and malformed tokens: the fallback leaf, one warning per va
 
 // ---- U4 (06 T3): token parity ---------------------------------------------------------------------
 
-/**
- * The custom properties of the first `:root { ... }` block of a stylesheet, as written (comments removed, values
- * trimmed; a later declaration of the same name wins, as in CSS).
- * @param {string} css
- * @returns {Map<string, string>}
- */
-function rootDeclarations(css) {
-  const text = css.replace(/\/\*[\s\S]*?\*\//g, '');
-  const block = /:root\s*\{([^}]*)\}/.exec(text);
-  if (!block) throw new Error('no :root block');
-  const decls = new Map();
-  for (const m of block[1].matchAll(/(--[A-Za-z0-9_-]+)\s*:\s*([^;]*);/g)) decls.set(m[1], m[2].trim());
-  return decls;
-}
-
-/**
- * Resolves the var(--x) references of a declaration value against `decls`, like the computed value of a custom
- * property (var() substituted, the text otherwise as written). Depth <= 8; a cycle or an unknown name throws.
- * @param {Map<string, string>} decls
- * @param {string} name
- * @returns {string}
- */
-function resolveVar(decls, name, depth = 0, stack = []) {
-  if (stack.includes(name)) throw new Error(`var() cycle: ${[...stack, name].join(' -> ')}`);
-  if (depth > 8) throw new Error(`var() chain deeper than 8 at ${name}`);
-  if (!decls.has(name)) throw new Error(`${name} is not declared`);
-  return decls.get(name).replace(/var\(\s*(--[A-Za-z0-9_-]+)\s*\)/g, (_, ref) => resolveVar(decls, ref, depth + 1, [...stack, name]));
-}
-
-/** A ThemeBridge reader over css/02-tokens.css ('' for an undeclared name, like getPropertyValue). */
-function tokensReader() {
-  const decls = rootDeclarations(readFileSync(join(ROOT, 'css', '02-tokens.css'), 'utf8'));
-  return { decls, read: (name) => (decls.has(name) ? resolveVar(decls, name) : '') };
-}
-
 describe('U4 token parity: css/02-tokens.css and the Theme.js fallbacks agree (06 T3 onwards)', () => {
   test('the :root parser and the var() resolver: chains, depth and cycles', () => {
     const decls = rootDeclarations(':root {\n  /* c */ --a: var(--b);\n  --b: var( --c );\n  --c: #0A0A0A;\n  --x: var(--y); --y: var(--x);\n}\n.other { --z: 1; }');
@@ -320,7 +284,7 @@ describe('U4 token parity: css/02-tokens.css and the Theme.js fallbacks agree (0
   });
 
   test('every COLOR_BINDINGS variable is declared and parses for its kind', () => {
-    const { decls, read } = tokensReader();
+    const { decls, read } = readTokens();
     for (const [path, name, kind] of COLOR_BINDINGS) {
       assert.ok(decls.has(name), `${name} (${path}) is not declared in css/02-tokens.css`);
       const raw = read(name);
@@ -330,7 +294,7 @@ describe('U4 token parity: css/02-tokens.css and the Theme.js fallbacks agree (0
 
   test('buildTheme(Theme, the tokens) without options, as App calls it: every bridged leaf equals its fallback', () => {
     const warnings = [];
-    const out = buildTheme(Theme, tokensReader().read, { warn: (m) => warnings.push(m) });
+    const out = buildTheme(Theme, readTokens().read, { warn: (m) => warnings.push(m) });
     assert.deepEqual(warnings, []);
     for (const [path] of COLOR_BINDINGS) {
       const got = at(out, path);
@@ -343,7 +307,7 @@ describe('U4 token parity: css/02-tokens.css and the Theme.js fallbacks agree (0
       }
     }
     if (BIND_FONTS_DEFAULT) {
-      const { decls } = tokensReader();
+      const { decls } = readTokens();
       for (const [path, name] of FONT_BINDINGS) {
         assert.ok(decls.has(name), `${name} is not declared`);
         const got = at(out, path);
@@ -388,7 +352,7 @@ function classifyTheme(theme) {
 
 describe('U10 Theme walk: every leaf is bound, UNBRANDED, a function or non-colour (06 T3)', () => {
   test('no unclassified leaf, in Theme and in the bridged theme', () => {
-    for (const theme of [Theme, buildTheme(Theme, tokensReader().read)]) {
+    for (const theme of [Theme, buildTheme(Theme, readTokens().read)]) {
       const unclassified = classifyTheme(theme).filter((l) => l.kind === null).map((l) => l.path);
       assert.deepEqual(unclassified, [], `add a COLOR_BINDINGS row or an UNBRANDED entry for: ${unclassified.join(', ')}`);
     }
@@ -423,7 +387,7 @@ describe('U10 Theme walk: every leaf is bound, UNBRANDED, a function or non-colo
 describe('U11 conventions unchanged: UNBRANDED leaves equal their Phase-1 values (AC 10)', () => {
   test('UNBRANDED lists exactly the leaves of the legacy-theme fixture, and each equals its Phase-1 value', () => {
     assert.deepEqual([...UNBRANDED].sort(), Object.keys(LEGACY_UNBRANDED).sort());
-    for (const theme of [Theme, buildTheme(Theme, tokensReader().read)]) {
+    for (const theme of [Theme, buildTheme(Theme, readTokens().read)]) {
       for (const [path, legacy] of Object.entries(LEGACY_UNBRANDED)) {
         const leaf = at(theme, path);
         if (Array.isArray(legacy)) {
@@ -437,7 +401,7 @@ describe('U11 conventions unchanged: UNBRANDED leaves equal their Phase-1 values
   });
 
   test('the face-orientation leaves keep spec 01\'s values (bound, never re-coloured)', () => {
-    for (const theme of [Theme, buildTheme(Theme, tokensReader().read)]) {
+    for (const theme of [Theme, buildTheme(Theme, readTokens().read)]) {
       for (const [path, value] of Object.entries(FACE_ORIENTATION)) {
         const leaf = at(theme, path);
         if (leaf !== undefined) assert.equal(leaf, value, path);
@@ -445,5 +409,63 @@ describe('U11 conventions unchanged: UNBRANDED leaves equal their Phase-1 values
     }
     assert.equal(Theme.scene.debug.faceFront, 0x2f6bff);
     assert.equal(Theme.scene.debug.faceBack, 0xff3344);
+  });
+});
+
+// ---- U6 (06 T4a): gold exclusivity and legacy identity ----------------------------------------------
+
+const PIVOT_GOLD = '#F2B705';
+const LEGACY_IDENTITY = ['#00F0FF', '#FF00AA'];
+/** The layers U6 checks so far, by token prefix (06 8.1 U6: layers 1-3 from T4a). Layer 4 (--scene-*, --canvas-*,
+ *  --status-*, --uv-*) still holds the legacy values until 06 T5, which adds it together with the bound Theme leaves;
+ *  06 T7 adds the palette. */
+const U6_PREFIXES = ['--morph-', '--ui-', '--color-', '--cta-', '--shadow-', '--font-'];
+/** Exempt by name: the gold primitive and its one role, which must stay Pivot Gold. */
+const GOLD_EXEMPT = new Set(['--morph-gold-500', '--cta-background']);
+
+describe('U6 gold exclusivity and legacy identity: css/02-tokens.css layers 1-3 (06 T4a)', () => {
+  const { decls, token } = readTokens();
+  const checked = [...decls.keys()].filter((name) => U6_PREFIXES.some((p) => name.startsWith(p)));
+
+  test('the CIEDE2000 helper reproduces the reference distances of 06 3.9 and 5.12', () => {
+    const near = (a, b, want) => assert.ok(Math.abs(deltaE00(a, b) - want) < 0.05, `${a} vs ${b}: ${deltaE00(a, b)} vs ${want}`);
+    near('#d9d9d6', PIVOT_GOLD, 28.6);
+    near('#e2803c', PIVOT_GOLD, 22.7);
+    near('#ffaa00', PIVOT_GOLD, 7.2);
+    near('#ffdd00', PIVOT_GOLD, 10.9);
+    near('#e68ac0', '#FF00AA', 15.7);
+    near('#FF4FD8', '#FF00AA', 8.7);
+  });
+
+  test('--cta-background and --morph-gold-500 resolve to Pivot Gold', () => {
+    assert.equal(token('--cta-background').toUpperCase(), PIVOT_GOLD);
+    assert.equal(token('--morph-gold-500').toUpperCase(), PIVOT_GOLD);
+  });
+
+  test('the legacy token names are gone and every layer 1-3 colour token is >= 20 from gold and >= 15 from cyan and magenta', () => {
+    for (const legacy of ['--bg-primary', '--bg-secondary', '--bg-tertiary', '--accent-cyan', '--accent-magenta', '--accent-orange',
+      '--accent-green', '--text-primary', '--text-secondary', '--text-dim', '--border-color', '--glow-cyan']) {
+      assert.ok(!decls.has(legacy), `${legacy} is still declared`);
+    }
+    let colours = 0;
+    for (const name of checked) {
+      const value = token(name);
+      if (!parseColour(value)) continue;          // shadows and fonts are not colours
+      colours++;
+      if (GOLD_EXEMPT.has(name)) continue;
+      const rgb = composite(value, '#0a0a0a');     // rgba() over Morph Black first
+      const gold = deltaE00(rgb, PIVOT_GOLD);
+      assert.ok(gold >= 20, `${name} (${value}) is ${gold.toFixed(1)} from Pivot Gold (< 20)`);
+      for (const id of LEGACY_IDENTITY) {
+        const d = deltaE00(rgb, id);
+        assert.ok(d >= 15, `${name} (${value}) is ${d.toFixed(1)} from the legacy ${id} (< 15)`);
+      }
+    }
+    assert.ok(colours >= 40, `only ${colours} colour tokens found in layers 1-3`);
+  });
+
+  test('a gold-like or legacy-cyan token would fail (the check is live)', () => {
+    assert.ok(deltaE00(composite('#ffaa00', '#0a0a0a'), PIVOT_GOLD) < 20);
+    assert.ok(deltaE00(composite('rgba(0, 240, 255, 0.9)', '#0a0a0a'), '#00F0FF') < 15);
   });
 });

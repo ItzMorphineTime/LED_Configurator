@@ -1,38 +1,42 @@
-/* 04-header.css: index.html@cd3fd3f lines 48-102 (header bar, logo, header stats).
-   Contiguous slice of the original <style>; link order = file number. Do not reorder rules across files. */
+/* 04-header.css: index.html@cd3fd3f lines 48-102 (header bar, header stats); 06 T4a replaced the logo rules.
+   06 3.2: the header is a three-column grid [brand lockup | history group | stats] (07 C50). The middle column is the
+   slot of spec 07 H2's .header-history (#history-undo, #history-redo, #autosave-status); until H2 lands it stays
+   empty, so the lockup and the stats are placed in columns 1 and 3 explicitly and H2's group auto-places into
+   column 2. .brand-lockup is the <h1> (not a link: a reload would discard unsaved work) holding the live-text product
+   name; 06 T4b adds the wordmark, the monogram and the divider in front of it.
+   Slice of the original <style>, rewritten to role tokens (css-slices.mjs --report-only lists the difference, 07 S7);
+   link order = file number. Do not reorder rules across files. */
 .header {
     grid-column: 1 / -1;
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border-color);
-    display: flex;
+    background: var(--color-bg-app);
+    border-bottom: 1px solid var(--color-border-subtle);
+    display: grid;
+    grid-template-columns: auto 1fr auto;
     align-items: center;
-    justify-content: space-between;
+    column-gap: 24px;
     padding: 0 24px;
 }
 
-.logo {
+.brand-lockup {
+    grid-column: 1;
+    margin: 0;
+    font: inherit;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 16px;
+    min-width: 0;
 }
 
-.logo-icon {
-    width: 36px;
-    height: 36px;
-    background: linear-gradient(135deg, var(--accent-cyan), var(--accent-magenta));
-    border-radius: 8px;
-}
-
-.logo-text {
+.product-name {
     font-weight: 600;
-    font-size: 18px;
-}
-
-.logo-text span {
-    color: var(--accent-cyan);
+    font-size: 15px;
+    letter-spacing: 0.02em;
+    color: var(--color-text-primary);
+    white-space: nowrap;
 }
 
 .header-stats {
+    grid-column: 3;
     display: flex;
     gap: 32px;
 }
@@ -42,16 +46,17 @@
 }
 
 .stat-value {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 18px;
-    color: var(--accent-cyan);
-    text-shadow: var(--glow-cyan);
+    font-weight: 500;
+    color: var(--color-text-primary);
 }
 
 .stat-label {
-    font-size: 11px;
-    color: var(--text-secondary);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 0.12em;
     margin-top: 2px;
 }

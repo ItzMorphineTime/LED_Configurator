@@ -575,7 +575,7 @@ Rules:
 |---|---|
 | `01-reset.css` | No change. The `<h1>` reset (`margin: 0; font: inherit`) lives in `.brand-lockup` (04-header.css), not in a global rule. |
 | `02-tokens.css` | 5.1. |
-| `03-layout.css` | `body` font `var(--font-ui)`, colours via roles. |
+| `03-layout.css` | `body` font `var(--font-ui)`, colours via roles. The `:focus-visible` ring of 3.5 (`button`, `select`, `.toggle`: 2 px `--color-focus-ring`, offset 2 px; T4a), the one rule B-L36 and spec 07 3.9 rely on (2.4). |
 | `04-header.css` | Delete `.logo`, `.logo-icon`, `.logo-text`, `.logo-text span`. Add `.brand-lockup`, `.product-name` (T4a), `.brand-wordmark`, `.brand-monogram`, `.brand-divider` (T4b). Restyle `.stat-value` and `.stat-label` (3.2). |
 | `05-control-panel.css` | Roles per 3.4/3.5. Delete the cyan `rgba()` hovers. `.section-row` gains `align-items: end`; `.input-field label` tracking becomes 0.06em (3.1, T4a). |
 | `06-controls.css` | Toggles, mesh-mode, section-title bar. The **first** `.export-btn` block becomes the neutral base (no gradient). Add `.export-btn--primary` (gold). |

@@ -32,11 +32,18 @@ export const STYLE_PROPS = [
     'fill', 'stroke', 'stroke-width',
 ];
 
-/** :root custom properties (design tokens) recorded with every style snapshot. */
+/**
+ * :root custom properties (design tokens) recorded with every style snapshot: the semantic UI roles of
+ * css/02-tokens.css layer 3 (docs/improvements/06-morph-branding.md 5.1), which every component references since 06 T4a.
+ */
 export const CSS_TOKENS = [
-    '--bg-primary', '--bg-secondary', '--bg-tertiary',
-    '--accent-cyan', '--accent-magenta', '--accent-orange', '--accent-green',
-    '--text-primary', '--text-secondary', '--text-dim', '--border-color', '--glow-cyan',
+    '--color-bg-app', '--color-surface-1', '--color-surface-2', '--color-surface-hover', '--color-surface-overlay',
+    '--color-scrim', '--color-border-subtle', '--color-border-strong',
+    '--color-text-primary', '--color-text-secondary', '--color-text-disabled',
+    '--color-accent', '--color-on-accent', '--color-accent-text', '--cta-background', '--color-on-cta',
+    '--color-control-active-bg', '--color-on-control-active', '--color-focus-ring',
+    '--color-success', '--color-warning', '--color-warning-bg', '--color-warning-border', '--color-danger', '--color-danger-bg',
+    '--color-swatch-ring', '--shadow-overlay', '--font-ui', '--font-mono',
 ];
 
 const E = (group, label, sel, opts = {}) => ({ group, label, sel, ...opts });
@@ -89,10 +96,8 @@ export const UI_ELEMENTS = [
     E('page', 'body', 'body', { layout: true }),
     E('page', 'app-container', '.app-container', { layout: true }),
     E('page', 'header', '.header', { layout: true }),
-    E('page', 'logo', '.logo', { layout: true }),
-    E('page', 'logo-icon', '.logo-icon'),
-    E('page', 'logo-text', '.logo-text'),
-    E('page', 'logo-text/span', '.logo-text span'),
+    E('page', 'brand-lockup', '.brand-lockup', { layout: true }),
+    E('page', 'product-name', '.product-name'),
     E('page', 'header-stats', '.header-stats', { layout: true }),
     E('page', 'stat', '.stat'),
     E('page', 'stat-value', '.stat-value'),
@@ -209,8 +214,6 @@ export const UI_ELEMENTS = [
     E('overlay', 'gizmo/space', '#gizmo-space'),
     E('overlay', 'gizmo/divider', '.gizmo-divider'),
     E('overlay', 'gizmo/pilot', '#gizmo-pilot'),
-    E('overlay', 'company-logo', '.company-logo'),
-    E('overlay', 'company-logo/path', '.company-logo path'),
     E('overlay', 'selection-indicator', '#selection-indicator'),
     E('overlay', 'selection-indicator/name', '#selection-indicator .selected-name'),
     E('overlay', 'pilot-info', '#pilot-info'),

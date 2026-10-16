@@ -352,6 +352,9 @@ describe('LEGACY_SITES', () => {
   // 08 commit its 8.2 fix cell names. Every landing commit adds its id here.
   const PHASE2_LANDED = { 'B-M1': 'P2-5a', 'B-H3': 'P2-1a', 'B-L5': 'P2-1b', 'B-L4': 'P2-1c', 'B-H1': 'P2-2a', 'B-L3': 'P2-2b', 'B-H2': 'P2-2c',
     'B-L11': 'P2-9b' };
+  // The quirks a Phase 3 feature step fixed (its spec and step, as its 8.2 fix cell names them): B-L24's badge overlap in
+  // 06 T4a (its .view-btn.active half had landed in 01 F1-2; its two CSS documentation entries are gone).
+  const PHASE3_LANDED = { 'B-L24': '06 T4a' };
 
   test('ids cover every bug id B-H1..B-H5, B-M1..B-M16, B-L1..B-L36 except the landed fixes, and nothing else', () => {
     const expected = new Set();
@@ -362,14 +365,17 @@ describe('LEGACY_SITES', () => {
     assert.deepEqual(new Set(LEGACY_SITES.map((e) => e.id)), expected);
   });
 
-  test('landed fixes (8.2 "Landed ...") are exactly the Phase 1C flips true in Strategies.dispose and the Phase 2 fixes', () => {
+  test('landed fixes (8.2 "Landed ...") are exactly the Phase 1C flips true in Strategies.dispose and the Phase 2 and 3 fixes', () => {
     const flipped = [];
     if (Strategies.dispose.wallTextures === true) flipped.push('B-H5');
     if (Strategies.dispose.gizmo === true) flipped.push('B-L12');
-    assert.deepEqual(landed.slice().sort(), [...flipped, ...Object.keys(PHASE2_LANDED)].sort());
+    assert.deepEqual(landed.slice().sort(), [...flipped, ...Object.keys(PHASE2_LANDED), ...Object.keys(PHASE3_LANDED)].sort());
     for (const id of landed) assert.ok(!LEGACY_SITES.some((e) => e.id === id), `${id} still has a LEGACY_SITES entry`);
     for (const [id, commit] of Object.entries(PHASE2_LANDED)) {
       assert.match(register.get(id).fix, new RegExp(`^Landed in 08 ${commit}\\b`), `${id}: 8.2 names ${commit}`);
+    }
+    for (const [id, step] of Object.entries(PHASE3_LANDED)) {
+      assert.match(register.get(id).fix, new RegExp(`^Landed in ${step}\\b`), `${id}: 8.2 names ${step}`);
     }
   });
 
@@ -382,11 +388,9 @@ describe('LEGACY_SITES', () => {
     }
   });
 
-  test('documentation-only entries: two B-L24 (one per stylesheet) and B-L36 in index.html', () => {
+  test('documentation-only entries: B-L36 in index.html (the two B-L24 stylesheet entries left with 06 T4a)', () => {
     const docOnly = LEGACY_SITES.filter((e) => !e.site.startsWith('js/'));
     assert.deepEqual(docOnly.map(({ id, site }) => ({ id, site })), [
-      { id: 'B-L24', site: 'css/07-viewport.css' },
-      { id: 'B-L24', site: 'css/09-viewport-tools.css' },
       { id: 'B-L36', site: 'index.html' },
     ]);
     for (const entry of LEGACY_SITES.filter((e) => e.site.startsWith('js/'))) {

@@ -7,12 +7,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Fonts the app uses when drawing panel-ID canvases. Pre-loading them via the standard
 // FontFaceSet API makes canvas text rendering deterministic (otherwise the first draw may
-// race the web-font download and fall back to a system font).
+// race the web-font download and fall back to a system font). Montserrat (06 T4a, the UI font; the canvas section
+// label and the safe-distance label move to it in 06 T5, which also drops the two Outfit entries, 06 8.3).
 const FONT_PRELOADS = [
     "bold 32px 'JetBrains Mono'",
     "32px 'JetBrains Mono'",
     "bold 32px 'Outfit'",
     "32px 'Outfit'",
+    "bold 32px 'Montserrat'",
+    "600 32px 'Montserrat'",
+    "32px 'Montserrat'",
 ];
 
 const KEYS = {

@@ -1,5 +1,8 @@
 /* 08-section-logos.css: index.html@cd3fd3f lines 526-602 (per-section logo upload, clear, position and scale controls).
-   Contiguous slice of the original <style>; link order = file number. Do not reorder rules across files. */
+   06 T4a: role tokens. The controls sit on --color-surface-1 inside the --color-surface-2 logo row; an uploaded logo is
+   marked by a solid Signal Red border (graphic, 3.16:1 on #111111); the clear button's hover is the danger chip.
+   Slice of the original <style>, rewritten to role tokens (css-slices.mjs --report-only lists the difference, 07 S7);
+   link order = file number. Do not reorder rules across files. */
 .section-logo-upload {
     display: flex;
     align-items: center;
@@ -10,10 +13,10 @@
 .section-logo-upload-btn {
     flex: 1;
     padding: 8px 12px;
-    background: var(--bg-tertiary);
-    border: 1px dashed var(--border-color);
+    background: var(--color-surface-1);
+    border: 1px dashed var(--color-border-strong);
     border-radius: 6px;
-    color: var(--text-secondary);
+    color: var(--color-text-secondary);
     font-size: 11px;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -21,22 +24,22 @@
 }
 
 .section-logo-upload-btn:hover {
-    border-color: var(--accent-cyan);
-    color: var(--accent-cyan);
+    border-color: var(--color-text-primary);
+    color: var(--color-text-primary);
 }
 
 .section-logo-upload-btn.has-logo {
     border-style: solid;
-    border-color: var(--accent-cyan);
-    color: var(--accent-cyan);
+    border-color: var(--color-accent);
+    color: var(--color-text-primary);
 }
 
 .section-logo-clear {
     padding: 8px;
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-color);
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
     border-radius: 6px;
-    color: var(--text-secondary);
+    color: var(--color-text-secondary);
     cursor: pointer;
     display: none;
 }
@@ -46,8 +49,8 @@
 }
 
 .section-logo-clear:hover {
-    border-color: #ff4466;
-    color: #ff4466;
+    color: var(--color-danger);
+    background: var(--color-danger-bg);
 }
 
 .section-logo-position {
@@ -61,11 +64,12 @@
 
 .section-logo-position select {
     width: 100%;
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-color);
-    color: var(--text-primary);
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
+    color: var(--color-text-primary);
     padding: 6px;
     border-radius: 4px;
+    font-family: var(--font-ui);
     font-size: 11px;
 }
 

@@ -2,7 +2,10 @@
    The only @media rule of the original stylesheet: this file must stay the last of the slices (css/01-12). In 07 C52's
    link order the feature sheets (css/features/*) come before it, and spec 09's 20-29 block and css/99-utilities.css
    (06 T1, last of all) after it; those set no property these rules set on these elements.
-   Contiguous slice of the original <style>; link order = file number. Do not reorder rules across files. */
+   06 T4a: role tokens. The text-only header of 06 T4a keeps its product name visible at this width (it is the only
+   identity until 06 T4b adds the wordmark).
+   Slice of the original <style>, rewritten to role tokens (css-slices.mjs --report-only lists the difference, 07 S7);
+   link order = file number. Do not reorder rules across files. */
 @media (max-width: 900px) {
     .app-container {
         grid-template-columns: 1fr;
@@ -11,6 +14,6 @@
     .control-panel {
         order: 3;
         border-right: none;
-        border-top: 1px solid var(--border-color);
+        border-top: 1px solid var(--color-border-subtle);
     }
 }

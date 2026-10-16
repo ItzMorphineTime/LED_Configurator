@@ -1,0 +1,8 @@
+/* Static-check fixture (rules 13 and 15, 06 R-B1/R-B5): the token file may hold colour literals (#C51622, rgba()). */
+:root {
+    --morph-red-600: #C51622;
+    --morph-gold-500: #F2B705;
+    --color-text-primary: #F7F7F5;
+    --color-surface-overlay: rgba(17, 17, 17, 0.92);
+    --cta-background: var(--morph-gold-500);
+}

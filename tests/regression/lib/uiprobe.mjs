@@ -16,9 +16,11 @@ const MASK_CSS = '#three-canvas, #camera-preview-canvas { visibility: hidden !im
 
 // Every weight the Google Fonts URL serves, loaded up front so text revealed later (opened panels,
 // new cards) never races a web-font download. The sample text pulls in the unicode-range subsets.
+// Montserrat 400-700 since 06 T4a (06 8.3); 06 T5 drops Outfit and JetBrains Mono 300 and adds JetBrains Mono 700.
 const FONT_FACES = [
     ['Outfit', [300, 400, 500, 600, 700]],
     ['JetBrains Mono', [300, 400, 500, 600]],
+    ['Montserrat', [400, 500, 600, 700]],
 ];
 const FONT_SAMPLE = 'AaZz09 °×•—–…→✓⚠';
 
@@ -114,7 +116,7 @@ function pageCaptureText() {
     return {
         title: document.title,
         lang: document.documentElement.getAttribute('lang'),
-        header: { logo: texts('.logo-text'), statValues: texts('.stat-value'), statLabels: texts('.stat-label') },
+        header: { logo: texts('.product-name'), statValues: texts('.stat-value'), statLabels: texts('.stat-label') },
         globalSectionTitles: texts('.global-section-title'),
         subsectionTitles: texts('.subsection-title'),
         toggleLabels: texts('.toggle-label'),

@@ -31,6 +31,16 @@
  *  12  (06 R-B2, since 06 T1) the inline style="" attributes of <root>/index.html declare only display, width and
  *      height, with no var(--...) and no colour literal (#hex, rgb(), rgba(), hsl(), hsla()); every other inline
  *      style became a class of css/99-utilities.css. HTML comments are skipped. Skipped without an index.html.
+ *  13  (06 R-B1, since 06 T4a) no colour literal (#hex of 3-8 digits, rgb(, rgba(, hsl(, hsla() in a declaration
+ *      value of <root>/css/**\/*.css other than css/02-tokens.css: the text between ':' and ';' inside a {...} block,
+ *      comments stripped (selectors such as #add-section-btn are not scanned). Skipped without a css/ directory.
+ *  14  (06 R-B3a, since 06 T4a) no legacy identity residue in <root>/index.html, css/ and js/: no legacy token name
+ *      (--bg-primary, --bg-secondary, --bg-tertiary, --accent-<any>, --text-primary, --text-secondary, --text-dim,
+ *      --border-color, --glow-cyan, matched as whole custom-property names, so --color-text-primary does not match),
+ *      no Fivefold (any case), no company-logo, no rgba(0, 240, 255. The whole text is scanned, comments included.
+ *  15  (06 R-B5, since 06 T4a) exactly one element of <root>/index.html has the class export-btn--primary (the one
+ *      Pivot Gold element), and exactly one CSS declaration references var(--cta-background). Each half is skipped
+ *      without its index.html or css/ directory.
  *
  * "Identifier" means a token of code: comments and the text of string, template and regex literals
  * are blanked first (the code inside template `${...}` is kept), and a name after `.` or `?.` is a
@@ -79,6 +89,9 @@ const RULE_TITLES = Object.freeze({
     10: 'domain field write',
     11: 'render order literal',
     12: 'inline style (R-B2)',
+    13: 'CSS colour literal (R-B1)',
+    14: 'legacy identity (R-B3a)',
+    15: 'primary CTA (R-B5)',
 });
 
 /**
@@ -133,6 +146,21 @@ const RENDER_ORDER_MIN = 900;
 const INLINE_STYLE_PROPS = new Set(['display', 'width', 'height']);
 /** Rule 12: what an inline style value may not contain (a token or a colour literal). */
 const INLINE_STYLE_FORBIDDEN_RE = /var\(\s*--|#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?)\(/i;
+
+/** Rule 13 (06 R-B1): the one stylesheet that may hold colour values, and what a colour literal is. */
+const TOKENS_STYLESHEET = 'css/02-tokens.css';
+const CSS_COLOUR_LITERAL_RE = /#[0-9a-f]{3,8}\b|\brgba?\(|\bhsla?\(/gi;
+/** Rule 14 (06 R-B3a): the legacy identity residue, each with what it is. */
+const LEGACY_IDENTITY = Object.freeze([
+    [/(?<![\w-])--(?:bg-primary|bg-secondary|bg-tertiary|accent-[\w-]+|text-primary|text-secondary|text-dim|border-color|glow-cyan)(?![\w-])/g,
+        'legacy token name'],
+    [/fivefold/gi, 'third-party logo name'],
+    [/company-logo/g, 'third-party logo class'],
+    [/rgba\(\s*0\s*,\s*240\s*,\s*255\b/g, 'legacy cyan'],
+].map(Object.freeze));
+/** Rule 15 (06 R-B5): the primary CTA class and its one token. */
+const PRIMARY_CTA_CLASS = 'export-btn--primary';
+const CTA_TOKEN_REFERENCE_RE = /var\(\s*--cta-background\s*[,)]/g;
 
 /** Rule 7: the one event that may have no subscriber (the feature seam, ARCHITECTURE.md 5.1 rule 7). */
 const UNSUBSCRIBED_EVENTS = new Set(['WALL_REBUILT']);
@@ -813,6 +841,120 @@ function checkInlineStyles(ctx) {
     }
 }
 
+/** Every .css file under `dir` (recursive, sorted), or [] when `dir` does not exist. */
+function listCssFiles(dir) {
+    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return [];
+    const out = [];
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
+        const abs = path.join(dir, ent.name);
+        if (ent.isDirectory()) out.push(...listCssFiles(abs));
+        else if (ent.isFile() && ent.name.endsWith('.css')) out.push(abs);
+    }
+    return out;
+}
+
+/** CSS text with every comment blanked (newlines kept, so offsets and line numbers stay right). */
+const blankCssComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, ' '));
+/** The 1-based line of `index` in `text`. */
+const lineAt = (text, index) => text.slice(0, index).split('\n').length;
+
+/**
+ * The stylesheets of `<root>/css` (recursive) as { rel, raw, text }, `text` with its comments blanked.
+ * @returns {{rel: string, raw: string, text: string}[]}
+ */
+function readStylesheets(ctx) {
+    return listCssFiles(path.join(ctx.root, 'css')).map((abs) => {
+        const raw = fs.readFileSync(abs, 'utf8');
+        return { rel: toPosix(path.relative(ctx.root, abs)), raw, text: blankCssComments(raw) };
+    });
+}
+
+/**
+ * The declaration values of comment-blanked CSS: in every innermost {...} block (a rule body; an @media block's own
+ * body holds rules, not declarations), the text between the first ':' and the next ';' or the block end.
+ * @returns {{value: string, start: number}[]} `start` = offset of the value in `text`
+ */
+function declarationValues(text) {
+    const out = [];
+    for (const block of text.matchAll(/\{([^{}]*)\}/g)) {
+        let offset = block.index + 1;
+        for (const decl of block[1].split(';')) {
+            const colon = decl.indexOf(':');
+            if (colon >= 0) out.push({ value: decl.slice(colon + 1), start: offset + colon + 1 });
+            offset += decl.length + 1;
+        }
+    }
+    return out;
+}
+
+/**
+ * Rule 13 (06 R-B1): no colour literal in a declaration value of any stylesheet but css/02-tokens.css. Selectors and
+ * comments are not scanned. A missing css/ directory is not checked.
+ */
+function checkCssColourLiterals(ctx, sheets) {
+    for (const { rel, text } of sheets) {
+        if (rel === TOKENS_STYLESHEET) continue;
+        for (const { value, start } of declarationValues(text)) {
+            for (const m of value.matchAll(CSS_COLOUR_LITERAL_RE)) {
+                ctx.report(rel, lineAt(text, start + m.index), 13,
+                    `colour literal "${m[0]}" in a declaration value: only ${TOKENS_STYLESHEET} holds colour values; use a role token (06 R-B1)`);
+            }
+        }
+    }
+}
+
+/**
+ * Rule 14 (06 R-B3a): no legacy identity residue (legacy token names, the third-party logo, the legacy cyan) in
+ * index.html, the stylesheets and the modules, comments included.
+ */
+function checkLegacyIdentity(ctx, sheets) {
+    const files = [];
+    const html = path.join(ctx.root, 'index.html');
+    if (fs.existsSync(html)) files.push({ rel: 'index.html', raw: fs.readFileSync(html, 'utf8') });
+    files.push(...sheets.map(({ rel, raw }) => ({ rel, raw })));
+    files.push(...ctx.modules.map(({ rel, src }) => ({ rel, raw: src })));
+    for (const { rel, raw } of files) {
+        for (const [re, what] of LEGACY_IDENTITY) {
+            for (const m of raw.matchAll(re)) {
+                ctx.report(rel, lineAt(raw, m.index), 14, `${what} "${m[0]}": the legacy identity was replaced by the Morph role tokens and brand (06 R-B3a)`);
+            }
+        }
+    }
+}
+
+/**
+ * Rule 15 (06 R-B5): exactly one element of index.html carries the primary CTA class, and exactly one CSS declaration
+ * references --cta-background. HTML comments and CSS comments are not counted.
+ */
+function checkPrimaryCta(ctx, sheets) {
+    const abs = path.join(ctx.root, 'index.html');
+    if (fs.existsSync(abs)) {
+        const html = fs.readFileSync(abs, 'utf8').replace(/<!--[\s\S]*?-->/g, (c) => c.replace(/[^\n]/g, ' '));
+        const owners = [];
+        for (const tag of html.matchAll(START_TAG_RE)) {
+            for (const attr of tag[2].matchAll(ATTRIBUTE_RE)) {
+                if (attr[1].toLowerCase() !== 'class') continue;
+                if ((attr[2] ?? attr[3] ?? attr[4] ?? '').split(/\s+/).includes(PRIMARY_CTA_CLASS)) owners.push(tag);
+            }
+        }
+        if (owners.length !== 1) {
+            const line = owners.length ? lineAt(html, owners[1].index) : 1;
+            ctx.report('index.html', line, 15, `${owners.length} elements have the class ${PRIMARY_CTA_CLASS}; exactly one may (the one Pivot Gold element, 06 R-B5)`);
+        }
+    }
+    if (!sheets.length) return;
+    const refs = [];
+    for (const { rel, text } of sheets) {
+        for (const { value, start } of declarationValues(text)) {
+            for (const m of value.matchAll(CTA_TOKEN_REFERENCE_RE)) refs.push({ rel, line: lineAt(text, start + m.index) });
+        }
+    }
+    if (refs.length !== 1) {
+        const at = refs[1] || { rel: TOKENS_STYLESHEET, line: 1 };
+        ctx.report(at.rel, at.line, 15, `${refs.length} CSS declarations reference var(--cta-background); exactly one may (.export-btn--primary, 06 R-B5)`);
+    }
+}
+
 // ---- runner -----------------------------------------------------------------------------------
 
 /**
@@ -849,6 +991,10 @@ export async function runChecks(rootDir) {
     }
     checkLookups(ctx);
     checkInlineStyles(ctx);
+    const sheets = readStylesheets(ctx);
+    checkCssColourLiterals(ctx, sheets);
+    checkLegacyIdentity(ctx, sheets);
+    checkPrimaryCta(ctx, sheets);
 
     const legacy = await importIfPresent(root, 'js/legacy/LegacyCompat.js', 6, ctx);
     if (legacy.missing) notices.push('js/legacy/LegacyCompat.js not found: rules 6 (LEGACY parity) and 8 (Strategies references) skipped');
@@ -923,6 +1069,19 @@ const EXPECTED_BAD = Object.freeze([
     ['index.html', 12, '<div> inline style value "width: var(--preview-width)" holds a token'],
     ['index.html', 12, '<div> inline style value "width: #123456" holds a token or a colour literal'],
     ['index.html', 12, "<svg> inline style declares 'opacity'"],
+    ['css/07-viewport.css', 13, 'colour literal "#b85618"'],
+    ['css/07-viewport.css', 13, 'colour literal "rgba("'],
+    ['css/07-viewport.css', 13, 'colour literal "rgb("'],
+    ['css/07-viewport.css', 13, 'colour literal "hsl("'],
+    ['css/02-tokens.css', 14, 'legacy token name "--accent-cyan"'],
+    ['css/07-viewport.css', 14, 'legacy token name "--border-color"'],
+    ['css/07-viewport.css', 14, 'third-party logo class "company-logo"'],
+    ['css/07-viewport.css', 14, 'legacy cyan "rgba(0, 240, 255"'],
+    ['index.html', 14, 'legacy token name "--accent-cyan"'],
+    ['index.html', 14, 'third-party logo name "Fivefold"'],
+    ['js/ui/PanelB.js', 14, 'third-party logo class "company-logo"'],
+    ['index.html', 15, '2 elements have the class export-btn--primary'],
+    ['css/07-viewport.css', 15, '2 CSS declarations reference var(--cta-background)'],
 ]);
 
 async function selfTest() {

@@ -1,0 +1,16 @@
+/* Static-check fixture (rules 13-15): comments are not scanned for colour literals (#ff0000, rgba(0, 0, 0, 1)),
+   selectors are not declaration values, --color-text-primary is not the legacy text token, and exactly one
+   declaration references the CTA token. */
+#add-section-btn:hover,
+.export-btn {
+    color: var(--color-text-primary);
+    background: transparent;
+}
+
+.export-btn--primary {
+    background: var(--cta-background);
+}
+
+@media (max-width: 900px) {
+    #three-canvas { border-color: var(--morph-red-600); }
+}

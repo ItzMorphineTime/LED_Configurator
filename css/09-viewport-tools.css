@@ -1,65 +1,70 @@
 /* 09-viewport-tools.css: index.html@cd3fd3f lines 604-735 (gizmo mode buttons, pilot banner, gizmo divider, selection badge, view buttons).
-   Legacy note B-L24 (documentation-only, preserved): .selection-indicator sits at the same
-   bottom: 20px; left: 20px as .viewport-info (07-viewport.css) and overlaps it.
-   Fix = CSS change here + ui_visual re-baseline (06 T4a). The other half of B-L24, the missing
-   .view-btn.active rule, landed in 01 F1-2 (css/features/debug-view.css).
-   Contiguous slice of the original <style>; link order = file number. Do not reorder rules across files. */
+   06 T4a (06 3.5): role tokens. Gizmo and view buttons are overlay chips with 18 x 18 icons (the gizmo SVGs had no size
+   rule and filled the 40 px button); an active tool is white with a Morph Black icon; the active pilot button and the
+   pilot banner are Signal Red with white text or icon (5.98:1) and a 1 px Morph Black outline, so the red keeps a
+   Morph Black neighbour over any scene content (3.31:1). The selection badge is an opaque --color-surface-1 chip (not
+   the translucent overlay chip, on which red falls to 2.6:1 over a light wall) with a red left bar and the same
+   outline, which lies outside the chip and changes no rect.
+   B-L24 landed here in 06 T4a: the selection badge sits at bottom: 64px, stacked above the help badge of
+   07-viewport.css (bottom: 20px), so the two never overlap. The other half of B-L24, the missing .view-btn.active rule,
+   landed in 01 F1-2 (css/features/debug-view.css).
+   Slice of the original <style>, rewritten to role tokens (css-slices.mjs --report-only lists the difference, 07 S7);
+   link order = file number. Do not reorder rules across files. */
 .gizmo-mode-btn {
     width: 40px;
     height: 40px;
-    background: rgba(18, 18, 26, 0.9);
-    border: 1px solid var(--border-color);
+    background: var(--color-surface-overlay);
+    border: 1px solid var(--color-border-subtle);
     border-radius: 8px;
     cursor: pointer;
     display: grid;
     place-items: center;
     transition: all 0.2s ease;
-    color: var(--text-secondary);
+    color: var(--color-text-secondary);
+    font-family: var(--font-ui);
     font-size: 11px;
     font-weight: 600;
 }
 
+.gizmo-mode-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
 .gizmo-mode-btn:hover {
-    border-color: var(--accent-cyan);
-    color: var(--accent-cyan);
+    border-color: var(--color-text-secondary);
+    color: var(--color-text-primary);
 }
 
 .gizmo-mode-btn.active {
-    background: var(--accent-cyan);
-    border-color: var(--accent-cyan);
-    color: #000;
-}
-
-.gizmo-mode-btn.translate.active {
-    background: #ffaa00;
-    border-color: #ffaa00;
-}
-
-.gizmo-mode-btn.rotate.active {
-    background: #00aaff;
-    border-color: #00aaff;
+    background: var(--color-control-active-bg);
+    border-color: var(--color-control-active-bg);
+    color: var(--color-on-control-active);
 }
 
 .gizmo-mode-btn.pilot.active {
-    background: #ff4466;
-    border-color: #ff4466;
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: var(--color-on-accent);
+    outline: 1px solid var(--color-bg-app);
 }
 
 .gizmo-mode-btn.space {
+    font-family: var(--font-mono);
     font-weight: 700;
     font-size: 14px;
 }
 
 .gizmo-mode-btn.space.world {
-    background: rgba(100, 100, 100, 0.8);
-    border-color: #888;
-    color: #fff;
+    background: var(--color-surface-overlay);
+    border-color: var(--color-border-strong);
+    color: var(--color-text-primary);
 }
 
 .gizmo-mode-btn.space.local {
-    background: #aa66ff;
-    border-color: #aa66ff;
-    color: #fff;
+    background: var(--color-control-active-bg);
+    border-color: var(--color-control-active-bg);
+    color: var(--color-on-control-active);
 }
 
 .pilot-info {
@@ -67,13 +72,14 @@
     top: 20px;
     left: 50%;
     transform: translateX(-50%);
-    background: rgba(255, 68, 102, 0.95);
-    border: 2px solid #ff4466;
+    background: var(--color-accent);
+    border: 1px solid var(--color-accent);
+    outline: 1px solid var(--color-bg-app);
     border-radius: 8px;
     padding: 10px 20px;
     font-size: 12px;
     font-weight: 600;
-    color: #fff;
+    color: var(--color-on-accent);
     pointer-events: none;
     display: none;
     z-index: 100;
@@ -84,23 +90,32 @@
     display: block;
 }
 
+.pilot-info__icon {
+    width: 16px;
+    height: 16px;
+    margin-right: 8px;
+    vertical-align: -3px;
+}
+
 .gizmo-divider {
     width: 100%;
     height: 1px;
-    background: var(--border-color);
+    background: var(--color-border-strong);
     margin: 4px 0;
 }
 
 .selection-indicator {
     position: absolute;
-    bottom: 20px;
+    bottom: 64px;
     left: 20px;
-    background: rgba(18, 18, 26, 0.9);
-    border: 1px solid var(--border-color);
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
+    border-left: 3px solid var(--color-accent);
+    outline: 1px solid var(--color-bg-app);
     border-radius: 8px;
     padding: 8px 14px;
     font-size: 11px;
-    color: var(--text-secondary);
+    color: var(--color-text-secondary);
     pointer-events: none;
     display: none;
 }
@@ -110,26 +125,26 @@
 }
 
 .selection-indicator .selected-name {
-    color: var(--accent-cyan);
+    color: var(--color-text-primary);
     font-weight: 600;
 }
 
 .view-btn {
     width: 40px;
     height: 40px;
-    background: rgba(18, 18, 26, 0.9);
-    border: 1px solid var(--border-color);
+    background: var(--color-surface-overlay);
+    border: 1px solid var(--color-border-subtle);
     border-radius: 8px;
     cursor: pointer;
     display: grid;
     place-items: center;
     transition: all 0.2s ease;
-    color: var(--text-secondary);
+    color: var(--color-text-secondary);
 }
 
 .view-btn:hover {
-    border-color: var(--accent-cyan);
-    color: var(--accent-cyan);
+    border-color: var(--color-text-secondary);
+    color: var(--color-text-primary);
 }
 
 .view-btn svg {

@@ -1,13 +1,14 @@
-/* 07-viewport.css: index.html@cd3fd3f lines 446-524 (viewport, canvas, overlay, info badge, viewport/gizmo control bars, company logo).
+/* 07-viewport.css: index.html@cd3fd3f lines 446-524 (viewport, canvas, overlay, info badge, viewport/gizmo control bars).
    06 T1 deleted the dead .grid-lines rule (its only element was commented out in the markup; that comment went too).
-   Legacy note B-L24 (documentation-only, preserved): .viewport-info (bottom: 20px; left: 20px)
-   shares its corner with .selection-indicator in 09-viewport-tools.css, so the selection badge
-   covers the help badge while visible. Fix = CSS change here + ui_visual re-baseline.
-   Slice of the original <style> minus the deleted rule (css-slices.mjs --report-only lists the difference, 07 S7);
-   link order = file number. Do not reorder rules across files. */
+   06 T4a deleted the third-party logo (its inline SVG in the overlay and its rule), and maps the rest to role tokens: the
+   info badge is the translucent overlay chip (--color-surface-overlay; text keeps >= 6.15:1 over any scene).
+   B-L24 (the selection badge covering the help badge) landed in 06 T4a: .selection-indicator in
+   09-viewport-tools.css sits at bottom: 64px, above this file's .viewport-info (bottom: 20px).
+   Slice of the original <style> minus the deleted rules, rewritten to role tokens (css-slices.mjs --report-only lists
+   the difference, 07 S7); link order = file number. Do not reorder rules across files. */
 .viewport {
     position: relative;
-    background: var(--bg-primary);
+    background: var(--color-bg-app);
     overflow: hidden;
 }
 
@@ -33,13 +34,13 @@
 }
 
 .info-badge {
-    background: rgba(18, 18, 26, 0.9);
-    border: 1px solid var(--border-color);
+    background: var(--color-surface-overlay);
+    border: 1px solid var(--color-border-subtle);
     border-radius: 6px;
     padding: 8px 12px;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
-    color: var(--text-secondary);
+    color: var(--color-text-secondary);
 }
 
 .viewport-controls {
@@ -60,15 +61,4 @@
     flex-direction: column;
     gap: 8px;
     pointer-events: all;
-}
-
-.company-logo {
-    position: absolute;
-    top: 20px;
-    left: 70px;
-    width: 120px;
-    height: auto;
-    opacity: 0.7;
-    pointer-events: none;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
 }

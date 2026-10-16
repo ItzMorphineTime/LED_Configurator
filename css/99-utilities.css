@@ -1,14 +1,17 @@
 /* 99-utilities.css: the classes that replace the inline style="" attributes of index.html and of the section-logo and
-   card templates (docs/improvements/06-morph-branding.md 5.3, T1). Every value is copied from the inline style it
-   replaces, so the computed styles are unchanged (the ui_visual harness proves it).
+   card templates (docs/improvements/06-morph-branding.md 5.3, T1). T1 copied every value from the inline style it
+   replaced, so T1 left the computed styles unchanged (the ui_visual harness proved it); 06 T4a then restyled them.
    Linked LAST of all stylesheets (07 C52 link order: 00-fonts, 01-11, css/features/*, 12-responsive, 20-29,
    99-utilities). An inline style beat every rule; a class does not, so these classes win over every earlier rule of
    the same specificity by source order, and a utility used where a legacy rule is more specific than one class is
    qualified to that specificity (.input-field .color-input-full against .input-field input). The utilities set only
    spacing, typography and the read-out, preview-window and logo-row looks, which neither the media query nor the
    feature sheets set on these elements. Not a slice of the original <style>: tests/static/css-slices.mjs never
-   scans it. Colours are still the legacy tokens and literals copied from the inline styles until 06 T4a maps them to
-   role tokens (rule R-B1 is enabled at the end of T4a). */
+   scans it. Since 06 T4a every colour is a role token of 02-tokens.css (static rule R-B1): the read-outs are
+   --color-surface-1 blocks with primary JetBrains Mono values (the five formerly cyan read-outs), the preview window
+   has a 1 px Signal Red border plus a 1 px Morph Black outline (outside the border, so no rect changes) and the
+   --shadow-overlay shadow, its header and footer sit on --color-scrim, and its resize grip draws in currentColor
+   (--color-text-secondary). */
 
 /* Spacing (sidebar blocks, rows, buttons) */
 .mt-6 { margin-top: 6px; }
@@ -23,11 +26,12 @@
 /* Form controls (#led-layout, #camera-filmback; #panel-font-color, #section-label-color) */
 .ui-select {
     width: 100%;
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-color);
-    color: var(--text-primary);
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border-subtle);
+    color: var(--color-text-primary);
     padding: 6px;
     border-radius: 4px;
+    font-family: var(--font-ui);
     font-size: 12px;
 }
 
@@ -41,9 +45,10 @@
 .subsection-title {
     margin: 14px 0 8px;
     font-size: 10px;
+    font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 1px;
-    color: var(--text-secondary);
+    letter-spacing: 0.12em;
+    color: var(--color-text-secondary);
 }
 
 .subsection-title--tight {
@@ -54,7 +59,7 @@
 .readout {
     margin-top: 10px;
     padding: 10px;
-    background: var(--bg-secondary);
+    background: var(--color-surface-1);
     border-radius: 6px;
     font-size: 11px;
 }
@@ -67,8 +72,8 @@
 
 .readout-row--gap { margin-bottom: 8px; }
 .readout-row--last { margin-bottom: 0; }
-.readout-label { color: var(--text-secondary); }
-.readout-value { color: var(--accent-cyan); }
+.readout-label { color: var(--color-text-secondary); }
+.readout-value { color: var(--color-text-primary); font-family: var(--font-mono); font-weight: 500; }
 
 /* The static initial colours of #frustum-status-text and #safe-distance. Since 06 T3 they read the layer-4 status
    tokens, which ThemeBridge also reads into theme.ui.status, the colours CameraPanel writes to style.color at
@@ -82,11 +87,12 @@
     position: absolute;
     bottom: 20px;
     right: 20px;
-    background: #000;
-    border: 2px solid var(--accent-cyan);
+    background: var(--color-bg-app);
+    border: 1px solid var(--color-accent);
+    outline: 1px solid var(--color-bg-app);
     border-radius: 8px;
     overflow: hidden;
-    box-shadow: 0 4px 20px rgba(0, 240, 255, 0.3);
+    box-shadow: var(--shadow-overlay);
 }
 
 .preview-window__resize {
@@ -97,6 +103,7 @@
     height: 20px;
     cursor: nw-resize;
     z-index: 20;
+    color: var(--color-text-secondary);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -111,13 +118,20 @@
     right: 0;
     padding: 4px 8px;
     padding-left: 24px;
-    background: rgba(0, 0, 0, 0.7);
+    background: var(--color-scrim);
     font-size: 10px;
-    color: var(--accent-cyan);
+    color: var(--color-text-primary);
     display: flex;
     justify-content: space-between;
     align-items: center;
     z-index: 10;
+}
+
+/* The header's title: the 12 px camera icon (06 T4a, it replaced an emoji) and "Camera View" on one line */
+.preview-window__title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .preview-window__footer {
@@ -126,9 +140,9 @@
     left: 0;
     right: 0;
     padding: 4px 8px;
-    background: rgba(0, 0, 0, 0.7);
+    background: var(--color-scrim);
     font-size: 9px;
-    color: var(--text-secondary);
+    color: var(--color-text-secondary);
     display: flex;
     justify-content: space-between;
 }
@@ -137,31 +151,32 @@
 .logo-row {
     margin-bottom: 12px;
     padding: 10px;
-    background: var(--bg-tertiary);
+    background: var(--color-surface-2);
     border-radius: 6px;
 }
 
 .logo-row__title {
     font-size: 11px;
-    color: var(--text-primary);
+    color: var(--color-text-primary);
     margin-bottom: 8px;
     font-weight: 500;
 }
 
 .logo-row__label {
     font-size: 10px;
-    color: var(--text-secondary);
+    color: var(--color-text-secondary);
     display: block;
     margin-bottom: 4px;
 }
 
 .logo-row__input {
     width: 100%;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    color: var(--text-primary);
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
+    color: var(--color-text-primary);
     padding: 6px;
     border-radius: 4px;
+    font-family: var(--font-mono);
     font-size: 11px;
 }
 

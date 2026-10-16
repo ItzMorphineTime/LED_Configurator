@@ -1,0 +1,32 @@
+{
+  "commit": "F6-T4a",
+  "bugs": ["B-L24"],
+  "expect": [
+    {
+      "output": "ui_visual/*.styles.json",
+      "change": "modified",
+      "each": true,
+      "reason": "06 8.4 T4a: every probed element's computed style moves to the role tokens (colours, Montserrat, the header grid, the component states of 3.5, the selection badge at bottom: 64px); cssTokens lists the layer-3 roles; page/brand-lockup and page/product-name replace the four logo entries; the overlay/company-logo entries are gone"
+    },
+    {
+      "output": "ui_visual/*.text.json",
+      "change": "modified",
+      "each": true,
+      "reason": "06 8.4 T4a: title 'Morph LED Configurator'; header.logo reads .product-name ('Morph LED Configurator'); the pilot and preview texts lose their emoji; #export-zip has the class 'export-btn export-btn--primary'"
+    },
+    {
+      "output": "**/*.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "06 8.4 T4a: every canvas-clipped screenshot includes the DOM overlay (gizmo and view buttons as overlay chips with 18 px icons, the help badge, the preview frame, the removed third-party logo), and the ui_visual page and sidebar captures show the restyled chrome"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "large_wall/final__export-zip__led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen so far: L2_PanelIDs.png (1995, 948), L3_PanelIDs.png (1970, 1003), L4_PanelIDs.png (2026, 858), 1 px each, 3840x1920); this commit changes no export and no texture"
+    }
+  ],
+  "notes": "06 T4a (8.4): the ungated Morph chrome. Token layers 1-3 with the brand values and every stylesheet on role tokens (legacy token names and colour literals gone: static rules 13-15, R-B1/R-B3a/R-B5); the text-only <h1> header in the three-column grid of 3.2; the third-party logo deleted; title, valid author, description, theme-color, color-scheme and Open Graph metas; Montserrat for the DOM (the T4a font URL keeps JetBrains Mono 300-600 and Outfit, so no canvas glyph changes); the component states of 3.5 (opaque selection badge with its outer ring at bottom: 64px above the help badge, B-L24's overlap half; the preview-window ring; the two-tone active swatch ring; .view-btn.active on role tokens); emoji to SVG; the resize grip in currentColor. Unchanged by construction: every export and PNG (canvas fonts and colours stay on the legacy Theme.js values until 06 T5), every section-state JSON (card text unchanged until T4c), gizmoState and cameraState (the --status-* tokens keep the legacy values), console.json."
+}

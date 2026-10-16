@@ -1,9 +1,13 @@
-/* 03-layout.css: index.html@cd3fd3f lines 33-46 (body, .app-container grid).
-   Contiguous slice of the original <style>; link order = file number. Do not reorder rules across files. */
+/* 03-layout.css: index.html@cd3fd3f lines 33-46 (body, .app-container grid), plus the focus ring of 06 3.5.
+   06 T4a: body text in Montserrat (--font-ui) and colours through the role tokens of 02-tokens.css (06 3.4). The
+   :focus-visible ring (2 px --color-focus-ring, offset 2 px) is the one rule B-L36 and spec 07 3.9 rely on; it applies
+   to every button, select and .toggle (06 3.10).
+   Slice of the original <style> plus the focus rule (css-slices.mjs --report-only lists the difference, 07 S7);
+   link order = file number. Do not reorder rules across files. */
 body {
-    font-family: 'Outfit', sans-serif;
-    background: var(--bg-primary);
-    color: var(--text-primary);
+    font-family: var(--font-ui);
+    background: var(--color-bg-app);
+    color: var(--color-text-primary);
     min-height: 100vh;
     overflow: hidden;
 }
@@ -13,4 +17,11 @@ body {
     grid-template-columns: 400px 1fr;
     grid-template-rows: 60px 1fr;
     height: 100vh;
+}
+
+button:focus-visible,
+select:focus-visible,
+.toggle:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 2px;
 }
