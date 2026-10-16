@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 
 import { WallSection } from '../../js/domain/WallSection.js';
 import { Project } from '../../js/domain/Project.js';
-import { Strategies, unsupportedStrategy, legacySpreadBase64 } from '../../js/legacy/LegacyCompat.js';
+import { LegacyProfiles, Strategies, unsupportedStrategy, legacySpreadBase64 } from '../../js/legacy/LegacyCompat.js';
 import { layoutProject } from '../../js/geometry/WallLayout.js';
 import { WallMeshBuilder } from '../../js/geometry/WallMeshBuilder.js';
 import { computeAtlas } from '../../js/geometry/TextureAtlas.js';
@@ -70,8 +70,12 @@ const serializer = new ProjectSerializer({ palette: Palette });
 const makeObj = (profile = Strategies.mesh.obj) => new ObjExporter({ brand: Brand, colorToRgb, builder: new WallMeshBuilder(profile) });
 const makeGltf = (profile = Strategies.mesh.gltf, encodeBase64 = undefined) =>
   new GltfExporter({ brand: Brand, colorToRgb, builder: new WallMeshBuilder(profile), encodeBase64 });
+// The golden comparisons and the use-case tests use the production profiles (Strategies.mesh.*). The oracle comparisons
+// use the exact Phase-1 profiles (LegacyProfiles.mesh.*, 08 4.2), so they stay meaningful after each Phase-2 flip.
 const OBJ = makeObj();
 const GLTF = makeGltf();
+const LEGACY_OBJ = makeObj(LegacyProfiles.mesh.obj);
+const LEGACY_GLTF = makeGltf(LegacyProfiles.mesh.gltf);
 
 /** A project whose wall is exactly `sections` (Wall.replaceAll, as the import does) in `meshMode`. */
 function projectOf(sections, meshMode) {
@@ -151,9 +155,9 @@ function compareAll(project, label, tally) {
     const outcome = assertSameOutcome(actual, expected, `${label} ${key}`, toText);
     tally[outcome]++;
   };
-  r('obj', run(() => OBJ.write({ sections, meshMode, layout: layoutProject(project) })),
+  r('obj', run(() => LEGACY_OBJ.write({ sections, meshMode, layout: layoutProject(project) })),
     run(() => L.generateOBJContent(legacyGeometry(sections), 0.001, sections, meshMode, colorToRgb)), objText);
-  r('gltf', run(() => GLTF.write({ sections, meshMode, layout: layoutProject(project) })),
+  r('gltf', run(() => LEGACY_GLTF.write({ sections, meshMode, layout: layoutProject(project) })),
     run(() => L.generateGLTFContent(legacyGeometry(sections), sections, meshMode, colorToRgb)), gltfText);
   r('json:file', run(() => serializer.write(project, { variant: 'file' })), run(() => L.exportJSONData(sections, meshMode)), json2);
   r('json:zip', run(() => serializer.write(project, { variant: 'zip' })), run(() => L.exportZIPJSONData(sections, meshMode)), json2);
@@ -258,8 +262,8 @@ describe('oracle equality (byte for byte)', () => {
     for (const mode of MODES) {
       const project = projectOf([], mode);
       const sections = project.wall.sections;
-      const obj = run(() => OBJ.write({ sections, meshMode: mode, layout: layoutProject(project) }));
-      const gltf = run(() => GLTF.write({ sections, meshMode: mode, layout: layoutProject(project) }));
+      const obj = run(() => LEGACY_OBJ.write({ sections, meshMode: mode, layout: layoutProject(project) }));
+      const gltf = run(() => LEGACY_GLTF.write({ sections, meshMode: mode, layout: layoutProject(project) }));
       if (mode === 'combined') {
         assert.ok(!obj.ok && obj.error instanceof TypeError, describeError(obj.error));
         assert.ok(!gltf.ok && gltf.error instanceof TypeError, describeError(gltf.error));
@@ -275,7 +279,7 @@ describe('oracle equality (byte for byte)', () => {
     const sections = project.wall.sections;
     for (const [mode, throws] of [['panel', true], ['combined', false]]) {
       project.meshMode = mode;
-      const actual = run(() => GLTF.write({ sections, meshMode: mode, layout: layoutProject(project) }));
+      const actual = run(() => LEGACY_GLTF.write({ sections, meshMode: mode, layout: layoutProject(project) }));
       const expected = run(() => L.generateGLTFContent(legacyGeometry(sections), sections, mode, colorToRgb));
       assert.equal(actual.ok, !throws, `${mode}: ${actual.ok ? 'returned' : describeError(actual.error)}`);
       assert.equal(expected.ok, !throws);
@@ -379,7 +383,7 @@ describe('oracle equality (byte for byte)', () => {
       { isSprite: true },
     ];
     const group = { traverse(cb) { cb(this); children.forEach(cb); } };
-    const actual = OBJ.writeSafeDistance(group);
+    const actual = LEGACY_OBJ.writeSafeDistance(group);
     assert.equal(actual, L.safeDistanceObjText(group));
     assert.ok(actual.startsWith(Brand.safeDistanceObjHeader));
     assert.match(actual, /\nf 7 8 9\n$/);
@@ -562,7 +566,7 @@ function assertSameBytes(text, file) {
 
 const goldenAvailable = fs.existsSync(GOLDEN_DIR);
 const goldenSkip = goldenAvailable ? false
-  : `GOLDEN_DIR ${GOLDEN_DIR} does not exist: capture the baseline (tests/regression/run.mjs on index.html@cd3fd3f) or set GOLDEN_DIR`;
+  : `GOLDEN_DIR ${GOLDEN_DIR} does not exist: capture the baseline (tests/regression/run.mjs; tests/regression/README.md) or set GOLDEN_DIR`;
 
 describe('golden files (byte-identical to the legacy downloads)', { skip: goldenSkip }, () => {
   const scenarios = ['default', ...Object.keys(CONFIGS)];
@@ -712,12 +716,12 @@ describe('strategy reads (foreign profile values throw unsupportedStrategy)', ()
   const expectError = (key, value) => (e) => e instanceof Error && e.message === unsupportedStrategy(key, value).message;
 
   test('ObjExporter: stripNormals in combined and section mode only; combinedUV in combined mode only', () => {
-    const strip = makeObj({ ...Strategies.mesh.obj, stripNormals: 'per-vertex' });
+    const strip = makeObj({ ...LegacyProfiles.mesh.obj, stripNormals: 'per-vertex' });
     assert.throws(() => strip.write(args('combined')), expectError('mesh.obj.stripNormals', 'per-vertex'));
     assert.throws(() => strip.write(args('section')), expectError('mesh.obj.stripNormals', 'per-vertex'));
     assert.doesNotThrow(() => strip.write(args('panel')));
 
-    const uv = makeObj({ ...Strategies.mesh.obj, combinedUV: 'atlas' });
+    const uv = makeObj({ ...LegacyProfiles.mesh.obj, combinedUV: 'atlas' });
     assert.throws(() => uv.write(args('combined')), expectError('mesh.obj.combinedUV', 'atlas'));
     assert.doesNotThrow(() => uv.write(args('section')));
     assert.doesNotThrow(() => uv.write(args('panel')));
@@ -725,25 +729,25 @@ describe('strategy reads (foreign profile values throw unsupportedStrategy)', ()
 
   test('GltfExporter: attributes, indexType and doubleSided in every mode', () => {
     for (const [key, value] of [['attributes', ['POSITION', 'NORMAL']], ['attributes', ['NORMAL']], ['indexType', 'uint32'], ['doubleSided', 'true']]) {
-      const exporter = makeGltf({ ...Strategies.mesh.gltf, [key]: value });
+      const exporter = makeGltf({ ...LegacyProfiles.mesh.gltf, [key]: value });
       for (const mode of MODES) assert.throws(() => exporter.write(args(mode)), expectError(`mesh.gltf.${key}`, value), `${key} ${mode}`);
     }
   });
 
   test('the Phase-1 profiles do not throw; the default glTF encoder is legacySpreadBase64 and an injected one is used', () => {
     for (const mode of MODES) {
-      assert.doesNotThrow(() => OBJ.write(args(mode)));
-      assert.doesNotThrow(() => GLTF.write(args(mode)));
+      assert.doesNotThrow(() => LEGACY_OBJ.write(args(mode)));
+      assert.doesNotThrow(() => LEGACY_GLTF.write(args(mode)));
     }
     const large = projectFromConfig(CONFIGS.large_wall);
     const largeArgs = { sections: large.wall.sections, meshMode: 'panel', layout: layoutProject(large) };
-    assert.throws(() => GLTF.write(largeArgs), RangeError);
-    const chunked = makeGltf(Strategies.mesh.gltf, (bytes) => Buffer.from(bytes).toString('base64'));
+    assert.throws(() => LEGACY_GLTF.write(largeArgs), RangeError);
+    const chunked = makeGltf(LegacyProfiles.mesh.gltf, (bytes) => Buffer.from(bytes).toString('base64'));
     const gltf = chunked.write(largeArgs);
     assert.ok(gltf.buffers[0].uri.startsWith('data:application/octet-stream;base64,'));
     // Same text as the legacy encoder wherever the legacy encoder works.
     const small = chunked.write(args('panel'));
-    assert.equal(json2(small), json2(GLTF.write(args('panel'))));
+    assert.equal(json2(small), json2(LEGACY_GLTF.write(args('panel'))));
     assert.equal(legacySpreadBase64(new Uint8Array([1, 2, 3])), 'AQID');
   });
 });

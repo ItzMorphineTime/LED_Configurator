@@ -251,12 +251,18 @@ During integration only, `js/legacy/monolith.js` (WP10) temporarily holds the ve
 ```
 tests/
   regression/                              existing golden-master harness (run.mjs, compare.mjs, lib/...)
-    scenarios.mjs                          WP1 (edit: registers the extra scenarios)
-    compare.mjs                            WP1 (conditional edit: WARN_ONLY entries a self-consistency run proves nondeterministic)
+    scenarios.mjs                          WP1 (edit: registers the extra scenarios); 08 P2-0 (registers the Phase 2 scenarios)
+    compare.mjs                            WP1; 08 P2-0: `--expect` expected-change manifests and the `JITTER` status from
+                                                 expected/_nondeterminism.json (08 8.2; the Phase-1 WARN_ONLY list is gone)
     lib/server.mjs                         WP1 (conditional edit: optional port argument for tools/serve.mjs; default unchanged)
+    lib/app.mjs, lib/recorder.mjs          08 P2-0: the opt-in request log (`recordRequests`, network.json), AppPage.reload()
     scenarios-extra.mjs                    WP1   logos, gizmo_drag, pilot_look, preview_off_in_pilot, import_edge,
                                                  name_with_panel_ids, preview_resize
-    README.md                              WP1 (edit: documents the extra scenarios)
+    scenarios-phase2.mjs                   08 P2-0  the eight p2_* scenarios of 08 8.3, captured against the unfixed code
+    expected/                              08 P2-0  <commit-id>.json expected-change manifests (one per golden-changing commit,
+                                                 any spec); _nondeterminism.json, the only standing allowance
+    README.md                              WP1 (edit: documents the extra scenarios); 08 P2-0 (Phase 2 scenarios and the
+                                                 "Phase 2 re-baselining" procedure)
   static/
     check.mjs                              WP1   layering, DOM-id ownership, call-time globals, import case, LEGACY parity,
                                                  Strategies references, event subscribers, module-level state, domain field writers
@@ -273,13 +279,20 @@ tests/
     core.test.mjs                          WP3   EventBus semantics, LegacyCompat helpers, LEGACY_SITES shape
     domain.test.mjs                        WP3   rule tables vs legacy expressions, Wall/CineCamera/Prop/LogoLibrary semantics
     oracle/legacy-geometry.mjs             WP4   verbatim THREE-free copies of the legacy layout walks and grid builders
-    geometry.test.mjs                      WP4   Object.is equality vs the oracle over fuzzed sections (strings, fractions, NaN ids)
+    geometry.test.mjs                      WP4   Object.is equality vs the oracle over fuzzed sections (strings, fractions, NaN ids);
+                                                 since 08 P2-0 the oracle builders are injected with LegacyProfiles.mesh.*
     oracle/legacy-io.mjs                   WP5   verbatim THREE-free copies of generateAllSectionsGeometry, OBJ, glTF, JSON writers
-    io.test.mjs                            WP5   byte equality vs oracle and vs golden harness files (GOLDEN_DIR)
+    io.test.mjs                            WP5   byte equality vs oracle (LegacyProfiles.mesh.*, since 08 P2-0) and vs golden
+                                                 harness files (GOLDEN_DIR; Strategies.mesh.*)
     camera-hub.test.mjs                    WP7   CameraHub/CameraController pipeline order with spies
     wall-controller.test.mjs               WP9   rebuild policy: run counts and tile-cache clears for the 24 legacy sites
+    compare.test.mjs                       08 P2-0  compare.mjs --expect semantics and JITTER on synthetic output trees
+    tools.test.mjs                         08 P2-0  tools/check-orientation.mjs and tools/check-gltf.mjs on hand-built files
 tools/
   serve.mjs                                WP1   zero-dependency static server for local development (correct .js MIME type)
+  check-orientation.mjs                    08 P2-0  OBJ/glTF face orientation against the vertex normals (01 8.1, 08 8.2)
+  check-gltf.mjs                           08 P2-0  structural glTF subset: bounds, alignment, index values, POSITION min/max
+                                                 after Math.fround, unit NORMALs, TEXCOORD_0 count, references (08 8.2)
 index.html                                 WP10  head + markup verbatim; 12 <link>s; <script type="module" src="js/main.js">
 README.md                                  WP10  "How to run locally" section updated (static server required)
 docs/ARCHITECTURE.md, docs/REFACTOR_PLAN.md       this contract and the plan (amended by whoever changes a contract)
@@ -377,6 +390,20 @@ export const Strategies = deepFreeze({
   dispose: { wallTextures: true, gizmo: true },    // B-H5 fixed (Phase 1C H1); B-L12 fixed (Phase 1C H2)
 });
 
+/** The exact Phase-1 mesh profiles (08 P2-0, docs/improvements/08-bugfix-roadmap.md 4.2). Production code never
+ *  reads these; the oracle tests inject them into WallMeshBuilder / ObjExporter / GltfExporter so that the
+ *  "builder == verbatim oracle" tests stay meaningful after each Phase-2 flip of Strategies.mesh. Every value here
+ *  must stay a supported case of the builder and the exporters. The only legacy-profile fixture. */
+export const LegacyProfiles = deepFreeze({
+  mesh: {
+    viewport: { winding: 'legacy-cw', normals: 'right-panel', combinedUV: 'atlas-u-full-v', side: 'double' },
+    obj:      { winding: 'legacy-cw', normals: 'none', stripNormals: 'constant-z',
+                combinedUV: 'per-section-overlap', panelNormal: 'facing' },
+    gltf:     { winding: 'legacy-cw', normals: 'none', attributes: ['POSITION'], indexType: 'uint16',
+                doubleSided: 'omit' },
+  },
+});
+
 /** @returns {Error} Error(`Unsupported strategy ${key}=${JSON.stringify(value)}`) */
 export function unsupportedStrategy(key, value)
 
@@ -400,7 +427,7 @@ export function legacyMissingDownloadBlob(blob, filename)
  *  Entries whose site is not under js/ (CSS, markup) are documentation-only. */
 export const LEGACY_SITES
 ```
-`deepFreeze` is module-private. The `behaviour` and `fix` strings of each `LEGACY_SITES` entry are the 8.2 cell texts with only the markdown escape `\|` unescaped to `|` (inline backticks are kept as written); the 8.2 register is stored once and expanded per 8.3 site. Phase 1 implements only the legacy value of every key, except the `dispose.*` keys flipped by the non-observable Phase 1C clean-ups (8.1; a landed fix keeps its 8.2 row and loses its 8.3 rows, so `LEGACY_SITES` no longer lists it). Every leaf key (arrays such as `mesh.gltf.attributes` and `previewRendererSize` are leaves) has the read site given in section 8.1 and spelled out in that module's entry below; how it is read (switch-and-throw, value, array comparison) follows section 1.5.
+`deepFreeze` is module-private. `LegacyProfiles` is not a switch: it has no read site in `js/` and is not covered by the `Strategies` rule of the static check; when a Phase-2 commit flips a `Strategies.mesh.*` key, the builder keeps the legacy case for it (08 5.1 rule 3), and global keys (`gltfBase64`, `exportCombinedColor`, ...) cannot be injected, so the oracle cases that depend on a retired global key become explicit expected-value tests in that commit. The `behaviour` and `fix` strings of each `LEGACY_SITES` entry are the 8.2 cell texts with only the markdown escape `\|` unescaped to `|` (inline backticks are kept as written); the 8.2 register is stored once and expanded per 8.3 site. Phase 1 implements only the legacy value of every key, except the `dispose.*` keys flipped by the non-observable Phase 1C clean-ups (8.1; a landed fix keeps its 8.2 row and loses its 8.3 rows, so `LEGACY_SITES` no longer lists it). Every leaf key (arrays such as `mesh.gltf.attributes` and `previewRendererSize` are leaves) has the read site given in section 8.1 and spelled out in that module's entry below; how it is read (switch-and-throw, value, array comparison) follows section 1.5.
 
 ### 3.4 `js/theme/Theme.js`
 
@@ -2597,9 +2624,9 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 
 | Gate | Command | Passes when |
 |---|---|---|
-| Unit (pure layers) | `node --test "tests/unit/**/*.test.mjs"` (quoted glob; Node 22.7+: Node 21+ treats `--test` arguments as globs, so the directory form `node --test tests/unit/` fails with "Cannot find module", and the typeless `js/*.js` modules (there is no package.json) load as ESM only through module-syntax detection, unflagged since Node 22.7; the glob does not match the `oracle/*.mjs` helpers) | all green. Required per module: rule tables equal the legacy expressions over a seeded grid (0, '', NaN, negatives, fractions, numeric strings); `computeWallLayout`, `WallMeshBuilder`, `TextureAtlas`, `PanelNaming` equal the verbatim oracle with `Object.is` on every number over fuzzed sections (string fields, fractional cols, NaN/duplicate ids, empty walls); `ObjExporter`, `GltfExporter`, `ProjectSerializer` produce **byte-identical** text/JSON to the oracle and to the golden harness files of `default` and the 6 config scenarios in all 3 modes (when `GOLDEN_DIR` exists); `CameraHub`/`CameraController` step order with spies; `WallController` rebuild counts for every row of 6.2. Two Node-vs-Chrome facts the byte comparisons handle: (1) the goldens were captured in Chrome, whose `Math.atan2` is correctly rounded, while Node 24's V8 still uses fdlibm's `atan2` (last-ulp differences for about 20% of arguments), so any Node-side byte comparison of full-precision `atan2`-derived values against a Chrome golden (the panel-mode glTF accessor min/max of curved walls) installs a correctly rounded `atan2` for the duration of the test; (2) the NaN bit pattern written into a `Float32Array` is implementation-defined (B-L8 garbage imports give NaN positions), so the oracle fuzz canonicalises NaN inside float32 POSITION views on both sides before comparing; the goldens contain no NaN and are compared raw. |
+| Unit (pure layers) | `node --test "tests/unit/**/*.test.mjs"` (quoted glob; Node 22.7+: Node 21+ treats `--test` arguments as globs, so the directory form `node --test tests/unit/` fails with "Cannot find module", and the typeless `js/*.js` modules (there is no package.json) load as ESM only through module-syntax detection, unflagged since Node 22.7; the glob does not match the `oracle/*.mjs` helpers) | all green. Required per module: rule tables equal the legacy expressions over a seeded grid (0, '', NaN, negatives, fractions, numeric strings); `computeWallLayout`, `WallMeshBuilder`, `TextureAtlas`, `PanelNaming` equal the verbatim oracle with `Object.is` on every number over fuzzed sections (string fields, fractional cols, NaN/duplicate ids, empty walls); `ObjExporter`, `GltfExporter`, `ProjectSerializer` produce **byte-identical** text/JSON to the oracle (the oracle comparisons inject `LegacyProfiles.mesh.*`, the exact Phase-1 profiles, from 08 P2-0 on) and to the golden harness files of `default` and the 6 config scenarios in all 3 modes (when `GOLDEN_DIR` exists); `CameraHub`/`CameraController` step order with spies; `WallController` rebuild counts for every row of 6.2. Two Node-vs-Chrome facts the byte comparisons handle: (1) the goldens were captured in Chrome, whose `Math.atan2` is correctly rounded, while Node 24's V8 still uses fdlibm's `atan2` (last-ulp differences for about 20% of arguments), so any Node-side byte comparison of full-precision `atan2`-derived values against a Chrome golden (the panel-mode glTF accessor min/max of curved walls) installs a correctly rounded `atan2` for the duration of the test; (2) the NaN bit pattern written into a `Float32Array` is implementation-defined (B-L8 garbage imports give NaN positions), so the oracle fuzz canonicalises NaN inside float32 POSITION views on both sides before comparing; the goldens contain no NaN and are compared raw. |
 | Static | `node tests/static/check.mjs`, `node tests/static/css-slices.mjs` | layering table; DOM-id ownership; no `window`/`document` globals outside `vendor/`, `ui/dom.js`, `App.js`, `main.js` (injected `doc`/`win` everywhere else); import specifiers relative, `.js`, case-exact; no module-level `let`/`var`; LEGACY parity (8.3); every `Strategies` leaf referenced (8.1); every `Events` key emitted and (except `WALL_REBUILT`) subscribed; domain fields written only by the writers of section 4; CSS slices reproduce lines 12-869. Interpretation (as implemented): a `window`/`document` token in a pure-layer file is reported under both the globals rule and the purity rule; the domain-writer rule treats every assignment operator as a write (`=`, all compound and logical assignments, `++`, `--`). |
-| Golden master | `node tests/regression/run.mjs --root . --out <cand>` then `node tests/regression/compare.mjs <baseline> <cand>` | exit 0. The baseline is captured from the pristine `index.html@cd3fd3f` (twice, self-consistent), including the extra scenarios of `tests/regression/scenarios-extra.mjs`. The only accepted WARNs are the 1-level overlay-glyph jitters documented in `tests/regression/README.md` ("Known nondeterminism"): a maximum channel difference of 1 in a few pixels that all lie on glyphs of DOM text composited over a WebGL canvas (the help badge, the pilot banner, the camera preview window's header and footer labels). Each such pixel is bistable: it flips between the same two values, in both directions, between captures. The original shows it too (between its two baseline captures, and in the `keyboard` screenshots WP1 first documented). With ES-module delivery the page can paint before `App.start()` runs (8.4), and the flips occur more often; they occur equally with the verbatim legacy script loaded as a module (integration step I-1). A same-browser A/B run showed identical overlay-free canvas pixels and an identical draw list (object, material and geometry ids, and draw order) for the original and the candidate. Any other WARN, a difference above 1 level, or a pixel outside those overlays is investigated and never accepted by re-capturing the baseline. |
+| Golden master | `node tests/regression/run.mjs --root . --out <cand>` (always a full run) then `node tests/regression/compare.mjs <baseline> <cand> --expect tests/regression/expected/<commit-id>.json` (Phase 2 onwards; Phase 1 compared without `--expect`) | exit 0. **Phase 2 onwards (08 P2-0; every spec, every golden-changing commit): the baseline of a commit is the harness output of its parent commit (08 8.1); every golden-changing commit carries an expected-change manifest `tests/regression/expected/<commit-id>.json`, in which every difference must be declared and every declared change must happen (a within-tolerance PASS never satisfies an entry; an invariance commit has an empty `expect` list); `tests/regression/expected/_nondeterminism.json` is the only standing allowance (the overlay-glyph jitter described below, reported as `JITTER` within at most 1 level and 8 pixels on the listed screenshots); `run.mjs --only` is for local iteration and never produces a promoted baseline; export commits also run `tools/check-orientation.mjs` and `tools/check-gltf.mjs` on the candidate outputs. The procedure is documented in `tests/regression/README.md` ("Phase 2 re-baselining").** Phase 1: the baseline is captured from the pristine `index.html@cd3fd3f` (twice, self-consistent), including the extra scenarios of `tests/regression/scenarios-extra.mjs`. The only accepted WARNs are the 1-level overlay-glyph jitters documented in `tests/regression/README.md` ("Known nondeterminism"): a maximum channel difference of 1 in a few pixels that all lie on glyphs of DOM text composited over a WebGL canvas (the help badge, the pilot banner, the camera preview window's header and footer labels). Each such pixel is bistable: it flips between the same two values, in both directions, between captures. The original shows it too (between its two baseline captures, and in the `keyboard` screenshots WP1 first documented). With ES-module delivery the page can paint before `App.start()` runs (8.4), and the flips occur more often; they occur equally with the verbatim legacy script loaded as a module (integration step I-1). A same-browser A/B run showed identical overlay-free canvas pixels and an identical draw list (object, material and geometry ids, and draw order) for the original and the candidate. Any other WARN, a difference above 1 level, or a pixel outside those overlays is investigated and never accepted by re-capturing the baseline. |
 | Manual (not automatable) | side by side with the original | WASD/QE orbit and pilot fly incl. the inverted vertical (B-M13); hover highlight; window resize; a GitHub Pages smoke test (case-sensitive paths, sub-path URLs). |
 
 ---
@@ -2614,7 +2641,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 6. Markup and templates byte-identical; listeners attached in the legacy phase and order (R8, R11)?
 7. No `try/catch` added; async/sync shape unchanged (R13)?
 8. Imports follow the layer table and are case-exact; no globals (R9)?
-9. Unit, static and full golden-master gates green?
+9. Unit, static and full golden-master gates green? From Phase 2 on: the commit's expected-change manifest written first, the parent commit's output as the baseline, and `compare.mjs --expect` exiting 0 (10)?
 
 ---
 
@@ -2649,3 +2676,9 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 6.2: named ids for the rows that later specs add (07 §0.4); legacy rows 1-24 keep their numbers.
 - 8.1: the `curveBeforeFirstPanel` fix column records the decision (8.2 and `LEGACY_SITES` are unchanged until 08 P2-13f).
 - 9: the Feature 3 row (a baked translation, never a wall root transform; 03 §5.9 #2) and the Feature 5 row (`PreviewPass`, `LAYERS.ENVIRONMENT`, `CarPropView`, `render/ColorManagement.js`, `vendor/three-addons.js`; 05 §5.11 #17) are rewritten.
+
+**08 P2-0, Phase 2 enablement** (harness, tests, tools and documentation; no application behaviour change, every existing golden output unchanged; the eight `p2_*` scenarios are new outputs):
+- 2.3: `tests/regression/compare.mjs --expect` and `tests/regression/expected/` (expected-change manifests, `_nondeterminism.json`), `scenarios-phase2.mjs`, the opt-in request log in `lib/app.mjs` / `lib/recorder.mjs`, `tests/unit/compare.test.mjs`, `tests/unit/tools.test.mjs`, `tools/check-orientation.mjs`, `tools/check-gltf.mjs`. The empty Phase-1 `WARN_ONLY` list of `compare.mjs` is removed: `_nondeterminism.json` is the only standing allowance.
+- 3.3: `LegacyProfiles`, the exact Phase-1 mesh profiles that the oracle tests inject (08 4.2); the only legacy-profile fixture.
+- 10: the golden-master gate from Phase 2 on (baseline = the parent commit's output; one expected-change manifest per golden-changing commit, in any spec; `_nondeterminism.json` the only standing allowance; full runs only; the structural checkers for export commits); the unit gate's oracle comparisons use `LegacyProfiles`.
+- 11: checklist item 9 names the Phase 2 gate.

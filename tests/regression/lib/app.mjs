@@ -40,11 +40,19 @@ export class AppPage {
         this.step = 'load';
         this.errors = [];      // { kind, step, message, raw }
         this.requests = new Map();
+        this.requestLog = null;  // [{ step, url }] when the scenario sets recordRequests (opt-in request log)
+        this.navigating = false; // true while reload() navigates and waits for readiness
     }
 
-    static async open(browser, appUrl, { width = 1600, height = 1000 } = {}) {
+    /**
+     * Open the app in a new tab. `recordRequests` turns on the opt-in request log: the URL of every
+     * Network.requestWillBeSent from the scenario's first step on, except while a page (re)load is in progress
+     * (AppPage.open and reload()); externalRequests() returns the http(s) ones of other origins.
+     */
+    static async open(browser, appUrl, { width = 1600, height = 1000, recordRequests = false } = {}) {
         const page = await browser.newPage();
         const app = new AppPage(page, appUrl);
+        if (recordRequests) app.requestLog = [];
         app._wireEvents();
         await page.send('Page.enable');
         await page.send('Runtime.enable');
@@ -74,7 +82,10 @@ export class AppPage {
             const raw = (args || []).map((a) => a.value !== undefined ? (typeof a.value === 'string' ? a.value : JSON.stringify(a.value)) : (a.description || a.unserializableValue || a.type)).join(' ');
             this.errors.push({ kind: 'console.' + type, step: this.step, message: normalizeMessage(raw, this.origin), raw: raw.slice(0, 2000) });
         });
-        p.on('Network.requestWillBeSent', ({ requestId, request }) => { this.requests.set(requestId, request.url); });
+        p.on('Network.requestWillBeSent', ({ requestId, request }) => {
+            this.requests.set(requestId, request.url);
+            if (this.requestLog && !this.navigating && this.step !== 'load' && this.step !== 'ready') this.requestLog.push({ step: this.step, url: request.url });
+        });
         p.on('Network.loadingFailed', ({ requestId, errorText, canceled }) => {
             const url = this.requests.get(requestId) || '?';
             if (canceled || url.startsWith('data:') || url.startsWith('blob:') || url.endsWith('/favicon.ico')) return;
@@ -93,6 +104,48 @@ export class AppPage {
     }
 
     eval(expr, timeoutMs) { return this.page.evaluate(expr, timeoutMs); }
+
+    /**
+     * Reload the app in the same tab (a fresh page; console errors keep accumulating on this AppPage). Requests made
+     * while it loads are page loads, not scenario requests, so the opt-in request log skips them. `afterReady` runs
+     * inside that window too (for example a font preload).
+     */
+    async reload({ afterReady = null } = {}) {
+        this.navigating = true;
+        try {
+            const loaded = this.page.once('Page.loadEventFired', 60000);
+            const nav = await this.page.send('Page.navigate', { url: this.appUrl });
+            if (nav.errorText) throw new Error('Navigation failed: ' + nav.errorText);
+            await loaded;
+            await this.waitReady();
+            if (afterReady) await afterReady(this);
+        } finally {
+            this.navigating = false;
+        }
+    }
+
+    /**
+     * The opt-in request log as written to network.json: the http(s) requests to an origin other than the app's own
+     * (data: and blob: URLs are not requests to anyone), first occurrence of each (step, URL) pair, in order.
+     * Returns undefined when the log is off.
+     */
+    externalRequests() {
+        if (!this.requestLog) return undefined;
+        const own = new URL(this.appUrl).origin;
+        const seen = new Set();
+        const out = [];
+        for (const { step, url } of this.requestLog) {
+            let u;
+            try { u = new URL(url); } catch { continue; }
+            if ((u.protocol !== 'http:' && u.protocol !== 'https:') || u.origin === own) continue;
+            const k = `${step}
+${url}`;
+            if (seen.has(k)) continue;
+            seen.add(k);
+            out.push({ step, url });
+        }
+        return out;
+    }
 
     /** Robust readiness: #total-panels shows a non-zero number, the canvas exists, fonts settled. */
     async waitReady(timeoutMs = 45000) {

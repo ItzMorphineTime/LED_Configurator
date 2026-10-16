@@ -99,10 +99,11 @@ async function main() {
             // Remove stale files of this scenario when refreshing selectively.
             fs.rmSync(path.join(out, name), { recursive: true, force: true });
             const rec = new Recorder(out, name);
+            const recordRequests = SCENARIOS[name].recordRequests === true;   // opt-in request log -> network.json
             let app = null;
             let fatal = null;
             try {
-                app = await AppPage.open(browser, appUrl);
+                app = await AppPage.open(browser, appUrl, { recordRequests });
                 await SCENARIOS[name].run({ app, rec });
             } catch (e) {
                 fatal = e;
@@ -111,7 +112,8 @@ async function main() {
             if (fatal) errors.push({ kind: 'harness', step: app ? app.step : 'load', message: String(fatal.message || fatal).split('\n')[0], raw: String(fatal.stack || fatal) });
             let dialogs = [];
             try { if (app) dialogs = await app.dialogs(); } catch { /* page may be gone */ }
-            const res = rec.finish({ errors, dialogs });
+            const requests = recordRequests ? (app ? app.externalRequests() : []) : undefined;
+            const res = rec.finish({ errors, dialogs, requests });
             manifest.scenarios[name] = { description: SCENARIOS[name].description, durationMs: Date.now() - t0, outputs: res.outputs };
             if (app) await app.close().catch(() => {});
             const nErr = errors.length;

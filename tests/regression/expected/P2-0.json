@@ -1,0 +1,9 @@
+{
+  "commit": "P2-0",
+  "bugs": [],
+  "expect": [
+    { "output": "p2_*/**", "change": "added", "each": true,
+      "reason": "the eight Phase 2 scenarios of 08 section 8.3, captured against the unfixed code (p2_project_v2/network.json included)" }
+  ],
+  "mayChange": []
+}

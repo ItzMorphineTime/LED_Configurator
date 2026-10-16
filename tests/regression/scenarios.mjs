@@ -4,6 +4,7 @@ import { CONFIGS } from './configs.mjs';
 import { decodePNG, readZip } from './lib/formats.mjs';
 import * as ui from './lib/uiprobe.mjs';
 import { EXTRA_SCENARIOS } from './scenarios-extra.mjs';
+import { PHASE2_SCENARIOS } from './scenarios-phase2.mjs';
 
 const MODES = ['combined', 'section', 'panel'];
 const card = (i) => `#wall-sections > :nth-child(${i + 1})`;
@@ -560,4 +561,6 @@ export const SCENARIOS = {
     },
     // The extra scenarios of scenarios-extra.mjs, registered after the original entries.
     ...EXTRA_SCENARIOS,
+    // The Phase 2 scenarios of scenarios-phase2.mjs (08 section 8.3), registered after the extra scenarios.
+    ...PHASE2_SCENARIOS,
 };

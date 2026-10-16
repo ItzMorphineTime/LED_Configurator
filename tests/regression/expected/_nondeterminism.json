@@ -1,0 +1,15 @@
+{
+  "jitter": [
+    { "output": "keyboard/{pilot_view,final_view}.screenshot.png", "maxLevel": 1, "maxPixels": 8,
+      "overlay": "pilot banner, help badge", "evidence": "README Known nondeterminism; 2 runs of the original" },
+    { "output": "preview_resize/*.screenshot.png", "maxLevel": 1, "maxPixels": 8,
+      "overlay": "preview header and footer", "evidence": "README; captures of the original" },
+    { "output": "pilot_look/*.screenshot.png", "maxLevel": 1, "maxPixels": 8, "overlay": "pilot banner, preview labels", "evidence": "README" },
+    { "output": "preview_off_in_pilot/*.screenshot.png", "maxLevel": 1, "maxPixels": 8, "overlay": "pilot banner", "evidence": "README" },
+    { "output": "camera/*.screenshot.png", "maxLevel": 1, "maxPixels": 8, "overlay": "preview labels",
+      "evidence": "README (ES-module build); P2-0 self-consistency runs A/B: 08_camera_moved and 13_safe_distance, 1 level, 2 px each (preview header)" },
+    { "output": "gizmo_drag/*.screenshot.png", "maxLevel": 1, "maxPixels": 8, "overlay": "help badge, preview labels", "evidence": "README (ES-module build)" },
+    { "output": "import_edge/i_empty.screenshot.png", "maxLevel": 1, "maxPixels": 8, "overlay": "preview labels", "evidence": "README (ES-module build)" },
+    { "output": "toggles/15_car_moved.screenshot.png", "maxLevel": 1, "maxPixels": 8, "overlay": "help badge", "evidence": "README (ES-module build)" }
+  ]
+}

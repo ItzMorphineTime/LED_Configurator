@@ -61,10 +61,15 @@ export class Recorder {
         return this.add(`${name}.screenshot.png`, png, 'screenshot');
     }
 
-    finish({ errors, dialogs, timings }) {
+    /**
+     * Write the per-scenario logs. `requests` is the opt-in request log (AppPage.externalRequests()): when the
+     * scenario sets `recordRequests`, it is written as network.json (an empty list too); otherwise no file is written.
+     */
+    finish({ errors, dialogs, timings, requests }) {
         this.add('downloads.json', JSON.stringify(this.downloadLog, null, 2) + '\n', 'state');
         this.add('dialogs.json', JSON.stringify(dialogs || [], null, 2) + '\n', 'state');
         this.add('console.json', JSON.stringify(errors || [], null, 2) + '\n', 'console');
+        if (requests !== undefined) this.add('network.json', JSON.stringify(requests, null, 2) + '\n', 'state');
         return { outputs: this.outputs, timings };
     }
 }

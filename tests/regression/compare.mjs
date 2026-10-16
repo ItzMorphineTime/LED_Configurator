@@ -1,12 +1,23 @@
 #!/usr/bin/env node
 // Golden-master comparator.
-//   node tests/regression/compare.mjs <baselineDir> <candidateDir> [--tolerance 1e-5]
+//   node tests/regression/compare.mjs <baselineDir> <candidateDir> [--expect a.json[,b.json]] [--tolerance 1e-5]
 //        [--png-threshold 0] [--png-max-percent 0.01] [--shot-threshold 8] [--shot-max-percent 0.5]
 //        [--only scenarioA,scenarioB] [--verbose]
 // Exit code: 0 = no FAIL, 1 = at least one FAIL, 2 = usage error.
+//
+// --expect (docs/improvements/08-bugfix-roadmap.md, sections 8.1 and 8.2) gates a re-baselining commit: every difference
+// must be declared in an expected-change manifest (tests/regression/expected/<commit-id>.json), and every declared
+// change must happen. Every --expect run also loads tests/regression/expected/_nondeterminism.json, the standing
+// allowlist of the known overlay-glyph screenshot jitter; it is never listed by hand.
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { decodePNG, readZip, kindForFilename } from './lib/formats.mjs';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+
+/** The standing nondeterminism allowlist, loaded by every --expect run. */
+export const NONDETERMINISM_FILE = path.join(HERE, 'expected', '_nondeterminism.json');
 
 // ---------------------------------------------------------------------------------------------
 // Documented nondeterminism handling (never silently ignored - each is reported):
@@ -14,29 +25,26 @@ import { decodePNG, readZip, kindForFilename } from './lib/formats.mjs';
 //     archive bytes differ on every export. Archives are compared by entry list + per-entry content.
 //   * Viewport screenshots (kind 'screenshot'): GPU/SwiftShader rasterisation may legitimately
 //     differ by a few levels; any difference is a WARN, a FAIL only beyond --shot-threshold /
-//     --shot-max-percent.
+//     --shot-max-percent. With --expect, a difference on an output listed in
+//     expected/_nondeterminism.json that stays within its bounds is reported as JITTER.
 //   * console.json (kind 'console'): compared as a multiset of (kind, normalised message); the step
 //     an async error is attributed to and URLs/line numbers are ignored. Errors that disappear in
 //     the candidate are a WARN (likely a fix); new errors are a FAIL.
-//   * WARN_ONLY below: outputs whose differences are downgraded to WARN. Patterns are matched
-//     against "<scenario>/<output>". Keep this list empty unless a self-consistency run proves an
-//     output is nondeterministic, and document why next to each entry.
 // ---------------------------------------------------------------------------------------------
-const WARN_ONLY = [
-    // { pattern: /^toggles\/.*\.screenshot\.png$/, reason: 'example' },
-];
 
 function parseArgs(argv) {
-    const a = { tolerance: 1e-5, pngThreshold: 0, pngMaxPercent: 0.01, shotThreshold: 8, shotMaxPercent: 0.5, verbose: false, positional: [] };
+    const a = { tolerance: 1e-5, pngThreshold: 0, pngMaxPercent: 0.01, shotThreshold: 8, shotMaxPercent: 0.5, verbose: false, expect: [], positional: [] };
     for (let i = 2; i < argv.length; i++) {
         const k = argv[i];
         const num = () => { const v = Number(argv[++i]); if (!Number.isFinite(v)) throw new Error('Bad number for ' + k); return v; };
+        const str = () => { const v = argv[++i]; if (v === undefined) throw new Error('Missing value for ' + k); return v; };
         if (k === '--tolerance') a.tolerance = num();
         else if (k === '--png-threshold') a.pngThreshold = num();
         else if (k === '--png-max-percent') a.pngMaxPercent = num();
         else if (k === '--shot-threshold') a.shotThreshold = num();
         else if (k === '--shot-max-percent') a.shotMaxPercent = num();
-        else if (k === '--only') a.only = argv[++i].split(',').map((s) => s.trim()).filter(Boolean);
+        else if (k === '--only') a.only = str().split(',').map((s) => s.trim()).filter(Boolean);
+        else if (k === '--expect') a.expect.push(...str().split(',').map((s) => s.trim()).filter(Boolean));
         else if (k === '--verbose' || k === '-v') a.verbose = true;
         else if (k.startsWith('--')) throw new Error('Unknown option ' + k);
         else a.positional.push(k);
@@ -240,9 +248,9 @@ function comparePNG(aBuf, bBuf, threshold, maxPercent, label) {
     }
     const pct = (over / n) * 100;
     const detail = `${label}: max channel diff ${maxDiff}, ${pct.toFixed(4)}% pixels differ by >${threshold} (${anyDiff} px differ at all, ${a.width}x${a.height})`;
-    if (maxDiff === 0) return result('PASS', 'pixel-identical (encoding differs)', { maxDiff, pct });
-    if (pct > maxPercent) return result('FAIL', detail, { maxDiff, pct });
-    return result('WARN', detail, { maxDiff, pct });
+    if (maxDiff === 0) return result('PASS', 'pixel-identical (encoding differs)', { maxDiff, pct, anyDiff });
+    if (pct > maxPercent) return result('FAIL', detail, { maxDiff, pct, anyDiff });
+    return result('WARN', detail, { maxDiff, pct, anyDiff });
 }
 
 // ---- console ---------------------------------------------------------------------------------
@@ -312,78 +320,297 @@ function compareContent(kind, aBuf, bBuf, opts, label = '') {
     }
 }
 
-function loadManifest(dir) {
+function loadHarnessManifest(dir) {
     const p = path.join(dir, 'manifest.json');
     if (!fs.existsSync(p)) throw new Error('No manifest.json in ' + dir);
     return JSON.parse(fs.readFileSync(p, 'utf8'));
 }
 
-function main() {
-    let args;
-    try { args = parseArgs(process.argv); } catch (e) { console.error(e.message); return 2; }
-    if (args.positional.length !== 2) {
-        console.error('Usage: node tests/regression/compare.mjs <baselineDir> <candidateDir> [--tolerance 1e-5] [--png-threshold 0] [--png-max-percent 0.01] [--shot-threshold 8] [--shot-max-percent 0.5] [--only a,b] [--verbose]');
-        return 2;
-    }
-    const [baseDir, candDir] = args.positional.map((p) => path.resolve(p));
-    const A = loadManifest(baseDir), B = loadManifest(candDir);
-    console.log(`Baseline : ${baseDir}\n           ${A.meta?.browser || '?'} captured ${A.meta?.capturedAt || '?'} from ${A.meta?.root || '?'}`);
-    console.log(`Candidate: ${candDir}\n           ${B.meta?.browser || '?'} captured ${B.meta?.capturedAt || '?'} from ${B.meta?.root || '?'}`);
-    console.log(`Tolerance ${args.tolerance}; export PNG: >${args.pngThreshold} on >${args.pngMaxPercent}% px = FAIL; screenshots: >${args.shotThreshold} on >${args.shotMaxPercent}% px = FAIL\n`);
+export const DEFAULT_OPTIONS = Object.freeze({ tolerance: 1e-5, pngThreshold: 0, pngMaxPercent: 0.01, shotThreshold: 8, shotMaxPercent: 0.5 });
 
+/**
+ * Compare two harness output trees. Every output of the union is reported once as
+ * { key: '<scenario>/<output>', scenario, output, kind, status, detail, change, maxDiff?, anyDiff? }, where status is
+ * IDENTICAL | PASS | WARN | FAIL and `change` is 'added' (only in the candidate), 'removed' (only in the baseline),
+ * 'modified' (in both, status WARN or FAIL) or null (no difference). A scenario present on one side only reports
+ * each of its outputs as added or removed.
+ */
+export function compareTrees(baseDir, candDir, opts = DEFAULT_OPTIONS, only = null) {
+    const A = loadHarnessManifest(baseDir), B = loadHarnessManifest(candDir);
     let scenarios = [...new Set([...Object.keys(A.scenarios || {}), ...Object.keys(B.scenarios || {})])];
-    if (args.only) scenarios = scenarios.filter((s) => args.only.includes(s));
-    const totals = { IDENTICAL: 0, PASS: 0, WARN: 0, FAIL: 0 };
-    const scenarioStatus = {};
+    if (only) scenarios = scenarios.filter((s) => only.includes(s));
+    const out = [];
+    for (const s of scenarios) {
+        const sa = A.scenarios[s], sb = B.scenarios[s];
+        const outputs = [];
+        const outs = [...new Set([...Object.keys(sa?.outputs || {}), ...Object.keys(sb?.outputs || {})])];
+        for (const o of outs) {
+            const oa = sa?.outputs[o], ob = sb?.outputs[o];
+            let r;
+            let change = null;
+            if (!oa) {
+                change = 'added';
+                r = result('FAIL', sa ? 'EXTRA output (not in baseline)' : 'EXTRA output (scenario not in baseline)');
+            } else if (!ob) {
+                change = 'removed';
+                r = result('FAIL', sb ? 'MISSING output (not produced by candidate)' : 'MISSING output (scenario not in candidate)');
+            } else if (oa.kind !== ob.kind) {
+                r = result('FAIL', `kind ${oa.kind} vs ${ob.kind}`);
+            } else {
+                try {
+                    const ba = fs.readFileSync(path.join(baseDir, oa.file));
+                    const bb = fs.readFileSync(path.join(candDir, ob.file));
+                    r = compareContent(oa.kind, ba, bb, opts, o);
+                } catch (e) {
+                    r = result('FAIL', 'read error: ' + e.message);
+                }
+            }
+            if (!change && (r.status === 'WARN' || r.status === 'FAIL')) change = 'modified';
+            outputs.push({ key: `${s}/${o}`, scenario: s, output: o, kind: (oa || ob).kind, inBaseline: !!oa, inCandidate: !!ob, ...r, change });
+        }
+        out.push({ name: s, inBaseline: !!sa, inCandidate: !!sb, outputs });
+    }
+    return { A, B, scenarios: out };
+}
 
+// ---- expected-change manifests and the nondeterminism allowlist (08 section 8.2) ---------------
+
+/**
+ * Glob over '<scenario>/<output>': `*` matches within one path segment, `**` across segments, `{a,b}` is
+ * alternation (nestable, each alternative may hold wildcards), `?` matches one character of a segment. Everything
+ * else is literal.
+ */
+export function globToRegExp(pattern) {
+    if (typeof pattern !== 'string' || !pattern) throw new Error(`invalid pattern ${JSON.stringify(pattern)}`);
+    let i = 0;
+    const parse = (inBrace) => {
+        let re = '';
+        const alts = [];
+        while (i < pattern.length) {
+            const c = pattern[i];
+            if (c === '*') {
+                if (pattern[i + 1] === '*') {
+                    i += 2;
+                    if (pattern[i] === '/') { i++; re += '(?:.*/)?'; } else re += '.*';
+                } else { i++; re += '[^/]*'; }
+            } else if (c === '?') { i++; re += '[^/]'; }
+            else if (c === '{') {
+                i++;
+                re += parse(true);
+                if (pattern[i] !== '}') throw new Error(`unclosed "{" in pattern ${JSON.stringify(pattern)}`);
+                i++;
+            } else if (inBrace && c === ',') { i++; alts.push(re); re = ''; }
+            else if (inBrace && c === '}') break;
+            else if (c === '}' || c === ',') { i++; re += '\\' + c; }
+            else { i++; re += c.replace(/[.+^$()|[\]\\]/g, '\\$&'); }
+        }
+        if (!inBrace) return re;
+        alts.push(re);
+        return `(?:${alts.join('|')})`;
+    };
+    const body = parse(false);
+    return new RegExp(`^${body}$`);
+}
+
+const CHANGES = ['added', 'removed', 'modified'];
+const ENTRY_KEYS = new Set(['output', 'change', 'each', 'reason', 'note']);
+
+function validateEntry(e, where, { changeRequired }) {
+    if (typeof e === 'string') e = { output: e };
+    if (!e || typeof e !== 'object' || Array.isArray(e)) throw new Error(`${where}: an entry must be an object or a pattern string`);
+    for (const k of Object.keys(e)) if (!ENTRY_KEYS.has(k)) throw new Error(`${where}: unknown key "${k}"`);
+    if (typeof e.output !== 'string' || !e.output) throw new Error(`${where}: "output" must be a non-empty pattern`);
+    if (changeRequired || e.change !== undefined) {
+        if (!CHANGES.includes(e.change)) throw new Error(`${where}: "change" must be one of ${CHANGES.join(' | ')}`);
+    }
+    if (e.each !== undefined && typeof e.each !== 'boolean') throw new Error(`${where}: "each" must be a boolean`);
+    return { output: e.output, change: e.change ?? null, each: e.each === true, reason: e.reason ?? e.note ?? '', re: globToRegExp(e.output) };
+}
+
+/** Parse and validate an expected-change manifest ({ commit, bugs?, expect: [...], mayChange?: [...] }). */
+export function parseExpectManifest(json, file = 'manifest') {
+    if (!json || typeof json !== 'object' || Array.isArray(json)) throw new Error(`${file}: not a JSON object`);
+    for (const k of Object.keys(json)) {
+        if (!['commit', 'bugs', 'expect', 'mayChange', 'notes'].includes(k)) throw new Error(`${file}: unknown key "${k}"`);
+    }
+    if (!Array.isArray(json.expect)) throw new Error(`${file}: "expect" must be an array (it may be empty)`);
+    if (json.mayChange !== undefined && !Array.isArray(json.mayChange)) throw new Error(`${file}: "mayChange" must be an array`);
+    const commit = typeof json.commit === 'string' && json.commit ? json.commit : path.basename(file, '.json');
+    return {
+        file,
+        commit,
+        expect: json.expect.map((e, k) => validateEntry(e, `${file} expect[${k}]`, { changeRequired: true })),
+        mayChange: (json.mayChange || []).map((e, k) => validateEntry(e, `${file} mayChange[${k}]`, { changeRequired: false })),
+    };
+}
+
+/** Parse and validate the nondeterminism allowlist ({ jitter: [{ output, maxLevel, maxPixels, overlay, evidence }] }). */
+export function parseAllowlist(json, file = '_nondeterminism.json') {
+    if (!json || typeof json !== 'object' || !Array.isArray(json.jitter)) throw new Error(`${file}: expected { "jitter": [...] }`);
+    return json.jitter.map((e, k) => {
+        const where = `${file} jitter[${k}]`;
+        if (!e || typeof e.output !== 'string' || !e.output) throw new Error(`${where}: "output" must be a non-empty pattern`);
+        for (const n of ['maxLevel', 'maxPixels']) {
+            if (!Number.isInteger(e[n]) || e[n] < 0) throw new Error(`${where}: "${n}" must be a non-negative integer`);
+        }
+        return { output: e.output, maxLevel: e.maxLevel, maxPixels: e.maxPixels, overlay: e.overlay || '', re: globToRegExp(e.output) };
+    });
+}
+
+const isDiffering = (o) => o.change !== null;
+
+/**
+ * Apply the 08 section 8.2 semantics to the outputs of compareTrees (mutates their status):
+ *   0. a screenshot difference on an allowlisted output within its bounds becomes JITTER (no count, satisfies nothing);
+ *   1. a difference matching an `expect` entry with a compatible `change` becomes EXPECTED;
+ *   2. a difference matching `mayChange` becomes EXPECTED?;
+ *   3. every other difference keeps its status.
+ * Returns one record per `expect` entry: { manifest, entry, matched, differing, satisfied, why }. An entry is
+ * satisfied only by differing outputs (a within-tolerance PASS never satisfies it); with `each`, every matching
+ * output present in the baseline must differ compatibly. An unsatisfied entry is a FAIL.
+ */
+export function applyExpectations(outputs, manifests, allowlist) {
+    for (const o of outputs) {
+        o.originalStatus = o.status;
+        if (o.kind === 'screenshot' && o.change === 'modified' && (o.status === 'WARN' || o.status === 'FAIL') && Number.isFinite(o.maxDiff)) {
+            const j = allowlist.find((a) => a.re.test(o.key));
+            if (j && o.maxDiff <= j.maxLevel && o.anyDiff <= j.maxPixels) {
+                o.status = 'JITTER';
+                o.detail = `${o.detail} [allowlisted: ${j.output}, <= ${j.maxLevel} level / ${j.maxPixels} px]`;
+                o.change = null;
+            }
+        }
+    }
+    const entries = [];
+    for (const m of manifests) {
+        for (const entry of m.expect) {
+            const matched = outputs.filter((o) => entry.re.test(o.key));
+            const differing = matched.filter((o) => isDiffering(o) && o.change === entry.change);
+            for (const o of differing) {
+                if (o.status !== 'EXPECTED') { o.status = 'EXPECTED'; o.detail = `[${m.commit}: ${entry.output}, ${entry.change}] ${o.detail}`; }
+            }
+            let satisfied = differing.length > 0;
+            let why = '';
+            if (!matched.length) why = 'no output matches the pattern';
+            else if (!differing.length) why = `none of the ${matched.length} matching output(s) differs with change "${entry.change}"`;
+            if (satisfied && entry.each) {
+                const notChanged = matched.filter((o) => o.inBaseline && !differing.includes(o));
+                if (notChanged.length) {
+                    satisfied = false;
+                    why = `"each": ${notChanged.length} of ${matched.filter((o) => o.inBaseline).length} matching baseline output(s) did not change: ` +
+                        notChanged.slice(0, 6).map((o) => o.key).join(', ') + (notChanged.length > 6 ? ', ...' : '');
+                }
+            }
+            entries.push({ manifest: m.commit, entry, matched: matched.length, differing: differing.length, satisfied, why });
+        }
+    }
+    for (const m of manifests) {
+        for (const entry of m.mayChange) {
+            for (const o of outputs) {
+                if (!isDiffering(o) || o.status === 'EXPECTED' || o.status === 'EXPECTED?' || !entry.re.test(o.key)) continue;
+                if (entry.change && entry.change !== o.change) continue;
+                o.status = 'EXPECTED?';
+                o.detail = `[${m.commit} mayChange: ${entry.output}${entry.reason ? ` (${entry.reason})` : ''}] ${o.detail}`;
+            }
+        }
+    }
+    return entries;
+}
+
+/**
+ * Programmatic entry point (used by the CLI and the unit tests). `expectFiles` is a list of manifest paths
+ * (empty: plain comparison); with at least one, the allowlist at `allowlistFile` is loaded as well.
+ * Returns { exitCode, outputs, entries, lines } and writes the report through `log`.
+ */
+export function runCompare({ baseDir, candDir, expectFiles = [], allowlistFile = NONDETERMINISM_FILE, opts = DEFAULT_OPTIONS, only = null, verbose = false, log = console.log }) {
+    const expectMode = expectFiles.length > 0;
+    let manifests = [], allowlist = [];
+    if (expectMode) {
+        if (!fs.existsSync(allowlistFile)) throw new UsageError(`--expect needs the nondeterminism allowlist ${allowlistFile}`);
+        try {
+            allowlist = parseAllowlist(JSON.parse(fs.readFileSync(allowlistFile, 'utf8')), allowlistFile);
+            manifests = expectFiles.map((f) => parseExpectManifest(JSON.parse(fs.readFileSync(f, 'utf8')), f));
+        } catch (e) {
+            throw new UsageError(e.message);
+        }
+    }
+    const { A, B, scenarios } = compareTrees(baseDir, candDir, opts, only);
+    const outputs = scenarios.flatMap((s) => s.outputs);
+    const entries = expectMode ? applyExpectations(outputs, manifests, allowlist) : [];
+
+    log(`Baseline : ${baseDir}\n           ${A.meta?.browser || '?'} captured ${A.meta?.capturedAt || '?'} from ${A.meta?.root || '?'}`);
+    log(`Candidate: ${candDir}\n           ${B.meta?.browser || '?'} captured ${B.meta?.capturedAt || '?'} from ${B.meta?.root || '?'}`);
+    log(`Tolerance ${opts.tolerance}; export PNG: >${opts.pngThreshold} on >${opts.pngMaxPercent}% px = FAIL; screenshots: >${opts.shotThreshold} on >${opts.shotMaxPercent}% px = FAIL`);
+    if (expectMode) {
+        log(`Expected-change manifests: ${manifests.map((m) => `${m.commit} (${m.file})`).join(', ')}`);
+        log(`Nondeterminism allowlist: ${allowlistFile} (${allowlist.length} entries)`);
+    }
+    log('');
+
+    const totals = { IDENTICAL: 0, PASS: 0, WARN: 0, FAIL: 0, EXPECTED: 0, 'EXPECTED?': 0, JITTER: 0 };
+    const failedScenarios = [];
+    const ALWAYS_SHOWN = new Set(['FAIL', 'WARN', 'EXPECTED', 'EXPECTED?', 'JITTER']);
     for (const s of scenarios) {
         const lines = [];
         let sStatus = 'IDENTICAL';
-        const sa = A.scenarios[s], sb = B.scenarios[s];
-        if (!sa || !sb) {
-            sStatus = 'FAIL';
-            lines.push(`    FAIL  scenario ${!sa ? 'missing from baseline (extra in candidate)' : 'missing from candidate'}`);
-            totals.FAIL++;
-        } else {
-            const outs = [...new Set([...Object.keys(sa.outputs), ...Object.keys(sb.outputs)])];
-            for (const o of outs) {
-                const oa = sa.outputs[o], ob = sb.outputs[o];
-                let r;
-                if (!oa) r = result('FAIL', 'EXTRA output (not in baseline)');
-                else if (!ob) r = result('FAIL', 'MISSING output (not produced by candidate)');
-                else if (oa.kind !== ob.kind) r = result('FAIL', `kind ${oa.kind} vs ${ob.kind}`);
-                else {
-                    try {
-                        const ba = fs.readFileSync(path.join(baseDir, oa.file));
-                        const bb = fs.readFileSync(path.join(candDir, ob.file));
-                        r = compareContent(oa.kind, ba, bb, args, o);
-                    } catch (e) {
-                        r = result('FAIL', 'read error: ' + e.message);
-                    }
-                }
-                const wo = WARN_ONLY.find((w) => w.pattern.test(`${s}/${o}`));
-                if (wo && r.status === 'FAIL') r = result('WARN', `[warn-only: ${wo.reason}] ${r.detail}`);
-                totals[r.status]++;
-                sStatus = worst(sStatus, r.status);
-                if (r.status === 'FAIL' || r.status === 'WARN' || args.verbose) {
-                    lines.push(`    ${r.status.padEnd(9)} ${o}${r.detail ? '  -- ' + r.detail : ''}`);
-                }
-            }
-            const nOut = outs.length;
-            lines.unshift(`    (${nOut} outputs)`);
+        if (!s.inBaseline || !s.inCandidate) lines.push(`    scenario ${!s.inBaseline ? 'missing from baseline (extra in candidate)' : 'missing from candidate'}`);
+        for (const o of s.outputs) {
+            totals[o.status]++;
+            if (o.status in RANK) sStatus = worst(sStatus, o.status);
+            if (ALWAYS_SHOWN.has(o.status) || verbose) lines.push(`    ${o.status.padEnd(9)} ${o.output}${o.detail ? '  -- ' + o.detail : ''}`);
         }
-        scenarioStatus[s] = sStatus;
+        lines.unshift(`    (${s.outputs.length} outputs)`);
+        if (sStatus === 'FAIL') failedScenarios.push(s.name);
         const label = sStatus === 'FAIL' ? 'FAIL' : sStatus === 'WARN' ? 'PASS (with warnings)' : 'PASS';
-        console.log(`[${label}] ${s}`);
-        for (const l of lines) console.log(l);
+        log(`[${label}] ${s.name}`);
+        for (const l of lines) log(l);
     }
 
-    const failed = Object.entries(scenarioStatus).filter(([, v]) => v === 'FAIL').map(([k]) => k);
-    console.log('\n==================== SUMMARY ====================');
-    console.log(`Outputs: ${totals.IDENTICAL} identical, ${totals.PASS} equivalent within tolerance, ${totals.WARN} warnings, ${totals.FAIL} failures`);
-    console.log(`Scenarios: ${scenarios.length - failed.length}/${scenarios.length} passed${failed.length ? '  | FAILED: ' + failed.join(', ') : ''}`);
-    console.log(failed.length ? 'RESULT: FAIL' : 'RESULT: PASS');
-    return failed.length ? 1 : 0;
+    const unsatisfied = entries.filter((e) => !e.satisfied);
+    if (expectMode) {
+        log('\n============ EXPECTED-CHANGE ENTRIES ============');
+        if (!entries.length) log('    (no expect entries: every difference outside the allowlist and mayChange keeps its status)');
+        for (const e of entries) {
+            const head = `[${e.manifest}] ${e.entry.output} (${e.entry.change}${e.entry.each ? ', each' : ''})`;
+            if (e.satisfied) log(`    ok        ${head}: ${e.differing} differing of ${e.matched} matching`);
+            else log(`    FAIL      ${head}: expected change did not occur (${e.why})`);
+        }
+    }
+
+    log('\n==================== SUMMARY ====================');
+    let sum = `Outputs: ${totals.IDENTICAL} identical, ${totals.PASS} equivalent within tolerance, ${totals.WARN} warnings, ${totals.FAIL} failures`;
+    if (expectMode) sum += `, ${totals.EXPECTED} expected, ${totals['EXPECTED?']} may-change, ${totals.JITTER} jitter`;
+    log(sum);
+    log(`Scenarios: ${scenarios.length - failedScenarios.length}/${scenarios.length} passed${failedScenarios.length ? '  | FAILED: ' + failedScenarios.join(', ') : ''}`);
+    if (expectMode) log(`Expected-change entries: ${entries.length - unsatisfied.length}/${entries.length} satisfied`);
+    const fail = failedScenarios.length > 0 || unsatisfied.length > 0;
+    log(fail ? 'RESULT: FAIL' : 'RESULT: PASS');
+    return { exitCode: fail ? 1 : 0, outputs, entries };
 }
 
-process.exit(main());
+export class UsageError extends Error {}
+
+const USAGE = 'Usage: node tests/regression/compare.mjs <baselineDir> <candidateDir> [--expect a.json[,b.json]] [--tolerance 1e-5] [--png-threshold 0] [--png-max-percent 0.01] [--shot-threshold 8] [--shot-max-percent 0.5] [--only a,b] [--verbose]';
+
+export function main(argv = process.argv) {
+    let args;
+    try { args = parseArgs(argv); } catch (e) { console.error(e.message); return 2; }
+    if (args.positional.length !== 2) {
+        console.error(USAGE);
+        return 2;
+    }
+    const [baseDir, candDir] = args.positional.map((p) => path.resolve(p));
+    try {
+        const { exitCode } = runCompare({
+            baseDir, candDir,
+            expectFiles: args.expect.map((f) => path.resolve(f)),
+            opts: args, only: args.only || null, verbose: args.verbose,
+        });
+        return exitCode;
+    } catch (e) {
+        console.error(e instanceof UsageError ? `compare: ${e.message}` : e);
+        return 2;
+    }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) process.exit(main());

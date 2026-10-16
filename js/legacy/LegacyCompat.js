@@ -2,6 +2,7 @@
  * @module legacy/LegacyCompat
  * The single home of every output-affecting legacy switch and helper of Phase 1:
  * - `Strategies`: deep-frozen switches, each read at exactly one site (ARCHITECTURE.md 8.1);
+ * - `LegacyProfiles`: the exact Phase-1 mesh profiles, read only by the oracle tests (ARCHITECTURE.md 3.3);
  * - legacy helpers that reproduce a preserved quirk (`orDefault`, `legacyHtml`, `legacySpreadBase64`,
  *   `legacyMissingDownloadBlob`);
  * - `unsupportedStrategy`, thrown by every switch-and-throw reader for a non-legacy value (ARCHITECTURE.md 1.5);
@@ -61,6 +62,24 @@ export const Strategies = deepFreeze({
   pilotForwardYSign: -1,                           // B-M13
   combinedLedSimColor: 'white',                    // B-L18
   dispose: { wallTextures: true, gizmo: true },    // B-H5 fixed (Phase 1C H1); B-L12 fixed (Phase 1C H2)
+});
+
+/**
+ * The exact Phase-1 mesh profiles (docs/improvements/08-bugfix-roadmap.md 4.2). Production code never reads these;
+ * the oracle tests inject them into WallMeshBuilder / ObjExporter / GltfExporter so that the "builder == verbatim
+ * oracle" tests stay meaningful after each Phase-2 flip of `Strategies.mesh`. Every value here must stay a supported
+ * case of the builder and the exporters (a flipped key keeps its legacy case, ARCHITECTURE.md 8.1).
+ * Global keys (for example `gltfBase64`, `exportCombinedColor`) cannot be injected: when one is retired, the oracle
+ * cases that depend on it become explicit expected-value tests in the same commit.
+ */
+export const LegacyProfiles = deepFreeze({
+  mesh: {
+    viewport: { winding: 'legacy-cw', normals: 'right-panel', combinedUV: 'atlas-u-full-v', side: 'double' },
+    obj:      { winding: 'legacy-cw', normals: 'none', stripNormals: 'constant-z',
+                combinedUV: 'per-section-overlap', panelNormal: 'facing' },
+    gltf:     { winding: 'legacy-cw', normals: 'none', attributes: ['POSITION'], indexType: 'uint16',
+                doubleSided: 'omit' },
+  },
 });
 
 /**

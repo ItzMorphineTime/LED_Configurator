@@ -2,7 +2,9 @@
 
 A black-box, zero-dependency harness that drives the LED Wall Configurator in headless Chrome,
 captures every export and observable UI state, and compares a candidate build against a
-baseline captured from the original single-file app.
+baseline. In Phase 1 the baseline was captured from the original single-file app; from Phase 2 on
+it is the output of the parent commit, and every intended change is declared in an
+expected-change manifest (see [Phase 2 re-baselining](#phase-2-re-baselining)).
 
 It talks to the page **only through the DOM**: element ids, classes and data attributes,
 clicks, value changes followed by `input`/`change` events, real keyboard and mouse input through
@@ -34,7 +36,8 @@ Useful options:
 
 | Option | Tool | Meaning |
 |---|---|---|
-| `--only a,b` | run, compare | Limit to the named scenarios. `run` merges the results into an existing manifest: other scenarios' entries and files are kept, `meta` keeps the original capture's provenance, and the refresh is logged in `meta.partialCaptures` (with a warning if the browser, root or page differ). |
+| `--only a,b` | run, compare | Limit to the named scenarios. `run` merges the results into an existing manifest: other scenarios' entries and files are kept, `meta` keeps the original capture's provenance, and the refresh is logged in `meta.partialCaptures` (with a warning if the browser, root or page differ). For local iteration only: a gate run is always full. |
+| `--expect a.json[,b.json]` | compare | Gate a re-baselining commit against its expected-change manifests; also loads `expected/_nondeterminism.json`. See [Phase 2 re-baselining](#phase-2-re-baselining). |
 | `--list` | run | List the scenarios. |
 | `--page index.html` | run | The page to open under `--root`. |
 | `--chrome <path>` | run | The browser binary. |
@@ -72,8 +75,10 @@ node tests/regression/compare.mjs tests/regression/output/baseline tests/regress
 
 Run one harness process at a time (each one drives its own headless Chrome). Re-capture both
 baselines whenever a scenario or a probe changes (`scenarios.mjs`, `scenarios-extra.mjs`,
-`configs.mjs`, `ui-spec.mjs`, `lib/`), and never re-capture them to make a refactor candidate pass:
-a baseline changes only with a deliberate behaviour change (see `docs/REFACTOR_PLAN.md`, section 6).
+`scenarios-phase2.mjs`, `configs.mjs`, `ui-spec.mjs`, `lib/`), and never re-capture them to make a
+refactor candidate pass: a baseline changes only with a deliberate behaviour change (see
+`docs/REFACTOR_PLAN.md`, section 6). This was the Phase 1 procedure; Phase 2 and every later
+golden-changing commit use [Phase 2 re-baselining](#phase-2-re-baselining) instead.
 
 ## What runs
 
@@ -103,9 +108,19 @@ Configs are applied by importing a JSON file through `#import-input`. The harnes
 | `pilot_look` | 9 | Pilot mouse-look drag: the rotation inputs, frustum readouts and preview labels. Also checks that the orbit ignores the wheel in pilot mode. |
 | `gizmo_drag` | 20 | Gizmo drags on handles found by colour: the person's X arrow and Y ring, then the camera's X arrow and Y ring. |
 | `preview_resize` | 9 | The camera preview resize handle: an aspect-locked drag, then the B-L32 clamp blow-out with a 100×10 mm filmback. |
+| `p2_xss_names` | 14 | Phase 2: markup, quotes, spaces and duplicates in section names and a CSS-injecting colour (B-M4, B-L8, B-L14, B-M2, B-L21). |
+| `p2_zip_section_mode` | 8 | Phase 2: `flat3` in section mode with a renamed section; MTL texture paths against the ZIP entries (B-M2, B-L7). |
+| `p2_curved_safe_distance` | 11 | Phase 2: the safe-distance floor on four curved or cornered walls, screenshot and OBJ export each (B-M15, B-L29, B-M1). |
+| `p2_zero_inputs` | 9 | Phase 2: zero and fractional inputs (B-L9, B-L15, Q13). |
+| `p2_oversize_canvas` | 6 | Phase 2: a wall wider than the browser's canvas limit (B-L4). |
+| `p2_mixed_content` | 7 | Phase 2: LED sim and panel IDs on mixed section heights (B-M5, B-L18). |
+| `p2_shortcut_filters` | 8 | Phase 2: shortcut keys in a focused select, with Ctrl, auto-repeated, and a view preset in pilot mode (B-L11, B-L25). |
+| `p2_project_v2` | 34 | Phase 2: a full project save and restore, a save with the preview off, hostile v2 logos; the only scenario with `network.json` (B-L31, B-L35, B-L36). |
 
 The seven scenarios after `ui_visual` live in [`scenarios-extra.mjs`](scenarios-extra.mjs) and are
-spread into `SCENARIOS` after the original entries.
+spread into `SCENARIOS` after the original entries. The eight `p2_*` scenarios live in
+[`scenarios-phase2.mjs`](scenarios-phase2.mjs) and are spread in after them (see
+[The Phase 2 scenarios](#the-phase-2-scenarios)).
 
 The six config scenarios follow the same steps:
 
@@ -307,6 +322,50 @@ To see which pixels a handle search picked, set `REGRESSION_DEBUG_DIR=<dir>` whe
 Every searched screenshot is then written there with a JSON file that holds the chosen pixel and the
 excluded overlay rects.
 
+## The Phase 2 scenarios
+
+[`scenarios-phase2.mjs`](scenarios-phase2.mjs) adds the eight scenarios of
+`docs/improvements/08-bugfix-roadmap.md` section 8.3. They were captured at P2-0 against the
+**unfixed** code, so their baselines document the bugs; each later fix changes them on purpose,
+through its expected-change manifest. They follow the same DOM-only rules as the other scenarios.
+
+- **Export labels** are `<mesh mode>__<button>` (`section__export-obj`, `combined__export-zip`, ...) or
+  `<wall>__export-safe-distance`, so the segment-agnostic manifest patterns
+  (`**/*section__export-obj__*.mtl`, `**/*combined__export-*`) cover them like the config scenarios.
+- **No reachable URL** is ever part of a payload: hostile URLs use the `.invalid` top-level domain,
+  which never resolves. A request to one would be recorded as a `network` error, and
+  `p2_project_v2/network.json` lists every request to another origin.
+- **Fresh pages** inside a scenario use `AppPage.reload()`.
+
+| Scenario | Steps | Records |
+|---|---|---|
+| `p2_xss_names` | Import six 2×1 sections named `<b id="xss-probe">B</b>`, `Say "hi"`, `A B`, `A_B`, `Dup`, `Dup` (the third with the colour `red;outline:3px solid lime`) in section mode; probe; panel IDs on; probe; rename card 1 (the second card) to `<i id="xss-probe2">i</i>` with one `input` event; probe; `section__export-obj`, `section__export-zip` | `sections_initial`, `sections_renamed`, `xss_probe_0{0,1,2}_*` (`xss_probe`, `xss_probe2`, and per card whether the colour injected an outline), `logos_0{1,2}_*`, MTL, ZIP entries and ZIP JSON |
+| `p2_zip_section_mode` | Import `flat3` in section mode, rename `Center` to `Center Stage`, `section__export-obj`, `section__export-zip` | `sections_renamed`, MTL, ZIP entries |
+| `p2_curved_safe_distance` | For `concave_offsets`, `convex`, `box_corner` and the inline `concave30` (one section, 6 × 4 panels of 500 mm, curve +30°), each on a fresh page: import; preview on; camera at (3, 1.5, 6); safe distance on; screenshot `<wall>`; `<wall>__export-safe-distance` | 4 screenshots, the OBJs (none while B-M1 throws), `console.json`, `downloads.json` |
+| `p2_zero_inputs` | Preview on; camera Y and Z = 0; card 0 width 0 and columns 2.5; panel IDs on with border 0; `combined__export-obj` | `camera_zero`, `sections_zero`, `stats_zero`, `ui_zero_border`, OBJ and MTL |
+| `p2_oversize_canvas` | Import one section of 70 × 2 panels with 1000 × 64 LEDs (a 70,000 × 128 px atlas) in section mode; `section__export-panel-ids`; `section__export-zip`; panel IDs on; screenshot `panel_ids_viewport` | `dialogs.json`, `console.json` (Export Panel IDs throws a `TypeError` today), `downloads.json`, ZIP entries and MTL (a 0-byte texture today), the screenshot |
+| `p2_mixed_content` | Import `mixed`; LED sim on (combined), screenshot; layout `square`, screenshot; panel IDs on, screenshot | 3 screenshots |
+| `p2_shortcut_filters` | LED sim on, focus `#led-layout`, press `g`; blur, Ctrl+G; preview on, `p` as three auto-repeat key downs; Escape and one `p` (pilot on from either state), click `#view-front`, screenshot | `gizmo_0{1..4}_*` (gizmo state, focused element, `#led-layout` value), `pilot_view_front` |
+| `p2_project_v2` | 1. preview on, custom filmback 30×20, focal 50, pose (2, 1.2, 4) / (5, −10, 2), safe distance on. 2. person at (1, 3), rot 45, scale 1.5; car on. 3. Add Section (so that section 1 exists), LED sim on then panel IDs on, border 12, font colour `#ff0000`, the 16×8 test PNG on section 0, a generated 2,000,000-byte 24-bit noise BMP on section 1, wireframe on. 4. `v2_first__export-json`. 5–6. fresh page, import it, record, screenshot, `v2_second__export-json`. 7. preview off (only if on), `v2_off__export-json`, fresh page, import it, preview on (only if off), record. 8. import an inline one-section v2 file whose `assets[]` hold an `https://` URL, a `data:text/html` URI, a data URI with a base64 length that is not a multiple of 4, and an SVG with `<script>`, `<foreignObject>` and an external `href` (the section's logo); `combined__export-panel-ids`, `combined__export-zip` | `camera_*`, `ui_*`, `aria_*` (every `.toggle`: `.active`, `role`, `aria-checked`, `tabindex`), `logos_*` (the list with every `data-*` attribute), `dialogs_page{1,2,3...}` (dialogs per page), the three JSON exports, the screenshot, `network.json` |
+
+**`p2_project_v2` and the request log.** The scenario sets `recordRequests: true`. `lib/app.mjs`
+then keeps the URL of every `Network.requestWillBeSent` from the scenario's first step on, except
+while a page (re)load is in progress (`AppPage.open`, `AppPage.reload`), and `network.json` lists the
+`http(s)` URLs whose origin is not the app's own (data and blob URLs are not requests to anyone),
+each (step, URL) pair once. Every web-font face is preloaded before the first step and inside each
+reload, so a font download never enters the log. No other scenario writes `network.json`.
+
+**Generated payloads.** The noise BMP is 788 × 846 px, rows of 2,364 bytes without padding, the pixel
+array at offset 56 (a 14-byte file header, a 40-byte `BITMAPINFOHEADER` and 2 bytes of gap), so the
+file is exactly 2,000,000 bytes; the noise comes from a seeded PRNG, so it is the same on every run,
+and it does not compress, so its PNG conversion exceeds 2 MB.
+
+**Why 70,000 px in `p2_oversize_canvas`.** The harness browser (Chrome 154, measured) draws canvases
+up to 65,535 px per side and 268,435,456 px in area, so a 50,000 px wall still exports correctly in
+it. The wall is made wider than 65,535 px so that the unfixed Export Panel IDs (`TypeError` in
+`URL.createObjectURL`), the ZIP texture (0 bytes) and the viewport texture fail in the harness too.
+08 P2-1's guard uses the stricter 32,767 px limit of other browsers.
+
 ## Output layout
 
 ```
@@ -321,6 +380,7 @@ excluded overlay rects.
 <out>/<scenario>/downloads.json          which files each export step produced (an empty list is recorded too)
 <out>/<scenario>/dialogs.json            alert/confirm/prompt messages
 <out>/<scenario>/console.json            exceptions, console.error calls, failed network requests, harness errors
+<out>/p2_project_v2/network.json         the opt-in request log (only scenarios with recordRequests: true)
 ```
 
 Each output entry in the manifest is `{ file, sha256, kind, bytes, ... }`, where `kind` is one of
@@ -372,8 +432,13 @@ Byte-identical files report `IDENTICAL`. Otherwise:
   the first paint. It occurs equally with the verbatim legacy script loaded as a module (integration
   step I-1). A same-browser A/B run of the original and the candidate showed identical overlay-free
   canvas pixels and an identical draw list (object, material and geometry ids, and draw order).
-  It stays far below the FAIL threshold and is always a WARN, so it needs no `WARN_ONLY` entry. A
-  WARN anywhere else, or above 1 level, is a real difference.
+  It stays far below the FAIL threshold and is always a WARN. A WARN anywhere else, or above 1
+  level, is a real difference. Since P2-0 this list is data:
+  [`expected/_nondeterminism.json`](expected/_nondeterminism.json) holds one entry per output (or
+  output pattern) with its bounds (at most 1 level, at most 8 pixels), the overlay element and the
+  evidence, and every `compare.mjs --expect` run reports a difference within those bounds as
+  `JITTER`. The entries are exactly the outputs named above (the "..." resolved by P2-0's two full
+  self-consistency runs; see [Phase 2 re-baselining](#phase-2-re-baselining)).
 - **CSS transitions** (0.2–0.3 s) are waited out through `document.getAnimations()` before any
   state read or screenshot.
 - **Fonts** are preloaded with `document.fonts.load()` before the app is used, so panel-ID canvas
@@ -386,9 +451,136 @@ Byte-identical files report `IDENTICAL`. Otherwise:
 - **Asynchronous imports** (`FileReader`) are awaited by watching `#wall-sections` for changes and
   `alert` calls. An import that changes nothing (`{"foo": 1}`) waits the full 2 s, so its recorded
   result is deterministic too.
-- **The `WARN_ONLY` list** in `compare.mjs` downgrades specific outputs to WARN. It is empty
-  today. Only add entries that a self-consistency run proves are nondeterministic, and document
-  the reason next to each one.
+- **The standing allowance** is `expected/_nondeterminism.json` and nothing else (it replaced the
+  empty `WARN_ONLY` list that `compare.mjs` had in Phase 1). Adding an entry is a separate commit
+  that changes no code (see [Phase 2 re-baselining](#phase-2-re-baselining)).
+
+## Phase 2 re-baselining
+
+`docs/improvements/08-bugfix-roadmap.md` section 8.1 is the one procedure for every commit that
+changes a golden output, in any spec (Phase 2 fixes, Features 1-6, the platform work):
+
+- **The baseline of a commit is the harness output of its parent commit.**
+- **Each intentional change is declared up front** in `tests/regression/expected/<commit-id>.json`.
+- **Every gate run is full.** `run.mjs --only` is for local iteration and never produces a promoted
+  baseline.
+
+```bash
+# 0. Baseline = the parent commit (skip if the previous commit promoted tests/regression/output/baseline).
+git worktree add ../led-baseline HEAD
+node tests/regression/run.mjs --root ../led-baseline --out tests/regression/output/baseline
+git worktree remove ../led-baseline
+
+# 1. Implement ONE commit. Write tests/regression/expected/<commit-id>.json first.
+GOLDEN_DIR=./no-golden node --test "tests/unit/**/*.test.mjs"   # golden-file tests skip
+node tests/static/check.mjs && node tests/static/css-slices.mjs
+
+# 2. Full candidate run.
+node tests/regression/run.mjs --root . --out tests/regression/output/candidate
+
+# 3. Gate: every diff declared, every declared change happened (also loads expected/_nondeterminism.json).
+node tests/regression/compare.mjs tests/regression/output/baseline tests/regression/output/candidate \
+     --expect tests/regression/expected/<commit-id>.json --verbose
+#    Export commits also run the structural checks on the candidate outputs:
+node tools/check-orientation.mjs tests/regression/output/candidate/*/*.obj tests/regression/output/candidate/*/*.gltf
+node tools/check-gltf.mjs tests/regression/output/candidate/*/*.gltf
+
+# 4. Review every EXPECTED diff (PNGs side by side, OBJ/glTF text, dialogs, console).
+# 5. Promote the reviewed candidate.
+rm -rf tests/regression/output/baseline && mv tests/regression/output/candidate tests/regression/output/baseline
+# 6. Self-consistency and golden unit tests against the promoted baseline.
+node tests/regression/run.mjs --root . --out tests/regression/output/candidate
+node tests/regression/compare.mjs tests/regression/output/baseline tests/regression/output/candidate   # must exit 0
+node --test "tests/unit/**/*.test.mjs"
+# 7. Commit code + expected/<commit-id>.json + the ARCHITECTURE section 8 amendment.
+#    Message: "fix(B-xx): <what>; re-baselined: <manifest id>"
+```
+
+To classify step 6's remaining differences, run the same comparison with `--expect` and a scratch
+manifest whose `expect` list is empty (`{"commit": "self", "expect": []}`, not committed): it must
+exit 0 with every remaining difference reported as `JITTER`.
+
+**Manifest format** (committed):
+
+```json
+{
+  "commit": "P2-1a",
+  "bugs": ["B-H3"],
+  "expect": [
+    { "output": "large_wall/panel__export-gltf__*.gltf", "change": "added" },
+    { "output": "large_wall/{downloads,console}.json", "change": "modified", "each": true }
+  ],
+  "mayChange": [
+    { "output": "toggles/01_wireframe.screenshot.png", "reason": "wireframe draw order may change" }
+  ]
+}
+```
+
+- `output` is a pattern over `<scenario>/<output>`: `*` matches within one path segment, `**` across
+  segments, `{a,b}` is alternation (nestable), `?` is one character. Prefer segment-agnostic,
+  filename-agnostic patterns for whole output kinds (`**/*__export-obj__*.obj`,
+  `**/*combined__export-*`); use explicit names only for single outputs, checked against the
+  parent's baseline listing. Write manifests by grepping the parent's baseline, never from memory
+  (08 section 8.2, R10).
+- `change` is `added` (only in the candidate), `removed` (only in the baseline) or `modified`.
+- `mayChange` entries take an optional `change` and a `reason`; plain pattern strings are accepted.
+- Other keys are refused (exit code 2), so a typo cannot silently disable an entry.
+
+**`compare.mjs --expect a.json[,b.json]` semantics:**
+
+1. A differing output (status FAIL or WARN, including a missing or extra output) that matches an
+   `expect` entry with a compatible `change` is reported as `EXPECTED` and does not count.
+2. One that matches `mayChange` is reported as `EXPECTED?` and does not count.
+3. Any other difference keeps its normal status.
+4. **An `expect` entry is satisfied only by a differing output.** A within-tolerance PASS (for
+   example a re-encoded but pixel-identical screenshot, or a 1e-7 numeric change) does not satisfy
+   it. Without `each`, one differing match suffices; with `"each": true`, every matching output
+   present in the baseline must differ. An unsatisfied entry is a FAIL ("expected change did not
+   occur"), and so is an entry whose pattern matches nothing.
+5. Consequently a change that may stay under the screenshot tolerance is declared under
+   `mayChange`, never under `expect`.
+6. `expected/_nondeterminism.json` is applied first (`JITTER`, below).
+7. The exit code is 0 iff there is no FAIL. A scenario present in only one tree reports each of its
+   outputs as added or removed (the P2-0 manifest declares `p2_*/**` as added).
+
+The report lists every `EXPECTED`, `EXPECTED?` and `JITTER` output with its detail, then one line per
+`expect` entry (`ok` with the number of differing and matching outputs, or `FAIL` with the reason),
+then the summary.
+
+**The nondeterminism allowlist** (`expected/_nondeterminism.json`, committed) is the README's
+"Known nondeterminism" list as data:
+
+```json
+{ "jitter": [ { "output": "keyboard/{pilot_view,final_view}.screenshot.png", "maxLevel": 1, "maxPixels": 8,
+                "overlay": "pilot banner, help badge", "evidence": "..." } ] }
+```
+
+- A screenshot difference on a listed output with a maximum channel difference `<= maxLevel` and at
+  most `maxPixels` differing pixels is reported as `JITTER`: it does not count, and it never
+  satisfies an `expect` entry. A larger difference keeps its normal status.
+- It is loaded by every `--expect` run and never listed by hand; it is the only standing allowance.
+- Any other undeclared screenshot WARN is reviewed, and declared under `mayChange` with a reason if
+  it is accepted. Nobody adds jitter entries to a commit manifest.
+- **Adding an entry** is a separate commit that changes no code: it attaches the self-consistency
+  evidence (two runs of the same build, the output name, the maximum level and pixel count, the
+  overlay element) and updates this README in the same commit. P2-0 created the file from this
+  README's list plus every screenshot that differed between its own two full self-consistency runs.
+
+**Structural checkers** (Node, no dependencies; see their file headers):
+
+- `node tools/check-orientation.mjs <file.obj|file.gltf ...>`: for every triangle, the geometric
+  normal of its counter-clockwise winding has a positive dot product with the vertex normal at each
+  of its three vertices; one PASS/FAIL line per object, exit 1 on any failure. A face without vertex
+  normals fails. Today every OBJ and glTF fails it (B-H1, B-H2) until 08 P2-2.
+- `node tools/check-gltf.mjs <file.gltf ...>`: buffer, bufferView and accessor bounds, component and
+  4-byte alignment, index values below the vertex count and never the primitive-restart value,
+  `POSITION` min/max compared after `Math.fround`, unit `NORMAL`s, the `TEXCOORD_0` count, and the
+  mesh, material, node and scene references; exit 1 on any failure. Today the string-number glTFs of
+  `import_edge` (`ii_combined`, `ii_section`) fail it (indices beyond the vertex count, B-L8) until
+  08 P2-3b.
+
+Their unit tests are `tests/unit/tools.test.mjs`; the `--expect` semantics are unit-tested in
+`tests/unit/compare.test.mjs` on synthetic output trees.
 
 ## Contract the refactor must keep
 
@@ -470,9 +662,20 @@ These were observed in the original app and are part of the golden master:
 - `preview_off_in_pilot`: three alerts `Enable Camera Frustum Preview first to use Pilot Mode`, and
   pilot mode stays on until the preview is enabled again (B-H4).
 - `preview_resize`: the second drag produces a 1200×120 preview window (B-L32).
+- `p2_xss_names`: `xss_probe` and (after the rename) `xss_probe2` are `true`, the third card's colour
+  swatch gets the injected outline, and the second card's name input shows `Say ` (B-M4, B-L8, B-L16).
+- `p2_curved_safe_distance`: each of the four exports throws the B-M1 `ReferenceError`, so no OBJ is
+  produced; the `concave30` screenshot shows the folded band (B-M15).
+- `p2_oversize_canvas`: Export Panel IDs throws `TypeError: Failed to execute 'createObjectURL' on
+  'URL': Overload resolution failed.` and downloads nothing; the ZIP holds a 0-byte texture (B-L4).
+- `p2_shortcut_filters`: `g` in the focused select turns translate mode on, Ctrl+G turns it off again,
+  and the three auto-repeated `p` presses leave pilot mode on (B-L11).
+- `p2_project_v2`: the JSON exports are v1 (sections and mesh mode only), so the restored page has the
+  default camera, props, display and no logos (B-L31); `network.json` is empty.
 
 A candidate that fixes these will report the missing error as a WARN, and the newly produced
-file as an EXTRA output (FAIL). Accept such a change deliberately by re-capturing the baseline.
+file as an EXTRA output (FAIL). Accept such a change deliberately through its expected-change
+manifest ([Phase 2 re-baselining](#phase-2-re-baselining)).
 
 ## Limitations
 
@@ -538,7 +741,10 @@ node tools/serve.mjs [--port 8000] [--root .]
 
 Since Node 21, `--test` arguments are globs: the directory form `node --test tests/unit/` fails with
 "Cannot find module", and the unquoted glob is expanded (or not) by the shell. The quoted glob does
-not match the `tests/unit/oracle/*.mjs` helpers.
+not match the `tests/unit/oracle/*.mjs` helpers. `tests/unit/compare.test.mjs` and
+`tests/unit/tools.test.mjs` cover this harness's `--expect` gate and the structural checkers; the
+oracle comparisons in `geometry.test.mjs` and `io.test.mjs` inject `LegacyProfiles.mesh.*` (the exact
+Phase-1 profiles), while the golden comparisons use the production `Strategies.mesh.*`.
 
 ES modules do not load from `file://`. `tools/serve.mjs` serves a directory on `http://127.0.0.1:<port>/`
 with the harness's static server, which sends `.js` as `text/javascript`. Some Windows static servers

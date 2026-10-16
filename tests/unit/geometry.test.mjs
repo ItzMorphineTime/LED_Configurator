@@ -4,6 +4,8 @@
 // >= 500 seeded fuzzed walls: 0-6 sections, integer and fractional counts, numeric strings, flat / concave / convex /
 // string curves, +-90 / +-180 offsets, NaN / duplicate / string ids, plus rare degenerate counts (0, '', negative)
 // whose legacy exceptions must be reproduced with the identical error type and message.
+// The oracle builders are injected with LegacyProfiles.mesh.* (the exact Phase-1 profiles, 08 4.2), never with
+// Strategies.mesh.*, so these comparisons stay meaningful after each Phase-2 flip of a production profile.
 // Run: node --test tests/unit/geometry.test.mjs   (zero dependencies)
 
 import { test, describe } from 'node:test';
@@ -12,7 +14,7 @@ import assert from 'node:assert/strict';
 import { WallSection } from '../../js/domain/WallSection.js';
 import { Wall, PivotMode } from '../../js/domain/Wall.js';
 import { Project } from '../../js/domain/Project.js';
-import { Strategies, unsupportedStrategy } from '../../js/legacy/LegacyCompat.js';
+import { LegacyProfiles, Strategies, unsupportedStrategy } from '../../js/legacy/LegacyCompat.js';
 import { computeWallLayout, layoutProject, framingBounds, SectionLayout, WallLayout } from '../../js/geometry/WallLayout.js';
 import { quadIndices, WallMeshBuilder } from '../../js/geometry/WallMeshBuilder.js';
 import { computeAtlas, sectionPxPerLed, panelPxPerLed } from '../../js/geometry/TextureAtlas.js';
@@ -210,9 +212,9 @@ const CONFIG_WALLS = Object.entries(CONFIGS).map(([name, data]) => ({ label: `co
 const FUZZ_WALLS = fuzzWalls(0x5eed4, 600);
 const WALLS = [...HAND_WALLS, ...CONFIG_WALLS, ...FUZZ_WALLS];
 
-const viewport = new WallMeshBuilder(Strategies.mesh.viewport);
-const obj = new WallMeshBuilder(Strategies.mesh.obj);
-const gltf = new WallMeshBuilder(Strategies.mesh.gltf);
+const viewport = new WallMeshBuilder(LegacyProfiles.mesh.viewport);
+const obj = new WallMeshBuilder(LegacyProfiles.mesh.obj);
+const gltf = new WallMeshBuilder(LegacyProfiles.mesh.gltf);
 
 /** Runs `check(wall, mm)` over every wall and asserts zero mismatches. */
 function overAllWalls(t, check) {
@@ -640,24 +642,38 @@ describe('quadIndices and the builder profiles', () => {
     }
   });
 
+  test('LegacyProfiles holds exactly the Phase-1 mesh profiles (08 4.2), deep-frozen; Strategies has its own objects', () => {
+    assert.deepEqual(LegacyProfiles, {
+      mesh: {
+        viewport: { winding: 'legacy-cw', normals: 'right-panel', combinedUV: 'atlas-u-full-v', side: 'double' },
+        obj: { winding: 'legacy-cw', normals: 'none', stripNormals: 'constant-z', combinedUV: 'per-section-overlap', panelNormal: 'facing' },
+        gltf: { winding: 'legacy-cw', normals: 'none', attributes: ['POSITION'], indexType: 'uint16', doubleSided: 'omit' },
+      },
+    });
+    for (const o of [LegacyProfiles, LegacyProfiles.mesh, ...Object.values(LegacyProfiles.mesh), LegacyProfiles.mesh.gltf.attributes]) {
+      assert.ok(Object.isFrozen(o));
+    }
+    for (const consumer of ['viewport', 'obj', 'gltf']) assert.notEqual(LegacyProfiles.mesh[consumer], Strategies.mesh[consumer]);
+  });
+
   test('profile is the injected object', () => {
-    assert.equal(viewport.profile, Strategies.mesh.viewport);
-    assert.equal(obj.profile, Strategies.mesh.obj);
-    assert.equal(gltf.profile, Strategies.mesh.gltf);
+    assert.equal(viewport.profile, LegacyProfiles.mesh.viewport);
+    assert.equal(obj.profile, LegacyProfiles.mesh.obj);
+    assert.equal(gltf.profile, LegacyProfiles.mesh.gltf);
   });
 
   test('a foreign winding throws from sectionGrid, combinedGrid and panelQuadIndices', () => {
-    for (const base of [Strategies.mesh.viewport, Strategies.mesh.obj, Strategies.mesh.gltf]) {
+    for (const base of [LegacyProfiles.mesh.viewport, LegacyProfiles.mesh.obj, LegacyProfiles.mesh.gltf]) {
       const b = new WallMeshBuilder({ ...base, winding: 'x' });
       assert.throws(() => b.sectionGrid(SMALL_LAYOUT.sections[0]), unsupported('mesh.winding', 'x'));
       assert.throws(() => b.panelQuadIndices(0), unsupported('mesh.winding', 'x'));
     }
-    const b = new WallMeshBuilder({ ...Strategies.mesh.viewport, winding: 'x' });
+    const b = new WallMeshBuilder({ ...LegacyProfiles.mesh.viewport, winding: 'x' });
     assert.throws(() => b.combinedGrid(SMALL_LAYOUT, computeAtlas([SMALL_LAYOUT.sections[0].section])), unsupported('mesh.winding', 'x'));
   });
 
   test('a foreign normals value throws from sectionGrid (profile or opts.normals), even for an empty grid', () => {
-    const b = new WallMeshBuilder({ ...Strategies.mesh.obj, normals: 'averaged' });
+    const b = new WallMeshBuilder({ ...LegacyProfiles.mesh.obj, normals: 'averaged' });
     assert.throws(() => b.sectionGrid(SMALL_LAYOUT.sections[0]), unsupported('mesh.normals', 'averaged'));
     assert.throws(() => obj.sectionGrid(SMALL_LAYOUT.sections[0], { normals: 'x' }), unsupported('mesh.normals', 'x'));
     const empty = computeWallLayout([section({ panelCols: -1, panelRows: -1 })]).sections[0];
@@ -668,7 +684,7 @@ describe('quadIndices and the builder profiles', () => {
   });
 
   test('a foreign combinedUV throws from combinedGrid, even for an empty wall; non-viewport profiles have none', () => {
-    const b = new WallMeshBuilder({ ...Strategies.mesh.viewport, combinedUV: 'per-section' });
+    const b = new WallMeshBuilder({ ...LegacyProfiles.mesh.viewport, combinedUV: 'per-section' });
     assert.throws(() => b.combinedGrid(SMALL_LAYOUT, computeAtlas([SMALL_LAYOUT.sections[0].section])), unsupported('mesh.combinedUV', 'per-section'));
     assert.throws(() => b.combinedGrid(computeWallLayout([]), computeAtlas([])), unsupported('mesh.combinedUV', 'per-section'));
     assert.throws(() => obj.combinedGrid(SMALL_LAYOUT, computeAtlas([])), unsupported('mesh.combinedUV', 'per-section-overlap'));
@@ -676,7 +692,7 @@ describe('quadIndices and the builder profiles', () => {
   });
 
   test('a foreign panelNormal throws from panelFacingNormal; only the OBJ profile defines it', () => {
-    const b = new WallMeshBuilder({ ...Strategies.mesh.obj, panelNormal: 'x' });
+    const b = new WallMeshBuilder({ ...LegacyProfiles.mesh.obj, panelNormal: 'x' });
     assert.throws(() => b.panelFacingNormal(PANEL), unsupported('mesh.panelNormal', 'x'));
     assert.throws(() => gltf.panelFacingNormal(PANEL), unsupported('mesh.panelNormal', undefined));
     assert.throws(() => viewport.panelFacingNormal(PANEL), unsupported('mesh.panelNormal', undefined));

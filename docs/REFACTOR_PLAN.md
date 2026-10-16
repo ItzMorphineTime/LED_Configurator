@@ -114,19 +114,35 @@ Pure layers (domain, geometry, io and the app controllers) are verified in Node 
 - **H2** dispose gizmo resources (B-L12) by setting `Strategies.dispose.gizmo = true` (watch the `keyboard` screenshots: freeing materials can change WebGL program ids and so draw order). **Landed** (on top of H1). `TransformGizmo.rebuild/detach` now dispose the replaced or removed group's geometries and materials. Unit and static gates green; the full harness (`tests/regression/output/h2`) passed against the baseline with 12 WARNs, every differing pixel a documented 1-level overlay-glyph flip; the `keyboard` and `gizmo_drag` screenshots show no other difference, so no draw order changed. B-L12 left `LEGACY_SITES` (its 8.2 row is kept and marked landed).
 
 ### Phase 2: bug fixes (each one separately re-baselined)
-Each fix flips one switch or edits one tagged site, updates `LEGACY_SITES`, and re-captures only the affected harness outputs in its own commit. Suggested order (bug ids from the verified defect list, `docs/DEFECTS.md`):
-1. **B-H1 + B-H2** inverted winding and wrong/missing normals in the viewport and every export (the owner-reported "inverted normals"; this is the core of Feature 1).
-2. **B-M4 + B-L8** unescaped names in HTML and unvalidated imports (security and robustness): real `legacyHtml` escaping and a `ProjectValidator` inside `ProjectSerializer.read`.
-3. **B-H3 + B-L4** glTF/ZIP export failing on large walls; canvas-size guard and user-visible error messages.
-4. **B-H4** stuck pilot mode when the preview is turned off; **B-M8** stale safe-distance floor.
-5. **B-M1** safe-distance OBJ download (with **B-L29** face orientation, since the file becomes reachable).
-6. **B-M3**, **B-M2 + B-L14 + B-L7** export consistency (ZIP JSON offsets, texture names, MTL delivery).
-7. **B-L20** (unbounded LED tile cache). B-H5 and B-L12 landed in Phase 1C (H1, H2).
-8. Interaction: **B-M12, B-L28, B-L22, B-L23** (gizmo), **B-M13, B-L27** (movement), **B-M14** (select on click), **B-L11, B-L25, B-L26**.
-9. Preview: **B-M9, B-M11, B-L32, B-L33, B-L34**.
-10. UVs and export completeness: **B-M5, B-M6, B-M7, B-L6, B-L5** (prerequisite for Feature 4).
-11. Bounds: **B-M10, B-L2, B-M15** (together with Feature 3).
-12. The rest: **B-L9, B-L10, B-L15, B-L16, B-L17, B-L18, B-L19, B-M16, B-L21, B-L31 (JSON v2), B-L35, B-L36, B-L24, B-L13, B-L3**, and the **B-L1** curve-convention decision (changes every curved export; owner decision first).
+The authoritative plan is `docs/improvements/08-bugfix-roadmap.md` (batch cards in its section 10, bug ownership across the specs in its section 5.6). Each commit fixes one bug id for one consumer: it flips one switch or edits one tagged site, updates `LEGACY_SITES`, and is re-baselined on its own through 08 section 8.1 (the baseline is the parent commit's output, the intended changes are declared first in `tests/regression/expected/<commit-id>.json`, and `compare.mjs --expect` gates a full harness run). Merge order and batch membership (08 section 1; bug ids from the verified defect list, `docs/DEFECTS.md`):
+
+**Owner-visible block**
+1. **P2-0** Phase 2 tooling (no bug id): `compare.mjs --expect`, the nondeterminism allowlist, the eight `p2_*` harness scenarios, `LegacyProfiles`, the structural export checkers.
+2. **P2-5a** **B-M1**: Export Safe Distance OBJ downloads (one line), merged before P2-1a wraps every export in its error alert.
+3. **P2-1** **B-H3, B-L5, B-L4**: exports never fail silently (chunked base64, 32-bit indices from 65,535 on, canvas-size guards and messages).
+4. **P2-2** **B-H1, B-H2, B-L3**: stage-facing winding and real normals in the viewport and every export (the owner-reported "inverted normals"). It must follow P2-1: adding `NORMAL` puts `large_wall`'s glTF buffer at 121,056 bytes, inside the band where the legacy spread encoder throws `RangeError` (B-H3).
+5. **P2-8a** **B-L15**: integer counts and sanity caps in the UI rules, before the validator.
+6. **P2-3** **B-M4, B-L8, B-L16, B-L21**: escaped names and validated imports.
+7. **P2-4** **B-H4, B-M8**: a clean preview-off (no stuck pilot mode, no stale safe-distance floor).
+8. **P2-5b** **B-L29, B-M15**: the mitred, clamped safe-distance band.
+9. **P2-6** **B-M3, B-L14, B-L7, B-M2**: consistent, lossless bundles (ZIP JSON offsets, texture names, MTL delivery).
+10. **P2-12d** **B-M16, B-L19**: panel-mode textures (P2-12a is not needed: B-H5 and B-L12 landed in Phase 1C, H1 and H2).
+11. **P2-7** **B-M5, B-M6, B-M7, B-L6, B-L18**: UVs match textures (prerequisite for Feature 4).
+
+**Feature-gate block**
+12. **P2-8b–d** **B-L9, B-L10** (pilot half), **B-L13**: numeric input semantics.
+13. **P2-9a–d** **B-M14, B-L11, B-M12, B-L22**: click-select, shortcut filters, gizmo rotation sign, prop axes.
+14. **P2-13a** **B-L35**: logo guards, sanitising and the post-conversion size cap.
+15. **P2-13e** **B-L31**: the v2 project file (07 section 4.2).
+
+**Remainder**
+16. **P2-9e–j** **B-L23, B-L28, B-M13, B-L27, B-L25, B-L26**: gizmo local space, quaternion rotation, pilot movement, presets in pilot mode.
+17. **P2-10** **B-M11, B-M9, B-L32, B-L34**: the preview window.
+18. **P2-11** **B-M10, B-L33, B-L2, B-L10** (Z half): true framing and coverage, co-scheduled with Feature 3.
+19. **P2-12b, P2-12c** **B-L20, B-L30**: the LED tile cache LRU and the pose-only camera refresh.
+20. **P2-13b, c, f, g** **B-L17, B-L36, B-L1**: the wall texture warning, toggle accessibility, the curve-convention code (the owner kept the convention, 08 Q10) and the final clean-up.
+
+B-L24 is fixed by Feature 1 (01 T7) and Feature 6 (06 T4a). Phase 3 feature tasks merge as soon as their own gates have merged (08 section 1.1), interleaved with these commits, one merge at a time, each through the same gate.
 
 ### Phase 3: features
 Suggested order: **1** normals debug view (after the B-H1/B-H2 fix), **6** Morph branding (independent; can run any time after Phase 1), **3** configurable pivot, **2** section selection and per-section offsets, **4** clean UVs and the UV viewer/editor, **5** HDRI projection and the reflective car (needs the single-renderer preview and the helpers layer). ARCHITECTURE.md section 9 lists, per feature, what already exists after Phase 1 and what the feature adds.
@@ -135,12 +151,12 @@ Suggested order: **1** normals debug view (after the B-H1/B-H2 fix), **6** Morph
 
 | Gate | What it proves | When |
 |---|---|---|
-| Golden master (`tests/regression`) | Every export, DOM state, dialog, console error and screenshot equals the original (`console.warn` is not recorded; screenshots allow only the documented 1-level overlay-glyph jitter, ARCHITECTURE.md 10), across 19 scenarios including computed styles and full-page UI screenshots | baseline in Phase 0; every checkpoint and merge in Phases 1-2 |
+| Golden master (`tests/regression`) | Every export, DOM state, dialog, console error and screenshot equals the original (`console.warn` is not recorded; screenshots allow only the documented 1-level overlay-glyph jitter, ARCHITECTURE.md 10), across 19 scenarios including computed styles and full-page UI screenshots (27 with the eight Phase 2 scenarios added by 08 P2-0; from Phase 2 on, every output equals the parent commit's except the changes declared in the commit's expected-change manifest) | baseline in Phase 0; every checkpoint and merge in Phases 1-2 |
 | Unit tests (`node --test "tests/unit/**/*.test.mjs"`) | Rule tables, layout, mesh builder, atlas and naming equal a verbatim copy of the old code (`Object.is` on every number over hundreds of random walls, including string and fractional inputs); exporters byte-identical to the baseline files; rebuild counts and camera-hub order with spies | every work package and merge |
 | Static checks (`tests/static/`) | Layering, DOM-id ownership, file-name case, no globals, LEGACY register parity, every `Strategies` switch read, event usage, domain-field writers, CSS slices equal the original | every merge |
 | Manual checks | WASD/QE orbit and pilot fly (including the inverted vertical), gizmo hover, window resize, preview resize, a GitHub Pages smoke test | end of Phase 1 and before release |
 
-Rules: a failing comparison is never "fixed" by re-capturing the baseline during Phase 1. Baselines change only in Phase 2/3, one intended change per commit.
+Rules: a failing comparison is never "fixed" by re-capturing the baseline during Phase 1. Baselines change only in Phase 2/3, one intended change per commit, each with an expected-change manifest (`tests/regression/expected/<commit-id>.json`, `docs/improvements/08-bugfix-roadmap.md` sections 8.1 and 8.2). From Phase 2 on, in every spec, the baseline of a commit is its parent commit's output, the gate is `compare.mjs --expect` on a full run, and `tests/regression/expected/_nondeterminism.json` is the only standing allowance.
 
 ## 7. Work-package logistics
 
@@ -182,6 +198,7 @@ node tests/static/check.mjs
 node tests/static/css-slices.mjs
 node tests/regression/run.mjs --root . --out tests/regression/output/candidate
 node tests/regression/compare.mjs tests/regression/output/baseline tests/regression/output/candidate
+# Phase 2 onwards: --expect tests/regression/expected/<commit-id>.json (tests/regression/README.md, "Phase 2 re-baselining")
 ```
 
 The harness needs Node 22+, Chrome (or Edge) and internet access (three.js, JSZip and fonts come from CDNs). Capture the baseline and the candidate on the same machine and browser.
