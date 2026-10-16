@@ -24,8 +24,8 @@ import { setViewport } from './lib/uiprobe.mjs';
 import {
     MIN_REGION, classifyFace, colorMask, diffStats, largestComponent, probePoint, readProbePalette, sampleRGB, withinJitter,
 } from './lib/probe.mjs';
-// A function declaration, so this import cycle (scenarios.mjs registers EXTRA_SCENARIOS) is safe.
-import { findPersonPixel } from './scenarios.mjs';
+// Function declarations, so this import cycle (scenarios.mjs registers EXTRA_SCENARIOS) is safe.
+import { findPersonPixel, isPersonPixel, debugDump } from './scenarios.mjs';
 
 const MODES = ['combined', 'section', 'panel'];
 
@@ -289,7 +289,7 @@ const readPreviewSize = (app) => pageCall(app, pagePreviewSize);
 //   gizmo red   0xff4444 @ 0.35 -> ~(96, 30, 30)     gizmo green 0x44ff44 @ 0.35 -> ~(30, 96, 30)
 //   camera body 0xc51622 @ 1.00 -> (197, 22, 34), opaque: the same over the default wall; under one or two layers of
 //               the 0.05 frustum fill (0xf7f7f5) at most (201, 44, 55)
-//   person      0x4488ff @ 0.85 (see findPersonPixel)
+//   person      0x4488ff @ 0.85 (isPersonPixel of scenarios.mjs, re-derived for the Studio Grey wall in 06 T7)
 // The camera body's anti-aliased edges and its Morph Black edge outline blend to (10 + 187c, 10 + 12c, 10 + 24c), for
 // example (104, 16, 22) at c = 0.5, so isGizmoRed also asks g >= 24 (real gizmo-red pixels have g >= 30 over the
 // darkest background), which keeps the two matchers disjoint. isGizmoGreen rejects the safe band's green @ 0.5
@@ -299,7 +299,7 @@ const readPreviewSize = (app) => pageCall(app, pagePreviewSize);
 const isGizmoRed = (r, g, b) => r >= 78 && r <= 128 && g >= 24 && g <= 56 && b <= 60 && r - Math.max(g, b) >= 40;
 const isGizmoGreen = (r, g, b) => g >= 78 && g <= 128 && r <= 56 && b <= 60 && g - Math.max(r, b) >= 40;
 const isCameraBody = (r, g, b) => r >= 150 && g <= 50 && b <= 60;
-const isPerson = (r, g, b) => b >= 200 && r >= 40 && r <= 80 && g >= 95 && g <= 170;
+const isPerson = isPersonPixel;
 
 /**
  * Find a pixel of a solid region of matching colour in a canvas screenshot.
@@ -351,12 +351,7 @@ async function locate(app, match, opts = {}) {
     const exclude = await pageCall(app, pageOverlayRects);
     const png = await app.screenshotCanvas();
     const hit = findRegionPixel(png, match, { ...opts, exclude });
-    if (process.env.REGRESSION_DEBUG_DIR) {
-        const base = path.join(process.env.REGRESSION_DEBUG_DIR, `${app.step.replace(/[^\w.-]+/g, '_')}`);
-        fs.mkdirSync(process.env.REGRESSION_DEBUG_DIR, { recursive: true });
-        fs.writeFileSync(base + '.png', png);
-        fs.writeFileSync(base + '.json', JSON.stringify({ hit, exclude }, null, 2));
-    }
+    debugDump(app.step, png, { hit, exclude });
     if (!hit) return null;
     const r = await app.canvasRect();
     return { x: r.x + hit.x, y: r.y + hit.y };
@@ -1192,7 +1187,9 @@ async function normalsDebugScenario(ctx) {
         await setCheck('debug-normals-face', 'face', true);
         await setCheck('debug-normals-ontop', 'onTop', true);
         await closePopover();
-        const hit = findPersonPixel(await app.screenshotCanvas());
+        const png = await app.screenshotCanvas();
+        const hit = findPersonPixel(png);
+        debugDump(`normals_debug_${app.step}`, png, { hit });
         if (hit) {
             const r = await app.canvasRect();
             await clickAt(app, r.x + hit.x, r.y + hit.y);

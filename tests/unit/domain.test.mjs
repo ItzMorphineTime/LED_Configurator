@@ -313,14 +313,25 @@ describe('WallSection', () => {
     assert.equal('extra' in s, false);
   });
 
-  test('createDefault equals the legacy bootstrap section (1395-1407)', () => {
+  test('createDefault equals the legacy bootstrap section (1395-1407) with the injected colour (06 T7, 4.1)', () => {
     const s = WallSection.createDefault();
     assert.ok(s instanceof WallSection);
     assert.deepEqual({ ...s }, {
       id: 0, name: 'Wall 1', panelCols: 5, panelRows: 3, panelWidth: 500, panelHeight: 500,
-      ledX: 32, ledY: 32, curveIntensity: 0, angleOffset: 0, color: '#00f0ff',
+      ledX: 32, ledY: 32, curveIntensity: 0, angleOffset: 0, color: '#d9d9d6',
     });
     assert.notEqual(WallSection.createDefault(), s, 'a fresh object per call');
+    assert.deepEqual({ ...WallSection.createDefault({ color: '#00f0ff' }) }, { ...s, color: '#00f0ff' }, 'the legacy bootstrap section');
+    assert.equal(WallSection.createDefault({}).color, '#d9d9d6');
+    assert.equal(WallSection.createDefault({ color: undefined }).color, '#d9d9d6', 'undefined: the default');
+  });
+
+  test('Project.createDefault({defaultSectionColor}) gives the first section that colour; without it the default (06 T7)', () => {
+    assert.equal(Project.createDefault({ defaultSectionColor: '#123456' }).wall.sections[0].color, '#123456');
+    assert.equal(Project.createDefault().wall.sections[0].color, '#d9d9d6');
+    const p = Project.createDefault({ defaultSectionColor: '#123456' });
+    assert.equal(p.wall.count, 1);
+    assert.equal(p.wall.nextSectionId, 1, 'the id allocator as with new Wall()');
   });
 
   test('defaultName', () => {

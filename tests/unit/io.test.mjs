@@ -364,7 +364,8 @@ describe('oracle equality (byte for byte)', () => {
     let compared = 0;
     for (const [k, data] of docs.entries()) {
       const actual = run(() => serializer.read(data));
-      const expected = run(() => L.importJSONMapping(data, Palette.sectionColors));
+      // The legacy global `sectionColors` is the Phase-1 palette, which fills v1 colours since 06 T7 (4.3).
+      const expected = run(() => L.importJSONMapping(data, Palette.legacySectionColors));
       if (!expected.ok || !actual.ok) {
         assert.equal(actual.ok, expected.ok, `doc #${k}`);
         assert.equal(describeError(actual.error), describeError(expected.error), `doc #${k}`);
@@ -707,17 +708,22 @@ describe('ProjectSerializer', () => {
     const [a, b, c] = parsed.sections;
     assert.ok(a instanceof WallSection && b instanceof WallSection);
     assert.deepEqual({ ...a }, { id: 0, name: 'S', panelCols: '10', panelRows: '0', panelWidth: '500', panelHeight: 500,
-      ledX: '64', ledY: 32, curveIntensity: '5', angleOffset: 0, color: Palette.sectionColors[0] });
+      ledX: '64', ledY: 32, curveIntensity: '5', angleOffset: 0, color: Palette.legacySectionColors[0] });
     assert.deepEqual({ ...b }, { id: 'abc', name: 'Wall 2', panelCols: 5, panelRows: 3, panelWidth: 500, panelHeight: 500,
       ledX: 32, ledY: 32, curveIntensity: 0, angleOffset: '15', color: '#123456' });
     assert.equal(c.id, 0);
     assert.equal(c.name, 'Wall 3');
-    assert.equal(c.color, Palette.sectionColors[2]);
+    assert.equal(c.color, Palette.legacySectionColors[2]);
   });
 
-  test('the palette colour fallback wraps with i % length', () => {
+  test('a v1 section without a colour gets the legacy palette colour, wrapping with i % length (06 T7, 4.3)', () => {
     const parsed = serializer.read({ sections: Array.from({ length: 10 }, () => ({})) });
-    assert.deepEqual(parsed.sections.map((s) => s.color), Array.from({ length: 10 }, (_, i) => Palette.sectionColors[i % 8]));
+    assert.deepEqual(parsed.sections.map((s) => s.color), Array.from({ length: 10 }, (_, i) => Palette.legacySectionColors[i % 8]));
+    assert.equal(parsed.sections[0].color, '#00f0ff', 'the Phase-1 first colour, as the file looked when authored');
+    const kept = serializer.read({ sections: [{ color: '#123456' }, { color: '#d9d9d6' }] });
+    assert.deepEqual(kept.sections.map((s) => s.color), ['#123456', '#d9d9d6'], 'colours in the file are kept verbatim');
+    const noLegacy = new ProjectSerializer({ palette: { sectionColors: Palette.sectionColors } });
+    assert.equal(noLegacy.read({ sections: [{}] }).sections[0].color, Palette.sectionColors[0], 'without a legacy list: sectionColors');
   });
 
   test('write: legacy key order; zip drops angle_offset_degrees and adds texture_file; numeric names throw in zip', () => {

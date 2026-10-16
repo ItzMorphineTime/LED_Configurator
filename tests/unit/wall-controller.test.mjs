@@ -652,8 +652,14 @@ const lines = (a, b) => LEGACY_LINES.slice(a - 1, b).join('\n');
  * became the classes of css/99-utilities.css, and the logo row's style.cssText became className = 'logo-row'.
  * 06 T4c (06 3.1, Q14): the British copy of the card (the shortened "Panel Angle (°)" label, "Panel Colour", the
  * "Custom colour" title) and of the logo row's position options ("Centre"); option values are unchanged.
+ * 06 T7 (06 3.9, 5.7): the card's swatches come from the palette (Palette.cardSwatches, one line each with the legacy
+ * indentation), so the six literal swatch lines of the legacy template become the palette's lines.
  */
+/** The legacy template's swatch line for colour `c` (index.html@cd3fd3f 3970-3975). */
+const swatchLine = (c) => `<div class="color-swatch-small \${section.color === '${c}' ? 'active' : ''}" data-color="${c}" style="background: ${c};"></div>`;
+const SWATCH_INDENT = '\n' + ' '.repeat(36);
 const TEMPLATE_EDITS = Object.freeze([
+  [['#00f0ff', '#ff00aa', '#00ff66', '#ff6b35', '#ffffff', '#ffdd00'].map(swatchLine).join(SWATCH_INDENT), Palette.cardSwatches.map(swatchLine).join(SWATCH_INDENT), 1],
   ["sectionDiv.style.cssText = 'margin-bottom: 12px; padding: 10px; background: var(--bg-tertiary); border-radius: 6px;';",
     "sectionDiv.className = 'logo-row';", 1],
   ['<div style="font-size: 11px; color: var(--text-primary); margin-bottom: 8px; font-weight: 500;">', '<div class="logo-row__title">', 1],
@@ -728,9 +734,10 @@ ${lines(4975, 5003)}
 /** The markup that holds every element the wall panels own (header stats .. logo container). */
 const panelMarkup = () => lines(880, 993);
 
-/** The new world on its own fake document, wired like App.start (section 7). */
+/** The new world on its own fake document, wired like App.start (section 7); its first section starts with the colour of
+ *  the legacy side's initial section (fields(), the legacy bootstrap colour), as App passes the palette default. */
 function buildModern(doc) {
-  const project = Project.createDefault();
+  const project = Project.createDefault({ defaultSectionColor: fields().color });
   const bus = new EventBus();
   const view = { rebuild: () => doc.call('createLEDWall') };
   const ledTiles = { clearCache: () => doc.call('clearCache') };
@@ -738,7 +745,7 @@ function buildModern(doc) {
   const hub = { refresh() { throw new Error('the hub must not run while the preview is off'); } };
   const headerStats = new HeaderStats({ doc, bus });
   const wallController = new WallController({ project, view, ledTiles, orbit, hub, bus, palette: Palette });
-  const sectionList = new SectionListPanel({ doc, project, wallController, bus });
+  const sectionList = new SectionListPanel({ doc, project, wallController, bus, palette: Palette });
   const displayPanel = new WallDisplayPanel({ doc, wallController, bus });
   const logosPanel = new SectionLogosPanel({ doc, project, wallController, bus });
   return { project, bus, wallController, headerStats, sectionList, displayPanel, logosPanel };

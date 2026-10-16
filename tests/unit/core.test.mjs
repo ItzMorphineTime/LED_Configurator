@@ -452,10 +452,12 @@ describe('Theme', () => {
 
   test('status colours, palette and brand strings', () => {
     assert.deepEqual(UiColors, { status: { within: '#3dd68c', offCenter: '#ff8640', exceeds: '#f2555a' } });
-    assert.deepEqual(Palette.sectionColors,
+    assert.deepEqual(Palette.sectionColors,   // 06 T7 (3.9)
+      ['#d9d9d6', '#c51622', '#58a6e8', '#e2803c', '#14a37f', '#e68ac0', '#7462d8', '#6c6c6c']);
+    assert.equal(Palette.cardSwatches, Palette.sectionColors, 'the same array');
+    assert.equal(Palette.defaultSectionColor, '#d9d9d6');
+    assert.deepEqual(Palette.legacySectionColors,   // 1379-1382: the v1 import fill
       ['#00f0ff', '#ff00aa', '#00ff66', '#ff6b35', '#ffdd00', '#aa66ff', '#66ffaa', '#ff6666']);
-    assert.deepEqual(Palette.cardSwatches, ['#00f0ff', '#ff00aa', '#00ff66', '#ff6b35', '#ffffff', '#ffdd00']);
-    assert.equal(Palette.defaultSectionColor, '#00f0ff');
     assert.deepEqual(Brand, {   // 06 T6a: the Morph strings; 06 T6b: the file names from filePrefix (06 5.4)
       productName: 'Morph LED Configurator',
       jsonGenerator: { name: 'Morph LED Configurator' },

@@ -1,21 +1,17 @@
 // U5 contrast (docs/improvements/06-morph-branding.md 3.12, 6.1 and 8.1): every pair of 3.12 at or above its threshold,
 // resolved from the parsed tokens of css/02-tokens.css, so a token edit that breaks contrast fails here. This is spec
-// 07's X2 file; 06 T4a creates it with the UI rows (X2 has not landed, so U5 satisfies it). The scene rows (adaptive
-// frames, camera body, two-tone overlays against the final palette) join in 06 T7, the sibling overlay rows with their
-// keys (06 5.12). The forbidden pairs are asserted below 3:1 as documentation of why the design avoids them.
+// 07's X2 file; 06 T4a creates it with the UI rows (X2 has not landed, so U5 satisfies it). 06 T7 adds the scene rows
+// (adaptive frames, the outlined camera body, the two-tone frustum against the background and every palette colour);
+// the sibling overlay rows (selection, pivot, UV wire, HDRI marker) join with their keys (06 5.12). The forbidden pairs
+// and the rejected designs are asserted below 3:1 as documentation of why the design avoids them.
 // Run: node --test tests/unit/contrast.test.mjs   (zero dependencies)
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { Palette } from '../../js/theme/Theme.js';
 import { readTokens } from './fixtures/css-tokens.mjs';
-import { contrast, composite, hexRgb } from './fixtures/colour-math.mjs';
+import { contrast, composite, hexRgb, luminance } from './fixtures/colour-math.mjs';
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const { token } = readTokens();
 /** The opaque colour of a token ([r, g, b]); a translucent token is composited over `over` first. */
 const rgb = (name, over = '#0A0A0A') => composite(token(name), over);
@@ -34,11 +30,6 @@ const SURFACES = ['--color-bg-app', '--color-surface-1', '--color-surface-2', '-
 /** What the translucent overlay chip sits on over the live scene: Morph Black, the default wall, white (06 3.4). */
 const SCENE_UNDERLAYS = ['#0A0A0A', '#D9D9D6', '#FFFFFF'];
 
-/** The card's swatch colours as rendered by the SectionListPanel template (literals until 06 T7 derives them from the palette). */
-function cardSwatches() {
-  const src = readFileSync(join(ROOT, 'js', 'ui', 'SectionListPanel.js'), 'utf8');
-  return [...new Set([...src.matchAll(/data-color="(#[0-9a-fA-F]{6})"/g)].map((m) => m[1].toLowerCase()))];
-}
 
 describe('U5 contrast: the WCAG formula (06 6.1)', () => {
   test('reproduces the brand file\'s verified ratios', () => {
@@ -143,11 +134,61 @@ describe('U5 contrast: UI rows of 06 3.12 (06 T4a)', () => {
     const light = rgb('--color-text-primary');
     const dark = rgb('--color-bg-app');
     atLeast(3, [['active swatch light border on --color-surface-2', light, rgb('--color-surface-2')]]);
-    const fills = [...new Set([...Palette.sectionColors.map((c) => c.toLowerCase()), ...cardSwatches()])];
-    assert.ok(fills.length >= 6, `only ${fills.length} swatch colours found`);
+    // Since 06 T7 the card renders its swatches from the palette (cardSwatches is sectionColors).
+    const fills = [...new Set([...Palette.sectionColors, ...Palette.cardSwatches].map((c) => c.toLowerCase()))];
+    assert.equal(fills.length, 8);
     for (const fill of fills) {
       const best = Math.max(ratio(light, fill), ratio(dark, fill));
       assert.ok(best >= 3, `active swatch ring on ${fill}: ${fmt(best)}:1 < 3:1`);
+    }
+  });
+});
+
+// ---- U5 scene rows (06 T7, 3.12, 6.6, 6.7): the overlays against the background and every palette colour ----------
+
+describe('U5 contrast: scene rows of 06 3.12 (06 T7, D15)', () => {
+  /** The opaque surfaces a scene overlay can lie on: the scene background and every section palette colour. */
+  const surfaces = () => [['--scene-background', rgb('--scene-background')], ...Palette.sectionColors.map((c) => [c, hexRgb(c)])];
+  /** Asserts that the better of two colours reaches `min` on every surface; returns the worst ratio. */
+  const betterOfTwo = (label, a, b, min = 3) => {
+    let worst = Infinity;
+    for (const [name, x] of surfaces()) {
+      const best = Math.max(ratio(a, x), ratio(b, x));
+      worst = Math.min(worst, best);
+      assert.ok(best >= min, `${label} on ${name}: ${fmt(best)}:1 < ${min}:1`);
+    }
+    return worst;
+  };
+
+  test('adaptive panel frames: the better of the light and the dark frame >= 3 on the background and each palette colour; >= 3.65 for any colour (6.7)', () => {
+    const light = rgb('--scene-frame');
+    const dark = rgb('--scene-frame-on-light');
+    const worst = betterOfTwo('adaptive frame', light, dark);
+    assert.ok(Math.abs(worst - 3.77) < 0.01, `palette minimum ${fmt(worst)} (Steel)`);
+    const analytic = Math.sqrt((luminance(light) + 0.05) / (luminance(dark) + 0.05));
+    assert.ok(analytic >= 3.65, `the minimum over every colour, where both ratios are equal: ${fmt(analytic)}`);
+    assert.ok(ratio(light, rgb('--canvas-background')) >= 13.36 - 0.005, 'the light frame on the near-black textures');
+  });
+
+  test('the camera body: the better of the Signal Red fill and its Morph Black edge outline >= 3 everywhere; the fill alone on the background and the default wall', () => {
+    const fill = rgb('--scene-camera-body');
+    const outline = rgb('--scene-overlay-halo');
+    const worst = betterOfTwo('camera body (fill, outline)', fill, outline);
+    assert.ok(Math.abs(worst - 3.31) < 0.01, `worst ${fmt(worst)} (Signal Red, via the outline)`);
+    atLeast(3, [['camera body on --scene-background', fill, rgb('--scene-background')],
+      ['camera body on the default wall', fill, hexRgb(Palette.defaultSectionColor)]]);
+  });
+
+  test('the two-tone frustum: the better of the light core and the Morph Black halo >= 3 everywhere (worst 4.37, Iris)', () => {
+    const worst = betterOfTwo('frustum (core, halo)', rgb('--scene-frustum'), rgb('--scene-overlay-halo'));
+    assert.ok(Math.abs(worst - 4.37) < 0.01, `worst ${fmt(worst)}`);
+  });
+
+  test('rejected designs (documentation): a single #F7F7F5 line at 0.6 over the default wall, a single #616161 frame on Signal Red, Steel and Iris', () => {
+    const wall = hexRgb(Palette.defaultSectionColor);
+    assert.ok(ratio(composite('rgba(247, 247, 245, 0.6)', wall), wall) < 3, 'the prototype frustum vanishes on the default wall (1.18:1)');
+    for (const c of ['#c51622', '#6c6c6c', '#7462d8']) {
+      assert.ok(ratio('#616161', c) < 3, `#616161 on ${c}: ${fmt(ratio('#616161', c))}`);
     }
   });
 });

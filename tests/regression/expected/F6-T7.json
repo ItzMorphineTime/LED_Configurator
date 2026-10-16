@@ -1,0 +1,91 @@
+{
+  "commit": "F6-T7",
+  "bugs": [],
+  "expect": [
+    {
+      "output": "{box_corner/sections_initial,concave_offsets/sections_initial,convex/sections_initial,default/sections_initial,flat3/sections_initial,import_edge/ii_strings_state,import_edge/iv_after_delete,import_edge/iv_after_import,import_edge/viii_after,import_edge/vii_after,import_edge/vi_after,import_edge/vi_before,import_edge/v_after_add,import_edge/v_after_import,large_wall/sections_initial,mixed/sections_initial,p2_xss_names/sections_initial,p2_xss_names/sections_renamed,p2_zero_inputs/sections_zero,p2_zip_section_mode/sections_renamed,ui_sections/ui_*}.json",
+      "change": "modified",
+      "each": true,
+      "reason": "06 8.4 T7: every section-state snapshot with an active swatch: the cards render the 8 palette swatches, none of the legacy swatch colours is in the new palette, so activeSwatches change (the 6 imported configs: activeSwatches only, their colours are imported verbatim); the default and added sections carry the new colours (#d9d9d6, palette[n % 8])"
+    },
+    {
+      "output": "default/*__export-{json,gltf,zip}__*",
+      "change": "modified",
+      "each": true,
+      "reason": "06 7 / 8.4 T7: the default wall #d9d9d6: JSON color, glTF baseColorFactor, the ZIP json/mtl/gltf entries"
+    },
+    {
+      "output": "default/*__export-obj__*.mtl",
+      "change": "modified",
+      "each": true,
+      "reason": "06 7: MTL Kd of the default wall 0.8510 0.8510 0.8392 (was 0.0000 0.9412 1.0000)"
+    },
+    {
+      "output": "{default,toggles,keyboard,gizmo_drag,pilot_look,preview_off_in_pilot,preview_resize,p2_shortcut_filters}/*.screenshot.png",
+      "change": "modified",
+      "reason": "06 8.4 T7: the canvas captures of the scenarios that start from the default wall show it in Studio Grey; not each: as built 32 of the 43 change, and the 11 that do not show no section colour (default and toggles 07-09 panel IDs, toggles 03 and 04 the LED-sim tiles, toggles/17_view_side the wall edge-on)"
+    },
+    {
+      "output": "logos/*__export-zip__*.zip",
+      "change": "modified",
+      "each": true,
+      "reason": "06 8.4 T7: the ZIP json and mtl entries carry the default wall colour"
+    },
+    {
+      "output": "name_with_panel_ids/*__export-json__*.json",
+      "change": "modified",
+      "each": true,
+      "reason": "06 8.4 T7: the JSON exports carry the default wall colour"
+    },
+    {
+      "output": "ui_sections/*__export-*",
+      "change": "modified",
+      "each": true,
+      "reason": "06 8.4 T7: the JSON and MTL exports of the default and added sections (palette colours; the 4th swatch is Ember); the OBJ carries no colour (excluded; the first gate run found it identical)",
+      "exclude": "ui_sections/*.obj"
+    },
+    {
+      "output": "p2_zero_inputs/*__export-obj__*.mtl",
+      "change": "modified",
+      "each": true,
+      "reason": "the default wall MTL Kd (08 P2-0 scenario starting from the default wall)"
+    },
+    {
+      "output": "import_edge/v__export-json__*.json",
+      "change": "modified",
+      "reason": "06 8.4 T7: the one import_edge export with an added section (step v adds palette[1], Signal Red); the other import_edge exports are of imported or empty walls (the first gate run found them identical)",
+      "each": true
+    },
+    {
+      "output": "ui_visual/{00_initial,04_options_ledsim_camera_props,06_options_panelids_logo,07_two_sections,08_collapsed_and_4k_warning}.styles.json",
+      "change": "modified",
+      "each": true,
+      "reason": "06 8.4 T7: the card swatch entries (matches 6 -> 8, the custom input rect), the .section-color background"
+    },
+    {
+      "output": "ui_visual/*.screenshot.png",
+      "change": "modified",
+      "reason": "06 8.4 T7: the sidebar swatches and colour dots, and the default wall"
+    },
+    {
+      "output": "normals_debug/{a1_front,a2_behind,b1_vertex_normals,b2_vertex_face,b3_scale2,b10_preview_lines_on,b11_content}.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the normals_debug captures of the default wall with content shading (A1, A2, B11; B1-B3 under the normal lines; B10 the preview); the box captures import their colours and the debug-shading captures show no section colour (unchanged); its content probes read the wall colour from the palette hook and stay identical (07 C53). Not in 06 8.4 list: found by the first gate run"
+    },
+    {
+      "output": "p2_project_v2/{v2_first__export-json__*.json,v2_second__export-json__*.json,v2_off__export-json__*.json,06_restored.screenshot.png}",
+      "change": "modified",
+      "each": true,
+      "reason": "the 08 P2-0 scenario starts from the default wall and adds a section: its three JSON exports carry #d9d9d6 and palette[1], and the restored capture shows them; its hostile-import ZIP is identical. Not in 06 8.4 list: found by the first gate run"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "p2_curved_safe_distance/box_corner.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas on the preview footer label row (1 level, 1 px at (920, 912), as in the 06 T6a and T6b runs); this scenario imports its walls, so T7 changes no pixel"
+    }
+  ],
+  "notes": "06 T7 (8.4): the 8-colour palette with Studio Grey #d9d9d6 as the default; card swatches from the palette; the v1 colour fill from the legacy palette. Unchanged: every export and screenshot of the 6 imported configs and of camera (colours imported verbatim; the colour-less v1 section of concave_offsets keeps the legacy fill). Pick JSONs (keyboard and gizmo_drag person_pick, ui_visual selection_pick, camera_pick, the handles) must stay IDENTICAL under the re-derived person predicate."
+}

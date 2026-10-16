@@ -10,6 +10,7 @@
 
 import { orDefault } from '../legacy/LegacyCompat.js';
 import { Wall } from './Wall.js';
+import { WallSection } from './WallSection.js';
 import { LogoLibrary } from './LogoLibrary.js';
 import { CineCamera } from './CineCamera.js';
 import { PersonProp, CarProp } from './Prop.js';
@@ -160,14 +161,16 @@ export class Project {
   }
 
   /**
-   * The legacy start-up state.
+   * The legacy start-up state; the first section's colour is injected (06 T7, 4.1).
    * Ports: index.html@cd3fd3f lines 1279-1409.
    * Side effects: none.
+   * @param {{defaultSectionColor?: string}} [options]  the first section's colour (Theme.palette.defaultSectionColor);
+   *   undefined: WallSection.createDefault's default
    * @returns {Project}
    */
-  static createDefault() {
+  static createDefault({ defaultSectionColor } = {}) {
     return new Project({
-      wall: new Wall(),
+      wall: new Wall({ sections: [WallSection.createDefault({ color: defaultSectionColor })] }),
       display: new DisplaySettings(),
       panelIdStyle: new PanelIdStyle(),
       logos: new LogoLibrary(),

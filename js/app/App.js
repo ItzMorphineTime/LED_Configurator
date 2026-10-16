@@ -104,7 +104,7 @@ export class App {
     const brand = theme.brand;
     const bus = new EventBus();
     const dialogs = createDialogs(win);
-    const project = Project.createDefault();
+    const project = Project.createDefault({ defaultSectionColor: theme.palette.defaultSectionColor });   // 06 T7
     const display = project.display;
     const style = project.panelIdStyle;
     const logos = project.logos;
@@ -190,7 +190,7 @@ export class App {
     });
     // Panels: WALL_SECTIONS_CHANGED runs SectionListPanel then SectionLogosPanel, and DISPLAY_CONTENT_CHANGED runs
     // WallDisplayPanel then SectionLogosPanel (construction order = subscription order, ARCHITECTURE.md 5.2).
-    const sectionList = new SectionListPanel({ doc, project, wallController, bus });
+    const sectionList = new SectionListPanel({ doc, project, wallController, bus, palette: theme.palette });
     const displayPanel = new WallDisplayPanel({ doc, wallController, bus });
     const logosPanel = new SectionLogosPanel({ doc, project, wallController, bus });
     const cameraPanel = new CameraPanel({ doc, project, cameraController, projectIO, bus, theme });

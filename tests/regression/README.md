@@ -747,7 +747,8 @@ The harness depends on this markup:
   harness clicks the enclosing `<label>` and records `.active` on that label.
 - **Section cards:** the direct children of `#wall-sections`. Inside a card it uses
   `input[data-field=panelCols|panelRows|panelWidth|panelHeight|ledX|ledY|curveIntensity|angleOffset]`,
-  `.section-name-input`, `input[type=color]`, `[data-color]` swatches (with `.active`),
+  `.section-name-input`, `input[type=color]`, `[data-color]` swatches (with `.active`; since 06 T7 the swatch click of
+  `ui_sections` is by index, `.color-swatch-small:nth-child(4)`, so it does not depend on the palette),
   `.section-header`, `.section-delete[data-id]` and the `.collapsed` class.
 - **State classes:** `.active` on toggles and gizmo buttons, `.visible` on
   `#selection-indicator` and `#pilot-info`, `.world` and `.local` on `#gizmo-space`, and
@@ -791,7 +792,10 @@ The harness depends on this markup:
     (0xc51622, opaque, with a 0x0a0a0a edge outline since 06 T5; 0xff6600 @ 0.8 before) and the gizmo's red
     and green handles (0xff4444 / 0x44ff44 @ 0.35). The matchers of `scenarios-extra.mjs` are derived from
     those blends over the 0x0a0a0a background (06 8.3): isGizmoRed asks g >= 24, so the anti-aliased edges of
-    the red body (g <= 22) never pass for a gizmo handle.
+    the red body (g <= 22) never pass for a gizmo handle. Since 06 T7 the person predicate (`isPersonPixel` of
+    `scenarios.mjs`, one copy for every person pick) also accepts the person over the Studio Grey default wall
+    ((90, 148, 249), its second branch); with `REGRESSION_DEBUG_DIR` set, every person pick and every `locate` keeps its
+    screenshot and hit there (`debugDump`), so a pick can be checked to lie on the body.
 
 ## Baseline facts worth knowing
 

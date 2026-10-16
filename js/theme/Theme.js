@@ -12,7 +12,8 @@
  * canvas fonts are JetBrains Mono and Montserrat, and CanvasTheme.preloadFonts feeds the font gate (app/fontGate.js).
  * 06 T6a (5.4, 7): the brand strings name "Morph LED Configurator" (ASCII only: several OBJ importers read Latin-1),
  * with Brand.jsonGenerator for spec 07's JSON generator record. 06 T6b: every download file name derives from
- * Brand.filePrefix = 'morph-led-wall' (06 D9, Q11). The palette keeps its Phase-1 values until 06 T7.
+ * Brand.filePrefix = 'morph-led-wall' (06 D9, Q11). 06 T7 (3.9, D8): the 8-colour Morph section palette with Studio
+ * Grey #d9d9d6 as the default first section; the legacy palette stays only to fill colour-less sections of v1 files.
  * Legacy source: index.html@cd3fd3f 1379-1384, 1406, 1431, 1440-1449, 1563, 1693, 1821, 2009, 2034, 2042, 2064,
  * 2092, 2107, 2110, 2181, 2334, 2407, 2425-2426, 2518-2524, 2698-2751, 2792, 2826, 2840-2841, 2915-2917, 2960,
  * 3010, 3029-3089, 3225, 3264, 3970-3975, 4520-4549, 4557-4561, 4721, 4915-4916, 4923, 4934, 4964 (where each value
@@ -91,12 +92,24 @@ export const UiColors = deepFreeze({
   status: { within: '#3dd68c', offCenter: '#ff8640', exceeds: '#f2555a' },  // 2518-2524
 });
 
-/** Section colour palette (new sections and import fallback) and the card swatch colours. */
+/**
+ * The section palette (06 T7, 3.9): Studio Grey, Signal Red, Sky, Ember, Jade, Rose, Iris, Steel. Lowercase, so it
+ * equals what <input type="color"> produces and the swatch .active match stays exact. No gold (>= 20 CIEDE2000 from
+ * Pivot Gold, U6); distinct in every vision mode (U7).
+ */
+const SECTION_COLORS = deepFreeze(['#d9d9d6', '#c51622', '#58a6e8', '#e2803c', '#14a37f', '#e68ac0', '#7462d8', '#6c6c6c']);
+
+/**
+ * Section colour palette: sectionColors for added sections (index = sections.length % 8, 1379-1382) and v2 imports
+ * without a colour; cardSwatches, the card's swatches (the same array, 3970-3975); defaultSectionColor, the first
+ * section of a new project (1406); legacySectionColors, the Phase-1 palette, only to fill the missing colours of a v1
+ * file (06 4.3, Q20; spec 07 C11), so an old file looks as it did when it was authored.
+ */
 export const Palette = deepFreeze({
-  sectionColors: ['#00f0ff', '#ff00aa', '#00ff66', '#ff6b35', '#ffdd00', '#aa66ff', '#66ffaa', '#ff6666'],   // 1379-1382
-  cardSwatches: ['#00f0ff', '#ff00aa', '#00ff66', '#ff6b35', '#ffffff', '#ffdd00'],   // 3970-3975 (documentation:
-                                                                                     // the card template keeps them literal in Phase 1)
-  defaultSectionColor: '#00f0ff',                                           // 1406
+  sectionColors: SECTION_COLORS,
+  cardSwatches: SECTION_COLORS,
+  defaultSectionColor: '#d9d9d6',
+  legacySectionColors: ['#00f0ff', '#ff00aa', '#00ff66', '#ff6b35', '#ffdd00', '#aa66ff', '#66ffaa', '#ff6666'],
 });
 
 /** The product name (06 D1, Q1). */

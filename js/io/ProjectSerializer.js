@@ -32,13 +32,14 @@ function unlessSkipped(path, skipped, i) {
 
 /** Writes and reads the project JSON (schema v1). */
 export class ProjectSerializer {
-  /** @type {{sectionColors: string[]}} */
+  /** @type {{sectionColors: string[], legacySectionColors?: string[]}} */
   #palette;
 
   /**
    * Side effects: none.
-   * @param {{palette: {sectionColors: string[]}}} deps  the theme palette (Theme.Palette); its sectionColors
-   *   are the import colour fallback (legacy global `sectionColors`, 1379-1382)
+   * @param {{palette: {sectionColors: string[], legacySectionColors?: string[]}}} deps  the theme palette
+   *   (Theme.Palette); a v1 section without a colour gets legacySectionColors[i % 8] (06 T7, 4.3: the legacy global
+   *   `sectionColors` of 1379-1382, so an old file looks as authored), or sectionColors without a legacy list
    */
   constructor({ palette }) {
     this.#palette = palette;
@@ -176,7 +177,8 @@ export class ProjectSerializer {
         default:
           throw unsupportedStrategy('importValidation', Strategies.importValidation);
       }
-      const sectionColors = this.#palette.sectionColors;
+      // 06 T7 (4.3, Q20; spec 07 C11 carries the rule into migrateV1toV2): the Phase-1 palette fills missing colours.
+      const sectionColors = this.#palette.legacySectionColors ?? this.#palette.sectionColors;
       // LEGACY(B-L8, B-M4): no validation, no coercion and no escaping: imported strings, NaN or duplicate ids,
       // empty walls and unknown mesh modes are accepted; `|| default` turns 0 and '' into the default.
       const sections = data.sections.map((s, i) => new WallSection({

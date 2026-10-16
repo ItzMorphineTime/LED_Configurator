@@ -1,5 +1,6 @@
 // Colour math for the token tests (docs/improvements/06-morph-branding.md 6.1 and 6.3): parsing of the token values,
-// alpha compositing, WCAG 2.2 relative luminance and contrast, CIELAB (D65) and CIEDE2000 (kL = kC = kH = 1).
+// alpha compositing, WCAG 2.2 relative luminance and contrast, CIELAB (D65), CIEDE2000 (kL = kC = kH = 1) and the
+// Machado dichromacy simulation of 6.3 (U7).
 // Zero dependencies.
 
 /**
@@ -102,4 +103,35 @@ export function deltaE00Lab([L1, a1, b1], [L2, a2, b2]) {
 /** CIEDE2000 of two 8-bit sRGB colours ([r, g, b] or '#rrggbb'). */
 export function deltaE00(a, b) {
   return deltaE00Lab(lab(typeof a === 'string' ? hexRgb(a) : a), lab(typeof b === 'string' ? hexRgb(b) : b));
+}
+
+// ---- dichromacy simulation (06 6.3, U7) ------------------------------------------------------------
+
+/** Machado, Oliveira and Fernandes (2009), severity 1.0, applied to linear RGB (06 6.3). */
+export const MACHADO = Object.freeze({
+  protan: [[0.152286, 1.052583, -0.204868], [0.114503, 0.786281, 0.099216], [-0.003882, -0.048116, 1.051998]],
+  deutan: [[0.367322, 0.860646, -0.227968], [0.280085, 0.672501, 0.047413], [-0.011820, 0.042940, 0.968881]],
+  tritan: [[1.255528, -0.076749, -0.178779], [-0.078411, 0.930809, 0.147602], [0.004733, 0.691367, 0.303900]],
+});
+
+/** CIELAB (D65) of a linear RGB triple in [0, 1] (no 8-bit rounding). */
+export function labFromLinear([R, G, B]) {
+  const X = (0.4124564 * R + 0.3575761 * G + 0.1804375 * B) / 0.95047;
+  const Y = 0.2126729 * R + 0.7151522 * G + 0.0721750 * B;
+  const Z = (0.0193339 * R + 0.1191920 * G + 0.9503041 * B) / 1.08883;
+  const f = (t) => (t > 216 / 24389 ? Math.cbrt(t) : (24389 / 27 * t + 16) / 116);
+  return [116 * f(Y) - 16, 500 * (f(X) - f(Y)), 200 * (f(Y) - f(Z))];
+}
+
+/**
+ * The CIELAB of an sRGB colour as seen in a vision mode: 'normal', or a dichromacy simulated with the MACHADO matrix
+ * in linear RGB, clamped to [0, 1] and kept unrounded (06 6.3).
+ * @param {string|number[]} colour '#rrggbb' or [r, g, b]
+ * @param {'normal'|'protan'|'deutan'|'tritan'} mode
+ */
+export function labInMode(colour, mode) {
+  const l = (typeof colour === 'string' ? hexRgb(colour) : colour).map(lin);
+  const m = MACHADO[mode];
+  if (!m) return labFromLinear(l);
+  return labFromLinear(m.map((row) => Math.min(1, Math.max(0, row[0] * l[0] + row[1] * l[1] + row[2] * l[2]))));
 }

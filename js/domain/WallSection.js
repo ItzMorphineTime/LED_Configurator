@@ -36,13 +36,16 @@ export class WallSection {
   }
 
   /**
-   * The bootstrap section.
+   * The bootstrap section. Its colour is injected (06 T7, 4.1): App passes Theme.palette.defaultSectionColor through
+   * Project.createDefault; the literal default only lets `new Wall()` work in Node tests, and the U8 test keeps it equal
+   * to the palette's.
    * Ports: index.html@cd3fd3f lines 1395-1407.
    * Side effects: none.
+   * @param {{color?: string}} [options]  color: the section colour (default '#d9d9d6', Studio Grey)
    * @returns {WallSection} {id: 0, name: 'Wall 1', panelCols: 5, panelRows: 3, panelWidth: 500, panelHeight: 500,
-   *   ledX: 32, ledY: 32, curveIntensity: 0, angleOffset: 0, color: '#00f0ff'}
+   *   ledX: 32, ledY: 32, curveIntensity: 0, angleOffset: 0, color}
    */
-  static createDefault() {
+  static createDefault({ color = '#d9d9d6' } = {}) {
     return new WallSection({
       id: 0,
       name: 'Wall 1',
@@ -54,7 +57,7 @@ export class WallSection {
       ledY: 32,
       curveIntensity: 0,
       angleOffset: 0, // degrees - rotation offset before this section
-      color: '#00f0ff',
+      color,
     });
   }
 

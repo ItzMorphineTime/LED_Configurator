@@ -4,7 +4,8 @@
 // function or non-colour), U11 the UNBRANDED conventions against tests/unit/fixtures/legacy-theme.mjs (06 T3); U6 gold
 // exclusivity and legacy identity of the :root tokens, layers 1-3 (06 T4a), layer 4 and the Theme colour leaves (06 T5;
 // the palette joins in 06 T7). Since 06 T5 BIND_FONTS_DEFAULT is true, so U4 also compares the font leaves. U9 the
-// brand strings (06 T6a) and the file names derived from Brand.filePrefix (06 T6b).
+// brand strings (06 T6a) and the file names derived from Brand.filePrefix (06 T6b); U6 for the palette, U7 palette
+// distinctness and U8 the injected default colour (06 T7).
 // Run: node --test tests/unit/theme.test.mjs   (zero dependencies)
 
 import { test, describe } from 'node:test';
@@ -13,7 +14,8 @@ import assert from 'node:assert/strict';
 import { Theme } from '../../js/theme/Theme.js';
 import { LEGACY_UNBRANDED, FACE_ORIENTATION } from './fixtures/legacy-theme.mjs';
 import { rootDeclarations, resolveVar, readTokens } from './fixtures/css-tokens.mjs';
-import { parseColour, composite, deltaE00 } from './fixtures/colour-math.mjs';
+import { parseColour, composite, deltaE00, deltaE00Lab, contrast, labInMode } from './fixtures/colour-math.mjs';
+import { WallSection } from '../../js/domain/WallSection.js';
 import { Project } from '../../js/domain/Project.js';
 import { Strategies } from '../../js/legacy/LegacyCompat.js';
 import { layoutProject } from '../../js/geometry/WallLayout.js';
@@ -596,5 +598,94 @@ describe('U9 Brand file names (06 T6b): every download name derives from Brand.f
       const { objContent } = obj.write({ sections: project.wall.sections, meshMode, layout: layoutProject(project) });
       assert.ok(objContent.includes(`\nmtllib ${Theme.brand.files.mtl}\n`), meshMode);
     }
+  });
+});
+
+// ---- U6 palette, U7 and U8 (06 T7): the section palette -------------------------------------------------
+
+const MODES = ['normal', 'protan', 'deutan', 'tritan'];
+/** The 6.3 metrics of a palette in one vision mode: min pairwise, min cyclic-adjacent and min vs #0a0a0a ΔE00. */
+function paletteMetrics(colours, mode) {
+  const lab = colours.map((c) => labInMode(c, mode));
+  const bg = labInMode('#0a0a0a', mode);
+  let pairwise = Infinity, adjacent = Infinity, background = Infinity;
+  lab.forEach((a, i) => {
+    for (let j = i + 1; j < lab.length; j++) pairwise = Math.min(pairwise, deltaE00Lab(a, lab[j]));
+    adjacent = Math.min(adjacent, deltaE00Lab(a, lab[(i + 1) % lab.length]));
+    background = Math.min(background, deltaE00Lab(a, bg));
+  });
+  return { pairwise, adjacent, background };
+}
+
+describe('U6 gold exclusivity and legacy identity: the section palette (06 T7)', () => {
+  test('every Palette.sectionColors entry is >= 20 from Pivot Gold and >= 15 from the legacy cyan and magenta', () => {
+    for (const c of Theme.palette.sectionColors) assertOffBrandColours(`Palette.sectionColors ${c}`, c);
+  });
+
+  test('the legacy palette is exempt (v1 import data, not a default) and would fail: #ffdd00 is gold-like, #00f0ff the cyan', () => {
+    assert.throws(() => assertOffBrandColours('#ffdd00', '#ffdd00'), /Pivot Gold/);
+    assert.throws(() => assertOffBrandColours('#00f0ff', '#00f0ff'), /legacy #00F0FF/);
+    assert.ok(Theme.palette.legacySectionColors.includes('#ffdd00'));
+  });
+});
+
+describe('U7 palette distinctness (06 3.9, 6.3)', () => {
+  const P = Theme.palette;
+
+  test('8 lowercase #rrggbb colours; cardSwatches is sectionColors itself; the default is Studio Grey, its first colour', () => {
+    assert.equal(P.sectionColors.length, 8);
+    for (const c of P.sectionColors) assert.match(c, /^#[0-9a-f]{6}$/);
+    assert.equal(P.cardSwatches, P.sectionColors);
+    assert.equal(new Set(P.sectionColors).size, 8);
+    assert.equal(P.defaultSectionColor, '#d9d9d6');
+    assert.equal(P.sectionColors[0], P.defaultSectionColor);
+    assert.ok(Object.isFrozen(P.sectionColors) && Object.isFrozen(P.legacySectionColors));
+    assert.equal(P.legacySectionColors.length, 8);
+  });
+
+  test('the dichromacy simulation reproduces 06 3.9\'s table for both palettes (min pairwise, cyclic adjacent, vs background)', () => {
+    const table = {
+      new: { normal: [25.3, 27.3, 31.0], protan: [7.8, 14.3, 26.1], deutan: [13.1, 17.0, 31.0], tritan: [8.8, 14.7, 31.0] },
+      legacy: { normal: [8.8, 42.2, 50.8], protan: [4.9, 25.5, 37.9], deutan: [7.5, 13.1, 47.4], tritan: [1.9, 27.7, 46.6] },
+    };
+    for (const [name, colours] of [['new', P.sectionColors], ['legacy', P.legacySectionColors]]) {
+      for (const mode of MODES) {
+        const m = paletteMetrics(colours, mode);
+        const got = [m.pairwise, m.adjacent, m.background].map((v) => Number(v.toFixed(1)));
+        assert.deepEqual(got, table[name][mode], `${name} ${mode}`);
+      }
+    }
+  });
+
+  test('the thresholds of 6.3 hold for the palette', () => {
+    const normal = paletteMetrics(P.sectionColors, 'normal');
+    assert.ok(normal.pairwise >= 20, `normal pairwise ${normal.pairwise}`);
+    assert.ok(paletteMetrics(P.sectionColors, 'deutan').pairwise >= 10, 'deuteranopia pairwise');
+    for (const mode of MODES) {
+      const m = paletteMetrics(P.sectionColors, mode);
+      assert.ok(m.pairwise >= 7.5, `${mode} pairwise ${m.pairwise}`);
+      assert.ok(m.adjacent >= 14, `${mode} cyclic adjacent ${m.adjacent}`);
+      assert.ok(m.background >= 25, `${mode} vs background ${m.background}`);
+    }
+    for (const c of P.sectionColors) {
+      assert.ok(contrast(c, '#0a0a0a') >= 3, `${c} on #0a0a0a: ${contrast(c, '#0a0a0a')}`);
+      assert.ok(deltaE00(c, PIVOT_GOLD) >= 20, `${c} vs gold`);
+      for (const id of LEGACY_IDENTITY) assert.ok(deltaE00(c, id) >= 15, `${c} vs ${id}`);
+    }
+  });
+
+  test('the legacy palette fails the pairwise thresholds (why it was replaced), and the prototype Steel #7f7f7f fails deuteranopia', () => {
+    assert.ok(paletteMetrics(P.legacySectionColors, 'normal').pairwise < 20);
+    assert.ok(MODES.some((mode) => paletteMetrics(P.legacySectionColors, mode).pairwise < 7.5));
+    const prototype = [...P.sectionColors.slice(0, 7), '#7f7f7f'];
+    assert.ok(paletteMetrics(prototype, 'deutan').pairwise < 10, 'Q22: #7f7f7f sat 6.6 from Jade under deuteranopia');
+  });
+});
+
+describe('U8 the default section colour comes from the palette (06 T7, 4.1)', () => {
+  test('WallSection.createDefault() is Theme.palette.defaultSectionColor; Project.createDefault injects its argument', () => {
+    assert.equal(WallSection.createDefault().color, Theme.palette.defaultSectionColor);
+    assert.equal(Project.createDefault({ defaultSectionColor: '#123456' }).wall.sections[0].color, '#123456');
+    assert.equal(Project.createDefault({ defaultSectionColor: Theme.palette.defaultSectionColor }).wall.sections[0].color, '#d9d9d6');
   });
 });

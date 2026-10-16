@@ -38,7 +38,9 @@ export function capWallProject() {
       ledY: CAP_WALL.ledY,
       curveIntensity: 0,
       angleOffset: 0,
-      color: Palette.sectionColors[i % Palette.sectionColors.length],
+      // The Phase-1 palette (06 T7: Palette.legacySectionColors), so the committed v1 fixture stays byte-identical
+      // when the default palette changes.
+      color: Palette.legacySectionColors[i % Palette.legacySectionColors.length],
     }));
   }
   const project = Project.createDefault();

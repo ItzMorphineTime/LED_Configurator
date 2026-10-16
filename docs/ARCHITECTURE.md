@@ -274,8 +274,9 @@ js/
     dom.js                                 WP3   byId, flipToggle, setDisplay, createDialogs
     HeaderStats.js                         WP9   #total-pixels / #total-panels / #total-sections / #total-arc
     SectionListPanel.js                    WP9   #wall-sections cards (verbatim templates; 06 T1: the offset hint's class;
-                                                 06 T4c: "Panel Angle (°)", "Panel Colour", title "Custom colour"),
-                                                 card handlers, collapse snapshot/restore, #add-section-btn
+                                                 06 T4c: "Panel Angle (°)", "Panel Colour", title "Custom colour"; 06 T7:
+                                                 the swatches from the injected palette's cardSwatches), card handlers,
+                                                 collapse snapshot/restore, #add-section-btn
     SectionLogosPanel.js                   WP9   #section-logos-container rows (verbatim template; 06 T1: logo-row classes instead
                                                  of the inline styles; 06 T4c: the "Centre" position labels) +
                                                  upload/clear/position/scale
@@ -296,7 +297,10 @@ During integration only, `js/legacy/monolith.js` (WP10) temporarily holds the ve
 ```
 tests/
   regression/                              existing golden-master harness (run.mjs, compare.mjs, lib/...)
-    scenarios.mjs                          WP1 (edit: registers the extra scenarios); 08 P2-0 (registers the Phase 2 scenarios)
+    scenarios.mjs                          WP1 (edit: registers the extra scenarios); 08 P2-0 (registers the Phase 2 scenarios);
+                                                 06 T7: the ui_sections swatch click by index (the 4th swatch), the one
+                                                 person predicate isPersonPixel for the Studio Grey wall (also gizmo_drag's
+                                                 isPerson), debugDump (REGRESSION_DEBUG_DIR) for every person pick
     compare.mjs                            WP1; 08 P2-0: `--expect` expected-change manifests and the `JITTER` status from
                                                  expected/_nondeterminism.json (08 8.2; the Phase-1 WARN_ONLY list is gone);
                                                  01 T2: `exclude`, the rect allowances `rects` + `size` (per-pixel rule,
@@ -419,12 +423,17 @@ tests/
                                                  every token layer and the Theme colour leaves (spec 01's debug colours
                                                  exempt from the identity check only; the palette in 06 T7), and
                                                  BIND_FONTS_DEFAULT true, so U4 compares the font leaves too; 06 T6a:
-                                                 U9 the brand strings (ASCII, jsonGenerator = { name: productName })
+                                                 U9 the brand strings (ASCII, jsonGenerator = { name: productName });
+                                                 06 T6b: U9 the file names; 06 T7: U6 for the palette, U7 palette
+                                                 distinctness (06 3.9's table in every vision mode, the 6.3 thresholds),
+                                                 U8 the injected default colour
     contrast.test.mjs                      06 T4a  U5 contrast (spec 07's X2 file): every UI pair of 06 3.12 from the parsed
                                                  tokens (text, red text and icons, status, on-colour, Signal Red graphics on
                                                  opaque surfaces, the focus ring, the red indicators' Morph Black neighbours,
                                                  chip text over any scene, the active swatch rings) and the forbidden pairs
-                                                 below 3:1 as documentation; the scene rows join in 06 T7
+                                                 below 3:1 as documentation; 06 T7: the scene rows (adaptive frames >= 3.65,
+                                                 the outlined camera body, the two-tone frustum, each against the background
+                                                 and every palette colour; the rejected designs below 3:1)
     scene-overlays.test.mjs                06 T5  U13 frameColor.js (the palette's frame choices, textures and wireframe,
                                                  free strings, a 4,096-colour sweep >= 3.65:1) and LEDWallView's per-section
                                                  frame colours; U12 the two-tone frustum of CameraRigView (LineSegments
@@ -442,7 +451,8 @@ tests/
                                                  colours (U11)
     fixtures/css-tokens.mjs                06 T4a  the :root declarations of css/02-tokens.css with var() resolution (U4,
                                                  U5, U6)
-    fixtures/colour-math.mjs               06 T4a  token colour parsing, compositing, WCAG contrast, CIELAB and CIEDE2000
+    fixtures/colour-math.mjs               06 T4a  token colour parsing, compositing, WCAG contrast, CIELAB and CIEDE2000;
+                                                 06 T7: the Machado dichromacy simulation of 06 6.3 (U7)
   fixtures/
     normals-max-wall.json                  01 T1  the largest importable wall (200 sections of 50 x 20, v1, combined) for the
                                                  manual normals cap timing (01 8.3); written by tools/make-cap-wall.mjs
@@ -673,11 +683,13 @@ export const CanvasTheme = Object.freeze({
 export const UiColors = Object.freeze({
   status: { within: '#3dd68c', offCenter: '#ff8640', exceeds: '#f2555a' },  // 2518-2524
 });
+const SECTION_COLORS = Object.freeze(['#d9d9d6', '#c51622', '#58a6e8', '#e2803c', '#14a37f', '#e68ac0', '#7462d8', '#6c6c6c']);   // 06 T7
 export const Palette = Object.freeze({
-  sectionColors: ['#00f0ff', '#ff00aa', '#00ff66', '#ff6b35', '#ffdd00', '#aa66ff', '#66ffaa', '#ff6666'],   // 1379-1382
-  cardSwatches: ['#00f0ff', '#ff00aa', '#00ff66', '#ff6b35', '#ffffff', '#ffdd00'],   // 3970-3975 (documentation:
-                                                                                     // the card template keeps them literal in Phase 1)
-  defaultSectionColor: '#00f0ff',                                           // 1406
+  sectionColors: SECTION_COLORS,                                            // 1379-1382 (added sections: index n % 8)
+  cardSwatches: SECTION_COLORS,                                             // 3970-3975: the same array; the card renders it
+  defaultSectionColor: '#d9d9d6',                                           // 1406 (Studio Grey)
+  legacySectionColors: Object.freeze(['#00f0ff', '#ff00aa', '#00ff66', '#ff6b35', '#ffdd00', '#aa66ff', '#66ffaa', '#ff6666']),
+                                                                            // the Phase-1 palette: the v1 import colour fill only
 });
 const PRODUCT_NAME = 'Morph LED Configurator';                           // 06 T6a (06 D1)
 const FILE_PREFIX = 'morph-led-wall';                                     // 06 T6b (06 D9, Q11)
@@ -739,8 +751,9 @@ export class WallSection {
   constructor(fields)
 
   /** {id: 0, name: 'Wall 1', panelCols: 5, panelRows: 3, panelWidth: 500, panelHeight: 500, ledX: 32, ledY: 32,
-   *   curveIntensity: 0, angleOffset: 0, color: '#00f0ff'}  (1395-1407) */
-  static createDefault()
+   *   curveIntensity: 0, angleOffset: 0, color}  (1395-1407); 06 T7: the colour is injected (Project.createDefault passes
+   *   Theme.palette.defaultSectionColor); the literal default '#d9d9d6' only lets new Wall() work in Node (U8) */
+  static createDefault({ color = '#d9d9d6' } = {})
 
   /** `Wall ${index + 1}` */
   static defaultName(index)
@@ -878,8 +891,10 @@ export class Project {
   camera;        // CineCamera
   person;        // PersonProp
   car;           // CarProp
-  static createDefault()   // new Project({ wall: new Wall(), display: new DisplaySettings(), panelIdStyle: new PanelIdStyle(),
-                           //   logos: new LogoLibrary(), camera: new CineCamera(), person: new PersonProp(), car: new CarProp() })
+  static createDefault({ defaultSectionColor } = {})
+      // new Project({ wall: new Wall({ sections: [WallSection.createDefault({ color: defaultSectionColor })] }),
+      //   display: new DisplaySettings(), panelIdStyle: new PanelIdStyle(), logos: new LogoLibrary(), camera: new CineCamera(),
+      //   person: new PersonProp(), car: new CarProp() })   (06 T7: the first section's colour injected; undefined: the default)
 }
 ```
 
@@ -1844,7 +1859,7 @@ Exporters receive `layout` (from `layoutProject`) and raw `sections`; they never
 #### `js/io/ProjectSerializer.js`
 ```js
 export class ProjectSerializer {
-  /** @param {{palette: {sectionColors: string[]}}} deps */
+  /** @param {{palette: {sectionColors: string[], legacySectionColors?: string[]}}} deps */
   constructor({ palette })
   /** Verbatim 4943-4963 ('file') and 4499-4519 ('zip'), written as two explicit object literals so key order is exact:
    *  { version: '1.0', sections: sections.map((s, i) => ({ name: s.name || `Wall ${i + 1}`, id: s.id,
@@ -1878,7 +1893,8 @@ export class ProjectSerializer {
    *    panelCols: s.panel?.columns || 5, panelRows: s.panel?.rows || 3, panelWidth: s.panel?.width_mm || 500,
    *    panelHeight: s.panel?.height_mm || 500, ledX: s.led_resolution?.x || 32, ledY: s.led_resolution?.y || 32,
    *    curveIntensity: s.curvature?.angle_degrees || 0, angleOffset: s.curvature?.angle_offset_degrees || 0,
-   *    color: s.color || palette.sectionColors[i % palette.sectionColors.length] }))
+   *    color: s.color || colors[i % colors.length] }))   with colors = palette.legacySectionColors ?? palette.sectionColors
+   *    (06 T7, 4.3: a v1 file without colours looks as authored; spec 07 C11 carries the rule into migrateV1toV2)
    *  LEGACY(B-L8, B-M4): no validation, no escaping.
    *  @returns {{sections: WallSection[], meshMode: any} | null}  meshMode = data.mesh_mode (raw, may be undefined) */
   read(data)
@@ -2218,8 +2234,10 @@ export class HeaderStats {
 ```js
 export class SectionListPanel {
   /** Owns #wall-sections, #add-section-btn and every card element. Subscribes WALL_SECTIONS_CHANGED (see below).
-   *  @param {{doc, project: Project, wallController: WallController, bus}} deps */
-  constructor({ doc, project, wallController, bus })
+   *  @param {{doc, project: Project, wallController: WallController, bus, palette: {cardSwatches}}} deps
+   *  palette (06 T7): the card renders one swatch per palette.cardSwatches colour, each on its own line with the legacy
+   *  indentation (the six legacy colours would give the legacy markup byte for byte) */
+  constructor({ doc, project, wallController, bus, palette })
   /** #add-section-btn click -> wallController.addSection()  (4154) */
   bindAddButton()
   /** Verbatim renderWallSections 3893-4078: container.innerHTML = ''; renderedSections = wall.sections.slice();
@@ -2512,7 +2530,7 @@ Writers listed here are the only allowed writers (checked by `tests/static/check
 | `pilotMoveSpeed` (1375) | `PilotController.moveSpeed` | `PilotController.onWheel` |
 | `isPilotLooking` (1376) | `PilotController` private `#looking` | `PilotController` mouse handlers, `toggle` |
 | `pilotLastMouse` (1377) | `PilotController` private `#lastMouse` | same |
-| `sectionColors` (1379) | `Theme.Palette.sectionColors` (injected as `palette` into `WallController` and `ProjectSerializer`) | - |
+| `sectionColors` (1379) | `Theme.Palette.sectionColors` (injected as `palette` into `WallController`, `ProjectSerializer` and, since 06 T7, `SectionListPanel` for the card swatches); since 06 T7 the Morph palette, with the Phase-1 colours kept as `Palette.legacySectionColors` for the v1 import fill | - |
 | `panelBorderColors` (1384) | `Theme.CanvasTheme.panelBorderColors` (injected into `PanelIdRenderer`) | - |
 | `panelIdFontColor` (1387) | `Project.panelIdStyle.fontColor` | `PanelIdStyle.set` |
 | `sectionLabelEnabled` (1388) | `Project.panelIdStyle.sectionLabelEnabled` | same |
@@ -2819,7 +2837,7 @@ Reproduces `init(); setupUI(); setView('reset');` (5093-5095). `main.js` has alr
 theme = buildTheme(Theme, (name) => win.getComputedStyle(doc.documentElement).getPropertyValue(name),
                    { warn: (m) => win.console.warn(m) });   // 06 T3 (was theme = Theme); bindFonts: BIND_FONTS_DEFAULT (true since 06 T5)
 brand = theme.brand; bus = new EventBus(); dialogs = createDialogs(win)
-project = Project.createDefault()
+project = Project.createDefault({ defaultSectionColor: theme.palette.defaultSectionColor })   // 06 T7
 frameBounds = () => framingBounds(project); colorToRgb = (s) => new THREE.Color(s)
 interaction = new InteractionState(); keyboard = new KeyboardState({ doc, win })
 sceneManager = new SceneManager({ canvas: byId(doc, 'three-canvas'), win, display: project.display, theme })
@@ -2853,7 +2871,7 @@ objExporter = new ObjExporter({ brand, colorToRgb, builder: new WallMeshBuilder(
 gltfExporter = new GltfExporter({ brand, colorToRgb, builder: new WallMeshBuilder(Strategies.mesh.gltf) })
 projectIO = new ProjectIO({ project, wallController, serializer, objExporter, gltfExporter, panelIds, safeDistance,
                             downloader: new Downloader({ doc, win }), JSZip, dialogs, brand, win })
-sectionList = new SectionListPanel({ doc, project, wallController, bus })
+sectionList = new SectionListPanel({ doc, project, wallController, bus, palette: theme.palette })   // 06 T7: the swatches
 displayPanel = new WallDisplayPanel({ doc, wallController, bus })
 logosPanel = new SectionLogosPanel({ doc, project, wallController, bus })     // after sectionList and displayPanel (5.2)
 cameraPanel = new CameraPanel({ doc, project, cameraController, projectIO, bus, theme })
@@ -3101,7 +3119,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 | **3. Configurable pivot + offset** | `WallPivot`/`PivotMode` in `Wall` (identity); `WallLayout.firstEdge/lastEdge/bounds()/pivotPoint(mode)` including "middle of entire wall" = midpoint of the first section's first edge and the last section's last edge on the floor; the single `framingBounds` switch for the four flat-bounds consumers; the single `layoutProject()` entry. | A baked translation in `layoutProject`: stage frame `−(P.x, 0, P.z)`, export frame `−P`, P = anchor + offset (1.4). The raw walk is translated first, and spec 02's `applySectionOffsets(out)` builds its section matrices from the translated layout (07 C32). **No wall root transform, ever:** the identity `wallGroup` transform is a unit-tested invariant (03 §5.1, §5.9 #2). `ui/PivotPanel`; a pivot Selectable + marker view; switch `framingBounds` to pivot/bounds (fixes B-L2); optional re-expression of camera/prop poses; schema v2. |
 | **4. Clean 0..1 UVs + UV viewer/editor** | UV strategies in one builder function per consumer; `TextureAtlas` as the single source of offsets, widths and start columns (yields per-section `uvRects`); `PanelIdRenderer.sectionCanvas()` for the viewer background; mesh tags; the selection registry; `PreviewWindow`'s resize handle as the floating-panel pattern. | `'per-section'` / `'atlas-pixel-accurate'` strategies (fix B-M5/B-M6) and a baked per-section `uvTransform`; glTF TEXCOORD_0; `ui/UVViewer.js` (2D canvas; subscribes to `SELECTION_CHANGED` and `WALL_REBUILT`); `ui/FloatingPanel.js` extracted from `PreviewWindow`. |
 | **5. HDRI projection (+ reflective car)** | `DisplaySettings.content` enum (`'color' \| 'ledSim' \| 'panelIds'`, ready for `'hdri'`); `LEDMaterialFactory` as the only wall-material constructor; `ResourceTracker` for HDR/PMREM disposal; `SceneManager` owns the main renderer and the helper registry; the second renderer is encapsulated in `PreviewWindow`; `PropView` base with `buildMesh()`; `CineCamera` lens math for the default projection point. | `ContentMode.HDRI` + `render/HdriProjectionMaterial.js` (wall and dome); `ui/HdriPanel.js` + the projection-point Selectable (`'hdri-point'`, kind `'projector'`, 07 C36); the second renderer is replaced by spec 07's `PreviewPass` (scissor rendering, R1/R2; `SceneManager` keeps only `setEnvironment` and `setPunctualLightScale`), which excludes `LAYERS.HELPERS` (B-M9/B-M11, first fixed by 08 P2-10 or 07 R1/R2, 07 C31); the backdrop dome on `LAYERS.ENVIRONMENT`; `GltfCarPropView extends CarPropView`; colour management in `render/ColorManagement.js` as per-material patches (Option L on r128; Option G after 07 U3b); loaders from 07's `vendor/three-addons.js` factories (spec 05 §5.11 #17). |
-| **6. Morph branding** | `css/02-tokens.css` holds every `:root` token; `Theme.js` holds every scene/canvas colour, font, palette and export string, and every consumer receives it by injection from `App`; header and watermark markup in one place in `index.html`. | Role-based tokens; `theme/ThemeBridge.js` reading CSS variables into an object of `Theme`'s shape (one line in `App`); new `Brand` strings and filenames (+ a JSON `generator` field in v2); Morph logo SVG, favicon, valid author meta; inline styles -> classes; card swatches from `Palette`; re-baseline `ui_visual` and exports separately. Gizmo axis colours stay XYZ = RGB. Landed so far (docs/improvements/06-morph-branding.md 8.4): T1 (the static inline styles of `index.html` and the two panel templates became the classes of `css/99-utilities.css`, linked last; dead CSS removed; `css-slices.mjs --report-only`; static rule 12; `compare.mjs --ignore-keys`), T2 (`theme/ThemeBridge.js`, pure and not wired, with U1-U3), T3 (layer-4 tokens with the legacy values and spec 01's four debug tokens, ThemeBridge wired in `App`, `.status-*` on `--status-*`, U4/U10/U11), T4a (the ungated Morph chrome: token layers 1-3 with the brand values and every stylesheet on role tokens, static rules 13-15; the text-only `<h1>` header in the three-column grid; the third-party logo deleted; the head metas and Montserrat; the component states of 06 3.5, including the opaque selection badge at `bottom: 64px`, B-L24; U5 in `contrast.test.mjs`, U6), T4b (the owner-approved brand artwork: the six app files in `assets/brand/` with `NOTICE.md`, the favicons, the apple-touch icon and `og:image`, the wordmark lockup with the monogram at <= 520 px, the viewport watermark hidden in pilot mode, static rule 16), T4c (British English in the visible labels and tooltips: "Colour", "Centre", and "Panel Angle (°)" for the one label that wrapped), T5 (the Morph scene and canvas: layer-4 brand values with `--scene-frame-on-light` and `--scene-overlay-halo`, adaptive panel frames, the outlined opaque camera body, the two-tone dashed frustum, JetBrains Mono 700 and Montserrat on the canvases with `BIND_FONTS_DEFAULT` true, the font gate of row F6-1), T6a (the Morph export headers and generator strings, `Brand.jsonGenerator`, `shortName`, `company`, `homepage`; the oracle tests keep the Phase-1 strings through `LEGACY_BRAND`), T6b (every download name derived from `Brand.filePrefix = 'morph-led-wall'`, `Brand.files.hdriPixelMap`, `compare.mjs --rename`, static rule 17). |
+| **6. Morph branding** | `css/02-tokens.css` holds every `:root` token; `Theme.js` holds every scene/canvas colour, font, palette and export string, and every consumer receives it by injection from `App`; header and watermark markup in one place in `index.html`. | Role-based tokens; `theme/ThemeBridge.js` reading CSS variables into an object of `Theme`'s shape (one line in `App`); new `Brand` strings and filenames (+ a JSON `generator` field in v2); Morph logo SVG, favicon, valid author meta; inline styles -> classes; card swatches from `Palette`; re-baseline `ui_visual` and exports separately. Gizmo axis colours stay XYZ = RGB. Landed so far (docs/improvements/06-morph-branding.md 8.4): T1 (the static inline styles of `index.html` and the two panel templates became the classes of `css/99-utilities.css`, linked last; dead CSS removed; `css-slices.mjs --report-only`; static rule 12; `compare.mjs --ignore-keys`), T2 (`theme/ThemeBridge.js`, pure and not wired, with U1-U3), T3 (layer-4 tokens with the legacy values and spec 01's four debug tokens, ThemeBridge wired in `App`, `.status-*` on `--status-*`, U4/U10/U11), T4a (the ungated Morph chrome: token layers 1-3 with the brand values and every stylesheet on role tokens, static rules 13-15; the text-only `<h1>` header in the three-column grid; the third-party logo deleted; the head metas and Montserrat; the component states of 06 3.5, including the opaque selection badge at `bottom: 64px`, B-L24; U5 in `contrast.test.mjs`, U6), T4b (the owner-approved brand artwork: the six app files in `assets/brand/` with `NOTICE.md`, the favicons, the apple-touch icon and `og:image`, the wordmark lockup with the monogram at <= 520 px, the viewport watermark hidden in pilot mode, static rule 16), T4c (British English in the visible labels and tooltips: "Colour", "Centre", and "Panel Angle (°)" for the one label that wrapped), T5 (the Morph scene and canvas: layer-4 brand values with `--scene-frame-on-light` and `--scene-overlay-halo`, adaptive panel frames, the outlined opaque camera body, the two-tone dashed frustum, JetBrains Mono 700 and Montserrat on the canvases with `BIND_FONTS_DEFAULT` true, the font gate of row F6-1), T6a (the Morph export headers and generator strings, `Brand.jsonGenerator`, `shortName`, `company`, `homepage`; the oracle tests keep the Phase-1 strings through `LEGACY_BRAND`), T6b (every download name derived from `Brand.filePrefix = 'morph-led-wall'`, `Brand.files.hdriPixelMap`, `compare.mjs --rename`, static rule 17), T7 (the 8-colour Morph palette with Studio Grey `#d9d9d6` as the injected default, the card swatches from the palette, the v1 colour fill from `Palette.legacySectionColors`, U5 scene rows, U7, U8). |
 
 ---
 
@@ -3342,4 +3360,12 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 3.4: `Brand.filePrefix = 'morph-led-wall'`; `Brand.files` derived from it (`.json`, `.obj`, `.mtl`, `.gltf`, `-export.zip`, `-panel-ids.png`, `-safe-distance.obj`, and `-hdri-pixel-map.png` for spec 05).
 - 2.3: `compare.mjs --rename` and its tests; `io.test.mjs` derives every golden path from `Brand.files` (`golden(step, kind, key)`) and its `ProjectIO` log assertions from the injected brand; `export-orientation.test.mjs` matches its open-defect outputs by any download name; `theme.test.mjs` U9 (the file names, `files.json === filePrefix + '.json'`, the OBJ `mtllib` line); the harness README (product name, file names, `--rename`).
 - 10: static rule 17 (06 R-B3b), enabled after the last of 06 T5 and T6b.
+- 9: Feature 6's landed steps.
+
+**06 T7, the Morph section palette (docs/improvements/06-morph-branding.md 3.9, 4.1, 4.3, 5.4, 5.7, 6.3, 8.1, 8.3, 8.4; D8, Q8, Q20, Q22)** (manifest `tests/regression/expected/F6-T7.json`: the section-state snapshots with an active swatch, the exports and canvas captures that carry the default or an added section colour, the `ui_visual` swatch probes and captures; every export and capture of the imported configs unchanged):
+- 3.4: `Palette.sectionColors` (= `cardSwatches`, the same array) is Studio Grey, Signal Red, Sky, Ember, Jade, Rose, Iris, Steel; `defaultSectionColor` `#d9d9d6`; `legacySectionColors` keeps the Phase-1 palette for the v1 import fill only.
+- 3.5, 7: `WallSection.createDefault({ color })` and `Project.createDefault({ defaultSectionColor })`; `App` injects `theme.palette.defaultSectionColor`.
+- 3.9: `ProjectSerializer` fills a v1 section without a colour from `palette.legacySectionColors[i % 8]` (an old file looks as authored; colours in a file are kept verbatim).
+- 3.11, 4, 7: `SectionListPanel` takes `palette` and renders the card swatches from `palette.cardSwatches`.
+- 2.3: `theme.test.mjs` U6 (palette), U7, U8; `contrast.test.mjs` the scene rows; `fixtures/colour-math.mjs` the dichromacy simulation; `domain.test.mjs`, `io.test.mjs` (the oracle's legacy global `sectionColors` is `legacySectionColors`), `wall-controller.test.mjs` (`TEMPLATE_EDITS` maps the six legacy swatch lines to the palette's eight; the parity project starts from the legacy bootstrap colour); `tools/make-cap-wall.mjs` keeps its committed v1 fixture on the legacy palette; the harness swatch selector by index, `isPersonPixel` and `debugDump`.
 - 9: Feature 6's landed steps.

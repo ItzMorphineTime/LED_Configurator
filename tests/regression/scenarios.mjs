@@ -1,5 +1,7 @@
 // Golden-master scenarios. Each scenario starts from a fresh page load and drives the app
 // ONLY through the DOM. Every observation is written through the Recorder.
+import fs from 'node:fs';
+import path from 'node:path';
 import { CONFIGS } from './configs.mjs';
 import { decodePNG, readZip } from './lib/formats.mjs';
 import * as ui from './lib/uiprobe.mjs';
@@ -196,7 +198,8 @@ async function uiScenario(ctx) {
     await step(ctx, 'edit-offset', () => app.setValue(field(1, 'angleOffset'), '-15'));
     await snap('card1_curve_offset');
     await step(ctx, 'edit-name', () => app.setValue(`${card(1)} .section-name-input`, 'Stage Left', ['input']));
-    await step(ctx, 'edit-swatch', () => app.click(`${card(1)} [data-color="#ff6b35"]`));
+    // The 4th swatch of card 1, by index (06 T7, 8.3): palette-independent; Ember since 06 T7, #ff6b35 before.
+    await step(ctx, 'edit-swatch', () => app.click(`${card(1)} .color-swatch-small:nth-child(4)`));
     await snap('card1_name_swatch');
     await step(ctx, 'edit-custom-color', () => app.setValue(`${card(1)} input[type="color"]`, '#123456', ['input']));
     await snap('card1_custom_color');
@@ -321,8 +324,38 @@ async function togglesScenario(ctx) {
 }
 
 /**
- * Find the centre-most pixel of the person prop (MeshBasic 0x4488ff @ 0.85 opacity) in a canvas screenshot.
- * Exported for the normals_debug scenario (01 T8, B9); a function declaration, so the import cycle with
+ * Whether a canvas pixel belongs to the person prop (MeshBasic 0x4488ff @ 0.85), re-derived for the Studio Grey default
+ * wall (docs/improvements/06-morph-branding.md 8.3, T7). The person composites to (59, 117, 218) over the 0x0a0a0a
+ * background, (71, 141, 252) over Sky and (90, 148, 249) over the #d9d9d6 wall: the first branch takes the first two,
+ * the second the person over a light wall. The second branch rejects Sky itself (88, 166, 232: b < 240, g > 160), Iris
+ * and Steel (r > 95), every neutral grey (b - r < 145) and the chrome (no blue). Every person pick happens with the
+ * camera preview off, so no frustum covers the person (two layers of the 0.05 fill over the background would still give
+ * (77, 130, 220), inside the first branch). Used by findPersonPixel and the gizmo_drag scenario (isPerson); a function
+ * declaration, so the import cycle with scenarios-extra.mjs is safe.
+ */
+export function isPersonPixel(r, g, b) {
+    return (b >= 200 && r >= 40 && r <= 80 && g >= 95 && g <= 170) || (b >= 240 && r >= 81 && r <= 95 && g >= 135 && g <= 160);
+}
+
+/**
+ * With REGRESSION_DEBUG_DIR set, keep a searched screenshot and what was found (06 T7: the person picks are checked to
+ * lie on the person's body, 8.3). Writes nothing otherwise, so it never changes an output.
+ * @param {string} step  the step name (the file stem)
+ * @param {Buffer} png   the searched screenshot
+ * @param {object} data  the hit and anything else worth keeping
+ */
+export function debugDump(step, png, data) {
+    const dir = process.env.REGRESSION_DEBUG_DIR;
+    if (!dir) return;
+    const base = path.join(dir, step.replace(/[^\w.-]+/g, '_'));
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(base + '.png', png);
+    fs.writeFileSync(base + '.json', JSON.stringify(data, null, 2));
+}
+
+/**
+ * Find the centre-most pixel of the person prop (MeshBasic 0x4488ff @ 0.85 opacity, isPersonPixel) in a canvas
+ * screenshot. Exported for the normals_debug scenario (01 T8, B9); a function declaration, so the import cycle with
  * scenarios-extra.mjs is safe.
  */
 export function findPersonPixel(png) {
@@ -333,7 +366,7 @@ export function findPersonPixel(png) {
         for (let x = 0; x < width; x++) {
             const i = (y * width + x) * 4;
             const r = rgba[i], g = rgba[i + 1], b = rgba[i + 2];
-            if (b >= 200 && r >= 40 && r <= 80 && g >= 95 && g <= 170) { sx += x; sy += y; n++; hits.push([x, y]); }
+            if (isPersonPixel(r, g, b)) { sx += x; sy += y; n++; hits.push([x, y]); }
         }
     }
     if (n < 20) return null;
@@ -365,6 +398,7 @@ async function keyboardScenario(ctx) {
     await step(ctx, 'select-person', async () => {
         const png = await app.screenshotCanvas();
         const hit = findPersonPixel(png);
+        debugDump(`keyboard_${app.step}`, png, { hit });
         // Only `found` is recorded: exact pixel coordinates would make this state brittle to
         // sub-pixel rendering differences that the screenshot comparison already tolerates.
         rec.state('person_pick', { found: !!hit });
@@ -435,7 +469,9 @@ async function uiVisualScenario(ctx) {
     await step(ctx, 'gizmo-translate', () => app.click('#gizmo-translate'));
     await capture('gizmo_translate', { styles: ['overlay'] });
     await step(ctx, 'select-person', async () => {
-        const hit = findPersonPixel(await app.screenshotCanvas());
+        const png = await app.screenshotCanvas();
+        const hit = findPersonPixel(png);
+        debugDump(`ui_visual_${app.step}`, png, { hit });
         rec.state('selection_pick', { found: !!hit });
         if (!hit) return;
         const r = await app.canvasRect();

@@ -13,7 +13,9 @@
  * inline font-size became the class curve-hint--small of css/99-utilities.css (06 T1), and the British copy of
  * 06 T4c: the labels "Panel Angle (°)" (was "Angle Between Panels (°)", which wrapped to two lines under
  * Montserrat) and "Panel Colour", the custom input's title "Custom colour". The colour dot's and the swatches'
- * inline backgrounds are per-section data and stay. Do not re-indent them.
+ * inline backgrounds are per-section data and stay. Do not re-indent them. 06 T7: the swatches are rendered from the
+ * injected palette's cardSwatches, one per line with the legacy indentation, so the six legacy swatches would give the
+ * legacy markup byte for byte.
  */
 import { Events } from '../core/EventBus.js';
 import { legacyHtml } from '../legacy/LegacyCompat.js';
@@ -44,16 +46,32 @@ function warningBlockHtml(section) {
 }
 
 /**
+ * The palette swatches of a card (06 T7, 5.7): one div per colour of `swatches`, each on its own line with the
+ * template's indentation; the active one is the swatch equal to the section colour. The colours are palette
+ * constants, so no escaping is needed (B-M4 does not apply).
+ * Ports: index.html@cd3fd3f lines 3970-3975.
+ * Side effects: none.
+ * @param {import('../domain/WallSection.js').WallSection} section
+ * @param {ReadonlyArray<string>} swatches  palette.cardSwatches
+ * @returns {string}
+ */
+function swatchesHtml(section, swatches) {
+  return swatches.map((c) => `<div class="color-swatch-small ${section.color === c ? 'active' : ''}" data-color="${c}" style="background: ${c};"></div>`)
+    .join('\n                                    ');
+}
+
+/**
  * The card's inner markup. Every interpolation of a section value goes through legacyHtml() (B-M4, tagged at
  * render): name (title and input), colour (dot and colour input), id, the eight numeric field values (imported
- * strings are not coerced, B-L8), summary and hint. The six swatches stay literal.
+ * strings are not coerced, B-L8), summary and hint. The swatches come from the palette (06 T7).
  * Ports: index.html@cd3fd3f lines 3898, 3906, 3908, 3920-3980.
  * Side effects: none.
  * @param {import('../domain/WallSection.js').WallSection} section
  * @param {boolean} showDelete  legacy `wallSections.length > 1`
+ * @param {ReadonlyArray<string>} swatches  palette.cardSwatches
  * @returns {string}
  */
-function cardHtml(section, showDelete) {
+function cardHtml(section, showDelete, swatches) {
   const summary = section.summary;
   const exceeds4K = section.exceeds4K;
   const warningHTML = warningBlockHtml(section);
@@ -108,12 +126,7 @@ function cardHtml(section, showDelete) {
                             <div class="input-field">
                                 <label>Panel Colour</label>
                                 <div class="section-color-picker">
-                                    <div class="color-swatch-small ${section.color === '#00f0ff' ? 'active' : ''}" data-color="#00f0ff" style="background: #00f0ff;"></div>
-                                    <div class="color-swatch-small ${section.color === '#ff00aa' ? 'active' : ''}" data-color="#ff00aa" style="background: #ff00aa;"></div>
-                                    <div class="color-swatch-small ${section.color === '#00ff66' ? 'active' : ''}" data-color="#00ff66" style="background: #00ff66;"></div>
-                                    <div class="color-swatch-small ${section.color === '#ff6b35' ? 'active' : ''}" data-color="#ff6b35" style="background: #ff6b35;"></div>
-                                    <div class="color-swatch-small ${section.color === '#ffffff' ? 'active' : ''}" data-color="#ffffff" style="background: #ffffff;"></div>
-                                    <div class="color-swatch-small ${section.color === '#ffdd00' ? 'active' : ''}" data-color="#ffdd00" style="background: #ffdd00;"></div>
+                                    ${swatchesHtml(section, swatches)}
                                     <input type="color" class="color-input-custom" value="${legacyHtml(section.color)}" title="Custom colour">
                                 </div>
                             </div>
@@ -131,6 +144,8 @@ export class SectionListPanel {
   #project;
   /** @type {import('../app/WallController.js').WallController} */
   #wallController;
+  /** @type {{cardSwatches: ReadonlyArray<string>}} the theme palette (06 T7) */
+  #palette;
   /** @type {HTMLElement} #wall-sections */
   #container;
   /** @type {HTMLElement} #add-section-btn */
@@ -149,10 +164,13 @@ export class SectionListPanel {
    * Side effects: DOM lookups (no mutation); one bus subscription.
    * @param {{doc: Document, project: import('../domain/Project.js').Project,
    *          wallController: import('../app/WallController.js').WallController,
-   *          bus: import('../core/EventBus.js').EventBus}} deps
+   *          bus: import('../core/EventBus.js').EventBus,
+   *          palette: {cardSwatches: ReadonlyArray<string>}}} deps
+   *   palette: theme.palette (06 T7: the card swatches)
    */
-  constructor({ doc, project, wallController, bus }) {
+  constructor({ doc, project, wallController, bus, palette }) {
     this.#doc = doc;
+    this.#palette = palette;
     this.#project = project;
     this.#wallController = wallController;
     this.#container = byId(doc, 'wall-sections');
@@ -192,7 +210,7 @@ export class SectionListPanel {
       sectionEl.className = 'wall-section collapsed';
       // LEGACY(B-M4): names, colours, ids and field values are interpolated into innerHTML unescaped
       // (legacyHtml is the identity); an imported name such as `<img onerror=...>` runs script.
-      sectionEl.innerHTML = cardHtml(section, wall.count > 1);
+      sectionEl.innerHTML = cardHtml(section, wall.count > 1, this.#palette.cardSwatches);
 
       container.appendChild(sectionEl);
 
