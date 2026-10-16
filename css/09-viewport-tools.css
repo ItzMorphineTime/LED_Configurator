@@ -2,9 +2,11 @@
    06 T4a (06 3.5): role tokens. Gizmo and view buttons are overlay chips with 18 x 18 icons (the gizmo SVGs had no size
    rule and filled the 40 px button); an active tool is white with a Morph Black icon; the active pilot button and the
    pilot banner are Signal Red with white text or icon (5.98:1) and a 1 px Morph Black outline, so the red keeps a
-   Morph Black neighbour over any scene content (3.31:1). The selection badge is an opaque --color-surface-1 chip (not
-   the translucent overlay chip, on which red falls to 2.6:1 over a light wall) with a red left bar and the same
-   outline, which lies outside the chip and changes no rect.
+   Morph Black neighbour over any scene content (3.31:1). That outline would replace the :focus-visible ring of
+   03-layout.css (its selector is more specific), so while the active pilot button has keyboard focus the ring takes
+   the outline and the Morph Black edge becomes a 1 px box-shadow. The selection badge is an opaque --color-surface-1
+   chip (not the translucent overlay chip, on which red falls to 2.6:1 over a light wall) with a red left bar and the
+   same outline, which lies outside the chip and changes no rect.
    B-L24 landed here in 06 T4a: the selection badge sits at bottom: 64px, stacked above the help badge of
    07-viewport.css (bottom: 20px), so the two never overlap. The other half of B-L24, the missing .view-btn.active rule,
    landed in 01 F1-2 (css/features/debug-view.css).
@@ -47,6 +49,12 @@
     border-color: var(--color-accent);
     color: var(--color-on-accent);
     outline: 1px solid var(--color-bg-app);
+}
+
+.gizmo-mode-btn.pilot.active:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 1px var(--color-bg-app);
 }
 
 .gizmo-mode-btn.space {

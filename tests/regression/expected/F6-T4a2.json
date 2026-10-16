@@ -1,0 +1,10 @@
+{
+  "commit": "F6-T4a2",
+  "bugs": [],
+  "expect": [],
+  "mayChange": [
+    { "output": "large_wall/final__export-zip__led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen so far: L2_PanelIDs.png (1995, 948), L3_PanelIDs.png (1970, 1003), L4_PanelIDs.png (2026, 858), 1 px each, 3840x1920); this commit changes no export and no texture" }
+  ],
+  "notes": "Review follow-up of 06 T4a, invariance: the active pilot button keeps the :focus-visible ring of 06 3.5 (before, .gizmo-mode-btn.pilot.active's Morph Black outline, specificity 0,3,0, replaced the ring of button:focus-visible, 0,1,1); while it has keyboard focus its Morph Black edge is a 1 px box-shadow instead. The harness never gives the pilot button keyboard focus (app.click is element.click(), which does not focus it), so no computed style, rect or pixel may change."
+}
