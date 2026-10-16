@@ -1,0 +1,28 @@
+# Static checks and unit tests on every push to a refactor/ or feature/ branch and on every pull request
+# (docs/improvements/07-platform-foundations.md 5.8.1, task G1). Zero dependencies: no npm install and no
+# package.json. The golden-file unit tests skip when tests/regression/output/baseline is absent, as it is here.
+name: CI
+on:
+  push: { branches: ['refactor/**', 'feature/**'] }   # main is checked by pages.yml (it calls this workflow)
+  pull_request:
+  workflow_call:
+permissions: { contents: read }
+# In a called workflow, github.workflow is the CALLER's name, so the run inside pages.yml ("Deploy Pages-refs/heads/main")
+# never shares a group with a direct CI run ("CI-refs/..."), and a PR or branch run can never cancel a deploy's checks.
+concurrency: { group: '${{ github.workflow }}-${{ github.ref }}', cancel-in-progress: true }
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      # Actions are pinned by commit SHA (07 Q13); .github/dependabot.yml keeps the pins current.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+        with: { fetch-depth: 0 }          # css-slices and the wall-controller parity tests read index.html@cd3fd3f
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020   # v4.4.0
+        with: { node-version: '22' }
+      - name: Static checks
+        run: |
+          node tests/static/check.mjs
+          node tests/static/css-slices.mjs
+      - name: Unit tests
+        run: node --test "tests/unit/**/*.test.mjs"

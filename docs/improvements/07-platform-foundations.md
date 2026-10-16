@@ -1779,9 +1779,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0 (pinned by SHA, Q13)
         with: { fetch-depth: 0 }          # css-slices / oracle tests may read index.html@cd3fd3f
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020   # v4.4.0
         with: { node-version: '22' }
       - name: Static checks
         run: |
@@ -1791,7 +1791,7 @@ jobs:
         run: node --test "tests/unit/**/*.test.mjs"
 ```
 
-No `npm install` and no `package.json` (zero dependencies, as today). GOLDEN-dependent unit tests skip with a message when `GOLDEN_DIR` is absent (REFACTOR_PLAN 7). Until the first intentional markup or CSS change lands (08 P2-3/P2-8, Feature 1 or E1, whichever is first; 5.12 R8), the css-slices step runs without `--report-only`.
+No `npm install` and no `package.json` (zero dependencies, as today). G1 pins every action by commit SHA with its tag in a comment (Q13) and adds `.github/dependabot.yml` (`package-ecosystem: github-actions`, weekly), which keeps the pins current; `pages.yml` and `golden.yml` (G2, G4) pin theirs the same way. GOLDEN-dependent unit tests skip with a message when `GOLDEN_DIR` is absent (REFACTOR_PLAN 7). Until the first intentional markup or CSS change lands (08 P2-3/P2-8, Feature 1 or E1, whichever is first; 5.12 R8), the css-slices step runs without `--report-only`.
 
 #### 5.8.2 `.github/workflows/pages.yml`
 

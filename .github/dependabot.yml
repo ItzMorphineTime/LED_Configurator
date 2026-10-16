@@ -1,0 +1,7 @@
+# Keeps the commit-SHA pins of the GitHub Actions in .github/workflows/ current (07 Q13).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
