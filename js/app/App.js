@@ -3,9 +3,10 @@
  * Composition root. Constructs every module in the order of ARCHITECTURE.md section 7 (no THREE allocation, no
  * DOM mutation and no listeners while constructing: only DOM-id lookups and bus subscriptions), then runs the legacy
  * bootstrap `init(); setupUI(); setView('reset');` as the init phase, the setupUI phase and the reset view.
- * It is the only module that imports theme/Theme.js and vendor/jszip.js, and (besides the ui/ panels) the only one
- * that looks up DOM ids: '#three-canvas' for SceneManager, the six preview-window ids for PreviewWindow and
- * '#debug-normals-stats' for NormalsDebugView (01 F1-2, 5.6).
+ * It is the only module that imports theme/Theme.js, theme/ThemeBridge.js (06 T3: the theme every consumer
+ * receives is buildTheme(Theme, the computed :root custom properties)) and vendor/jszip.js, and (besides the ui/
+ * panels) the only one that looks up DOM ids: '#three-canvas' for SceneManager, the six preview-window ids for
+ * PreviewWindow and '#debug-normals-stats' for NormalsDebugView (01 F1-2, 5.6).
  * Nothing is attached to window.
  * Legacy source: index.html@cd3fd3f 1426-1455 (init), 3884-3890 (animate: the frame tick), 4148-4489 (setupUI,
  * statement order), 5093-5095 (bootstrap).
@@ -17,6 +18,7 @@ import JSZip from '../vendor/jszip.js';
 import { EventBus } from '../core/EventBus.js';
 import { Strategies } from '../legacy/LegacyCompat.js';
 import { Theme } from '../theme/Theme.js';
+import { buildTheme } from '../theme/ThemeBridge.js';
 import { Project } from '../domain/Project.js';
 import { DebugViewSettings } from '../domain/DebugViewSettings.js';
 import { framingBounds } from '../geometry/WallLayout.js';
@@ -91,7 +93,11 @@ export class App {
     const win = this.#win;
 
     // ---- construct (R4: no THREE allocation, no DOM mutation, no listeners; lookups and bus subscriptions only) ----
-    const theme = Theme;
+    // 06 T3 (5.5): the colour leaves come from the :root custom properties of css/02-tokens.css, with the Theme.js
+    // fallbacks for a missing or malformed token (one console warning per variable); no bindFonts option, so
+    // BIND_FONTS_DEFAULT applies, exactly as in the U4 parity test.
+    const theme = buildTheme(Theme, (name) => win.getComputedStyle(doc.documentElement).getPropertyValue(name),
+      { warn: (m) => win.console.warn(m) });
     const brand = theme.brand;
     const bus = new EventBus();
     const dialogs = createDialogs(win);

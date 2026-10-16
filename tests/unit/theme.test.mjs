@@ -1,16 +1,24 @@
 // Unit tests for theme/ThemeBridge (docs/improvements/06-morph-branding.md 5.5, 6.2 and 8.1): U1 colour parsing,
-// U2 the bridged theme's shape, freezing and the runtime override (AC 8), U3 missing and malformed tokens.
+// U2 the bridged theme's shape, freezing and the runtime override (AC 8), U3 missing and malformed tokens (06 T2);
+// U4 token parity of css/02-tokens.css with the Theme.js fallbacks, U10 the Theme walk (every leaf bound, UNBRANDED, a
+// function or non-colour), U11 the UNBRANDED conventions against tests/unit/fixtures/legacy-theme.mjs (06 T3).
 // Run: node --test tests/unit/theme.test.mjs   (zero dependencies)
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { Theme } from '../../js/theme/Theme.js';
+import { LEGACY_UNBRANDED, FACE_ORIENTATION } from './fixtures/legacy-theme.mjs';
 import {
   COLOR_BINDINGS, FONT_BINDINGS, UNBRANDED, BIND_FONTS_DEFAULT, parseHexColor, parseCssColor, buildTheme,
 } from '../../js/theme/ThemeBridge.js';
 
 // ---- helpers -------------------------------------------------------------------------------------
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /** The leaf at a dotted path ('scene.safeZone.wallColor'), or undefined. */
 const at = (root, path) => path.split('.').reduce((node, key) => (node == null ? undefined : node[key]), root);
@@ -242,5 +250,183 @@ describe('U3 missing and malformed tokens: the fallback leaf, one warning per va
     buildTheme(Theme, (name) => { read.add(name); return ''; }, { bindFonts: false, warn: (m) => warnings.push(m) });
     assert.ok(!read.has('--font-ui') && !read.has('--font-mono'));
     assert.ok(warnings.every((m) => !m.includes('--font-')));
+  });
+});
+
+// ---- U4 (06 T3): token parity ---------------------------------------------------------------------
+
+/**
+ * The custom properties of the first `:root { ... }` block of a stylesheet, as written (comments removed, values
+ * trimmed; a later declaration of the same name wins, as in CSS).
+ * @param {string} css
+ * @returns {Map<string, string>}
+ */
+function rootDeclarations(css) {
+  const text = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const block = /:root\s*\{([^}]*)\}/.exec(text);
+  if (!block) throw new Error('no :root block');
+  const decls = new Map();
+  for (const m of block[1].matchAll(/(--[A-Za-z0-9_-]+)\s*:\s*([^;]*);/g)) decls.set(m[1], m[2].trim());
+  return decls;
+}
+
+/**
+ * Resolves the var(--x) references of a declaration value against `decls`, like the computed value of a custom
+ * property (var() substituted, the text otherwise as written). Depth <= 8; a cycle or an unknown name throws.
+ * @param {Map<string, string>} decls
+ * @param {string} name
+ * @returns {string}
+ */
+function resolveVar(decls, name, depth = 0, stack = []) {
+  if (stack.includes(name)) throw new Error(`var() cycle: ${[...stack, name].join(' -> ')}`);
+  if (depth > 8) throw new Error(`var() chain deeper than 8 at ${name}`);
+  if (!decls.has(name)) throw new Error(`${name} is not declared`);
+  return decls.get(name).replace(/var\(\s*(--[A-Za-z0-9_-]+)\s*\)/g, (_, ref) => resolveVar(decls, ref, depth + 1, [...stack, name]));
+}
+
+/** A ThemeBridge reader over css/02-tokens.css ('' for an undeclared name, like getPropertyValue). */
+function tokensReader() {
+  const decls = rootDeclarations(readFileSync(join(ROOT, 'css', '02-tokens.css'), 'utf8'));
+  return { decls, read: (name) => (decls.has(name) ? resolveVar(decls, name) : '') };
+}
+
+describe('U4 token parity: css/02-tokens.css and the Theme.js fallbacks agree (06 T3 onwards)', () => {
+  test('the :root parser and the var() resolver: chains, depth and cycles', () => {
+    const decls = rootDeclarations(':root {\n  /* c */ --a: var(--b);\n  --b: var( --c );\n  --c: #0A0A0A;\n  --x: var(--y); --y: var(--x);\n}\n.other { --z: 1; }');
+    assert.deepEqual([...decls.keys()], ['--a', '--b', '--c', '--x', '--y']);
+    assert.equal(resolveVar(decls, '--a'), '#0A0A0A');
+    assert.throws(() => resolveVar(decls, '--x'), /cycle/);
+    const deep = new Map(Array.from({ length: 11 }, (_, i) => [`--d${i}`, i === 10 ? '#000000' : `var(--d${i + 1})`]));
+    assert.equal(resolveVar(deep, '--d2'), '#000000');
+    assert.throws(() => resolveVar(deep, '--d0'), /deeper than 8/);
+    assert.throws(() => resolveVar(decls, '--nope'), /not declared/);
+  });
+
+  test('every COLOR_BINDINGS variable is declared and parses for its kind', () => {
+    const { decls, read } = tokensReader();
+    for (const [path, name, kind] of COLOR_BINDINGS) {
+      assert.ok(decls.has(name), `${name} (${path}) is not declared in css/02-tokens.css`);
+      const raw = read(name);
+      assert.notEqual(kind === 'css' ? parseCssColor(raw) : parseHexColor(raw), null, `${name}: "${raw}" is not a valid ${kind} value`);
+    }
+  });
+
+  test('buildTheme(Theme, the tokens) without options, as App calls it: every bridged leaf equals its fallback', () => {
+    const warnings = [];
+    const out = buildTheme(Theme, tokensReader().read, { warn: (m) => warnings.push(m) });
+    assert.deepEqual(warnings, []);
+    for (const [path] of COLOR_BINDINGS) {
+      const got = at(out, path);
+      const want = at(Theme, path);
+      if (Array.isArray(want)) {
+        assert.equal(got.length, want.length, path);
+        want.forEach((v, i) => assert.ok(Object.is(got[i], v), `${path}[${i}]: token ${got[i]} vs Theme.js ${v}`));
+      } else {
+        assert.ok(Object.is(got, want), `${path}: token ${String(got)} vs Theme.js ${String(want)}`);
+      }
+    }
+    if (BIND_FONTS_DEFAULT) {
+      const { decls } = tokensReader();
+      for (const [path, name] of FONT_BINDINGS) {
+        assert.ok(decls.has(name), `${name} is not declared`);
+        const got = at(out, path);
+        const want = at(Theme, path);
+        assert.equal(typeof got === 'function' ? got(40) : got, typeof want === 'function' ? want(40) : want, path);
+      }
+    } else {
+      for (const [path] of FONT_BINDINGS) assert.equal(at(out, path), at(Theme, path), `${path}: unbound (BIND_FONTS_DEFAULT false)`);
+    }
+  });
+});
+
+// ---- U10 (06 T3): every Theme colour leaf is bound or UNBRANDED ----------------------------------
+
+const NON_COLOUR_KEY = /(opacity|size|radius|factor|alpha|px|divisions|position|intensity|dash|gap|font|fonts|order)$/i;
+
+/**
+ * Classifies every leaf under the theme keys other than palette and brand: 'bound' (a COLOR_BINDINGS or FONT_BINDINGS
+ * path), 'unbranded' (UNBRANDED), 'function', 'non-colour' (the last non-index key matches NON_COLOUR_KEY) or null.
+ * A bound or UNBRANDED path is classified whole (an rgb01 array, the panel border colours); arrays are otherwise
+ * walked with the key that holds them.
+ * @returns {{path: string, kind: string|null}[]}
+ */
+function classifyTheme(theme) {
+  const bound = new Set([...COLOR_BINDINGS, ...FONT_BINDINGS].map(([p]) => p));
+  const unbranded = new Set(UNBRANDED);
+  const out = [];
+  const walk = (value, path, key) => {
+    if (bound.has(path)) { out.push({ path, kind: 'bound' }); return; }
+    if (unbranded.has(path)) { out.push({ path, kind: 'unbranded' }); return; }
+    if (typeof value === 'function') { out.push({ path, kind: 'function' }); return; }
+    if (Array.isArray(value)) { value.forEach((v, i) => walk(v, `${path}[${i}]`, key)); return; }
+    if (value !== null && typeof value === 'object') {
+      for (const [k, v] of Object.entries(value)) walk(v, `${path}.${k}`, k);
+      return;
+    }
+    out.push({ path, kind: NON_COLOUR_KEY.test(key) ? 'non-colour' : null });
+  };
+  for (const [top, value] of Object.entries(theme)) if (top !== 'palette' && top !== 'brand') walk(value, top, top);
+  return out;
+}
+
+describe('U10 Theme walk: every leaf is bound, UNBRANDED, a function or non-colour (06 T3)', () => {
+  test('no unclassified leaf, in Theme and in the bridged theme', () => {
+    for (const theme of [Theme, buildTheme(Theme, tokensReader().read)]) {
+      const unclassified = classifyTheme(theme).filter((l) => l.kind === null).map((l) => l.path);
+      assert.deepEqual(unclassified, [], `add a COLOR_BINDINGS row or an UNBRANDED entry for: ${unclassified.join(', ')}`);
+    }
+  });
+
+  test('the tables do not overlap, and no colour binding sits on a non-colour key', () => {
+    const colour = COLOR_BINDINGS.map(([p]) => p);
+    for (const p of colour) assert.ok(!UNBRANDED.includes(p), `${p} is both bound and UNBRANDED`);
+    for (const p of colour) assert.ok(!NON_COLOUR_KEY.test(p.split('.').pop()), `${p}: a colour binding on a non-colour key`);
+    assert.equal(new Set(UNBRANDED).size, UNBRANDED.length);
+  });
+
+  test('the rule classifies by the last non-index key: grid.position[0] and axesSize are non-colour, a colour key is not', () => {
+    const kinds = Object.fromEntries(classifyTheme(Theme).map((l) => [l.path, l.kind]));
+    assert.equal(kinds['scene.grid.position[0]'], 'non-colour');
+    assert.equal(kinds['scene.axesSize'], 'non-colour');
+    assert.equal(kinds['scene.debug.lineBaseFactor'], 'non-colour');
+    assert.equal(kinds['scene.safeZone.wallColor'], 'bound');
+    assert.equal(kinds['canvas.panelBorderColors'], 'unbranded');
+    assert.equal(kinds['canvas.panelLabelFont'], 'bound');
+    const probe = classifyTheme({ scene: { selection: { primary: 0xffffff, selectedDash: [0.12, 0.06] } } });
+    assert.deepEqual(probe, [
+      { path: 'scene.selection.primary', kind: null },
+      { path: 'scene.selection.selectedDash[0]', kind: 'non-colour' },
+      { path: 'scene.selection.selectedDash[1]', kind: 'non-colour' },
+    ]);
+  });
+});
+
+// ---- U11 (06 T3): conventions unchanged (AC 10) ----------------------------------------------------
+
+describe('U11 conventions unchanged: UNBRANDED leaves equal their Phase-1 values (AC 10)', () => {
+  test('UNBRANDED lists exactly the leaves of the legacy-theme fixture, and each equals its Phase-1 value', () => {
+    assert.deepEqual([...UNBRANDED].sort(), Object.keys(LEGACY_UNBRANDED).sort());
+    for (const theme of [Theme, buildTheme(Theme, tokensReader().read)]) {
+      for (const [path, legacy] of Object.entries(LEGACY_UNBRANDED)) {
+        const leaf = at(theme, path);
+        if (Array.isArray(legacy)) {
+          assert.equal(leaf.length, legacy.length, path);
+          legacy.forEach((v, i) => assert.ok(Object.is(leaf[i], v), `${path}[${i}]`));
+        } else {
+          assert.ok(Object.is(leaf, legacy), `${path}: ${leaf} vs Phase-1 ${legacy}`);
+        }
+      }
+    }
+  });
+
+  test('the face-orientation leaves keep spec 01\'s values (bound, never re-coloured)', () => {
+    for (const theme of [Theme, buildTheme(Theme, tokensReader().read)]) {
+      for (const [path, value] of Object.entries(FACE_ORIENTATION)) {
+        const leaf = at(theme, path);
+        if (leaf !== undefined) assert.equal(leaf, value, path);
+      }
+    }
+    assert.equal(Theme.scene.debug.faceFront, 0x2f6bff);
+    assert.equal(Theme.scene.debug.faceBack, 0xff3344);
   });
 });

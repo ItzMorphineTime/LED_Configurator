@@ -4,7 +4,9 @@
  * exact type (0x numbers stay numbers, CSS colour strings stay strings), plus the feature keys added since (SceneTheme
  * .debug, 01 F1-1). All objects and arrays are frozen.
  * Only app/App.js imports this module; every consumer receives `theme` (or one of its parts) by injection, so
- * Feature 6 swaps in a ThemeBridge-built object of the same shape in one line (never by mutating these objects).
+ * Feature 6 swaps in a ThemeBridge-built object of the same shape in one line (never by mutating these objects): since
+ * 06 T3 App injects buildTheme(Theme, the :root custom properties), and these values are its fallbacks, kept equal to
+ * the tokens of css/02-tokens.css by the U4 parity test (tests/unit/theme.test.mjs).
  * Legacy source: index.html@cd3fd3f 1379-1384, 1406, 1431, 1440-1449, 1563, 1693, 1821, 2009, 2034, 2042, 2064,
  * 2092, 2107, 2110, 2181, 2334, 2407, 2425-2426, 2518-2524, 2698-2751, 2792, 2826, 2840-2841, 2915-2917, 2960,
  * 3010, 3029-3089, 3225, 3264, 3970-3975, 4520-4549, 4557-4561, 4721, 4915-4916, 4923, 4934, 4964.

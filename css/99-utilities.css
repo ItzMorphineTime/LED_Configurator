@@ -70,9 +70,11 @@
 .readout-label { color: var(--text-secondary); }
 .readout-value { color: var(--accent-cyan); }
 
-/* The static initial colours of #frustum-status-text and #safe-distance; CameraPanel writes style.color at runtime */
-.status-pending { color: #ffaa00; }
-.status-ok { color: #00ff66; }
+/* The static initial colours of #frustum-status-text and #safe-distance. Since 06 T3 they read the layer-4 status
+   tokens, which ThemeBridge also reads into theme.ui.status, the colours CameraPanel writes to style.color at
+   runtime: the initial and the runtime status colours come from one token. */
+.status-pending { color: var(--status-off-center); }
+.status-ok { color: var(--status-within); }
 
 /* Camera preview window: the static parts only (display, width and height stay inline: PreviewWindow owns them;
    #camera-preview-canvas keeps its inline size, which renderer.setSize overwrites) */

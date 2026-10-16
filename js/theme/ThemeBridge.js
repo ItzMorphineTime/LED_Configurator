@@ -15,7 +15,8 @@
  *   'css'   -> '#rrggbb' lowercase, or canonical 'rgba(r, g, b, a)' (accepts either; ints 0-255, a in [0, 1], printed
  *              with String(Number(a))). Used by spec 04's Theme.uv.
  * Every path exists in Theme with a leaf of the matching type (U2). The keys that later steps add land with their
- * rows: 06 T5 frameOnLight, cameraBody.outlineColor and frustumLines.haloColor; the sibling specs' keys of 06 5.12.
+ * rows: 01 F1-5 scene.wallBack (--scene-wall-back); 06 T5 frameOnLight, cameraBody.outlineColor and
+ * frustumLines.haloColor; the sibling specs' keys of 06 5.12.
  */
 export const COLOR_BINDINGS = Object.freeze([
   ['scene.background',              '--scene-background',     'num'],
@@ -29,6 +30,10 @@ export const COLOR_BINDINGS = Object.freeze([
   ['scene.safeZone.thresholdColor', '--scene-safe-threshold', 'rgb01'],
   ['scene.safeZone.lineColor',      '--scene-safe-line',      'num'],
   ['scene.safeZone.labelColor',     '--scene-safe-label',     'hex'],
+  ['scene.debug.faceFront',         '--scene-face-front',     'num'],   // spec 01's debug view (01 4.6, CR-8; 06 T3)
+  ['scene.debug.faceBack',          '--scene-face-back',      'num'],
+  ['scene.debug.vertexNormal',      '--scene-normals',        'num'],
+  ['scene.debug.faceNormal',        '--scene-normals-face',   'num'],
   ['canvas.background',             '--canvas-background',    'hex'],
   ['ui.status.within',              '--status-within',        'hex'],
   ['ui.status.offCenter',           '--status-off-center',    'hex'],

@@ -1,0 +1,10 @@
+{
+  "commit": "F6-T3",
+  "bugs": [],
+  "expect": [],
+  "mayChange": [
+    { "output": "large_wall/final__export-zip__led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen so far: L2_PanelIDs.png (1995, 948), L3_PanelIDs.png (1970, 1003), L4_PanelIDs.png (2026, 858), 1 px each, 3840x1920); this commit changes no export and no texture" }
+  ],
+  "notes": "06 T3 (8.4), invariance: the layer-4 tokens of css/02-tokens.css hold the legacy values (the Theme.js fallbacks, U4) plus spec 01's four debug-view tokens with spec 01's values; App builds theme = buildTheme(Theme, getComputedStyle reader) (BIND_FONTS_DEFAULT false, so the canvas fonts stay the base strings); .status-pending / .status-ok read var(--status-off-center) / var(--status-within), the same colours. The ui_visual CSS_TOKENS probe lists only legacy token names, which are untouched; the harness palette hook (07 C53) now reads the --scene-* tokens instead of the served SceneTheme, with equal values, and --scene-wall-back stays undefined until 01 F1-5, so the cabinet probe stays null. No output may change."
+}
