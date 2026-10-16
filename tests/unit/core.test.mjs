@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 
 import { Events, EventBus } from '../../js/core/EventBus.js';
 import {
-  Strategies, unsupportedStrategy, orDefault, legacyHtml, legacySpreadBase64, LEGACY_SITES,
+  Strategies, unsupportedStrategy, orDefault, legacyHtml, LEGACY_SITES,
 } from '../../js/legacy/LegacyCompat.js';
 import * as LegacyCompat from '../../js/legacy/LegacyCompat.js';
 import { SceneTheme, CanvasTheme, UiColors, Palette, Brand, Theme } from '../../js/theme/Theme.js';
@@ -201,7 +201,6 @@ describe('Strategies', () => {
         gltf: { winding: 'legacy-cw', normals: 'none', attributes: ['POSITION'], indexType: 'uint16',
                 doubleSided: 'omit' },
       },
-      gltfBase64: 'spread',
       exportCombinedColor: 'first-section',
       mtlTextureNaming: 'index',
       zipTextureNaming: 'sanitized-name',
@@ -223,11 +222,11 @@ describe('Strategies', () => {
 
   test('is deep-frozen (nested profiles and arrays included)', () => {
     assertDeepFrozen(Strategies, 'Strategies');
-    assert.throws(() => { Strategies.gltfBase64 = 'chunked'; }, TypeError);
+    assert.throws(() => { Strategies.frustumDepthM = 30; }, TypeError);
     assert.throws(() => { Strategies.mesh.viewport.winding = 'ccw'; }, TypeError);
     assert.throws(() => { Strategies.mesh.gltf.attributes.push('NORMAL'); }, TypeError);
     assert.throws(() => { Strategies.dispose.gizmo = true; }, TypeError);
-    assert.equal(Strategies.gltfBase64, 'spread');
+    assert.equal(Strategies.frustumDepthM, 15);
   });
 
   test('mesh.gltf.doubleSided is the string "omit" (the material object gets no doubleSided key)', () => {
@@ -276,29 +275,15 @@ describe('legacyHtml', () => {
   });
 });
 
-describe('legacySpreadBase64', () => {
-  test('equals Buffer base64 for small inputs', () => {
-    const cases = [
-      new Uint8Array([]),
-      new Uint8Array([0]),
-      new Uint8Array([255, 254, 253]),
-      Uint8Array.from({ length: 256 }, (_, i) => i),
-      Uint8Array.from({ length: 4099 }, (_, i) => (i * 37 + 11) & 255),
-    ];
-    for (const bytes of cases) {
-      assert.equal(legacySpreadBase64(bytes), Buffer.from(bytes).toString('base64'));
-    }
-  });
-
-  test('throws RangeError for 200000 bytes (B-H3, the preserved spread overflow)', () => {
-    assert.throws(() => legacySpreadBase64(new Uint8Array(200000)), RangeError);
-  });
-});
-
 describe('retired legacy helpers', () => {
   test('legacyMissingDownloadBlob is gone (B-M1 landed in 08 P2-5a: the safe-distance OBJ uses downloader.saveBlob)', () => {
     assert.equal('legacyMissingDownloadBlob' in LegacyCompat, false);
     assert.equal(typeof globalThis.downloadBlob, 'undefined');
+  });
+
+  test('legacySpreadBase64 and Strategies.gltfBase64 are gone (B-H3 landed in 08 P2-1a: GltfExporter.chunkedBase64)', () => {
+    assert.equal('legacySpreadBase64' in LegacyCompat, false);
+    assert.equal('gltfBase64' in Strategies, false);
   });
 });
 
@@ -363,7 +348,7 @@ describe('LEGACY_SITES', () => {
   const landed = [...register].filter(([, row]) => /^Landed\b/.test(row.fix)).map(([id]) => id);
   // The Phase 2 fixes landed so far (docs/improvements/08-bugfix-roadmap.md section 10, merge order), each with the
   // 08 commit its 8.2 fix cell names. Every landing commit adds its id here.
-  const PHASE2_LANDED = { 'B-M1': 'P2-5a' };
+  const PHASE2_LANDED = { 'B-M1': 'P2-5a', 'B-H3': 'P2-1a' };
 
   test('ids cover every bug id B-H1..B-H5, B-M1..B-M16, B-L1..B-L36 except the landed fixes, and nothing else', () => {
     const expected = new Set();

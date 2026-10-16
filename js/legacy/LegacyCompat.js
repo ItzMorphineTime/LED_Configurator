@@ -3,14 +3,13 @@
  * The single home of every output-affecting legacy switch and helper of Phase 1:
  * - `Strategies`: deep-frozen switches, each read at exactly one site (ARCHITECTURE.md 8.1);
  * - `LegacyProfiles`: the exact Phase-1 mesh profiles, read only by the oracle tests (ARCHITECTURE.md 3.3);
- * - legacy helpers that reproduce a preserved quirk (`orDefault`, `legacyHtml`, `legacySpreadBase64`);
+ * - legacy helpers that reproduce a preserved quirk (`orDefault`, `legacyHtml`);
  * - `unsupportedStrategy`, thrown by every switch-and-throw reader for a non-legacy value (ARCHITECTURE.md 1.5);
  * - `LEGACY_SITES`, the machine-readable register of every tagged legacy site.
  * The human-readable register is docs/ARCHITECTURE.md section 8 (8.1 switches, 8.2 quirks, 8.3 tag sites).
  * A later fix flips one value (plus its new code branch) or edits one tagged site, updates LEGACY_SITES and
  * re-baselines only the affected golden-master outputs.
- * Legacy source: index.html@cd3fd3f 4902 (btoa spread), every `|| default` input rule, every innerHTML template
- * interpolation.
+ * Legacy source: index.html@cd3fd3f, every `|| default` input rule and every innerHTML template interpolation.
  * Layer: legacy (imports no other directory of js/).
  */
 
@@ -44,7 +43,6 @@ export const Strategies = deepFreeze({
     gltf:     { winding: 'legacy-cw', normals: 'none', attributes: ['POSITION'], indexType: 'uint16',
                 doubleSided: 'omit' },             // 'omit' = the material object has NO doubleSided key
   },
-  gltfBase64: 'spread',                            // B-H3
   exportCombinedColor: 'first-section',            // B-L6
   mtlTextureNaming: 'index',                       // B-M2
   zipTextureNaming: 'sanitized-name',              // B-L14 (no de-duplication)
@@ -68,8 +66,9 @@ export const Strategies = deepFreeze({
  * the oracle tests inject them into WallMeshBuilder / ObjExporter / GltfExporter so that the "builder == verbatim
  * oracle" tests stay meaningful after each Phase-2 flip of `Strategies.mesh`. Every value here must stay a supported
  * case of the builder and the exporters (a flipped key keeps its legacy case, ARCHITECTURE.md 8.1).
- * Global keys (for example `gltfBase64`, `exportCombinedColor`) cannot be injected: when one is retired, the oracle
- * cases that depend on it become explicit expected-value tests in the same commit.
+ * Global keys (for example `exportCombinedColor`) cannot be injected: when one is retired, the oracle cases that
+ * depend on it become explicit expected-value tests in the same commit (08 P2-1a retired `gltfBase64`: the oracle
+ * tests inject a copy of the Phase-1 spread encoder instead).
  */
 export const LegacyProfiles = deepFreeze({
   mesh: {
@@ -115,20 +114,6 @@ export const orDefault = (v, d) => v || d;
 export const legacyHtml = (s) => s;
 
 /**
- * Base64 of a byte array, exactly as the legacy glTF writer (index.html 4902) computed it.
- * LEGACY(B-H3): btoa(String.fromCharCode(...bytes)). Throws RangeError ("Maximum call stack size
- * exceeded") above ~125 KB in V8. Must be called at shallow stack depth (directly from the exporter).
- * Ports: index.html@cd3fd3f line 4902.
- * Side effects: none.
- * @param {ArrayLike<number>} bytes  e.g. a Uint8Array
- * @returns {string} base64 text
- * @throws {RangeError} for large inputs (the preserved quirk)
- */
-export function legacySpreadBase64(bytes) {
-  return btoa(String.fromCharCode(...bytes));
-}
-
-/**
  * Quirk register (ARCHITECTURE.md 8.2): bug id -> [preserved behaviour, how the fix lands]. Module-private.
  * A fixed quirk keeps its row (its fix text starts with 'Landed') but has no TAG_SITES pair, so LEGACY_SITES
  * no longer lists it.
@@ -140,7 +125,7 @@ const QUIRKS = deepFreeze({
   'B-H2': ['Export winding, constant/contradicting normals, no doubleSided (R-5, S-2)',
     'flip profiles + normal writers'],
   'B-H3': ['glTF RangeError; ZIP dies silently (S-3, U-4)',
-    'chunked encoder + guard'],
+    'Landed in 08 P2-1a (`chunkedBase64` encoder; `ProjectIO.#runExport` reports every export failure; no tag site)'],
   'B-H4': ['Preview off in pilot: alert, stuck in pilot (O-8)',
     'exit pilot before clearing `enabled`'],
   'B-H5': ['Wall textures leak (memory only)',
@@ -259,7 +244,6 @@ const QUIRKS = deepFreeze({
 const TAG_SITES = deepFreeze([
   ['js/legacy/LegacyCompat.js#orDefault', ['B-L9']],
   ['js/legacy/LegacyCompat.js#legacyHtml', ['B-M4']],
-  ['js/legacy/LegacyCompat.js#legacySpreadBase64', ['B-H3']],
   ['js/domain/WallSection.js#constructor', ['B-L8']],
   ['js/domain/WallSection.js#FIELD_RULES', ['B-L15']],
   ['js/domain/WallSection.js#exceeds4K', ['B-L17']],
@@ -286,7 +270,7 @@ const TAG_SITES = deepFreeze([
   ['js/io/ProjectSerializer.js#write', ['B-M3', 'B-L31']],
   ['js/io/ProjectSerializer.js#read', ['B-L8', 'B-M4']],
   ['js/io/ObjExporter.js#write', ['B-H2', 'B-M6', 'B-L6', 'B-L8']],
-  ['js/io/GltfExporter.js#write', ['B-H3', 'B-L6', 'B-L8']],
+  ['js/io/GltfExporter.js#write', ['B-L6', 'B-L8']],
   ['js/io/GltfExporter.js#addMesh', ['B-H2', 'B-M7', 'B-L5']],
   ['js/render/SceneManager.js#addHelper', ['B-M11']],
   ['js/render/LEDWallView.js#rebuild', ['B-L8']],
@@ -319,7 +303,7 @@ const TAG_SITES = deepFreeze([
   ['js/app/CameraController.js#setPreviewEnabled', ['B-H4', 'B-M8']],
   ['js/app/ProjectIO.js#exportOBJ', ['B-L7']],
   ['js/app/ProjectIO.js#exportPanelIds', ['B-L4']],
-  ['js/app/ProjectIO.js#exportZIP', ['B-H3', 'B-L4', 'B-L14']],
+  ['js/app/ProjectIO.js#exportZIP', ['B-L4', 'B-L14']],
   ['js/ui/SectionListPanel.js#render', ['B-M4']],
   ['js/ui/SectionListPanel.js#patchCard', ['B-L16']],
   ['js/ui/SectionLogosPanel.js#render', ['B-M4', 'B-L8']],

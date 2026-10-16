@@ -661,10 +661,12 @@ in parentheses changes them:
 - `camera`: Export Safe Distance OBJ throws `ReferenceError: downloadBlob is not defined`, so no file is
   produced (08 P2-5a: the OBJ downloads, with the legacy per-column band until P2-5b).
 - `large_wall`: Export glTF in panel mode throws `RangeError: Maximum call stack size exceeded`
-  from `btoa(String.fromCharCode(...buffer))`, so no file is produced.
+  from `btoa(String.fromCharCode(...buffer))`, so no file is produced (08 P2-1a: the chunked encoder
+  writes the file).
 - `import_edge`: after importing an empty wall, Add Section throws
   `TypeError: Cannot read properties of undefined (reading 'panelCols')`, and Export OBJ and Export
-  glTF throw `TypeError: Cannot read properties of undefined (reading 'color')`. Importing `null`
+  glTF throw `TypeError: Cannot read properties of undefined (reading 'color')` (08 P2-1a: both are
+  M-EXP-1 alerts, `Export OBJ failed: ... No file was downloaded.`; Add Section still throws). Importing `null`
   alerts `Error parsing JSON file: Cannot read properties of null (reading 'sections')`, and the
   malformed file alerts `Error parsing JSON file: Unexpected end of JSON input`.
 - `preview_off_in_pilot`: three alerts `Enable Camera Frustum Preview first to use Pilot Mode`, and
@@ -675,7 +677,8 @@ in parentheses changes them:
 - `p2_curved_safe_distance`: each of the four exports throws the B-M1 `ReferenceError`, so no OBJ is
   produced (08 P2-5a: the four OBJs download); the `concave30` screenshot shows the folded band (B-M15).
 - `p2_oversize_canvas`: Export Panel IDs throws `TypeError: Failed to execute 'createObjectURL' on
-  'URL': Overload resolution failed.` and downloads nothing; the ZIP holds a 0-byte texture (B-L4).
+  'URL': Overload resolution failed.` and downloads nothing; the ZIP holds a 0-byte texture (B-L4)
+  (08 P2-1a: the TypeError is an M-EXP-1 alert).
 - `p2_shortcut_filters`: `g` in the focused select turns translate mode on, Ctrl+G turns it off again,
   and the three auto-repeated `p` presses leave pilot mode on (B-L11).
 - `p2_project_v2`: the JSON exports are v1 (sections and mesh mode only), so the restored page has the

@@ -41,7 +41,8 @@ export class ExportPanel {
    * Adds the listeners in legacy order: export-zip -> projectIO.exportZIP(); export-panel-ids ->
    * exportPanelIds(); export-json -> exportJSON(); export-obj -> exportOBJ(); export-gltf -> exportGLTF();
    * #import-json click -> #import-input.click(); #import-input change -> projectIO.importFromInputEvent(e).
-   * The listeners return the promise of the async exports, so a rejection stays unhandled, as legacy.
+   * The listeners return the promise of the async exports, which never rejects since 08 P2-1a (ProjectIO reports
+   * every export failure as the M-EXP-1 alert).
    * Ports: index.html@cd3fd3f lines 4482-4488.
    * Side effects: adds 6 click listeners and 1 change listener.
    */

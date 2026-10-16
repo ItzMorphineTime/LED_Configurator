@@ -141,7 +141,7 @@ Direction of communication:
 | R10 | **Pure layers are Node-testable:** `core`, `legacy`, `theme`, `domain`, `geometry`, `io` import no THREE and touch no DOM. | Exporters are byte-compared against golden files in plain Node before any wiring. |
 | R11 | **Listener registration order is reproduced:** orbit canvas listeners and keyboard-state listeners in the init phase; panel listeners, shortcut keys and canvas pointer routing in the setupUI phase, in legacy statement order (section 7). | Same handler order on shared targets (`mousedown`, `keydown`, ...). |
 | R12 | **Domain values are never coerced or validated in Phase 1** (B-L8). Id-keyed lookups use plain-object property-key semantics (`obj[id]`, i.e. `String(id)` for primitives). | Imported strings, NaN and duplicate ids behave exactly as today. |
-| R13 | **Exceptions are never caught** except where legacy caught them (the import `try/catch`). Sync/async shape of every export function is preserved (`exportZIP` and `exportPanelIds` stay `async`). | Console baseline (uncaught errors, unhandled rejections) and import alerts stay identical. |
+| R13 | **Exceptions are never caught** except where legacy caught them (the import `try/catch`). Sync/async shape of every export function is preserved (`exportZIP` and `exportPanelIds` stay `async`). **Amended by 08 P2-1a:** `ProjectIO.#runExport`, which wraps every export and reports a failure as the M-EXP-1 alert, and the export size guards (08 P2-1c) are the sanctioned exceptions. | Console baseline (uncaught errors, unhandled rejections) and import alerts stay identical. |
 | R14 | **Reorderings are allowed only if listed in section 6.0**, each with its proof of non-observability. | Keeps "verbatim" auditable. |
 
 
@@ -181,8 +181,8 @@ js/
   core/
     EventBus.js                            WP3   Events catalogue (frozen) + synchronous EventBus (throws on unknown event names)
   legacy/
-    LegacyCompat.js                        WP3   Strategies (deep-frozen switches), legacy helpers (orDefault, legacyHtml,
-                                                 legacySpreadBase64), unsupportedStrategy, LEGACY_SITES
+    LegacyCompat.js                        WP3   Strategies (deep-frozen switches), LegacyProfiles, legacy helpers (orDefault,
+                                                 legacyHtml), unsupportedStrategy, LEGACY_SITES
   theme/
     Theme.js                               WP3   SceneTheme, CanvasTheme, UiColors, Palette, Brand, Theme (ThemeBridge-ready shape)
   domain/
@@ -376,7 +376,6 @@ export const Strategies = deepFreeze({
     gltf:     { winding: 'legacy-cw', normals: 'none', attributes: ['POSITION'], indexType: 'uint16',
                 doubleSided: 'omit' },             // 'omit' = the material object has NO doubleSided key
   },
-  gltfBase64: 'spread',                            // B-H3
   exportCombinedColor: 'first-section',            // B-L6
   mtlTextureNaming: 'index',                       // B-M2
   zipTextureNaming: 'sanitized-name',              // B-L14 (no de-duplication)
@@ -419,16 +418,12 @@ export const orDefault = (v, d) => v || d;
  *  so escaping is a one-function fix. */
 export const legacyHtml = (s) => s;
 
-/** LEGACY(B-H3): btoa(String.fromCharCode(...bytes)). Throws RangeError ("Maximum call stack size
- *  exceeded") above ~125 KB in V8. Must be called at shallow stack depth (directly from the exporter). */
-export function legacySpreadBase64(bytes)
-
 /** Register of every tagged legacy site (sections 8.2 and 8.3). Frozen array of
  *  { id: 'B-M14', site: 'js/interaction/ViewportInput.js#attachPointer', behaviour: '...', fix: '...' }.
  *  Entries whose site is not under js/ (CSS, markup) are documentation-only. */
 export const LEGACY_SITES
 ```
-`deepFreeze` is module-private. `LegacyProfiles` is not a switch: it has no read site in `js/` and is not covered by the `Strategies` rule of the static check; when a Phase-2 commit flips a `Strategies.mesh.*` key, the builder keeps the legacy case for it (08 5.1 rule 3), and global keys (`gltfBase64`, `exportCombinedColor`, ...) cannot be injected, so the oracle cases that depend on a retired global key become explicit expected-value tests in that commit. The `behaviour` and `fix` strings of each `LEGACY_SITES` entry are the 8.2 cell texts with only the markdown escape `\|` unescaped to `|` (inline backticks are kept as written); the 8.2 register is stored once and expanded per 8.3 site. Phase 1 implements only the legacy value of every key, except the `dispose.*` keys flipped by the non-observable Phase 1C clean-ups (8.1; a landed fix keeps its 8.2 row and loses its 8.3 rows, so `LEGACY_SITES` no longer lists it). Every leaf key (arrays such as `mesh.gltf.attributes` and `previewRendererSize` are leaves) has the read site given in section 8.1 and spelled out in that module's entry below; how it is read (switch-and-throw, value, array comparison) follows section 1.5.
+`deepFreeze` is module-private. `LegacyProfiles` is not a switch: it has no read site in `js/` and is not covered by the `Strategies` rule of the static check; when a Phase-2 commit flips a `Strategies.mesh.*` key, the builder keeps the legacy case for it (08 5.1 rule 3), and global keys (`exportCombinedColor`, ...) cannot be injected, so the oracle cases that depend on a retired global key become explicit expected-value tests in that commit (08 P2-1a retired `gltfBase64` and deleted `legacySpreadBase64`; `tests/unit/io.test.mjs` injects a verbatim copy of that encoder into its oracle exporter). The `behaviour` and `fix` strings of each `LEGACY_SITES` entry are the 8.2 cell texts with only the markdown escape `\|` unescaped to `|` (inline backticks are kept as written); the 8.2 register is stored once and expanded per 8.3 site. Phase 1 implements only the legacy value of every key, except the `dispose.*` keys flipped by the non-observable Phase 1C clean-ups (8.1; a landed fix keeps its 8.2 row and loses its 8.3 rows, so `LEGACY_SITES` no longer lists it). Phase 2 retires keys as 08 4.1 lists them (the key, its switch and its 8.1 row are deleted in the fixing commit); retired so far: `gltfBase64` (08 P2-1a). Every leaf key (arrays such as `mesh.gltf.attributes` and `previewRendererSize` are leaves) has the read site given in section 8.1 and spelled out in that module's entry below; how it is read (switch-and-throw, value, array comparison) follows section 1.5.
 
 ### 3.4 `js/theme/Theme.js`
 
@@ -1545,9 +1540,7 @@ export class GltfExporter {
   /** @param {{brand: Brand, colorToRgb, builder: WallMeshBuilder (Strategies.mesh.gltf profile),
    *           encodeBase64?: (bytes: Uint8Array) => string}} deps
    *  profile = builder.profile (the injected Strategies.mesh.gltf); #addMesh reads profile.attributes / indexType / doubleSided.
-   *  encodeBase64 defaults to the module-private gltfBase64Encoder(), evaluated in the constructor:
-   *    switch (Strategies.gltfBase64) { case 'spread': return legacySpreadBase64;
-   *      default: throw unsupportedStrategy('gltfBase64', Strategies.gltfBase64) }   (B-H3) */
+   *  encodeBase64 defaults to chunkedBase64 (08 P2-1a, B-H3; the Phase-1 `gltfBase64` switch and its spread encoder are retired) */
   constructor({ brand, colorToRgb, builder, encodeBase64 })
   /** Verbatim 4719-4909. gltf = { asset: {version: "2.0", generator: brand.gltfGenerator}, scene: 0, scenes: [{nodes: []}], nodes: [],
    *  meshes: [], accessors: [], bufferViews: [], buffers: [], materials: [] } (this key order).
@@ -1568,9 +1561,14 @@ export class GltfExporter {
    *  panel: per section color first; per panel: vertices = the 4 builder.panelCorners flattened (x, y, z); indices =
    *    builder.panelQuadIndices(0) ([0, 3, 2, 0, 2, 1]); addMesh(exportPanelName(i, row, col), ...).
    *  Buffer: concatenate, then uri = 'data:application/octet-stream;base64,' + encodeBase64(combinedBuffer)
-   *  (LEGACY(B-H3): RangeError above ~125 KB, NOT caught). @returns {object} gltf */
+   *  (default chunkedBase64: any size). @returns {object} gltf */
   write({ sections, meshMode, layout })
 }
+
+/** 08 6.1 (B-H3 fixed in 08 P2-1a): parts = String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)) per 32,768-byte
+ *  chunk, then ONE btoa(parts.join('')) (no mid-stream padding). Equal to the legacy btoa(String.fromCharCode(...bytes))
+ *  wherever that worked (byte-identical glTF below ~125 KB). Exported only for its unit test. */
+export function chunkedBase64(bytes)
 ```
 
 ### 3.10 App (use cases and ordered pipelines)
@@ -1703,10 +1701,11 @@ export class PropController {          // one instance per prop; Selectable prop
 #### `js/app/ProjectIO.js`
 ```js
 export class Downloader {              // the single anchor sequence (5082-5091 == 4547-4553 == 4932-4938)
-  /** @param {{doc: Document}} deps */
-  constructor({ doc })
-  /** a = doc.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; doc.body.appendChild(a); a.click();
-   *  doc.body.removeChild(a); URL.revokeObjectURL(a.href)   (URL looked up at call time) */
+  /** @param {{doc: Document, win: Window}} deps */
+  constructor({ doc, win })
+  /** a = doc.createElement('a'); href = URL.createObjectURL(blob); a.href = href; a.download = filename; doc.body.appendChild(a);
+   *  a.click(); doc.body.removeChild(a); win.setTimeout(() => URL.revokeObjectURL(href), 0)   (URL looked up at call time;
+   *  the revoke is deferred since 08 P2-1a, legacy revoked synchronously, 8.4) */
   saveBlob(blob, filename)
   /** saveBlob(new Blob([content], {type: mimeType}), filename) */
   saveText(content, filename, mimeType)
@@ -1717,6 +1716,12 @@ export class ProjectIO {
    *           gltfExporter: GltfExporter, panelIds: PanelIdRenderer, safeDistance: SafeDistanceView, downloader: Downloader,
    *           JSZip, dialogs, brand: Brand, win: Window}} deps */
   constructor({ project, wallController, serializer, objExporter, gltfExporter, panelIds, safeDistance, downloader, JSZip, dialogs, brand, win })
+  /** 08 P2-1a (B-H3), 08 3.3 M-EXP-1: every export body below runs as #runExport(label, fn), label = 'Export JSON' |
+   *  'Export OBJ' | 'Export glTF' | 'Export Panel IDs' | 'Export All (ZIP)' | 'Export Safe Distance OBJ'. A synchronous throw
+   *  or a rejection of the promise fn returns is caught: dialogs.alert(`${label} failed: ${err.message}. No file was
+   *  downloaded.`), then win.console.warn(err) (a non-Error is reported through String(err)). The returned promise of an
+   *  async export never rejects. Errors of the MTL timer of exportOBJ are not covered. (R13 amendment, 1.6.) */
+  #runExport(label, fn)
   /** 4942-4965: downloader.saveText(JSON.stringify(serializer.write(project, {variant: 'file'}), null, 2), brand.files.json, 'application/json') */
   exportJSON()
   /** 4911-4917: layout = wallController.layout(); {objContent, mtlContent} = objExporter.write({sections, meshMode, layout});
@@ -1725,15 +1730,17 @@ export class ProjectIO {
   exportOBJ()
   /** 4919-4924: saveText(JSON.stringify(gltfExporter.write({...}), null, 2), brand.files.gltf, 'application/json') */
   exportGLTF()
-  /** 4926-4940 (stays async, no await): panelIds.atlasCanvas(sections).toBlob(blob => downloader.saveBlob(blob, brand.files.panelIdsPng),
-   *  'image/png')   LEGACY(B-L4): no null-blob guard */
+  /** 4926-4940 (stays async): canvas = panelIds.atlasCanvas(sections); blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+   *  downloader.saveBlob(blob, brand.files.panelIdsPng)   LEGACY(B-L4): no null-blob guard (the TypeError of
+   *  URL.createObjectURL(null) becomes the M-EXP-1 alert since 08 P2-1a) */
   async exportPanelIds()
   /** 4491-4554, same order: zip = new JSZip(); zip.file(brand.files.json, JSON.stringify(serializer.write(project, {variant: 'zip'}), null, 2));
    *  layout = wallController.layout(); OBJ + MTL files; glTF file; folder = zip.folder('textures'); atlas = computeAtlas(sections);
    *  for i: canvas = panelIds.sectionCanvas(sections[i], i, null, atlas.entries[i].startCol); base64 = canvas.toDataURL('image/png').split(',')[1];
    *  folder.file(zipTextureFileName(sections[i], i), base64, {base64: true}) (LEGACY(B-L14): same names overwrite);
    *  content = await zip.generateAsync({type: 'blob'}); downloader.saveBlob(content, brand.files.zip).
-   *  LEGACY(B-H3): no try/catch (a glTF RangeError rejects the promise unhandled); LEGACY(B-L4): `data:,` for oversized canvases. */
+   *  LEGACY(B-L4): `data:,` for oversized canvases. The body is the private #writeZip(), run by #runExport (08 P2-1a: a
+   *  failure is the M-EXP-1 alert instead of an unhandled rejection). */
   async exportZIP()
   /** 2786-2827: group = safeDistance.object3D; if (!group) { dialogs.alert('Enable Safe Distance 3D visualization first'); return }
    *  text = objExporter.writeSafeDistance(group); blob = new Blob([text], {type: 'text/plain'});
@@ -2323,7 +2330,7 @@ e.target.value = ''                                // synchronous reset (5009)
 
 ### 6.13 Exports
 
-All exports read the live project and a fresh `layoutProject(project)`; none reads the scene except the safe-distance OBJ (its group). See `ProjectIO` (section 3.10) for the exact sequences of `exportJSON`, `exportOBJ` (OBJ, then MTL after 100 ms), `exportGLTF`, `exportPanelIds` (async, `toBlob`), `exportZIP` (async; JSON -> OBJ -> MTL -> glTF -> textures -> `generateAsync` -> download) and `exportSafeDistanceOBJ` (alert or download; 08 P2-5a). Console and dialog behaviour must match the baseline: `RangeError: Maximum call stack size exceeded` for large panel-mode glTF (sync throw for glTF, unhandled rejection for ZIP).
+All exports read the live project and a fresh `layoutProject(project)`; none reads the scene except the safe-distance OBJ (its group). See `ProjectIO` (section 3.10) for the exact sequences of `exportJSON`, `exportOBJ` (OBJ, then MTL after 100 ms), `exportGLTF`, `exportPanelIds` (async, `toBlob`), `exportZIP` (async; JSON -> OBJ -> MTL -> glTF -> textures -> `generateAsync` -> download) and `exportSafeDistanceOBJ` (alert or download; 08 P2-5a). Every export runs inside `ProjectIO.#runExport` (08 P2-1a): an export that throws or rejects shows the M-EXP-1 alert `<label> failed: <message>. No file was downloaded.` and warns in the console instead of raising an uncaught exception or an unhandled rejection (for example the empty-wall combined OBJ/glTF TypeError of `import_edge`). Console and dialog behaviour must match the baseline of the parent commit.
 
 ---
 
@@ -2363,7 +2370,7 @@ serializer = new ProjectSerializer({ palette: theme.palette })
 objExporter = new ObjExporter({ brand, colorToRgb, builder: new WallMeshBuilder(Strategies.mesh.obj) })
 gltfExporter = new GltfExporter({ brand, colorToRgb, builder: new WallMeshBuilder(Strategies.mesh.gltf) })
 projectIO = new ProjectIO({ project, wallController, serializer, objExporter, gltfExporter, panelIds, safeDistance,
-                            downloader: new Downloader({ doc }), JSZip, dialogs, brand, win })
+                            downloader: new Downloader({ doc, win }), JSZip, dialogs, brand, win })
 sectionList = new SectionListPanel({ doc, project, wallController, bus })
 displayPanel = new WallDisplayPanel({ doc, wallController, bus })
 logosPanel = new SectionLogosPanel({ doc, project, wallController, bus })     // after sectionList and displayPanel (5.2)
@@ -2423,7 +2430,6 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `mesh.gltf.attributes = ['POSITION']` | B-M7 | No NORMAL, no TEXCOORD_0 | `GltfExporter.#addMesh`: `profile.attributes` | array: equal to `['POSITION']` or throw | add NORMAL / TEXCOORD_0 |
 | `mesh.gltf.indexType = 'uint16'` | B-L5 | Always Uint16 (5123), wraps above 65,535 vertices | `GltfExporter.#addMesh`: `profile.indexType` | switch | `'auto'` (Uint32 when needed) |
 | `mesh.gltf.doubleSided = 'omit'` | B-H2 | The material object has **no** `doubleSided` key | `GltfExporter.#addMesh`: `profile.doubleSided` | switch | `'true'` writes `doubleSided: true` |
-| `gltfBase64 = 'spread'` | B-H3 | `btoa(String.fromCharCode(...bytes))`: RangeError above ~125 KB; glTF export throws, ZIP rejects unhandled | `GltfExporter` constructor, default encoder `gltfBase64Encoder()`: `Strategies.gltfBase64` (returns `legacySpreadBase64`) | switch | chunked encoder + error reporting in `ProjectIO` |
 | `exportCombinedColor = 'first-section'` | B-L6 | Combined MTL Kd and glTF baseColor from `sections[0]` (TypeError on an empty wall) | `ObjExporter.write` (first statement of the combined branch) and `GltfExporter.write` (after the combined loop): `Strategies.exportCombinedColor`, each at its legacy colour point | switch | per-section materials or COLOR_0 |
 | `mtlTextureNaming = 'index'` | B-M2 | `map_Kd textures/Wall_<i>_PanelIDs.png` | `PanelNaming.mtlTextureFile`: `Strategies.mtlTextureNaming` | switch | use `zipTextureFileName` |
 | `zipTextureNaming = 'sanitized-name'` | B-L14 | Colliding sanitised names overwrite in the ZIP | `PanelNaming.zipTextureFileName`: `Strategies.zipTextureNaming` | switch | de-duplicate |
@@ -2450,7 +2456,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 |---|---|---|---|
 | B-H1 | Viewport strip winding vs normals (C-5) | `Strategies.mesh.viewport.winding/side` | flip profile (Feature 1) |
 | B-H2 | Export winding, constant/contradicting normals, no doubleSided (R-5, S-2) | `Strategies.mesh.obj/gltf` | flip profiles + normal writers |
-| B-H3 | glTF RangeError; ZIP dies silently (S-3, U-4) | `Strategies.gltfBase64` (`legacySpreadBase64`); no try/catch in `ProjectIO.exportZIP` | chunked encoder + guard |
+| B-H3 | glTF RangeError; ZIP dies silently (S-3, U-4) | `GltfExporter`'s default encoder; `ProjectIO` exports (fixed; `Strategies.gltfBase64` retired) | Landed in 08 P2-1a (`chunkedBase64` encoder; `ProjectIO.#runExport` reports every export failure; no tag site) |
 | B-H4 | Preview off in pilot: alert, stuck in pilot (O-8) | `CameraController.setPreviewEnabled` (order) + `PilotController.toggle` guard | exit pilot before clearing `enabled` |
 | B-H5 | Wall textures leak (memory only) | `Strategies.dispose.wallTextures` | Landed in Phase 1C H1 (`dispose.wallTextures = true`; no tag site) |
 | B-M1 | Safe-distance OBJ throws ReferenceError (K-3) | `ProjectIO.exportSafeDistanceOBJ` (fixed) | Landed in 08 P2-5a (`downloader.saveBlob`; no tag site) |
@@ -2516,7 +2522,6 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 |---|---|
 | `js/legacy/LegacyCompat.js#orDefault` | B-L9 |
 | `js/legacy/LegacyCompat.js#legacyHtml` | B-M4 |
-| `js/legacy/LegacyCompat.js#legacySpreadBase64` | B-H3 |
 | `js/domain/WallSection.js#constructor` | B-L8 |
 | `js/domain/WallSection.js#FIELD_RULES` | B-L15 |
 | `js/domain/WallSection.js#exceeds4K` | B-L17 |
@@ -2543,7 +2548,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/io/ProjectSerializer.js#write` | B-M3, B-L31 |
 | `js/io/ProjectSerializer.js#read` | B-L8, B-M4 |
 | `js/io/ObjExporter.js#write` | B-H2, B-M6, B-L6, B-L8 |
-| `js/io/GltfExporter.js#write` | B-H3, B-L6, B-L8 |
+| `js/io/GltfExporter.js#write` | B-L6, B-L8 |
 | `js/io/GltfExporter.js#addMesh` | B-H2, B-M7, B-L5 |
 | `js/render/SceneManager.js#addHelper` | B-M11 |
 | `js/render/LEDWallView.js#rebuild` | B-L8 |
@@ -2576,7 +2581,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/app/CameraController.js#setPreviewEnabled` | B-H4, B-M8 |
 | `js/app/ProjectIO.js#exportOBJ` | B-L7 |
 | `js/app/ProjectIO.js#exportPanelIds` | B-L4 |
-| `js/app/ProjectIO.js#exportZIP` | B-H3, B-L4, B-L14 |
+| `js/app/ProjectIO.js#exportZIP` | B-L4, B-L14 |
 | `js/ui/SectionListPanel.js#render` | B-M4 |
 | `js/ui/SectionListPanel.js#patchCard` | B-L16 |
 | `js/ui/SectionLogosPanel.js#render` | B-M4, B-L8 |
@@ -2587,7 +2592,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `css/09-viewport-tools.css` (header comment; documentation-only) | B-L24 |
 | `index.html` (markup, untagged; documentation-only) | B-L36 |
 
-Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left). B-L24 has two documentation-only entries, one per stylesheet: the header comment of each of the two stylesheets carries a paragraph `Legacy note B-L24 (documentation-only, preserved): ...`, which does not use the reserved token `LEGACY(` (CSS is untagged; rule 6 scans only `js/`); grep `B-L24` or `Legacy note` to find it.
+Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14). B-L24 has two documentation-only entries, one per stylesheet: the header comment of each of the two stylesheets carries a paragraph `Legacy note B-L24 (documentation-only, preserved): ...`, which does not use the reserved token `LEGACY(` (CSS is untagged; rule 6 scans only `js/`); grep `B-L24` or `Legacy note` to find it.
 
 How rule 6 reads these rows (as implemented in `tests/static/check.mjs`): the comparison is per file, so a tag may sit in a private helper that only the named method calls (for example `ProjectSerializer.#readV1` for `#read`, `ObjExporter.#writeCombined` / `#stripNormalLine` for `#write`, `GltfExporter.#writeCombined` for `#write`); a tag wrapped across JSDoc continuation lines counts as one tag (placeholders are still rejected); and a row whose `js/` file does not exist is reported, so a typo in a site path cannot bypass the check.
 
@@ -2599,7 +2604,6 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 |---|---|---|
 | In pilot mode the main camera keeps the viewport aspect, so its horizontal FOV differs from the preview and the frustum | pilot screenshots | `PilotCameraDriver.enterView` (sets only `fov`) |
 | JetBrains Mono is drawn at weight 700 on canvases although only 300-600 are loaded, and canvas drawing does not wait for `document.fonts.load` | panel-ID textures, PNG/ZIP exports, screenshots | `Theme.CanvasTheme.panelLabelFont` (+ `PanelIdRenderer` draw timing) |
-| The object URL is revoked synchronously right after `click()` | downloads (works in Chrome) | `Downloader.saveBlob` |
 | `cameraBodyMesh` is not nulled by `removeCameraPreview`; picking relies on the preview flag | picking | `CameraRigView.bodyMesh` / `CameraController.isPickable` |
 | The frustum geometry is built twice on the first enable (duplicate lens readout) | DOM write count only | `CameraHub.refresh` + `CameraRigView.create` |
 | `<meta author="Joe Loe">` is invalid markup; there is no favicon | head markup | `index.html` head (Feature 6) |
@@ -2640,7 +2644,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 4. Domain values uncoerced; id-keyed maps with plain-object key semantics (R12)?
 5. Every quirk you touched is a `Strategies` key read at its 8.1 site (switch-and-throw, value or array comparison per 1.5) or a registered `LEGACY(B-xx)` tag (R7)? Every other bug mention written without the `LEGACY(` prefix?
 6. Markup and templates byte-identical; listeners attached in the legacy phase and order (R8, R11)?
-7. No `try/catch` added; async/sync shape unchanged (R13)?
+7. No `try/catch` added (the only sanctioned ones since 08 P2-1a: `ProjectIO.#runExport` and the export size guards); async/sync shape unchanged (R13)?
 8. Imports follow the layer table and are case-exact; no globals (R9)?
 9. Unit, static and full golden-master gates green? From Phase 2 on: the commit's expected-change manifest written first, the parent commit's output as the baseline, and `compare.mjs --expect` exiting 0 (10)?
 
@@ -2695,3 +2699,9 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 3.10, 6.13: `ProjectIO.exportSafeDistanceOBJ` downloads the floor OBJ through `downloader.saveBlob(blob, brand.files.safeDistanceObj)`. The band keeps its legacy per-column geometry (faces -Y, B-L29; un-mitred, B-M15) until 08 P2-5b.
 - 2.2, 3.3: `legacyMissingDownloadBlob` is deleted.
 - 8.2: the B-M1 row is kept with a `Landed` fix cell; 8.3: its rows `LegacyCompat.js#legacyMissingDownloadBlob` and `ProjectIO.js#exportSafeDistanceOBJ` are deleted, so `LEGACY_SITES` no longer lists B-M1.
+
+**08 P2-1a, B-H3 landed** (manifest `tests/regression/expected/P2-1a.json`):
+- 1.6 R13 amended (08 5.5): `ProjectIO.#runExport` and the export size guards are the sanctioned exceptions to "exceptions are never caught"; 11 item 7 says so.
+- 3.9: `GltfExporter`'s default encoder is the exported `chunkedBase64` (08 6.1); the `gltfBase64` switch is retired (3.3, 8.1 row deleted) and `legacySpreadBase64` is deleted (2.2, 3.3). Every glTF the legacy encoder could write is byte-identical.
+- 3.10, 6.13, 7: every export runs as `#runExport(label, fn)`, which turns a throw or a rejection into the M-EXP-1 alert plus a console warning; `exportPanelIds` awaits `toBlob`; the ZIP body is the private `#writeZip`; `Downloader` takes `win` and revokes the object URL in a 0 ms timer (the 8.4 observation "revoked synchronously" is removed).
+- 8.2: the B-H3 row is kept with a `Landed` fix cell; 8.3: the row `LegacyCompat.js#legacySpreadBase64` is deleted and B-H3 leaves `GltfExporter.js#write` and `ProjectIO.js#exportZIP`.

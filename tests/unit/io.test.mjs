@@ -22,14 +22,14 @@ import { fileURLToPath } from 'node:url';
 
 import { WallSection } from '../../js/domain/WallSection.js';
 import { Project } from '../../js/domain/Project.js';
-import { LegacyProfiles, Strategies, unsupportedStrategy, legacySpreadBase64 } from '../../js/legacy/LegacyCompat.js';
+import { LegacyProfiles, Strategies, unsupportedStrategy } from '../../js/legacy/LegacyCompat.js';
 import { layoutProject } from '../../js/geometry/WallLayout.js';
 import { WallMeshBuilder } from '../../js/geometry/WallMeshBuilder.js';
 import { computeAtlas } from '../../js/geometry/TextureAtlas.js';
 import { zipTextureFileName } from '../../js/geometry/PanelNaming.js';
 import { ProjectSerializer } from '../../js/io/ProjectSerializer.js';
 import { ObjExporter } from '../../js/io/ObjExporter.js';
-import { GltfExporter } from '../../js/io/GltfExporter.js';
+import { GltfExporter, chunkedBase64 } from '../../js/io/GltfExporter.js';
 import { ProjectIO, Downloader } from '../../js/app/ProjectIO.js';
 import { ExportPanel } from '../../js/ui/ExportPanel.js';
 import { Brand, Palette } from '../../js/theme/Theme.js';
@@ -66,16 +66,31 @@ function colorToRgb(style) {
   return { r: 1, g: 1, b: 1 };
 }
 
+/**
+ * The Phase-1 glTF encoder (index.html@cd3fd3f 4902), copied verbatim from js/legacy/LegacyCompat.js before 08 P2-1a
+ * deleted it with Strategies.gltfBase64 (B-H3: the spread throws RangeError above about 125 KB). A retired global key
+ * cannot be injected (08 4.2), so the oracle comparisons inject this copy and keep testing the exact legacy outcome.
+ * @param {Uint8Array} bytes
+ * @returns {string}
+ */
+function legacySpreadBase64(bytes) {
+  return btoa(String.fromCharCode(...bytes));
+}
+
+/** Node's own base64, the reference for every encoder test. */
+const nodeBase64 = (bytes) => Buffer.from(bytes).toString('base64');
+
 const serializer = new ProjectSerializer({ palette: Palette });
 const makeObj = (profile = Strategies.mesh.obj) => new ObjExporter({ brand: Brand, colorToRgb, builder: new WallMeshBuilder(profile) });
 const makeGltf = (profile = Strategies.mesh.gltf, encodeBase64 = undefined) =>
   new GltfExporter({ brand: Brand, colorToRgb, builder: new WallMeshBuilder(profile), encodeBase64 });
-// The golden comparisons and the use-case tests use the production profiles (Strategies.mesh.*). The oracle comparisons
-// use the exact Phase-1 profiles (LegacyProfiles.mesh.*, 08 4.2), so they stay meaningful after each Phase-2 flip.
+// The golden comparisons and the use-case tests use the production profiles (Strategies.mesh.*) and the production
+// encoder (chunkedBase64). The oracle comparisons use the exact Phase-1 profiles (LegacyProfiles.mesh.*, 08 4.2) and
+// the Phase-1 spread encoder, so they stay meaningful after each Phase-2 flip.
 const OBJ = makeObj();
 const GLTF = makeGltf();
 const LEGACY_OBJ = makeObj(LegacyProfiles.mesh.obj);
-const LEGACY_GLTF = makeGltf(LegacyProfiles.mesh.gltf);
+const LEGACY_GLTF = makeGltf(LegacyProfiles.mesh.gltf, legacySpreadBase64);
 
 /** A project whose wall is exactly `sections` (Wall.replaceAll, as the import does) in `meshMode`. */
 function projectOf(sections, meshMode) {
@@ -274,7 +289,7 @@ describe('oracle equality (byte for byte)', () => {
     }
   });
 
-  test('large_wall panel-mode glTF throws RangeError in both (B-H3); combined does not', () => {
+  test('large_wall panel-mode glTF throws RangeError in both with the Phase-1 encoder (B-H3); combined does not', () => {
     const project = projectFromConfig(CONFIGS.large_wall);
     const sections = project.wall.sections;
     for (const [mode, throws] of [['panel', true], ['combined', false]]) {
@@ -602,12 +617,9 @@ describe('golden files (byte-identical to the legacy downloads)', { skip: golden
           same(json2(gltf.value), gltfName);
         } else {
           // The baseline recorded no download but an uncaught RangeError for this step (B-H3).
-          const logged = consoleLog.find((e) => e.step === `${mode}__export-gltf`);
-          assert.ok(logged, `${gltfName} absent and no console entry for the step`);
-          assert.equal(logged.message, 'RangeError: Maximum call stack size exceeded');
-          assert.ok(!gltf.ok && gltf.error instanceof RangeError, `${mode} glTF must throw RangeError like the baseline`);
-          assert.equal(`RangeError: ${gltf.error.message}`, logged.message);
-          t.diagnostic(`${scenario} ${mode} glTF throws RangeError like the baseline`);
+          // Since 08 P2-1a every glTF export downloads (the chunked encoder), so the baseline holds every file.
+          const logged = consoleLog.find((e) => e.step === `${mode}__export-gltf`) ?? null;
+          assert.fail(`${gltfName} is missing from GOLDEN_DIR (console entry of the step: ${JSON.stringify(logged)})`);
         }
       }
 
@@ -734,7 +746,7 @@ describe('strategy reads (foreign profile values throw unsupportedStrategy)', ()
     }
   });
 
-  test('the Phase-1 profiles do not throw; the default glTF encoder is legacySpreadBase64 and an injected one is used', () => {
+  test('the Phase-1 profiles do not throw; the default glTF encoder is chunkedBase64 (08 P2-1a) and an injected one is used', () => {
     for (const mode of MODES) {
       assert.doesNotThrow(() => LEGACY_OBJ.write(args(mode)));
       assert.doesNotThrow(() => LEGACY_GLTF.write(args(mode)));
@@ -742,13 +754,49 @@ describe('strategy reads (foreign profile values throw unsupportedStrategy)', ()
     const large = projectFromConfig(CONFIGS.large_wall);
     const largeArgs = { sections: large.wall.sections, meshMode: 'panel', layout: layoutProject(large) };
     assert.throws(() => LEGACY_GLTF.write(largeArgs), RangeError);
-    const chunked = makeGltf(LegacyProfiles.mesh.gltf, (bytes) => Buffer.from(bytes).toString('base64'));
-    const gltf = chunked.write(largeArgs);
-    assert.ok(gltf.buffers[0].uri.startsWith('data:application/octet-stream;base64,'));
+    // The default encoder (no encodeBase64 given) encodes the large buffer, exactly as Node's base64 does.
+    const byDefault = makeGltf(LegacyProfiles.mesh.gltf).write(largeArgs);
+    const byNode = makeGltf(LegacyProfiles.mesh.gltf, nodeBase64).write(largeArgs);
+    assert.ok(byDefault.buffers[0].uri.startsWith('data:application/octet-stream;base64,'));
+    assert.ok(byDefault.buffers[0].byteLength > 125000, `${byDefault.buffers[0].byteLength} bytes: above the spread limit`);
+    assert.equal(json2(byDefault), json2(byNode));
     // Same text as the legacy encoder wherever the legacy encoder works.
-    const small = chunked.write(args('panel'));
-    assert.equal(json2(small), json2(LEGACY_GLTF.write(args('panel'))));
+    for (const mode of MODES) {
+      assert.equal(json2(makeGltf(LegacyProfiles.mesh.gltf).write(args(mode))), json2(LEGACY_GLTF.write(args(mode))), mode);
+    }
     assert.equal(legacySpreadBase64(new Uint8Array([1, 2, 3])), 'AQID');
+  });
+});
+
+describe('chunkedBase64 (B-H3, 08 6.1)', () => {
+  test('equals the Phase-1 spread encoder and Node base64 on random buffers of 0 ... 100,000 bytes', () => {
+    const rand = rng(0xb64);
+    const lengths = [0, 1, 2, 3, 4, 5, 32766, 32767, 32768, 32769, 65535, 65536, 65537, 98303, 98304, 100000];
+    for (let k = 0; k < 24; k++) lengths.push(Math.floor(rand() * 100001));
+    for (const n of lengths) {
+      const bytes = Uint8Array.from({ length: n }, () => Math.floor(rand() * 256));
+      const text = chunkedBase64(bytes);
+      assert.equal(text, legacySpreadBase64(bytes), `${n} bytes vs the spread encoder`);
+      assert.equal(text, nodeBase64(bytes), `${n} bytes vs Node`);
+    }
+  });
+
+  test('does not throw at 10 MB, and pads only at the end', () => {
+    const bytes = new Uint8Array(10 * 1024 * 1024);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 131 + 7) & 255;
+    const text = chunkedBase64(bytes);
+    assert.equal(text, nodeBase64(bytes));
+    assert.equal(text.indexOf('='), text.length - 2, 'one trailing "==" (10 MiB is 1 mod 3), none mid-stream');
+    assert.throws(() => legacySpreadBase64(new Uint8Array(200000)), RangeError, 'the Phase-1 encoder overflows');
+  });
+
+  test('large_wall panel-mode glTF: the production exporter returns the document the legacy one could not', () => {
+    const project = projectFromConfig(CONFIGS.large_wall);
+    project.meshMode = 'panel';
+    const writeArgs = { sections: project.wall.sections, meshMode: 'panel', layout: layoutProject(project) };
+    const gltf = GLTF.write(writeArgs);
+    assert.equal(json2(gltf), json2(makeGltf(Strategies.mesh.gltf, nodeBase64).write(writeArgs)));
+    assert.equal(Buffer.from(gltf.buffers[0].uri.split(',')[1], 'base64').length, gltf.buffers[0].byteLength);
   });
 });
 
@@ -776,7 +824,11 @@ async function withGlobals(overrides, body) {
 function fakeIO(project, log, extra = {}) {
   const downloader = {
     saveText: (content, filename, mimeType) => log.push(['saveText', filename, mimeType, content]),
-    saveBlob: (blob, filename) => log.push(['saveBlob', filename, blob]),
+    saveBlob: (blob, filename) => {
+      // Like the real Downloader: URL.createObjectURL(null) throws (Chrome's message).
+      if (blob === null) throw new TypeError("Failed to execute 'createObjectURL' on 'URL': Overload resolution failed.");
+      log.push(['saveBlob', filename, blob]);
+    },
   };
   const wallController = {
     layout: () => { log.push(['layout']); return layoutProject(project); },
@@ -801,12 +853,18 @@ function fakeIO(project, log, extra = {}) {
     }
     async generateAsync(options) { log.push(['generateAsync', options]); return 'ZIP-BLOB'; }
   }
-  const win = { setTimeout: (fn, ms) => { log.push(['setTimeout', ms]); extra.timer = fn; return 1; } };
+  const win = {
+    setTimeout: (fn, ms) => { log.push(['setTimeout', ms]); extra.timer = fn; return 1; },
+    console: { warn: (err) => log.push(['warn', err]) },
+  };
   const dialogs = { alert: (msg) => log.push(['alert', msg]) };
   const safeDistance = { object3D: extra.group ?? null };
-  return new ProjectIO({ project, wallController, serializer, objExporter: OBJ, gltfExporter: GLTF, panelIds, safeDistance,
-    downloader, JSZip: FakeZip, dialogs, brand: Brand, win });
+  return new ProjectIO({ project, wallController, serializer: extra.serializer ?? serializer, objExporter: OBJ,
+    gltfExporter: GLTF, panelIds, safeDistance, downloader, JSZip: FakeZip, dialogs, brand: Brand, win });
 }
+
+/** The M-EXP-1 text of 08 3.3. */
+const mExp1 = (label, message) => `${label} failed: ${message}. No file was downloaded.`;
 
 describe('ProjectIO use cases', () => {
   test('exportJSON downloads the pretty-printed file document', () => {
@@ -828,10 +886,10 @@ describe('ProjectIO use cases', () => {
     assert.deepEqual(log.at(-1), ['saveText', 'led-wall-config.mtl', 'text/plain', mtlContent]);
   });
 
-  test('exportGLTF downloads the pretty-printed document; a large panel wall throws synchronously', () => {
+  test('exportGLTF downloads the pretty-printed document; a large panel wall downloads too (B-H3 fixed in 08 P2-1a)', () => {
     const project = Project.createDefault();
     const log = [];
-    fakeIO(project, log).exportGLTF();
+    assert.equal(fakeIO(project, log).exportGLTF(), undefined);
     assert.deepEqual(log.map((e) => e[0]), ['layout', 'saveText']);
     assert.equal(log[1][1], 'led-wall-config.gltf');
     assert.equal(log[1][3], json2(GLTF.write({ sections: project.wall.sections, meshMode: 'combined', layout: layoutProject(project) })));
@@ -839,11 +897,12 @@ describe('ProjectIO use cases', () => {
     const large = projectFromConfig(CONFIGS.large_wall);
     large.meshMode = 'panel';
     const log2 = [];
-    assert.throws(() => fakeIO(large, log2).exportGLTF(), RangeError);
-    assert.deepEqual(log2, [['layout']]);
+    fakeIO(large, log2).exportGLTF();
+    assert.deepEqual(log2.map((e) => e[0]), ['layout', 'saveText']);
+    assert.equal(log2[1][3], json2(GLTF.write({ sections: large.wall.sections, meshMode: 'panel', layout: layoutProject(large) })));
   });
 
-  test('exportPanelIds is async and downloads the toBlob blob as panel-ids.png', async () => {
+  test('exportPanelIds is async, awaits toBlob and downloads the blob as panel-ids.png', async () => {
     const project = Project.createDefault();
     const log = [];
     const extra = {};
@@ -851,10 +910,21 @@ describe('ProjectIO use cases', () => {
     assert.equal(ProjectIO.prototype.exportPanelIds.constructor.name, 'AsyncFunction');
     const promise = io.exportPanelIds();
     assert.ok(promise instanceof Promise);
-    await promise;
     assert.deepEqual(log, [['atlasCanvas', project.wall.sections], ['toBlob', 'image/png']]);
     extra.toBlobCallback('PNG-BLOB');
+    assert.equal(await promise, undefined);
     assert.deepEqual(log.at(-1), ['saveBlob', 'panel-ids.png', 'PNG-BLOB']);
+  });
+
+  test('exportPanelIds: a null toBlob result is reported as M-EXP-1, not thrown (B-L4 is guarded in P2-1c)', async () => {
+    const log = [];
+    const extra = {};
+    const promise = fakeIO(Project.createDefault(), log, extra).exportPanelIds();
+    extra.toBlobCallback(null);
+    await promise;
+    assert.deepEqual(log.slice(2).map((e) => e[0]), ['alert', 'warn']);
+    assert.equal(log[2][1], mExp1('Export Panel IDs', "Failed to execute 'createObjectURL' on 'URL': Overload resolution failed."));
+    assert.ok(log[3][1] instanceof TypeError, 'the error itself goes to win.console.warn');
   });
 
   test('exportZIP: legacy order (JSON zip variant, layout, OBJ, MTL, glTF, textures, generateAsync, download)', async () => {
@@ -886,18 +956,21 @@ describe('ProjectIO use cases', () => {
     assert.deepEqual(sections.map((s, i) => atlas.entries[i].startCol), [0, 6, 10, 16]);
   });
 
-  test('exportZIP rejects (no download) on the glTF RangeError and on numeric names; data:, gives an empty texture', async () => {
+  test('exportZIP: a large panel wall downloads; numeric names give M-EXP-1 (no rejection); data:, gives an empty texture', async () => {
     const large = projectFromConfig(CONFIGS.large_wall);
     large.meshMode = 'panel';
     const log = [];
-    await assert.rejects(fakeIO(large, log).exportZIP(), RangeError);
-    assert.ok(!log.some((e) => e[0] === 'saveBlob' || e[0] === 'generateAsync'));
+    await fakeIO(large, log).exportZIP();
+    assert.deepEqual(log.at(-1), ['saveBlob', 'led-wall-export.zip', 'ZIP-BLOB']);
+    assert.ok(!log.some((e) => e[0] === 'alert'));
 
     const named = Project.createDefault();
     named.wall.sections[0].name = 7;
     const log2 = [];
-    await assert.rejects(fakeIO(named, log2).exportZIP(), { name: 'TypeError', message: 'name.replace is not a function' });
-    assert.deepEqual(log2, [['new JSZip']]);
+    assert.equal(await fakeIO(named, log2).exportZIP(), undefined);
+    assert.deepEqual(log2.map((e) => e[0]), ['new JSZip', 'alert', 'warn']);
+    assert.equal(log2[1][1], mExp1('Export All (ZIP)', 'name.replace is not a function'));
+    assert.ok(log2[2][1] instanceof TypeError);
 
     const log3 = [];
     await fakeIO(Project.createDefault(), log3, { dataUrl: 'data:,' }).exportZIP();
@@ -919,6 +992,38 @@ describe('ProjectIO use cases', () => {
     assert.equal(blobs.length, 1);
     assert.deepEqual([blobs[0].parts, blobs[0].options], [[OBJ.writeSafeDistance(group)], { type: 'text/plain' }]);
     assert.deepEqual(log2, [['saveBlob', 'safe-distance-floor.obj', blobs[0]]], 'one download, no alert');
+  });
+
+  test('#runExport: every export reports a failure as M-EXP-1 with its label, then warns; nothing escapes', async () => {
+    const empty = projectOf([], 'combined');
+    const cannotReadColor = "Cannot read properties of undefined (reading 'color')";
+    for (const [method, label] of [['exportOBJ', 'Export OBJ'], ['exportGLTF', 'Export glTF']]) {
+      const log = [];
+      assert.equal(fakeIO(empty, log)[method](), undefined, method);
+      assert.deepEqual(log.map((e) => e[0]), ['layout', 'alert', 'warn'], method);
+      assert.equal(log[1][1], mExp1(label, cannotReadColor));
+      assert.ok(log[2][1] instanceof TypeError);
+    }
+
+    const boom = new RangeError('boom');
+    const throwing = { write: () => { throw boom; } };
+    const log = [];
+    fakeIO(Project.createDefault(), log, { serializer: throwing }).exportJSON();
+    assert.deepEqual(log, [['alert', mExp1('Export JSON', 'boom')], ['warn', boom]]);
+
+    const log2 = [];
+    await fakeIO(Project.createDefault(), log2, { serializer: throwing }).exportZIP();
+    assert.deepEqual(log2, [['new JSZip'], ['alert', mExp1('Export All (ZIP)', 'boom')], ['warn', boom]]);
+
+    const log3 = [];
+    const group = { traverse: () => { throw boom; } };
+    fakeIO(Project.createDefault(), log3, { group }).exportSafeDistanceOBJ();
+    assert.deepEqual(log3, [['alert', mExp1('Export Safe Distance OBJ', 'boom')], ['warn', boom]]);
+
+    // A thrown non-Error is reported through String().
+    const log4 = [];
+    fakeIO(Project.createDefault(), log4, { serializer: { write: () => { throw 'plain'; } } }).exportJSON();
+    assert.deepEqual(log4, [['alert', mExp1('Export JSON', 'plain')], ['warn', 'plain']]);
   });
 
   test('importFromInputEvent: P-IMPORT (read, reset input synchronously; try/catch only around parse + read + apply)', async () => {
@@ -964,7 +1069,7 @@ describe('ProjectIO use cases', () => {
 });
 
 describe('Downloader', () => {
-  test('saveBlob runs the legacy anchor sequence with URL looked up at call time; saveText makes the Blob first', async () => {
+  test('saveBlob runs the legacy anchor sequence with URL looked up at call time, revoking in a 0 ms timer; saveText makes the Blob first', async () => {
     const log = [];
     const doc = {
       createElement: (tag) => {
@@ -975,14 +1080,18 @@ describe('Downloader', () => {
       body: { appendChild: (el) => log.push(['appendChild', el.download]), removeChild: (el) => log.push(['removeChild', el.download]) },
     };
     class FakeBlob { constructor(parts, options) { log.push(['Blob', parts, options]); } }
+    const timers = [];
+    const win = { setTimeout: (fn, ms) => { log.push(['setTimeout', ms]); timers.push(fn); return 1; } };
     await withGlobals([
       [URL, 'createObjectURL', (blob) => (log.push(['createObjectURL']), 'blob:fake/1')],
       [URL, 'revokeObjectURL', (url) => log.push(['revokeObjectURL', url])],
       [globalThis, 'Blob', FakeBlob],
     ], () => {
-      const downloader = new Downloader({ doc });
+      const downloader = new Downloader({ doc, win });
       assert.deepEqual(log, [], 'the constructor has no side effects');
       downloader.saveText('hello', 'a.txt', 'text/plain');
+      assert.deepEqual(log.at(-1), ['setTimeout', 0], 'not revoked synchronously (08 P2-1a)');
+      timers.forEach((fn) => fn());
     });
     assert.deepEqual(log, [
       ['Blob', ['hello'], { type: 'text/plain' }],
@@ -991,6 +1100,7 @@ describe('Downloader', () => {
       ['appendChild', 'a.txt'],
       ['click', 'blob:fake/1', 'a.txt'],
       ['removeChild', 'a.txt'],
+      ['setTimeout', 0],
       ['revokeObjectURL', 'blob:fake/1'],
     ]);
   });
@@ -1056,15 +1166,20 @@ describe('structure', () => {
     }
   });
 
-  test('no try/catch except the legacy import one; exportZIP and exportPanelIds stay async', () => {
+  test('no try/catch except #runExport (R13 amendment, 08 P2-1a) and the legacy import one; exportZIP and exportPanelIds stay async', () => {
     for (const rel of ['js/io/ProjectSerializer.js', 'js/io/ObjExporter.js', 'js/io/GltfExporter.js', 'js/ui/ExportPanel.js']) {
       assert.doesNotMatch(code(rel), /\btry\s*\{|\bcatch\s*[({]/, rel);
     }
     const io = code('js/app/ProjectIO.js');
-    assert.equal([...io.matchAll(/\btry\s*\{/g)].length, 1);
-    assert.equal([...io.matchAll(/\bcatch\s*\(/g)].length, 1);
-    const tryAt = io.indexOf('try {');
-    assert.ok(tryAt > io.indexOf('importFromInputEvent(e) {'), 'the try/catch is inside importFromInputEvent');
+    const tries = [...io.matchAll(/\btry\s*\{/g)].map((m) => m.index);
+    assert.equal(tries.length, 2);
+    assert.equal([...io.matchAll(/\bcatch\s*\(/g)].length, 2);
+    const runExportAt = io.indexOf('#runExport(label, fn) {');
+    const importAt = io.indexOf('importFromInputEvent(e) {');
+    assert.ok(runExportAt > 0 && importAt > 0);
+    const owner = (at) => (at > importAt ? 'import' : at > runExportAt ? 'runExport' : 'other');
+    assert.deepEqual(tries.map(owner).sort(), ['import', 'runExport'], 'one try in #runExport, one in importFromInputEvent');
+    assert.ok(runExportAt < importAt, '#runExport is defined before importFromInputEvent');
     for (const name of ['exportZIP', 'exportPanelIds']) assert.equal(ProjectIO.prototype[name].constructor.name, 'AsyncFunction');
     for (const name of ['exportJSON', 'exportOBJ', 'exportGLTF', 'exportSafeDistanceOBJ', 'importFromInputEvent']) {
       assert.equal(ProjectIO.prototype[name].constructor.name, 'Function', name);

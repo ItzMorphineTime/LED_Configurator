@@ -1,0 +1,18 @@
+{
+  "commit": "P2-1a",
+  "bugs": ["B-H3"],
+  "expect": [
+    { "output": "large_wall/panel__export-gltf__*.gltf", "change": "added",
+      "reason": "the chunked base64 encoder (08 6.1) encodes the panel-mode buffer that made the legacy spread throw RangeError" },
+    { "output": "large_wall/{downloads,console}.json", "change": "modified", "each": true,
+      "reason": "panel__export-gltf lists its file, and the RangeError 'Maximum call stack size exceeded' is gone" },
+    { "output": "import_edge/{console,i_dialogs}.json", "change": "modified", "each": true,
+      "reason": "ProjectIO.#runExport turns the empty-wall Export OBJ and Export glTF TypeErrors into M-EXP-1 alerts (recorded in i_dialogs.json); the Add Section TypeError stays (Add Section is not an export). import_edge/dialogs.json is not expected: import_edge keeps its own fresh-page helper, so dialogs.json holds only the last page (vi-viii) dialogs" },
+    { "output": "p2_oversize_canvas/{console,dialogs}.json", "change": "modified", "each": true,
+      "reason": "the Export Panel IDs TypeError (createObjectURL of the null toBlob result) becomes an M-EXP-1 alert" }
+  ],
+  "mayChange": [
+    { "output": "large_wall/final__export-zip__led-wall-export.zip", "change": "modified",
+      "reason": "the bistable export-PNG pixels documented by P2-0b and seen again in the P2-5a gate: textures/L3_PanelIDs.png (1970, 1003) and L4_PanelIDs.png (2026, 858), 1 level, 1 px each (3840x1920); nothing this commit changes reaches the combined-mode ZIP textures" }
+  ]
+}

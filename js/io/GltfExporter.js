@@ -9,7 +9,7 @@
  */
 
 import { exportSectionName, exportPanelName } from '../geometry/PanelNaming.js';
-import { Strategies, unsupportedStrategy, legacySpreadBase64 } from '../legacy/LegacyCompat.js';
+import { Strategies, unsupportedStrategy } from '../legacy/LegacyCompat.js';
 
 /**
  * Colour parser injected by App (`(s) => new THREE.Color(s)`); tests inject a THREE r128 setStyle equivalent.
@@ -27,17 +27,23 @@ import { Strategies, unsupportedStrategy, legacySpreadBase64 } from '../legacy/L
  */
 
 /**
- * The default base64 encoder, chosen by Strategies.gltfBase64 (module-private).
- * @returns {(bytes: Uint8Array) => string}
- * @throws {Error} unsupportedStrategy('gltfBase64', ...) for any value other than 'spread'
+ * Base64 of a byte array of any size: the default encoder of GltfExporter (08 6.1; B-H3 fixed in 08 P2-1a). The
+ * binary string is built with String.fromCharCode over chunks of 32,768 bytes (below the V8, about 125k, and
+ * JavaScriptCore, about 65k, argument limits), and ONE btoa encodes the whole string, so no '=' padding appears
+ * mid-stream. The text therefore equals the legacy btoa(String.fromCharCode(...bytes)) for every buffer the legacy
+ * spread could encode (it is the same binary string); the legacy spread threw RangeError above about 125 KB.
+ * Exported for its unit test only (08 8.4).
+ * Side effects: none.
+ * @param {Uint8Array} bytes
+ * @returns {string} base64 text
  */
-function gltfBase64Encoder() {
-  switch (Strategies.gltfBase64) {
-    case 'spread':
-      return legacySpreadBase64;
-    default:
-      throw unsupportedStrategy('gltfBase64', Strategies.gltfBase64);
+export function chunkedBase64(bytes) {
+  const CHUNK = 0x8000;
+  const parts = [];
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    parts.push(String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK)));
   }
+  return btoa(parts.join(''));
 }
 
 /** Writes glTF 2.0 documents. */
@@ -57,11 +63,10 @@ export class GltfExporter {
    * Side effects: none.
    * @param {{brand: {gltfGenerator: string}, colorToRgb: ColorToRgb,
    *          builder: import('../geometry/WallMeshBuilder.js').WallMeshBuilder,
-   *          encodeBase64?: (bytes: Uint8Array) => string}} deps  encodeBase64 defaults to the encoder selected by
-   *   Strategies.gltfBase64 (legacySpreadBase64), evaluated here
-   * @throws {Error} unsupportedStrategy('gltfBase64', ...) when no encoder is injected and the strategy is foreign
+   *          encodeBase64?: (bytes: Uint8Array) => string}} deps  encodeBase64 defaults to chunkedBase64 (the oracle
+   *   tests inject a copy of the Phase-1 spread encoder)
    */
-  constructor({ brand, colorToRgb, builder, encodeBase64 = gltfBase64Encoder() }) {
+  constructor({ brand, colorToRgb, builder, encodeBase64 = chunkedBase64 }) {
     this.#brand = brand;
     this.#colorToRgb = colorToRgb;
     this.#builder = builder;
@@ -75,15 +80,14 @@ export class GltfExporter {
    *     the first section AFTER the loop (B-L6);
    *   section: one mesh per section (indices from 0), coloured by that section after its indices;
    *   panel: one mesh per panel (the 4 builder corners, indices panelQuadIndices(0)), colour per section first.
-   * The buffer is encoded with the injected encoder at shallow stack depth, directly from here.
+   * The buffer is encoded with the injected encoder (default chunkedBase64, any size).
    * Ports: index.html@cd3fd3f lines 4719-4909.
    * Side effects: none.
    * @param {{sections: import('../domain/WallSection.js').WallSection[], meshMode: *,
    *          layout: import('../geometry/WallLayout.js').WallLayout}} args  layout = layoutProject(project) of
    *   the same sections
    * @returns {object} the glTF document (plain JSON)
-   * @throws {RangeError} 'Maximum call stack size exceeded' from the legacy encoder for buffers above ~125 KB
-   *   (NOT caught); {TypeError} combined mode on an empty wall; {Error} unsupportedStrategy for a foreign profile
+   * @throws {TypeError} combined mode on an empty wall; {Error} unsupportedStrategy for a foreign profile
    */
   write({ sections, meshMode, layout }) {
     const gltf = {
@@ -118,9 +122,8 @@ export class GltfExporter {
       offset += arr.length;
     }
 
-    // LEGACY(B-H3): the default encoder is btoa(String.fromCharCode(...bytes)), which throws RangeError
-    // ("Maximum call stack size exceeded") above ~125 KB (large panel-mode walls). Called directly from here at
-    // shallow stack depth and deliberately NOT caught: the glTF export throws, the ZIP export rejects unhandled.
+    // The default encoder is chunkedBase64 (B-H3 fixed in 08 P2-1a: the legacy spread threw RangeError above
+    // ~125 KB, so large panel-mode walls could not be exported).
     const base64 = this.#encodeBase64(combinedBuffer);
     gltf.buffers.push({
       byteLength: combinedBuffer.length,

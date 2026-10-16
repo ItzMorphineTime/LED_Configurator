@@ -157,7 +157,7 @@ export class App {
       gltfExporter,
       panelIds,
       safeDistance,
-      downloader: new Downloader({ doc }),
+      downloader: new Downloader({ doc, win }),
       JSZip,
       dialogs,
       brand,
