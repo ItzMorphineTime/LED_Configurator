@@ -180,6 +180,8 @@
     top: 72px;
 }
 
+/* The legend takes pointer events (the overlay and the stack do not), so its title, the gl_FrontFacing caveat of
+   01 11.1, shows on hover; a drag that starts on the chip does not orbit. */
 .debug-legend {
     display: flex;
     flex-direction: column;
@@ -191,6 +193,8 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
     color: var(--text-secondary);
+    pointer-events: auto;
+    cursor: help;
 }
 
 .debug-legend-row {
@@ -220,8 +224,10 @@
     background: var(--swatch, var(--text-dim));
 }
 
+/* The notes carry information (3.3: wireframe, camera preview), so they keep --text-secondary (5.5:1 on
+   --bg-secondary; --text-dim is 2.2:1, below WCAG AA for 11 px text) and are set apart by italics. */
 .debug-legend-note {
-    color: var(--text-dim);
+    font-style: italic;
 }
 
 /* ---- announcer ------------------------------------------------------------------------------------ */

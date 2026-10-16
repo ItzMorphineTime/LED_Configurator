@@ -1,0 +1,20 @@
+{
+  "commit": "F1-2b",
+  "bugs": [],
+  "expect": [
+    {
+      "output": "normals_debug/{b4_face_front,b5_face_behind,b6_normal_colors,b7_section,b8_panel,b9_wire_on,b10_wire_off,b12_box_p1,b13_box_p2}.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "every capture taken in face orientation or normal colours shows a legend row with its note ('wireframe lines all read as front · also in camera preview' / 'also in camera preview'), now drawn in --text-secondary italic instead of --text-dim (2.15:1 on the legend background, below WCAG AA for 11 px text); the differing pixels must lie in the legend chip at the top centre"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "large_wall/final__export-zip__led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen so far: L2_PanelIDs.png (1995, 948), L3_PanelIDs.png (1970, 1003), L4_PanelIDs.png (2026, 858), 1 px each, 3840x1920); this commit changes no export and no texture"
+    }
+  ],
+  "notes": "Review follow-up of 01 F1-2 (legend legibility): the legend note's colour and the legend taking pointer events, so its title (the gl_FrontFacing caveat of 01 11.1) can be shown on hover; pointer-events and cursor change no pixel. Unchanged by construction: every export and state file, every capture with the legend hidden or showing only the Normals row (Part A, b1-b3, b11, b10_preview_lines_on, every other scenario: debug is off by default), every ui_visual output."
+}
