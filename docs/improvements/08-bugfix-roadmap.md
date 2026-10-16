@@ -349,7 +349,7 @@ The status comes from `WallController` in the `WALL_REBUILT` payload (§5.2, §5
   - WASD/arrows/QE (orbit offset, or pilot fly);
   - mouse drag (orbit or pilot look), wheel (zoom or pilot speed).
 - **P2-9 / B-L11 filters.** Shortcuts are ignored when any of the following holds:
-  - `e.target` is `INPUT`, `TEXTAREA`, `SELECT` or `isContentEditable`;
+  - `isTypingTarget(e.target)` (`core/typingTarget.js`, P2-9b) with **07 §3.8's truth table**: an `INPUT` except the types `checkbox`, `radio`, `button`, `submit`, `reset`, `color`, `file` and `range`; a `SELECT` or `TEXTAREA`; any element whose `isContentEditable` is true; any element inside an open `[role=dialog]`. So a focused colour swatch no longer swallows G/R/L/P, which the legacy guard (every `INPUT`) did;
   - `e.ctrlKey || e.metaKey || e.altKey`;
   - `e.repeat`.
 
@@ -771,7 +771,7 @@ Signatures are additions or changes to ARCHITECTURE §3. Unlisted methods are un
 | P2-8 | `WallSection`, `CineCamera`, `Prop`, `PanelIdStyle`, `LogoLibrary` | Rules use `finiteOr`, `roundInt`, `clamp`, `wrapDeg` |
 | P2-8 | `js/app/WallController.js` | `setMeshMode(mode)`: `if (mode === project.meshMode) return;` (B-L13). The label click handler still sets the classes first |
 | P2-9 | `js/interaction/ViewportInput.js` | `attachPointer`: pending-click state `{x, y, button, armed}`; picking moves to `mouseup` (§6.11). `attachShortcuts`: the modifier and repeat filters |
-| P2-9 | `js/core/typingTarget.js` (new, P2-9b) | `isTypingTarget(t)` with **07 §3.8's truth table** (it adds `SELECT` and `isContentEditable` to the legacy check). This roadmap is its one named owner (07 C18, C52); 01 T7 and 07 I1 only consume or extend it |
+| P2-9 | `js/core/typingTarget.js` (new, P2-9b) | `isTypingTarget(t)` with **07 §3.8's truth table** (against the legacy check it adds `SELECT`, `isContentEditable` and open dialogs, and no longer counts the non-text `INPUT` types). This roadmap is its one named owner (07 C18, C52); 01 T7 and 07 I1 only consume or extend it |
 | P2-9 | `js/interaction/InputState.js` | `isShortcutIgnoredTarget` becomes a re-export of `isTypingTarget` until 07 I1 deletes it. `+ CLICK_TRAVEL_PX = 4` |
 | P2-9 | `js/interaction/SelectionManager.js` | `pickAt(event)` is unchanged except that it is now called from `mouseup` |
 | P2-9 | `js/interaction/TransformGizmo.js` | `onMouseMove`: `target.applyGizmoRotate(axis, angle, space)`. `rebuild()` builds only `target.allowedAxes?.()` handles and sets `group.visible = !interaction.pilotMode`. `+` subscribes `PILOT_CHANGED` (mirror: its own group's `visible`). The `SELECTABLE_MOVED` handler also calls `updateOrientation()` when `space === 'local'` |
