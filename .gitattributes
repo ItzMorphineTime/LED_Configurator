@@ -1,0 +1,4 @@
+# The published Morph brand files (docs/improvements/06-morph-branding.md 5.8) are copied byte for byte from the
+# brand source and never edited: no line-ending conversion on any platform.
+assets/brand/*.svg -text
+assets/brand/*.png -text

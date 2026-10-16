@@ -116,7 +116,12 @@ function pageCaptureText() {
     return {
         title: document.title,
         lang: document.documentElement.getAttribute('lang'),
-        header: { logo: texts('.product-name'), statValues: texts('.stat-value'), statLabels: texts('.stat-label') },
+        header: {
+            logo: texts('.product-name'),
+            brandAlt: [...document.querySelectorAll('.brand-lockup img')].map((i) => i.alt),
+            statValues: texts('.stat-value'),
+            statLabels: texts('.stat-label'),
+        },
         globalSectionTitles: texts('.global-section-title'),
         subsectionTitles: texts('.subsection-title'),
         toggleLabels: texts('.toggle-label'),

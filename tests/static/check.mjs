@@ -41,6 +41,10 @@
  *  15  (06 R-B5, since 06 T4a) exactly one element of <root>/index.html has the class export-btn--primary (the one
  *      Pivot Gold element), and exactly one CSS declaration references var(--cta-background). Each half is skipped
  *      without its index.html or css/ directory.
+ *  16  (06 R-B4, since 06 T4b) every assets/brand/<file> reference in <root>/index.html, README.md, css/ and js/ names an
+ *      existing file of <root>/assets/brand/ with exactly that case (GitHub Pages is case-sensitive), and every file
+ *      there except NOTICE.md is referenced at least once (only the brand files the app or the README uses are
+ *      published, 06 5.8).
  *
  * "Identifier" means a token of code: comments and the text of string, template and regex literals
  * are blanked first (the code inside template `${...}` is kept), and a name after `.` or `?.` is a
@@ -92,6 +96,7 @@ const RULE_TITLES = Object.freeze({
     13: 'CSS colour literal (R-B1)',
     14: 'legacy identity (R-B3a)',
     15: 'primary CTA (R-B5)',
+    16: 'brand asset (R-B4)',
 });
 
 /**
@@ -161,6 +166,11 @@ const LEGACY_IDENTITY = Object.freeze([
 /** Rule 15 (06 R-B5): the primary CTA class and its one token. */
 const PRIMARY_CTA_CLASS = 'export-btn--primary';
 const CTA_TOKEN_REFERENCE_RE = /var\(\s*--cta-background\s*[,)]/g;
+
+/** Rule 16 (06 R-B4): the published brand folder, its notice, and a reference to a file in it. */
+const BRAND_DIR = 'assets/brand';
+const BRAND_NOTICE = 'NOTICE.md';
+const BRAND_REFERENCE_RE = /assets\/brand\/([A-Za-z0-9@._-]+)/g;
 
 /** Rule 7: the one event that may have no subscriber (the feature seam, ARCHITECTURE.md 5.1 rule 7). */
 const UNSUBSCRIBED_EVENTS = new Set(['WALL_REBUILT']);
@@ -955,6 +965,41 @@ function checkPrimaryCta(ctx, sheets) {
     }
 }
 
+/**
+ * Rule 16 (06 R-B4): every assets/brand/... reference in index.html, the stylesheets, the modules and README.md names an
+ * existing file with exactly that case (GitHub Pages is case-sensitive, Windows and macOS are not), and every file of
+ * assets/brand/ except NOTICE.md is referenced at least once. Without an assets/brand/ directory, a reference is still
+ * reported (it cannot resolve) and nothing else is checked.
+ */
+function checkBrandAssets(ctx, sheets) {
+    const dir = path.join(ctx.root, BRAND_DIR);
+    const onDisk = fs.existsSync(dir) && fs.statSync(dir).isDirectory()
+        ? fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => e.name)
+        : [];
+    const files = [];
+    for (const rel of ['index.html', 'README.md']) {
+        const abs = path.join(ctx.root, rel);
+        if (fs.existsSync(abs)) files.push({ rel, raw: fs.readFileSync(abs, 'utf8') });
+    }
+    files.push(...sheets.map(({ rel, raw }) => ({ rel, raw })));
+    files.push(...ctx.modules.map(({ rel, src }) => ({ rel, raw: src })));
+    const referenced = new Set();
+    for (const { rel, raw } of files) {
+        for (const m of raw.matchAll(BRAND_REFERENCE_RE)) {
+            const name = m[1];
+            if (onDisk.includes(name)) { referenced.add(name); continue; }
+            const other = onDisk.find((f) => f.toLowerCase() === name.toLowerCase());
+            ctx.report(rel, lineAt(raw, m.index), 16, other
+                ? `${BRAND_DIR}/${name} differs in case from the file on disk (${other}); GitHub Pages is case-sensitive (06 R-B4)`
+                : `${BRAND_DIR}/${name} does not exist (06 R-B4)`);
+        }
+    }
+    for (const name of onDisk) {
+        if (name === BRAND_NOTICE || referenced.has(name)) continue;
+        ctx.report(`${BRAND_DIR}/${name}`, 1, 16, `${BRAND_DIR}/${name} is never referenced: publish only the brand files the app or the README uses (06 R-B4, 5.8)`);
+    }
+}
+
 // ---- runner -----------------------------------------------------------------------------------
 
 /**
@@ -995,6 +1040,7 @@ export async function runChecks(rootDir) {
     checkCssColourLiterals(ctx, sheets);
     checkLegacyIdentity(ctx, sheets);
     checkPrimaryCta(ctx, sheets);
+    checkBrandAssets(ctx, sheets);
 
     const legacy = await importIfPresent(root, 'js/legacy/LegacyCompat.js', 6, ctx);
     if (legacy.missing) notices.push('js/legacy/LegacyCompat.js not found: rules 6 (LEGACY parity) and 8 (Strategies references) skipped');
@@ -1082,6 +1128,9 @@ const EXPECTED_BAD = Object.freeze([
     ['js/ui/PanelB.js', 14, 'third-party logo class "company-logo"'],
     ['index.html', 15, '2 elements have the class export-btn--primary'],
     ['css/07-viewport.css', 15, '2 CSS declarations reference var(--cta-background)'],
+    ['index.html', 16, 'assets/brand/Morph-Mark.svg differs in case from the file on disk (morph-mark.svg)'],
+    ['css/07-viewport.css', 16, 'assets/brand/missing.svg does not exist'],
+    ['assets/brand/unused.png', 16, 'assets/brand/unused.png is never referenced'],
 ]);
 
 async function selfTest() {

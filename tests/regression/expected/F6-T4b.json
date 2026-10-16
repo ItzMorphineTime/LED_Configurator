@@ -1,0 +1,74 @@
+{
+  "commit": "F6-T4b",
+  "bugs": [],
+  "expect": [
+    {
+      "output": "ui_visual/*.styles.json",
+      "change": "modified",
+      "each": true,
+      "reason": "06 8.4 T4b: the header entries (the lockup now holds the wordmark, the hidden monogram, the divider and the shorter product name raised 5 px) and the four new probes page/brand-wordmark, page/brand-monogram, page/brand-divider (recorded in the narrow state too) and overlay/brand-watermark"
+    },
+    {
+      "output": "ui_visual/*.text.json",
+      "change": "modified",
+      "each": true,
+      "reason": "06 8.4 T4b: header.logo = 'LED Configurator', the new header.brandAlt = ['Morph', 'Morph'] (the wordmark and the monogram; only one is rendered), innerText without 'Morph' (the wordmark is artwork)"
+    },
+    {
+      "output": "ui_visual/*.viewport.screenshot.png",
+      "exclude": "ui_visual/{*narrow_800*,00_initial*}",
+      "change": "modified",
+      "each": true,
+      "reason": "the page captures (canvases masked) show the wordmark lockup in the header and, except while the pilot banner shows, the viewport watermark; nothing else may differ",
+      "measure": {"frame":"page","window":[1600,1000],"selectors":[".header",".brand-watermark"]},
+      "size": [1600,1000],
+      "rects": [{"x":0,"y":0,"w":1600,"h":68,"label":".header"},{"x":472,"y":76,"w":60,"h":49,"label":".brand-watermark"}]
+    },
+    {
+      "output": "ui_visual/00_initial.viewport.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the first page capture (the state as loaded) shows the lockup and the watermark, and also re-rasterised overlay content: the toolbar SVG icons with a different anti-aliasing (up to 73 levels on the icon edges) and the help badge text shifted by 1 level (1,999 px), byte-identical in two runs of the build. With the image in the overlay, Chrome rasterises the never-repainted overlay differently in this masked capture. The watermark has its own compositing layer (will-change), which removes the effect from every #three-canvas capture and from the later page captures (02-08), but not from this one; so the toolbar columns and the help badge are allowed here only",
+      "measure": {
+        "frame": "page",
+        "window": [1600,1000],
+        "selectors": [".header",".brand-watermark",".gizmo-controls",".viewport-controls",".viewport-info"]
+      },
+      "size": [1600,1000],
+      "rects": [
+        {"x":0,"y":0,"w":1600,"h":68,"label":".header"},
+        {"x":472,"y":76,"w":60,"h":49,"label":".brand-watermark"},
+        {"x":412,"y":72,"w":56,"h":217,"label":".gizmo-controls"},
+        {"x":1532,"y":72,"w":56,"h":361,"label":".viewport-controls"},
+        {"x":412,"y":940,"w":669,"h":48,"label":".viewport-info"}
+      ]
+    },
+    {
+      "output": "ui_visual/*narrow_800*.viewport.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the narrow (<= 900 px) page capture: the wordmark alone in the header (divider hidden, product name visually hidden) and the watermark",
+      "measure": {"frame":"page","window":[800,1000],"selectors":[".header",".brand-watermark"]},
+      "size": [800,1000],
+      "rects": [{"x":0,"y":0,"w":800,"h":68,"label":".header"},{"x":72,"y":76,"w":60,"h":49,"label":".brand-watermark"}]
+    },
+    {
+      "output": "*/*.screenshot.png",
+      "exclude": "{ui_visual/**,keyboard/pilot_view.screenshot.png,pilot_look/look_0{1,2}_*,preview_off_in_pilot/pilot_0{0,1}_*,p2_shortcut_filters/pilot_view_front.screenshot.png,normals_debug/b10_preview_lines_on.screenshot.png}",
+      "change": "modified",
+      "each": true,
+      "reason": "06 8.4 T4b: every #three-canvas capture whose state does not show the pilot banner gains the viewport watermark, and only it (06 3.3: top 24, left 80, 44 px wide); the pilot states hide it (.pilot-info.visible ~ .brand-watermark) and the preview-canvas capture b10_preview_lines_on does not reach it, so those stay IDENTICAL",
+      "measure": {"frame":"canvas","window":[1600,1000],"selectors":[".brand-watermark"]},
+      "size": [1200,940],
+      "rects": [{"x":72,"y":16,"w":60,"h":49,"label":".brand-watermark"}]
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "large_wall/final__export-zip__led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen so far: L2_PanelIDs.png (1995, 948), L3_PanelIDs.png (1970, 1003), L4_PanelIDs.png (2026, 858), 1 px each, 3840x1920); this commit changes no export and no texture"
+    }
+  ],
+  "notes": "06 T4b (8.4), the owner-approved brand artwork (Q2/A8): the six app files of 5.8 copied byte for byte into assets/brand/ with NOTICE.md; the favicon links, the apple-touch icon and og:image; the wordmark lockup (wordmark, divider, 'LED Configurator'; the monogram at <= 520 px); the viewport watermark, hidden while the pilot banner shows. Rect-limited (07 C57): the canvas captures may differ only inside the measured watermark rectangle and the page captures only inside the header and the watermark. Unchanged by construction: the sidebar captures, the pilot-state captures, every export, PNG, section-state, gizmoState/cameraState, *_pick.json and *_handle.json output, and console.json (no 404s: every brand reference resolves, static rule 16)."
+}

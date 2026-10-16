@@ -11,8 +11,13 @@
     <meta property="og:description" content="Design curved and multi-section LED walls and virtual-production stages in the browser.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://itzmorphinetime.github.io/LED_Configurator/">
+    <meta property="og:image" content="https://itzmorphinetime.github.io/LED_Configurator/assets/brand/morph-app-icon-dark@2x.png">
     <meta name="twitter:card" content="summary">
     <title>Morph LED Configurator</title>
+    <link rel="icon" href="assets/brand/morph-favicon.png" type="image/png" sizes="64x64">
+    <link rel="icon" href="assets/brand/morph-favicon@2x.png" type="image/png" sizes="128x128">
+    <link rel="icon" href="assets/brand/morph-favicon.svg" type="image/svg+xml" sizes="any">
+    <link rel="apple-touch-icon" href="assets/brand/morph-app-icon-dark@2x.png">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Montserrat:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -35,7 +40,10 @@
     <div class="app-container">
         <header class="header">
             <h1 class="brand-lockup">
-                <span class="product-name">Morph LED Configurator</span>
+                <img class="brand-wordmark" src="assets/brand/morph-wordmark-dark.svg" alt="Morph" width="507" height="147" decoding="async">
+                <img class="brand-monogram" src="assets/brand/morph-monogram-dark.svg" alt="Morph" width="233" height="172" decoding="async">
+                <span class="brand-divider" aria-hidden="true"></span>
+                <span class="product-name">LED Configurator</span>
             </h1>
             <div class="header-stats">
                 <div class="stat">
@@ -456,6 +464,7 @@
                 <div class="pilot-info" id="pilot-info">
                     <svg class="pilot-info__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>PILOT MODE — WASD: Move • Mouse: Look • QE: Up/Down • Scroll: Speed • ESC: Exit
                 </div>
+                <img class="brand-watermark" src="assets/brand/morph-monogram-dark.svg" alt="" aria-hidden="true" width="233" height="172">
                 <div id="viewport-top-stack">
                     <div class="debug-legend" id="debug-view-legend" aria-hidden="true" title="Face colours come from the GPU's front-facing flag, which some mobile GPUs report wrongly" hidden>
                         <div class="debug-legend-row" data-legend="faceOrientation" hidden>

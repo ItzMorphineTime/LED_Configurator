@@ -2,8 +2,13 @@
    06 3.2: the header is a three-column grid [brand lockup | history group | stats] (07 C50). The middle column is the
    slot of spec 07 H2's .header-history (#history-undo, #history-redo, #autosave-status); until H2 lands it stays
    empty, so the lockup and the stats are placed in columns 1 and 3 explicitly and H2's group auto-places into
-   column 2. .brand-lockup is the <h1> (not a link: a reload would discard unsaved work) holding the live-text product
-   name; 06 T4b adds the wordmark, the monogram and the divider in front of it.
+   column 2. .brand-lockup is the <h1> (not a link: a reload would discard unsaved work): since 06 T4b the
+   morph-wordmark-dark.svg artwork (alt "Morph"; at <= 520 px the monogram instead, 12-responsive.css), a 1 x 24 px
+   divider and the live-text product name "LED Configurator", so its accessible name is "Morph LED Configurator" at
+   every width. The artwork is never altered: its <img> carries the intrinsic width/height attributes, CSS sets only
+   the width (144 px wordmark, 36 px monogram) with height: auto, and no filter, opacity or blend applies. At 144 px
+   the wordmark is 41.75 px tall, leaving 8.6 px above and below in the 60 px header (clear space 6.8 px, 06 6.4).
+   The divider and the product name sit 5 px high, level with the MORPH letters rather than letters plus wave.
    Slice of the original <style>, rewritten to role tokens (css-slices.mjs --report-only lists the difference, 07 S7);
    link order = file number. Do not reorder rules across files. */
 .header {
@@ -27,12 +32,35 @@
     min-width: 0;
 }
 
+.brand-wordmark {
+    display: block;
+    width: 144px;
+    height: auto;
+    flex: none;
+}
+
+.brand-monogram {
+    display: none;
+    width: 36px;
+    height: auto;
+    flex: none;
+}
+
+.brand-divider {
+    width: 1px;
+    height: 24px;
+    flex: none;
+    background: var(--color-border-strong);
+    transform: translateY(-5px);
+}
+
 .product-name {
     font-weight: 600;
     font-size: 15px;
     letter-spacing: 0.02em;
     color: var(--color-text-primary);
     white-space: nowrap;
+    transform: translateY(-5px);
 }
 
 .header-stats {

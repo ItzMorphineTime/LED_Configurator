@@ -2,8 +2,11 @@
    The only @media rule of the original stylesheet: this file must stay the last of the slices (css/01-12). In 07 C52's
    link order the feature sheets (css/features/*) come before it, and spec 09's 20-29 block and css/99-utilities.css
    (06 T1, last of all) after it; those set no property these rules set on these elements.
-   06 T4a: role tokens. The text-only header of 06 T4a keeps its product name visible at this width (it is the only
-   identity until 06 T4b adds the wordmark).
+   06 T4a: role tokens. 06 T4b (06 3.2): at <= 900 px the decorative divider is hidden and the product name is visually
+   hidden (not removed: the heading keeps its accessible name "Morph LED Configurator"); the wordmark stays at 144 px.
+   At <= 520 px the 36 px monogram replaces the wordmark (below its 120 px minimum the brand switches to the monogram);
+   only one of the two images is ever rendered, so the name never repeats "Morph". Spec 07 H2's #autosave-status
+   joins the <= 900 px rule when it lands (07 C50).
    Slice of the original <style>, rewritten to role tokens (css-slices.mjs --report-only lists the difference, 07 S7);
    link order = file number. Do not reorder rules across files. */
 @media (max-width: 900px) {
@@ -15,5 +18,28 @@
         order: 3;
         border-right: none;
         border-top: 1px solid var(--color-border-subtle);
+    }
+    .brand-divider {
+        display: none;
+    }
+    .product-name {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+        border: 0;
+    }
+}
+
+@media (max-width: 520px) {
+    .brand-wordmark {
+        display: none;
+    }
+    .brand-monogram {
+        display: block;
     }
 }

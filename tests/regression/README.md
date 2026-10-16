@@ -197,8 +197,11 @@ Before every capture the scenario does the following, so that captures are repea
 
 At the start of the scenario, every Google Fonts weight is preloaded, including the unicode-range
 subsets for `°×•—` (Montserrat 400-700 since 06 T4a, next to JetBrains Mono and Outfit). The text
-snapshot's `header.logo` is the text of `.product-name` (06 T4a; the legacy `.logo-text` is gone), and
-`CSS_TOKENS` lists the role tokens of `css/02-tokens.css` layer 3.
+snapshot's `header.logo` is the text of `.product-name` (06 T4a; the legacy `.logo-text` is gone; since 06 T4b
+"LED Configurator", with the alt texts of the lockup images in `header.brandAlt`), and `CSS_TOKENS` lists the role
+tokens of `css/02-tokens.css` layer 3. Since 06 T4b the styles also probe the lockup images, the divider and the
+viewport watermark (`.brand-watermark`, a direct child of `.viewport-overlay`, so the pixel searches of the extra
+scenarios skip it like every other overlay).
 
 Two self-consistency runs from the original app produced byte-identical outputs for all 35 files.
 
