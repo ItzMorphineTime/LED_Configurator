@@ -1,6 +1,6 @@
 # Morph brand assets: notice
 
-This folder holds the Morph brand marks that the Morph LED Configurator displays:
+This folder holds the Morph brand marks that the Morph LED Configurator and its README display:
 
 | File | Used for |
 |---|---|
@@ -8,6 +8,8 @@ This folder holds the Morph brand marks that the Morph LED Configurator displays
 | `morph-monogram-dark.svg` | the M monogram: the header at narrow widths and the viewport watermark |
 | `morph-favicon.svg`, `morph-favicon.png`, `morph-favicon@2x.png` | the browser-tab icon |
 | `morph-app-icon-dark@2x.png` | the home-screen icon (`apple-touch-icon`) and link previews (`og:image`) |
+| `morph-primary-horizontal.svg` | the lockup at the top of the repository README (light theme) |
+| `morph-dark-event-lockup.svg` | the lockup at the top of the repository README (dark theme) |
 
 The Morph name, the M monogram, the MORPH wordmark and the related artwork are trademarks of Morph. They are **not**
 licensed under the Apache License 2.0 that covers the rest of this repository. Section 6 of that licence already

@@ -1,0 +1,28 @@
+{
+  "commit": "F6-T9",
+  "bugs": [],
+  "expect": [],
+  "mayChange": [
+    {
+      "output": "p2_curved_safe_distance/box_corner.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas on the preview footer label row (1 level, 1 px at (920, 912), seen in the 06 T6a, T6b and T7 runs); T9 changes no app file"
+    },
+    {
+      "output": "p2_shortcut_filters/pilot_view_front.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas (1 level, 2 px, seen in the 06 T6b and T7 self-consistency runs); T9 changes no app file"
+    },
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-T6b runs); T9 changes no app file"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b); T9 changes no export"
+    }
+  ],
+  "notes": "06 T9 (8.4: none, no re-baseline): README.md (the Morph lockups via <picture>, the product name, a tagline, the C51622 / 0A0A0A badges, the export file names, the Brand and licence section) and the two README lockups copied into assets/brand/ (owner-approved, 06 5.8, Q2/A8; byte-identical to the brand source), NOTICE.md lists them. No app file changes, so no output may change."
+}

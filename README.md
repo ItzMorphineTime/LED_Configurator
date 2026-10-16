@@ -1,15 +1,24 @@
-# LED Wall Configurator
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/morph-dark-event-lockup.svg">
+    <source media="(prefers-color-scheme: light)" srcset="assets/brand/morph-primary-horizontal.svg">
+    <img src="assets/brand/morph-primary-horizontal.svg" alt="Morph" width="320">
+  </picture>
+</p>
 
-A professional-grade, browser-based 3D configurator for designing LED video walls and virtual production stages. No installation required.
+# Morph LED Configurator
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-GitHub%20Pages-blue?style=for-the-badge)](https://itzmorphinetime.github.io/LED_Configurator/)
-![License](https://img.shields.io/badge/license-Apache%202.0-green)
+Shape curved and multi-section LED walls and virtual-production stages in the browser, see exactly what the film camera
+will frame, and hand the crew the geometry, the panel IDs and the safe zone they build from. Nothing to install.
+
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-GitHub%20Pages-C51622?style=for-the-badge)](https://itzmorphinetime.github.io/LED_Configurator/)
+![License](https://img.shields.io/badge/code%20license-Apache%202.0-0A0A0A)
 
 ---
 
 ## 🚀 Live Demo
 
-**[Launch LED Wall Configurator →](https://itzmorphinetime.github.io/LED_Configurator/)**
+**[Launch Morph LED Configurator →](https://itzmorphinetime.github.io/LED_Configurator/)**
 
 No installation required. Works in any modern browser.
 
@@ -154,6 +163,10 @@ A value outside its range is clamped to it when the field is changed. An empty f
 
 ## 📤 Export Options
 
+Every download is named after the product: `morph-led-wall.json`, `morph-led-wall.obj` with `morph-led-wall.mtl`,
+`morph-led-wall.gltf`, `morph-led-wall-export.zip`, `morph-led-wall-panel-ids.png` and
+`morph-led-wall-safe-distance.obj`. OBJ, MTL and glTF files name "Morph LED Configurator" as their generator.
+
 ### JSON Configuration
 Export and import wall configurations. The JSON file (format version 1.0) contains:
 - All section parameters (name, panels, LED resolution, curvature, angle offset, color)
@@ -190,7 +203,7 @@ High-resolution texture map showing:
 - Color-coded borders
 
 ### Safe Distance OBJ
-Export the calculated safe camera zone as 3D geometry (`safe-distance-floor.obj`).
+Export the calculated safe camera zone as 3D geometry (`morph-led-wall-safe-distance.obj`).
 
 Release note: this export used to fail without downloading anything; it now downloads the file. Until the next update the floor's faces point down (-Y), and on curved or cornered walls the band is still built from separate per-column quads.
 
@@ -227,11 +240,13 @@ Release note: this export used to fail without downloading anything; it now down
 - **Three.js** (r128) - 3D rendering
 - **JSZip** - ZIP file generation
 - **Vanilla JavaScript** - No framework dependencies
-- **CSS3** - Modern styling with CSS variables
+- **CSS3** - Modern styling with CSS custom properties (one token file, `css/02-tokens.css`)
+- **Montserrat** and **JetBrains Mono** (Google Fonts) - interface and label type
 
 ### Project Structure
 - `index.html`: page markup; loads three.js r128 and JSZip from cdnjs, the stylesheets in `css/` and the entry module `js/main.js`
-- `css/`: 12 stylesheets (`01-reset.css` ... `12-responsive.css`), linked in numeric order
+- `css/`: the stylesheets `01-reset.css` ... `12-responsive.css`, the feature sheet `css/features/debug-view.css` and `99-utilities.css`, linked in the order of [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) 2.1; `02-tokens.css` holds every colour and font token
+- `assets/brand/`: the Morph brand files the app and this README show (see [Brand and licence](#brand-and-licence))
 - `js/`: native ES modules in layers (`core`, `legacy`, `theme`, `domain`, `geometry`, `io`, `render`, `interaction`, `app`, `ui`); `js/app/App.js` is the composition root
 - `tests/`: unit tests (`node --test "tests/unit/**/*.test.mjs"`), static checks (`tests/static/`) and the golden-master regression harness (`tests/regression/`)
 - `tools/serve.mjs`: the local static server
@@ -306,6 +321,7 @@ Contributions are welcome! Feel free to:
 ## 📋 Changelog
 
 ### Latest Updates
+- ✅ Morph branding: dark interface, Morph colours on the 3D scene and the panel-ID textures, the Morph section palette, exports named `morph-led-wall-*`
 - ✅ 3D Gizmo system for camera and prop manipulation
 - ✅ World/Local space toggle for gizmos
 - ✅ Pilot camera mode with WASD navigation
@@ -328,6 +344,18 @@ Contributions are welcome! Feel free to:
 
 ---
 
+## Brand and licence
+
+The source code is licensed under the [Apache License 2.0](LICENSE).
+
+The Morph name, the M monogram, the MORPH wordmark and the other artwork in [`assets/brand/`](assets/brand/) are
+trademarks of Morph. They are **not** covered by the Apache License 2.0; see
+[`assets/brand/NOTICE.md`](assets/brand/NOTICE.md). Do not alter, recolour or redraw them. If you fork this repository,
+remove that folder and every reference to it and rename the product, unless Morph has given you permission to use the
+marks.
+
+---
+
 ## 📧 Contact
 
 Project Link: [https://github.com/ItzMorphineTime/LED_Configurator](https://github.com/ItzMorphineTime/LED_Configurator)
@@ -336,6 +364,6 @@ Project Link: [https://github.com/ItzMorphineTime/LED_Configurator](https://gith
 
 <p align="center">
   <a href="https://itzmorphinetime.github.io/LED_Configurator/">
-    <img src="https://img.shields.io/badge/🚀_Launch_Configurator-blue?style=for-the-badge&logo=github" alt="Launch Configurator">
+    <img src="https://img.shields.io/badge/Launch_Morph_LED_Configurator-C51622?style=for-the-badge&logo=github" alt="Launch Morph LED Configurator">
   </a>
 </p>
