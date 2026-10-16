@@ -26,7 +26,7 @@ import { LegacyProfiles, Strategies, unsupportedStrategy } from '../../js/legacy
 import { layoutProject } from '../../js/geometry/WallLayout.js';
 import { WallMeshBuilder, maxIndexOf } from '../../js/geometry/WallMeshBuilder.js';
 import { checkGltfDocument } from '../../tools/check-gltf.mjs';
-import { checkObjText } from '../../tools/check-orientation.mjs';
+import { checkObjText, checkGltfOrientation } from '../../tools/check-orientation.mjs';
 import { computeAtlas } from '../../js/geometry/TextureAtlas.js';
 import { zipTextureFileName } from '../../js/geometry/PanelNaming.js';
 import { ProjectSerializer } from '../../js/io/ProjectSerializer.js';
@@ -746,7 +746,8 @@ describe('strategy reads (foreign profile values throw unsupportedStrategy)', ()
   });
 
   test('GltfExporter: attributes, indexType and doubleSided in every mode', () => {
-    for (const [key, value] of [['attributes', ['POSITION', 'NORMAL']], ['attributes', ['NORMAL']], ['indexType', 'uint32'], ['doubleSided', 'true']]) {
+    for (const [key, value] of [['attributes', ['POSITION', 'TEXCOORD_0']], ['attributes', ['NORMAL']], ['attributes', ['NORMAL', 'POSITION']],
+      ['attributes', ['POSITION', 'POSITION']], ['attributes', []], ['indexType', 'uint32'], ['doubleSided', 'yes']]) {
       const exporter = makeGltf({ ...LegacyProfiles.mesh.gltf, [key]: value });
       for (const mode of MODES) assert.throws(() => exporter.write(args(mode)), expectError(`mesh.gltf.${key}`, value), `${key} ${mode}`);
     }
@@ -862,7 +863,7 @@ describe("glTF index width: mesh.gltf.indexType 'auto' (B-L5, 08 6.2)", () => {
     assert.equal(LegacyProfiles.mesh.gltf.indexType, 'uint16');
   });
 
-  test('65,535 vertices (largest index 65,534): componentType 5123, byte-identical to the Phase-1 profile', () => {
+  test("65,535 vertices (largest index 65,534): componentType 5123, byte-identical to indexType 'uint16'", () => {
     for (const mode of ['combined', 'section']) {
       const project = bigProject(254, 256, mode);
       const doc = GLTF.write(writeArgs(project));
@@ -870,7 +871,7 @@ describe("glTF index width: mesh.gltf.indexType 'auto' (B-L5, 08 6.2)", () => {
       assert.equal(componentType, 5123, mode);
       assert.equal(maxIndexOf(indices), 65534);
       assert.deepEqual(indices, builderIndices(project));
-      assert.equal(json2(doc), json2(makeGltf(LegacyProfiles.mesh.gltf).write(writeArgs(project))), `${mode}: same text as 'uint16'`);
+      assert.equal(json2(doc), json2(makeGltf({ ...Strategies.mesh.gltf, indexType: 'uint16' }).write(writeArgs(project))), `${mode}: same text as 'uint16'`);
     }
   });
 
@@ -905,12 +906,12 @@ describe("glTF index width: mesh.gltf.indexType 'auto' (B-L5, 08 6.2)", () => {
     fs.writeFileSync(path.join(outDir, 'p2-1b-70000-vertices.gltf'), json2(doc));
   });
 
-  test('every harness config, in every mode, writes the same glTF text as the Phase-1 index type', () => {
+  test("every harness config, in every mode, writes the same glTF text as the profile with indexType 'uint16'", () => {
     for (const [label, project] of handPicked()) {
       for (const mode of MODES) {
         if (label === 'empty wall' && mode === 'combined') continue;   // the legacy TypeError, in both
         project.meshMode = mode;
-        assert.equal(json2(GLTF.write(writeArgs(project))), json2(makeGltf(LegacyProfiles.mesh.gltf).write(writeArgs(project))),
+        assert.equal(json2(GLTF.write(writeArgs(project))), json2(makeGltf({ ...Strategies.mesh.gltf, indexType: 'uint16' }).write(writeArgs(project))),
           `${label} [${mode}]`);
       }
     }
@@ -1496,5 +1497,128 @@ describe('OBJ: stage-facing winding and per-vertex normals (B-H2, 08 P2-2c)', ()
       }
     }
     t.diagnostic(`${objects} OBJ objects pass`);
+  });
+});
+
+describe('glTF: stage-facing winding and the NORMAL attribute (B-H2, 08 P2-2d)', () => {
+  const writeArgs = (project, meshMode) => ({ sections: project.wall.sections, meshMode, layout: layoutProject(project) });
+  /** The decoded data of accessor `a` (float or index) of a written document. */
+  const accessorData = (doc, a) => {
+    const accessor = doc.accessors[a];
+    const view = doc.bufferViews[accessor.bufferView];
+    const bytes = Buffer.from(doc.buffers[0].uri.split(',')[1], 'base64');
+    const Ctor = accessor.componentType === 5126 ? Float32Array : accessor.componentType === 5125 ? Uint32Array : Uint16Array;
+    const n = accessor.count * (accessor.type === 'VEC3' ? 3 : 1);
+    const copy = bytes.buffer.slice(bytes.byteOffset + view.byteOffset, bytes.byteOffset + view.byteOffset + n * Ctor.BYTES_PER_ELEMENT);
+    return Array.from(new Ctor(copy));
+  };
+
+  test("the production profile winds 'ccw' with 'averaged' normals, panelNormal 'facing' and attributes POSITION, NORMAL", () => {
+    assert.deepEqual(JSON.parse(JSON.stringify(Strategies.mesh.gltf)), { winding: 'ccw', normals: 'averaged', panelNormal: 'facing',
+      attributes: ['POSITION', 'NORMAL'], indexType: 'auto', doubleSided: 'omit' });
+    assert.deepEqual(JSON.parse(JSON.stringify(LegacyProfiles.mesh.gltf)), { winding: 'legacy-cw', normals: 'none',
+      attributes: ['POSITION'], indexType: 'uint16', doubleSided: 'omit' });
+  });
+
+  test('every primitive has a unit NORMAL (VEC3 5126, own view 34962, no min/max); tools/check-gltf and check-orientation pass', (t) => {
+    let primitives = 0;
+    for (const [label, project] of orientationProjects()) {
+      for (const mode of MODES) {
+        const doc = GLTF.write(writeArgs(project, mode));
+        assert.deepEqual(checkGltfDocument(doc), [], `${label} [${mode}]`);
+        for (const r of checkGltfOrientation(doc)) assert.equal(r.failures, 0, `${label} [${mode}] ${r.name}: ${r.first}`);
+        for (const mesh of doc.meshes) {
+          for (const prim of mesh.primitives) {
+            assert.deepEqual(Object.keys(prim.attributes), ['POSITION', 'NORMAL'], `${label} [${mode}]`);
+            const normal = doc.accessors[prim.attributes.NORMAL];
+            assert.equal(normal.componentType, 5126);
+            assert.equal(normal.type, 'VEC3');
+            assert.equal(normal.count, doc.accessors[prim.attributes.POSITION].count);
+            assert.ok(!('min' in normal) && !('max' in normal));
+            const view = doc.bufferViews[normal.bufferView];
+            assert.equal(view.target, 34962);
+            assert.notEqual(normal.bufferView, doc.accessors[prim.attributes.POSITION].bufferView);
+            const n = accessorData(doc, prim.attributes.NORMAL);
+            for (let i = 0; i < n.length; i += 3) assert.ok(Math.abs(Math.hypot(n[i], n[i + 1], n[i + 2]) - 1) < 1e-6);
+            primitives++;
+          }
+        }
+        assert.ok(doc.materials.every((m) => !('doubleSided' in m)), "doubleSided 'omit'");
+      }
+    }
+    t.diagnostic(`${primitives} primitives`);
+  });
+
+  test('positions, min/max, materials, meshes and nodes equal the Phase-1 output; the indices are its triangles reversed', () => {
+    const swapLastTwo = (idx) => { const out = []; for (let k = 0; k < idx.length; k += 3) out.push(idx[k], idx[k + 2], idx[k + 1]); return out; };
+    const sortedTriangles = (idx) => { const tris = []; for (let k = 0; k < idx.length; k += 3) tris.push(`${idx[k]},${idx[k + 1]},${idx[k + 2]}`); return tris.sort(); };
+    for (const [label, project] of orientationProjects().slice(0, 40)) {
+      for (const mode of MODES) {
+        const now = GLTF.write(writeArgs(project, mode));
+        const old = makeGltf({ ...LegacyProfiles.mesh.gltf, indexType: 'auto' }).write(writeArgs(project, mode));
+        assert.deepEqual(now.materials, old.materials, `${label} [${mode}]`);
+        assert.deepEqual(now.nodes, old.nodes);
+        assert.deepEqual(now.scenes, old.scenes);
+        assert.deepEqual(now.meshes.map((m) => m.name), old.meshes.map((m) => m.name));
+        now.meshes.forEach((mesh, m) => {
+          const a = mesh.primitives[0], b = old.meshes[m].primitives[0];
+          const pa = now.accessors[a.attributes.POSITION], pb = old.accessors[b.attributes.POSITION];
+          assert.deepEqual([pa.min, pa.max, pa.count], [pb.min, pb.max, pb.count]);
+          assert.deepEqual(accessorData(now, a.attributes.POSITION), accessorData(old, b.attributes.POSITION));
+          // Same triangles, each with its last two vertices swapped (08 6.4): the CCW triangle set equals the legacy set reversed.
+          assert.deepEqual(sortedTriangles(accessorData(now, a.indices)), sortedTriangles(swapLastTwo(accessorData(old, b.indices))), `${label} [${mode}]`);
+        });
+      }
+    }
+  });
+
+  test('NORMAL equals the builder normals: the averaged strip normals, and 4 copies of the facing normal per panel', () => {
+    const builder = new WallMeshBuilder(Strategies.mesh.gltf);
+    for (const [label, project] of orientationProjects().slice(0, 40)) {
+      const layout = layoutProject(project);
+      const section = GLTF.write(writeArgs(project, 'section'));
+      layout.sections.forEach((sl, i) => {
+        assert.deepEqual(accessorData(section, section.meshes[i].primitives[0].attributes.NORMAL),
+          Array.from(new Float32Array(builder.sectionGrid(sl).normals)), `${label} section ${i}`);
+      });
+      const combined = GLTF.write(writeArgs(project, 'combined'));
+      assert.deepEqual(accessorData(combined, combined.meshes[0].primitives[0].attributes.NORMAL),
+        Array.from(new Float32Array(layout.sections.flatMap((sl) => builder.sectionGrid(sl).normals))), label);
+      const panel = GLTF.write(writeArgs(project, 'panel'));
+      const panels = layout.sections.flatMap((sl) => sl.panels);
+      panels.forEach((p, k) => {
+        const f = builder.panelFacingNormal(p);
+        assert.deepEqual(builder.panelNormals(p), [f.x, 0, f.z, f.x, 0, f.z, f.x, 0, f.z, f.x, 0, f.z]);
+        assert.deepEqual(accessorData(panel, panel.meshes[k].primitives[0].attributes.NORMAL), Array.from(new Float32Array(builder.panelNormals(p))));
+      });
+    }
+  });
+
+  test("doubleSided 'true' (08 P2-2d, unused) writes doubleSided: true on every material; nothing else changes", () => {
+    const project = projectFromConfig(CONFIGS.concave_offsets);
+    for (const mode of MODES) {
+      const plain = GLTF.write(writeArgs(project, mode));
+      const two = makeGltf({ ...Strategies.mesh.gltf, doubleSided: 'true' }).write(writeArgs(project, mode));
+      assert.ok(two.materials.length > 0 && two.materials.every((m) => m.doubleSided === true), mode);
+      assert.deepEqual(two.materials.map(({ doubleSided, ...rest }) => rest), plain.materials);
+      assert.deepEqual({ ...two, materials: null }, { ...plain, materials: null });
+    }
+  });
+
+  test('large_wall combined: the NORMAL view grows the buffer from 79,728 to 121,056 bytes (01 2.4; chunked base64 since P2-1a)', () => {
+    const project = projectFromConfig(CONFIGS.large_wall);
+    const now = GLTF.write(writeArgs(project, 'combined'));
+    const old = makeGltf({ ...LegacyProfiles.mesh.gltf, indexType: 'auto' }).write(writeArgs(project, 'combined'));
+    assert.equal(old.buffers[0].byteLength, 79728);
+    assert.equal(now.buffers[0].byteLength, 121056);
+  });
+
+  test('NORMAL without per-vertex normals is refused: strip modes name mesh.gltf.normals, panel mode mesh.panelNormal', () => {
+    const project = Project.createDefault();
+    const expectError = (key, value) => (e) => e instanceof Error && e.message === unsupportedStrategy(key, value).message;
+    const noNormals = makeGltf({ ...LegacyProfiles.mesh.gltf, attributes: ['POSITION', 'NORMAL'] });
+    assert.throws(() => noNormals.write(writeArgs(project, 'combined')), expectError('mesh.gltf.normals', 'none'));
+    assert.throws(() => noNormals.write(writeArgs(project, 'section')), expectError('mesh.gltf.normals', 'none'));
+    assert.throws(() => noNormals.write(writeArgs(project, 'panel')), expectError('mesh.panelNormal', undefined));
   });
 });

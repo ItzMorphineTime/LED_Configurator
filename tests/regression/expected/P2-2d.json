@@ -1,0 +1,12 @@
+{
+  "commit": "P2-2d",
+  "bugs": ["B-H2"],
+  "expect": [
+    { "output": "**/*__export-gltf__*.gltf", "change": "modified", "each": true,
+      "reason": "every glTF winds 'ccw' and gains a NORMAL accessor (its own bufferView, target 34962, no min/max) per primitive: the averaged strip normals, or 4 copies of the facing normal per panel. 25 outputs in the parent baseline: the seven configs x 3 modes and import_edge (4); this covers 01 CR-2 (import_edge) by construction" },
+    { "output": "**/*__export-zip__*.zip", "change": "modified", "each": true,
+      "reason": "the entry led-wall-config.gltf of every Export All archive (17 in the parent baseline, including the six logos archives of 01 CR-2), as above; every other entry is unchanged" }
+  ],
+  "mayChange": [],
+  "notes": "08 P2-2d: mesh.gltf.winding 'ccw', normals 'averaged', the new leaf panelNormal 'facing', attributes ['POSITION','NORMAL']; doubleSided keeps 'omit' (the new 'true' case is unused). Materials, positions, POSITION min/max, node and mesh names are unchanged; the OBJ, MTL, JSON, PNG and screenshot outputs are unchanged"
+}

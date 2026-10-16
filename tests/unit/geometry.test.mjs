@@ -691,7 +691,7 @@ describe('quadIndices and the builder profiles', () => {
     assert.throws(() => gltf.combinedGrid(SMALL_LAYOUT, computeAtlas([])), unsupported('mesh.combinedUV', undefined));
   });
 
-  test('a foreign panelNormal throws from panelFacingNormal; only the OBJ profile defines it', () => {
+  test('a foreign panelNormal throws from panelFacingNormal; of the Phase-1 profiles only OBJ defines it', () => {
     const b = new WallMeshBuilder({ ...LegacyProfiles.mesh.obj, panelNormal: 'x' });
     assert.throws(() => b.panelFacingNormal(PANEL), unsupported('mesh.panelNormal', 'x'));
     assert.throws(() => gltf.panelFacingNormal(PANEL), unsupported('mesh.panelNormal', undefined));
@@ -1155,5 +1155,36 @@ describe("viewport normals 'averaged' (B-L3; 08 6.4 with 01 CR-1)", () => {
       }
     }
     t.diagnostic(`${threw} sections throw the legacy TypeError in both`);
+  });
+});
+
+describe('glTF builder profile and panel normals (B-H2; 08 P2-2d)', () => {
+  test("the production glTF profile winds 'ccw' with 'averaged' normals and defines panelNormal 'facing'", () => {
+    assert.equal(Strategies.mesh.gltf.winding, 'ccw');
+    assert.equal(Strategies.mesh.gltf.normals, 'averaged');
+    assert.equal(Strategies.mesh.gltf.panelNormal, 'facing');
+    assert.ok(!('panelNormal' in LegacyProfiles.mesh.gltf));
+    const b = new WallMeshBuilder(Strategies.mesh.gltf);
+    assert.deepEqual(b.panelQuadIndices(0), [0, 1, 2, 0, 2, 3]);
+    const n = b.panelFacingNormal(PANEL);
+    assert.ok(Object.is(n.x, Math.sin(PANEL.rotY)) && n.y === 0 && Object.is(n.z, Math.cos(PANEL.rotY)));
+  });
+
+  test('panelNormals(panel) is panelFacingNormal x 4 (BL, BR, TR, TL); it throws where panelFacingNormal throws', () => {
+    const b = new WallMeshBuilder(Strategies.mesh.gltf);
+    for (const sl of SMALL_LAYOUT.sections) {
+      for (const panel of sl.panels) {
+        const n = b.panelFacingNormal(panel);
+        const all = b.panelNormals(panel);
+        assert.equal(all.length, 12);
+        for (let k = 0; k < 12; k += 3) assert.ok(Object.is(all[k], n.x) && all[k + 1] === 0 && Object.is(all[k + 2], n.z));
+      }
+    }
+    assert.throws(() => gltf.panelNormals(PANEL), unsupported('mesh.panelNormal', undefined));
+  });
+
+  test('PANEL_UVS: [0,0, 1,0, 1,1, 0,1] in the panelCorners order (the OBJ panel vt lines), frozen', () => {
+    assert.deepEqual(WallMeshBuilder.PANEL_UVS, [0, 0, 1, 0, 1, 1, 0, 1]);
+    assert.ok(Object.isFrozen(WallMeshBuilder.PANEL_UVS));
   });
 });

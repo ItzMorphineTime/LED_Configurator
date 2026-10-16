@@ -31,10 +31,10 @@ function deepFreeze(value) {
  * Deep-frozen compatibility switches. Phase 1 implements only these values: the legacy value of every key, except
  * the `dispose.*` keys flipped by the non-observable Phase 1C clean-ups (ARCHITECTURE.md 8.1). Phase 2 flips or retires
  * keys one fix at a time (docs/improvements/08-bugfix-roadmap.md 4.1); a flipped `mesh.*` key keeps its legacy case
- * for `LegacyProfiles`. Each leaf key is read at the single site named in ARCHITECTURE.md 8.1; enumerated keys are
+ * for `LegacyProfiles`. Each leaf key is read at the site(s) named in ARCHITECTURE.md 8.1; enumerated keys are
  * read with switch-and-throw, the numeric keys and the `dispose.*` booleans are used as values,
- * `mesh.gltf.attributes` is compared with ['POSITION'], and the `mesh.*` profiles are injected into the mesh builder
- * and exporters as `profile`.
+ * `mesh.gltf.attributes` is iterated and each element switched (04 5.5), and the `mesh.*` profiles are injected into
+ * the mesh builder and exporters as `profile`.
  * No module of WP3 reads any key.
  */
 export const Strategies = deepFreeze({
@@ -42,13 +42,15 @@ export const Strategies = deepFreeze({
     viewport: { winding: 'ccw', normals: 'averaged', combinedUV: 'atlas-u-full-v', side: 'double' },
     obj:      { winding: 'ccw', normals: 'averaged', stripNormals: 'per-vertex',
                 combinedUV: 'per-section-overlap', panelNormal: 'facing' },
-    gltf:     { winding: 'legacy-cw', normals: 'none', attributes: ['POSITION'], indexType: 'auto',
-                doubleSided: 'omit' },             // 'omit' = the material object has NO doubleSided key
+    gltf:     { winding: 'ccw', normals: 'averaged', panelNormal: 'facing', attributes: ['POSITION', 'NORMAL'],
+                indexType: 'auto', doubleSided: 'omit' },  // 'omit' = the material object has NO doubleSided key
   },                                               // gltf.indexType: 'auto' since 08 P2-1b (B-L5), Phase-1 'uint16';
                                                    // viewport.winding: 'ccw' since 08 P2-2a (B-H1), Phase-1 'legacy-cw';
                                                    // viewport.normals: 'averaged' since 08 P2-2b (B-L3), Phase-1 'right-panel';
                                                    // obj winding/normals/stripNormals since 08 P2-2c (B-H2), Phase-1
-                                                   // 'legacy-cw' / 'none' / 'constant-z'
+                                                   // 'legacy-cw' / 'none' / 'constant-z'; gltf winding/normals/attributes
+                                                   // since 08 P2-2d (B-H2), Phase-1 'legacy-cw' / 'none' / ['POSITION'],
+                                                   // and the new leaf gltf.panelNormal (08 P2-2d)
   exportCombinedColor: 'first-section',            // B-L6
   mtlTextureNaming: 'index',                       // B-M2
   zipTextureNaming: 'sanitized-name',              // B-L14 (no de-duplication)
@@ -129,7 +131,7 @@ const QUIRKS = deepFreeze({
   'B-H1': ['Viewport strip winding vs normals (C-5)',
     'Landed in 08 P2-2a (`mesh.viewport.winding = \'ccw\'`; `mesh.viewport.side = \'double\'` stays as a design choice; no tag site)'],
   'B-H2': ['Export winding, constant/contradicting normals, no doubleSided (R-5, S-2)',
-    'OBJ landed in 08 P2-2c (`mesh.obj` winding `\'ccw\'`, normals `\'averaged\'`, stripNormals `\'per-vertex\'`); glTF: 08 P2-2d (winding, `NORMAL`)'],
+    'Landed in 08 P2-2c (OBJ: `mesh.obj` winding `\'ccw\'`, normals `\'averaged\'`, stripNormals `\'per-vertex\'`) and 08 P2-2d (glTF: `mesh.gltf` winding `\'ccw\'`, normals `\'averaged\'`, panelNormal `\'facing\'`, attributes with `NORMAL`); no tag site'],
   'B-H3': ['glTF RangeError; ZIP dies silently (S-3, U-4)',
     'Landed in 08 P2-1a (`chunkedBase64` encoder; `ProjectIO.#runExport` reports every export failure; no tag site)'],
   'B-H4': ['Preview off in pilot: alert, stuck in pilot (O-8)',
@@ -149,7 +151,7 @@ const QUIRKS = deepFreeze({
   'B-M6': ['Overlapping combined OBJ UVs (R-6)',
     'atlas UVs'],
   'B-M7': ['glTF POSITION only (S-2)',
-    'add attributes'],
+    '`NORMAL` landed in 08 P2-2d; `TEXCOORD_0` with 08 P2-7c'],
   'B-M8': ['Safe-distance group survives preview off (K-2)',
     '`safeDistance.remove()` there'],
   'B-M9': ['Preview 320x180 stretch (L-1)',
@@ -267,7 +269,6 @@ const TAG_SITES = deepFreeze([
   ['js/geometry/WallLayout.js#computeWallLayout', ['B-L1']],
   ['js/geometry/WallLayout.js#flatEdges', ['B-M15']],
   ['js/geometry/WallLayout.js#framingBounds', ['B-L2', 'B-M10']],
-  ['js/geometry/WallMeshBuilder.js#quadIndices', ['B-H2']],
   ['js/geometry/WallMeshBuilder.js#sectionGrid', ['B-L15', 'B-L8']],
   ['js/geometry/WallMeshBuilder.js#combinedGrid', ['B-M5']],
   ['js/geometry/TextureAtlas.js#panelPxPerLed', ['B-M16']],
@@ -277,7 +278,7 @@ const TAG_SITES = deepFreeze([
   ['js/io/ProjectSerializer.js#read', ['B-L8', 'B-M4']],
   ['js/io/ObjExporter.js#write', ['B-M6', 'B-L6', 'B-L8']],
   ['js/io/GltfExporter.js#write', ['B-L6', 'B-L8']],
-  ['js/io/GltfExporter.js#addMesh', ['B-H2', 'B-M7']],
+  ['js/io/GltfExporter.js#addMesh', ['B-M7']],
   ['js/render/SceneManager.js#addHelper', ['B-M11']],
   ['js/render/LEDWallView.js#rebuild', ['B-L8']],
   ['js/render/LEDMaterialFactory.js#combined', ['B-M5', 'B-L18']],

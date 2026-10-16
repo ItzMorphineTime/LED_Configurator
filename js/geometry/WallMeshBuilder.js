@@ -16,8 +16,9 @@ import { unsupportedStrategy } from '../legacy/LegacyCompat.js';
 
 /**
  * The 6 indices of one grid quad (two triangles).
- *   'ccw' (08 6.4, 08 P2-2a): [bl, br, tr, bl, tr, tl], counter-clockwise seen from the side the stored normals
- *     point to (+Z for a flat wall, the stage); panel quads with corners BL=0, BR=1, TR=2, TL=3 give [0, 1, 2, 0, 2, 3].
+ *   'ccw' (08 6.4; viewport 08 P2-2a, OBJ P2-2c, glTF P2-2d): [bl, br, tr, bl, tr, tl], counter-clockwise seen
+ *     from the side the stored normals point to (+Z for a flat wall, the stage); panel quads with corners BL=0, BR=1,
+ *     TR=2, TL=3 give [0, 1, 2, 0, 2, 3].
  *   'legacy-cw': [bl, tl, tr, bl, tr, br], the Phase-1 order, kept for the LegacyProfiles oracle tests. It reproduces
  *     all 8 legacy index sites: viewport 1638 / 1749, OBJ 4599-4600 / 4648-4649, glTF 4844 / 4863, and panel quads:
  *     quadIndices(0, 1, 3, 2) = [0, 3, 2, 0, 2, 1] (glTF 4887) and OBJ `v, v+3, v+2 / v, v+2, v+1` =
@@ -36,13 +37,12 @@ import { unsupportedStrategy } from '../legacy/LegacyCompat.js';
 export function quadIndices(bl, br, tl, tr, winding = 'legacy-cw') {
   switch (winding) {
     case 'ccw':
-      // 08 6.4: (br - bl) x (tr - bl) points along the stored normals (+Z for a flat wall). Viewport since 08 P2-2a
-      // (B-H1 fixed).
+      // 08 6.4: (br - bl) x (tr - bl) points along the stored normals (+Z for a flat wall). Every production profile
+      // since 08 P2-2d (viewport P2-2a, B-H1; OBJ P2-2c and glTF P2-2d, B-H2).
       return [bl, br, tr, bl, tr, tl];
     case 'legacy-cw':
-      // LEGACY(B-H2): (bl, tl, tr) / (bl, tr, br) is clockwise seen from +Z, so the glTF export faces away from the
-      // stage. It was the viewport order until 08 P2-2a (B-H1) and the OBJ order until 08 P2-2c; kept for the
-      // LegacyProfiles oracle tests.
+      // legacy-cw: Phase-1 behaviour (B-H1, B-H2: clockwise seen from +Z, against the stored normals), kept for the
+      // LegacyProfiles oracle tests. No production profile uses it since 08 P2-2d.
       return [bl, tl, tr, bl, tr, br];
     default:
       throw unsupportedStrategy('mesh.winding', winding);
@@ -185,6 +185,13 @@ function uvWriter(uv) {
 
 /** Builds vertex grids, indices and panel quads for one consumer profile. */
 export class WallMeshBuilder {
+  /**
+   * The per-panel UVs of a panel-mode quad in the panelCorners order BL, BR, TR, TL (the OBJ panel lines
+   * `vt 0 0 / 1 0 / 1 1 / 0 1` of 4696), frozen. For the glTF panel TEXCOORD_0 of 08 P2-7c (08 5.2).
+   * @type {readonly number[]}
+   */
+  static PANEL_UVS = Object.freeze([0, 0, 1, 0, 1, 1, 0, 1]);
+
   /** @type {object} */
   #profile;
 
@@ -394,7 +401,9 @@ export class WallMeshBuilder {
   }
 
   /**
-   * The facing normal of a panel-mode quad (only the OBJ profile defines panelNormal).
+   * The facing normal of a panel-mode quad (the OBJ profile, and the glTF profile since 08 P2-2d, define
+   * panelNormal). With rotY = -atan2(dz, dx) it is the 'ccw' face normal (BR - BL) x (TR - BL) of panelCorners,
+   * normalised (08 6.4).
    * Ports: index.html@cd3fd3f lines 4698-4699.
    * Side effects: none.
    * @param {import('./WallLayout.js').LayoutPanel} panel
@@ -409,4 +418,18 @@ export class WallMeshBuilder {
         throw unsupportedStrategy('mesh.panelNormal', this.profile.panelNormal);
     }
   }
+
+  /**
+   * The 12 normal components of a panel-mode quad: panelFacingNormal(panel) for each of its 4 corners (BL, BR, TR,
+   * TL), flattened x, y, z. The glTF NORMAL of panel meshes (08 P2-2d).
+   * Side effects: none.
+   * @param {import('./WallLayout.js').LayoutPanel} panel
+   * @returns {number[]} a new 12-element array
+   * @throws {Error} unsupportedStrategy('mesh.panelNormal', ...) as panelFacingNormal
+   */
+  panelNormals(panel) {
+    const n = this.panelFacingNormal(panel);
+    return [n.x, n.y, n.z, n.x, n.y, n.z, n.x, n.y, n.z, n.x, n.y, n.z];
+  }
 }
+
