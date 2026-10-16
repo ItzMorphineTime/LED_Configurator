@@ -109,6 +109,48 @@ function pushRightPanelNormal(normals, section, edgePositions, col, edge) {
 }
 
 /**
+ * The panel normal (nx, nz) of the edge pair j -> j + 1: the edge direction rotated -90 deg about +Y, with the
+ * arithmetic of legacy 1610-1615. edgePositions[j + 1] is read first, so a missing pair throws the same TypeError as
+ * pushRightPanelNormal. Module-private.
+ * @param {import('./WallLayout.js').LayoutEdge[]} edgePositions
+ * @param {number} j
+ * @returns {{x: number, z: number}}
+ */
+function panelNormalAt(edgePositions, j) {
+  const dx = edgePositions[j + 1].x - edgePositions[j].x;
+  const dz = edgePositions[j + 1].z - edgePositions[j].z;
+  const len = Math.sqrt(dx * dx + dz * dz);
+  return { x: -dz / len, z: dx / len };
+}
+
+/**
+ * Appends the 'averaged' vertex normal (nx, 0, nz) of grid column `col` of a CURVED section (08 6.4 with 01 CR-1;
+ * a flat section uses pushRightPanelNormal verbatim). With C = edgePositions.length - 1 and n[j] = panelNormalAt(j):
+ * column 0 -> n[0]; column C -> n[C - 1]; any other column -> the unit bisector normalize(n[col - 1] + n[col]),
+ * exactly half the curve step from each adjacent panel normal. Every row of a column gets the same normal; the
+ * normals are never negated. A section without a column pair (panelCols 0, or '' / '0' imported raw, B-L8) throws
+ * the same TypeError as 'right-panel'. Module-private.
+ * @param {number[]} normals  output array
+ * @param {import('../domain/WallSection.js').WallSection} section  unused (the writer signature)
+ * @param {import('./WallLayout.js').LayoutEdge[]} edgePositions
+ * @param {number} col
+ */
+function pushAveragedNormal(normals, section, edgePositions, col) {
+  const last = edgePositions.length - 1;
+  if (col === 0 || col === last) {
+    const n = panelNormalAt(edgePositions, col === 0 ? 0 : last - 1);
+    normals.push(n.x, 0, n.z);
+    return;
+  }
+  const a = panelNormalAt(edgePositions, col - 1);
+  const b = panelNormalAt(edgePositions, col);
+  const sx = a.x + b.x;
+  const sz = a.z + b.z;
+  const len = Math.sqrt(sx * sx + sz * sz);
+  normals.push(sx / len, 0, sz / len);
+}
+
+/**
  * Resolves the sectionGrid `uv` option into a per-vertex UV writer, or null when no UVs are written.
  *   'unit'              -> (col / panelCols, row / panelRows)                          (1740)
  *   {offsetU, widthU}   -> (offsetU + (col / panelCols) * widthU, row / panelRows)     (1627; B-M5, tagged at combinedGrid)
@@ -169,8 +211,10 @@ export class WallMeshBuilder {
    * One section's vertex grid, pushed into `out` (appended with loops, never spread).
    * For row = 0..panelRows (<=), y = row * sl.panelH; for col = 0..panelCols (<=), edge = sl.edges[col]:
    *   positions.push(edge.x, y, edge.z);
-   *   normals mode = opts.normals ?? this.profile.normals: 'right-panel' -> (nx, 0, nz) verbatim 1607-1625;
-   *     'none' -> nothing pushed;
+   *   normals mode = opts.normals ?? this.profile.normals: 'averaged' (08 6.4 with 01 CR-1) -> a flat section
+   *     (sl.isFlat) pushes the 'right-panel' normals verbatim, a curved one the panel normal at its end columns and
+   *     the unit bisector of the two adjacent panel normals elsewhere; 'right-panel' -> (nx, 0, nz) verbatim
+   *     1607-1625; 'none' -> nothing pushed;
    *   uvs: 'unit' -> (col / panelCols, row / panelRows); {offsetU, widthU} -> (offsetU + (col / panelCols) * widthU,
    *     row / panelRows); null -> nothing pushed.
    * Indices: vertsPerRow = section.panelCols + 1 (raw); for row < panelRows, col < panelCols:
@@ -182,20 +226,28 @@ export class WallMeshBuilder {
    * Side effects: appends to the `out` arrays.
    * @param {import('./WallLayout.js').SectionLayout} sl
    * @param {{indexBase?: number, uv?: 'unit'|{offsetU: number, widthU: number}|null,
-   *          normals?: 'right-panel'|'none'}} [opts]  defaults: indexBase 0, uv null, normals this.profile.normals
+   *          normals?: 'averaged'|'right-panel'|'none'}} [opts]  defaults: indexBase 0, uv null, normals
+   *   this.profile.normals
    * @param {{positions: number[], normals: number[], uvs: number[], indices: number[]}} [out]  defaults to fresh arrays
    * @returns {SectionGrid} the out arrays plus vertexAdvance
    * @throws {Error} unsupportedStrategy('mesh.normals', ...) or ('mesh.winding', ...) for a foreign profile value;
-   *   the legacy TypeError for panelCols = 0 with 'right-panel' normals
+   *   the legacy TypeError for panelCols = 0 with 'right-panel' or 'averaged' normals
    */
   sectionGrid(sl, opts = {}, out = { positions: [], normals: [], uvs: [], indices: [] }) {
     const indexBase = opts.indexBase ?? 0;
     const normalsMode = opts.normals ?? this.profile.normals;
     let writeNormal;
     switch (normalsMode) {
+      case 'averaged':
+        // 08 6.4 with 01 CR-1 (B-L3 fixed in 08 P2-2b for the viewport): the test is per SECTION. Edge positions are
+        // accumulated, so neighbouring panel normals of a flat section at a non-axis heading can differ in the last
+        // bit; a flat section therefore keeps the 'right-panel' normals verbatim (bit-identical by construction), and
+        // a curved one gets the bisectors (pushAveragedNormal).
+        writeNormal = sl.isFlat ? pushRightPanelNormal : pushAveragedNormal;
+        break;
       case 'right-panel':
-        // LEGACY(B-L3): per-vertex normal of the panel to the right (the last column copies the previous one),
-        // not averaged across the two adjacent panels of a curved section.
+        // right-panel: Phase-1 behaviour (B-L3: the normal of the panel to the right, the last column copying the
+        // previous one, not averaged on curves), kept for the LegacyProfiles oracle tests.
         writeNormal = pushRightPanelNormal;
         break;
       case 'none':

@@ -673,11 +673,11 @@ describe('quadIndices and the builder profiles', () => {
   });
 
   test('a foreign normals value throws from sectionGrid (profile or opts.normals), even for an empty grid', () => {
-    const b = new WallMeshBuilder({ ...LegacyProfiles.mesh.obj, normals: 'averaged' });
-    assert.throws(() => b.sectionGrid(SMALL_LAYOUT.sections[0]), unsupported('mesh.normals', 'averaged'));
+    const b = new WallMeshBuilder({ ...LegacyProfiles.mesh.obj, normals: 'smooth' });
+    assert.throws(() => b.sectionGrid(SMALL_LAYOUT.sections[0]), unsupported('mesh.normals', 'smooth'));
     assert.throws(() => obj.sectionGrid(SMALL_LAYOUT.sections[0], { normals: 'x' }), unsupported('mesh.normals', 'x'));
     const empty = computeWallLayout([section({ panelCols: -1, panelRows: -1 })]).sections[0];
-    assert.throws(() => b.sectionGrid(empty), unsupported('mesh.normals', 'averaged'));
+    assert.throws(() => b.sectionGrid(empty), unsupported('mesh.normals', 'smooth'));
     // opts.normals overrides the profile (?? semantics): 'none' on the viewport builder pushes no normals.
     assert.equal(viewport.sectionGrid(SMALL_LAYOUT.sections[0], { normals: 'none' }).normals.length, 0);
     assert.equal(b.sectionGrid(SMALL_LAYOUT.sections[0], { normals: 'none' }).normals.length, 0);
@@ -1020,5 +1020,140 @@ describe('stage-facing winding (B-H1, B-H2; 08 6.4)', () => {
         }
       }
     }
+  });
+});
+
+describe("viewport normals 'averaged' (B-L3; 08 6.4 with 01 CR-1)", () => {
+  const averaged = new WallMeshBuilder({ ...LegacyProfiles.mesh.viewport, normals: 'averaged' });
+  const rightPanel = new WallMeshBuilder({ ...LegacyProfiles.mesh.viewport, normals: 'right-panel' });
+  /** The (nx, nz) of vertex column `col` (row 0) of a grid of `cols + 1` columns. */
+  const column = (normals, col) => [normals[3 * col], normals[3 * col + 1], normals[3 * col + 2]];
+  /** The panel (segment) normal of edges j -> j + 1, verbatim legacy 1610-1615. */
+  const segment = (edges, j) => {
+    const dx = edges[j + 1].x - edges[j].x;
+    const dz = edges[j + 1].z - edges[j].z;
+    const len = Math.sqrt(dx * dx + dz * dz);
+    return [-dz / len, 0, dx / len];
+  };
+  const angleBetween = (a, b) => Math.atan2(len3(cross3(a, b)), dot3(a, b));
+
+  test("the production viewport profile uses 'averaged' (08 P2-2b); LegacyProfiles keeps 'right-panel'", () => {
+    assert.equal(Strategies.mesh.viewport.normals, 'averaged');
+    assert.equal(LegacyProfiles.mesh.viewport.normals, 'right-panel');
+    assert.equal(new WallMeshBuilder(Strategies.mesh.viewport).sectionGrid(SMALL_LAYOUT.sections[0]).normals.length, 9 * 3);
+  });
+
+  test('flat sections: Object.is-equal to the right-panel normals, within 1e-12 of (-sin a, 0, cos a), (0, 0, 1) at heading 0', (t) => {
+    let vertices = 0;
+    for (const { label, sections } of INTEGER_WALLS) {
+      for (const sl of computeWallLayout(sections).sections) {
+        if (!sl.isFlat) continue;
+        const got = averaged.sectionGrid(sl).normals;
+        const want = rightPanel.sectionGrid(sl).normals;
+        assert.equal(got.length, want.length);
+        for (let i = 0; i < got.length; i++) assert.ok(Object.is(got[i], want[i]), `${label} section ${sl.sectionIndex}: [${i}]`);
+        const a = sl.edges[0].angle;
+        for (let i = 0; i < got.length; i += 3) {
+          assert.ok(Math.abs(got[i] + Math.sin(a)) < 1e-12 && got[i + 1] === 0 && Math.abs(got[i + 2] - Math.cos(a)) < 1e-12,
+            `${label} section ${sl.sectionIndex}: (${got[i]}, ${got[i + 2]}) vs heading ${a}`);
+        }
+        if (a === 0) for (let i = 0; i < got.length; i += 3) assert.ok(got[i] === 0 && got[i + 2] === 1, `${label}: heading 0`);
+        vertices += got.length / 3;
+      }
+    }
+    t.diagnostic(`${vertices} flat-section vertices`);
+  });
+
+  test('large_wall L3 (40 deg): the flat short-circuit is per section (a per-vertex Object.is test would renormalise)', () => {
+    const { sections } = CONFIG_WALLS.find(({ label }) => label === 'config:large_wall');
+    const sl = computeWallLayout(sections).sections.find((s) => s.section.name === 'L3');
+    assert.ok(sl && sl.isFlat, 'large_wall has a flat section named L3');
+    assert.ok(Math.abs(sl.edges[0].angle - (40 * Math.PI) / 180) < 1e-12, `L3 heading ${sl.edges[0].angle}`);
+    const C = sl.edges.length - 1;
+    const n = Array.from({ length: C }, (_, j) => segment(sl.edges, j));
+    // The edge positions are accumulated, so neighbouring panel normals differ in the last bit somewhere.
+    const drifting = n.filter((v, j) => j > 0 && !(Object.is(v[0], n[j - 1][0]) && Object.is(v[2], n[j - 1][2]))).length;
+    assert.ok(drifting > 0, 'L3 has bit-different neighbouring panel normals (the CR-1 case)');
+    const got = averaged.sectionGrid(sl).normals;
+    const want = rightPanel.sectionGrid(sl).normals;
+    for (let i = 0; i < got.length; i++) assert.ok(Object.is(got[i], want[i]), `[${i}]`);
+  });
+
+  test('curved sections: interior columns are the unit bisector, |c|/2 from each adjacent panel normal; ends equal their panel normal', (t) => {
+    let interior = 0;
+    for (const { label, sections } of INTEGER_WALLS) {
+      for (const sl of computeWallLayout(sections).sections) {
+        if (sl.isFlat) continue;
+        const C = sl.edges.length - 1;
+        const half = Math.abs((sl.section.curveIntensity * Math.PI) / 180) / 2;
+        const g = averaged.sectionGrid(sl);
+        const rows = sl.section.panelRows + 1;
+        for (let row = 0; row < rows; row++) {
+          for (let k = 0; k <= C; k++) {
+            const v = column(g.normals, row * (C + 1) + k);
+            assert.ok(Math.abs(len3(v) - 1) < 1e-12 && v[1] === 0, `${label}: |n| at column ${k}`);
+            if (k === 0) assert.deepEqual(v, segment(sl.edges, 0), `${label}: first column`);
+            else if (k === C) assert.deepEqual(v, segment(sl.edges, C - 1), `${label}: last column`);
+            else {
+              const left = angleBetween(v, segment(sl.edges, k - 1));
+              const right = angleBetween(v, segment(sl.edges, k));
+              assert.ok(Math.abs(left - half) < 1e-12 && Math.abs(right - half) < 1e-12,
+                `${label} column ${k}: ${left} / ${right} rad vs c/2 = ${half}`);
+              interior++;
+            }
+          }
+        }
+      }
+    }
+    t.diagnostic(`${interior} interior curved-section vertices`);
+    assert.ok(interior > 10000);
+  });
+
+  test('integer layouts: every production viewport triangle faces its averaged vertex normals, cos >= cos(|c|/2) - 1e-9', (t) => {
+    const prod = new WallMeshBuilder(Strategies.mesh.viewport);
+    let triangles = 0, minCos = Infinity;
+    for (const { label, sections } of INTEGER_WALLS) {
+      for (const sl of computeWallLayout(sections).sections) {
+        const r = orientation(prod.sectionGrid(sl));
+        assert.equal(r.failures, 0, `${label} section ${sl.sectionIndex}: ${r.first}`);
+        const half = Math.abs((sl.section.curveIntensity * Math.PI) / 180) / 2;
+        assert.ok(r.minCos >= Math.cos(half) - 1e-9, `${label} section ${sl.sectionIndex}: min cos ${r.minCos}`);
+        triangles += r.triangles;
+        minCos = Math.min(minCos, r.minCos);
+      }
+    }
+    t.diagnostic(`${triangles} triangles; minimum cos(face, vertex normal) ${minCos} (cos 15 deg = ${Math.cos(Math.PI / 12)})`);
+  });
+
+  test("degenerate counts: panelCols 0 throws the legacy TypeError (flat or curved); strings and fractions do not throw", () => {
+    for (const curveIntensity of [0, 5]) {
+      const sl = computeWallLayout([section({ panelCols: 0, curveIntensity })]).sections[0];
+      assert.throws(() => averaged.sectionGrid(sl), { name: 'TypeError', message: "Cannot read properties of undefined (reading 'x')" });
+      assert.throws(() => rightPanel.sectionGrid(sl), { name: 'TypeError', message: "Cannot read properties of undefined (reading 'x')" });
+    }
+    for (const fields of [{ panelCols: '10', curveIntensity: '5' }, { panelCols: 2.5, curveIntensity: 3 }, { curveIntensity: '0' }, { panelRows: 2.5 }]) {
+      const sl = computeWallLayout([section(fields)]).sections[0];
+      assert.doesNotThrow(() => averaged.sectionGrid(sl), JSON.stringify(fields));
+    }
+  });
+
+  test('every fuzzed wall: averaged throws exactly when right-panel throws (same type and message)', (t) => {
+    let threw = 0;
+    for (const { label, sections } of WALLS) {
+      for (const sl of computeWallLayout(sections).sections) {
+        const a = run(() => averaged.sectionGrid(sl));
+        const b = run(() => rightPanel.sectionGrid(sl));
+        assert.equal(a.ok, b.ok, label);
+        if (!a.ok) {
+          assert.equal(`${a.error.constructor.name}: ${a.error.message}`, `${b.error.constructor.name}: ${b.error.message}`, label);
+          threw++;
+        } else {
+          assert.deepEqual(a.value.positions, b.value.positions);
+          assert.deepEqual(a.value.indices, b.value.indices);
+          assert.equal(a.value.normals.length, b.value.normals.length);
+        }
+      }
+    }
+    t.diagnostic(`${threw} sections throw the legacy TypeError in both`);
   });
 });

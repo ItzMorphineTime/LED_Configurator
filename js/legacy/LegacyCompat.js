@@ -39,13 +39,14 @@ function deepFreeze(value) {
  */
 export const Strategies = deepFreeze({
   mesh: {
-    viewport: { winding: 'ccw', normals: 'right-panel', combinedUV: 'atlas-u-full-v', side: 'double' },
+    viewport: { winding: 'ccw', normals: 'averaged', combinedUV: 'atlas-u-full-v', side: 'double' },
     obj:      { winding: 'legacy-cw', normals: 'none', stripNormals: 'constant-z',
                 combinedUV: 'per-section-overlap', panelNormal: 'facing' },
     gltf:     { winding: 'legacy-cw', normals: 'none', attributes: ['POSITION'], indexType: 'auto',
                 doubleSided: 'omit' },             // 'omit' = the material object has NO doubleSided key
   },                                               // gltf.indexType: 'auto' since 08 P2-1b (B-L5), Phase-1 'uint16';
-                                                   // viewport.winding: 'ccw' since 08 P2-2a (B-H1), Phase-1 'legacy-cw'
+                                                   // viewport.winding: 'ccw' since 08 P2-2a (B-H1), Phase-1 'legacy-cw';
+                                                   // viewport.normals: 'averaged' since 08 P2-2b (B-L3), Phase-1 'right-panel'
   exportCombinedColor: 'first-section',            // B-L6
   mtlTextureNaming: 'index',                       // B-M2
   zipTextureNaming: 'sanitized-name',              // B-L14 (no de-duplication)
@@ -170,7 +171,7 @@ const QUIRKS = deepFreeze({
   'B-L2': ['Flat bounds for target/reset/D (H-3, J-1, J-9)',
     'true bounds / pivot'],
   'B-L3': ['Right-panel normals',
-    '`\'averaged\'`'],
+    'Landed in 08 P2-2b (`mesh.viewport.normals = \'averaged\'` with the 01 CR-1 flat-section short-circuit; no tag site)'],
   'B-L4': ['No canvas-size guard (`toBlob` null throws, ZIP `data:,`)',
     'Landed in 08 P2-1c (export size guards: `canvasFits`, M-EXP-2/3/4, ZIP pre-check and late skip) and 08 P2-1d (viewport: a null panel-ID canvas falls back to the section colour with a console warning); no tag site'],
   'B-L5': ['Uint16 glTF indices',
@@ -265,7 +266,7 @@ const TAG_SITES = deepFreeze([
   ['js/geometry/WallLayout.js#flatEdges', ['B-M15']],
   ['js/geometry/WallLayout.js#framingBounds', ['B-L2', 'B-M10']],
   ['js/geometry/WallMeshBuilder.js#quadIndices', ['B-H2']],
-  ['js/geometry/WallMeshBuilder.js#sectionGrid', ['B-L3', 'B-L15', 'B-L8']],
+  ['js/geometry/WallMeshBuilder.js#sectionGrid', ['B-L15', 'B-L8']],
   ['js/geometry/WallMeshBuilder.js#combinedGrid', ['B-M5']],
   ['js/geometry/TextureAtlas.js#panelPxPerLed', ['B-M16']],
   ['js/geometry/PanelNaming.js#zipTextureFileName', ['B-L14']],

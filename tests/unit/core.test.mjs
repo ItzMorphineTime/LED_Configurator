@@ -195,7 +195,7 @@ describe('Strategies', () => {
   test('has exactly the keys and values of ARCHITECTURE.md 3.3 (Phase-1 values except the Phase-2 flips)', () => {
     assert.deepEqual(Strategies, {
       mesh: {
-        viewport: { winding: 'ccw', normals: 'right-panel', combinedUV: 'atlas-u-full-v', side: 'double' },
+        viewport: { winding: 'ccw', normals: 'averaged', combinedUV: 'atlas-u-full-v', side: 'double' },
         obj: { winding: 'legacy-cw', normals: 'none', stripNormals: 'constant-z',
                combinedUV: 'per-section-overlap', panelNormal: 'facing' },
         gltf: { winding: 'legacy-cw', normals: 'none', attributes: ['POSITION'], indexType: 'auto',
@@ -348,7 +348,7 @@ describe('LEGACY_SITES', () => {
   const landed = [...register].filter(([, row]) => /^Landed\b/.test(row.fix)).map(([id]) => id);
   // The Phase 2 fixes landed so far (docs/improvements/08-bugfix-roadmap.md section 10, merge order), each with the
   // 08 commit its 8.2 fix cell names. Every landing commit adds its id here.
-  const PHASE2_LANDED = { 'B-M1': 'P2-5a', 'B-H3': 'P2-1a', 'B-L5': 'P2-1b', 'B-L4': 'P2-1c', 'B-H1': 'P2-2a' };
+  const PHASE2_LANDED = { 'B-M1': 'P2-5a', 'B-H3': 'P2-1a', 'B-L5': 'P2-1b', 'B-L4': 'P2-1c', 'B-H1': 'P2-2a', 'B-L3': 'P2-2b' };
 
   test('ids cover every bug id B-H1..B-H5, B-M1..B-M16, B-L1..B-L36 except the landed fixes, and nothing else', () => {
     const expected = new Set();

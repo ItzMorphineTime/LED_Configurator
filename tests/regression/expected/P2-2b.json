@@ -1,0 +1,10 @@
+{
+  "commit": "P2-2b",
+  "bugs": ["B-L3"],
+  "expect": [],
+  "mayChange": [
+    { "output": "large_wall/final__export-zip__led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen so far: L2_PanelIDs.png (1995, 948), L3_PanelIDs.png (1970, 1003), L4_PanelIDs.png (2026, 858), 1 px each, 3840x1920); this commit changes only the viewport normal attribute" }
+  ],
+  "notes": "invariance (08 8.1, criterion 8): mesh.viewport.normals 'averaged' (08 6.4 with 01 CR-1) changes only the 'normal' attribute of curved combined/section viewport meshes (flat sections keep the 'right-panel' values bit for bit); every wall material is an unlit MeshBasicMaterial, which never reads normals, and no export reads the viewport profile"
+}
