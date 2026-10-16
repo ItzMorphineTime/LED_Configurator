@@ -1,0 +1,10 @@
+{
+  "commit": "F6-T2b",
+  "bugs": [],
+  "expect": [],
+  "mayChange": [
+    { "output": "large_wall/final__export-zip__led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen so far: L2_PanelIDs.png (1995, 948), L3_PanelIDs.png (1970, 1003), L4_PanelIDs.png (2026, 858), 1 px each, 3840x1920); this commit changes no export and no texture" }
+  ],
+  "notes": "Review follow-up of 06 T2, invariance: buildTheme checks every COLOR_BINDINGS and FONT_BINDINGS path against the base theme before it reads a token, so a binding-table error throws whatever the tokens read (before, a row whose token was missing or malformed only warned). Every path exists in Theme (U2), so App builds the same theme and no output may change."
+}

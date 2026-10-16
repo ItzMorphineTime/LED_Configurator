@@ -622,7 +622,8 @@ export function parseCssColor(raw)   // '#rrggbb' | 'rgba(r, g, b, a)' | null
 /** Fresh objects and arrays, deep-frozen; function leaves shared with base by reference and never frozen (base is
  *  never mutated). Never throws for a missing or malformed token: that leaf keeps the base value, and warn is called
  *  once per variable name with `ThemeBridge: ${name} is missing or invalid (${JSON.stringify(raw)}); using the Theme.js
- *  fallback`. A binding path missing from base is a table error and throws. */
+ *  fallback`. A binding path missing from base is a table error and throws: every COLOR_BINDINGS and FONT_BINDINGS
+ *  path is checked before any token is read, so the throw depends neither on the tokens nor on bindFonts. */
 export function buildTheme(base, readVar, { warn = () => {}, bindFonts = BIND_FONTS_DEFAULT } = {})
 ```
 
@@ -3181,3 +3182,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 **06 T1b, the last slice is not the last stylesheet (review follow-up of 06 T1)** (manifest `tests/regression/expected/F6-T1b.json`, an invariance gate: empty `expect`; comments and documentation only):
 - 2.1: the `css/12-responsive.css` row and that file's header comment say it is the last of the slices, not the last stylesheet: since 06 T1, 07 C52's link order puts spec 09's `20`-`29` block and `css/99-utilities.css` after it. The `css-slices.mjs` check list says the same.
 - 08 8.1 step 1 (the per-commit procedure) runs `css-slices.mjs --report-only` (07 S7), as the static gate, CI and REFACTOR_PLAN 8 have since 06 T1.
+
+**06 T2b, a ThemeBridge table error throws whatever the tokens read (review follow-up of 06 T2)** (manifest `tests/regression/expected/F6-T2b.json`, an invariance gate: empty `expect`; every bound path exists in `Theme`, so `App` builds the same theme):
+- 3.4: `buildTheme` checks every `COLOR_BINDINGS` and `FONT_BINDINGS` path against the base theme before it reads a token. Before, a row whose path was missing threw only when its token parsed; with a missing or malformed token it only warned, so a table error could hide behind a token error. It now throws whatever the tokens read and whatever `bindFonts` is.
+- 2.3: `theme.test.mjs` U2 asserts that (no token read and no warning before the throw; a font row throws with `bindFonts` false or true).

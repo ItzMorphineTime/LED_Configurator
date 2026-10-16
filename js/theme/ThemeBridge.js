@@ -139,22 +139,34 @@ function deepFreeze(value) {
 }
 
 /**
- * Replaces the leaf at a dotted path of a cloned theme.
+ * The object that holds the leaf at a dotted path of a cloned theme, and the leaf's key.
  * @param {object} root
  * @param {string} path  e.g. 'scene.safeZone.wallColor'
- * @param {*} value
+ * @returns {{node: object, key: string}}
  * @throws {Error} when the path does not exist in the base theme (a binding table error, never a token error)
  */
-function setLeaf(root, path, value) {
+function leafSlot(root, path) {
   const keys = path.split('.');
   let node = root;
   for (const key of keys.slice(0, -1)) {
     node = node !== null && typeof node === 'object' ? node[key] : undefined;
     if (node === null || typeof node !== 'object') throw new Error(`ThemeBridge: no ${path} in the base theme`);
   }
-  const last = keys[keys.length - 1];
-  if (!Object.prototype.hasOwnProperty.call(node, last)) throw new Error(`ThemeBridge: no ${path} in the base theme`);
-  node[last] = value;
+  const key = keys[keys.length - 1];
+  if (!Object.prototype.hasOwnProperty.call(node, key)) throw new Error(`ThemeBridge: no ${path} in the base theme`);
+  return { node, key };
+}
+
+/**
+ * Replaces the leaf at a dotted path of a cloned theme.
+ * @param {object} root
+ * @param {string} path
+ * @param {*} value
+ * @throws {Error} when the path does not exist in the base theme (see leafSlot)
+ */
+function setLeaf(root, path, value) {
+  const { node, key } = leafSlot(root, path);
+  node[key] = value;
 }
 
 /**
@@ -165,11 +177,16 @@ function setLeaf(root, path, value) {
  * @returns a deep-frozen object with exactly base's key structure and leaf types. Objects and arrays are fresh copies
  *   and are frozen; function leaves are shared with base by reference and never frozen, so base is never mutated.
  *   Never throws for missing or malformed tokens: each such leaf keeps its base value.
+ * @throws {Error} when a COLOR_BINDINGS or FONT_BINDINGS path does not exist in base (a binding table error). Every
+ *   path is checked before any token is read, so the error does not depend on the tokens or on bindFonts.
  * Side effects: calls warn at most once per CSS variable name (a variable bound to several leaves warns once), with
  *   `ThemeBridge: ${name} is missing or invalid (${JSON.stringify(raw)}); using the Theme.js fallback`.
  */
 export function buildTheme(base, readVar, { warn = () => {}, bindFonts = BIND_FONTS_DEFAULT } = {}) {
   const out = deepClone(base);
+  // A table error must not hide behind a missing token: check every bound path first.
+  for (const [path] of COLOR_BINDINGS) leafSlot(out, path);
+  for (const [path] of FONT_BINDINGS) leafSlot(out, path);
   const warned = new Set();
   const bad = (name, raw) => {
     if (warned.has(name)) return;

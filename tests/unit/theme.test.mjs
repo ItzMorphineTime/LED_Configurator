@@ -196,6 +196,23 @@ describe('U2 buildTheme: shape, leaf types, freezing, no mutation of Theme, the 
     delete base.scene.frame;
     assert.throws(() => buildTheme(base, fullReader()), /no scene\.frame in the base theme/);
   });
+
+  test('a table error throws whatever the tokens read, before any token is read, font rows included', () => {
+    const noFrame = { ...Theme, scene: { ...Theme.scene } };
+    delete noFrame.scene.frame;
+    const read = [];
+    const warnings = [];
+    const reader = (name) => { read.push(name); return ''; };
+    assert.throws(() => buildTheme(noFrame, reader, { warn: (m) => warnings.push(m) }), /no scene\.frame in the base theme/);
+    assert.throws(() => buildTheme(noFrame, fullReader({ '--scene-frame': 'not a colour' })), /no scene\.frame in the base theme/);
+    assert.deepEqual(read, [], 'no token is read before the table is checked');
+    assert.deepEqual(warnings, []);
+    const noFont = { ...Theme, canvas: { ...Theme.canvas } };
+    delete noFont.canvas.panelLabelFont;
+    for (const bindFonts of [false, true]) {
+      assert.throws(() => buildTheme(noFont, fullReader(), { bindFonts }), /no canvas\.panelLabelFont in the base theme/, `bindFonts ${bindFonts}`);
+    }
+  });
 });
 
 // ---- U3 ------------------------------------------------------------------------------------------
