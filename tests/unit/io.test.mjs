@@ -1097,7 +1097,7 @@ describe('ProjectIO use cases', () => {
     assert.deepEqual(sections.map((s, i) => atlas.entries[i].startCol), [0, 6, 10, 16]);
   });
 
-  test('exportZIP: a large panel wall downloads; numeric names give M-EXP-1 (no rejection); data:, gives an empty texture', async () => {
+  test('exportZIP: a large panel wall downloads; numeric names give M-EXP-1 (no rejection)', async () => {
     const large = projectFromConfig(CONFIGS.large_wall);
     large.meshMode = 'panel';
     const log = [];
@@ -1112,7 +1112,6 @@ describe('ProjectIO use cases', () => {
     assert.deepEqual(log2.map((e) => e[0]), ['new JSZip', 'alert', 'warn']);
     assert.equal(log2[1][1], mExp1('Export All (ZIP)', 'name.replace is not a function'));
     assert.ok(log2[2][1] instanceof TypeError);
-
   });
 
   test('exportZIP pre-check: an oversize section is skipped up front (JSON null, no map_Kd, no canvas) and named by M-EXP-4', async () => {
@@ -1328,7 +1327,7 @@ describe('ExportPanel', () => {
       'export-gltf:click', 'import-json:click', 'import-input:change']);
 
     const zipResult = elements['export-zip'].listeners.click({});
-    assert.ok(zipResult instanceof Promise, 'the async export promise is returned (rejections stay unhandled)');
+    assert.ok(zipResult instanceof Promise, 'the async export promise is returned (it never rejects since 08 P2-1a)');
     await zipResult;
     await elements['export-panel-ids'].listeners.click({});
     elements['export-json'].listeners.click({});

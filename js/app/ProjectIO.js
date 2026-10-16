@@ -69,7 +69,8 @@ export class Downloader {
    * Side effects: creates, appends, clicks and removes an <a>; creates an object URL; one timer that revokes it.
    * @param {Blob} blob
    * @param {string} filename
-   * @throws {TypeError} from URL.createObjectURL for a null blob (B-L4, tagged at ProjectIO.exportPanelIds)
+   * @throws {TypeError} from URL.createObjectURL for a null blob (no caller passes one since 08 P2-1c: Export Panel
+   *   IDs alerts M-EXP-3 for a null toBlob result; any throw of an export is reported by ProjectIO.#runExport)
    */
   saveBlob(blob, filename) {
     const a = this.#doc.createElement('a');
