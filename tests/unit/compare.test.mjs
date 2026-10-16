@@ -2,7 +2,8 @@
 // tests/regression/compare.mjs --expect (expected-change manifests) and the nondeterminism allowlist
 // (tests/regression/expected/_nondeterminism.json), on synthetic baseline / candidate output trees; and the rect
 // allowances of docs/improvements/01-normals.md 8.4 (T2): `rects` / `size` / `exclude` on manifest entries (the
-// per-pixel rule and the frame-size check) and --diff-bbox, on synthetic PNG pairs.
+// per-pixel rule, the allowlisted jitter tolerated outside the rects (F1-0c) and the frame-size check) and
+// --diff-bbox, on synthetic PNG pairs.
 // Run: node --test tests/unit/compare.test.mjs   (zero dependencies)
 
 import { test, describe, after } from 'node:test';
@@ -336,7 +337,7 @@ describe('rect allowances (01 T2: rects, size, exclude, --diff-bbox)', () => {
     assert.equal(r.byKey[VIEW], 'FAIL');
     assert.equal(r.exitCode, 1);
     assert.equal(r.entries[0].satisfied, false);
-    assert.match(r.text, /1 of 2 differing px outside the rects \(bbox \[10,5\]-\[10,5\]\)/);
+    assert.match(r.text, /1 of 2 differing px outside the rects \(max 1, bbox \[10,5\]-\[10,5\]\)/);
     assert.match(r.text, /1 differing output\(s\) failed the rect check/);
   });
 
@@ -384,6 +385,36 @@ describe('rect allowances (01 T2: rects, size, exclude, --diff-bbox)', () => {
     assert.equal(outside.exitCode, 1);
   });
 
+  test('outside the rects, only the allowlisted jitter of that screenshot is tolerated (F1-0c)', () => {
+    const PILOT = 'keyboard/pilot_view.screenshot.png';   // allowlisted in ALLOWLIST: <= 1 level, <= 8 px
+    const OTHER = 'keyboard/other.screenshot.png';        // not allowlisted
+    const entry = (output) => ({ output, change: 'modified', size: [W, H], rects: CORNERS });
+    // A real change in the column rect plus 1-level flips at two pixels outside (the preview-label jitter of camera/*).
+    const real = [[at(1, 1), 40], [at(2, 0), 40]];
+    const run = (output, outside, mayChange = false) => {
+      const m = mayChange ? manifest([], [entry(output)]) : manifest([entry(output)]);
+      return gate(candidate({ [output]: shot(png([...real, ...outside])) }), [m]);
+    };
+
+    const ok = run(PILOT, [[at(10, 5), 1], [at(11, 5), 1]]);
+    assert.equal(ok.byKey[PILOT], 'EXPECTED', ok.text);
+    assert.equal(ok.exitCode, 0);
+    assert.equal(ok.entries[0].satisfied, true);
+    assert.match(ok.text, /2 of 4 differing px inside the rects .*2 outside within the allowlisted jitter \(keyboard\/\{pilot_view,final_view\}\.screenshot\.png, <= 1 level \/ 8 px; max 1, bbox \[10,5\]-\[11,5\]\)/);
+    assert.equal(run(PILOT, [[at(10, 5), 1]], true).byKey[PILOT], 'EXPECTED?', 'mayChange entries tolerate it too');
+
+    const twoLevels = run(PILOT, [[at(10, 5), 2]]);
+    assert.equal(twoLevels.byKey[PILOT], 'FAIL', 'a 2-level pixel outside is more than the jitter');
+    assert.match(twoLevels.text, /1 of 3 differing px outside the rects \(max 2, bbox \[10,5\]-\[10,5\]; beyond the allowlisted jitter of keyboard\/\{pilot_view,final_view\}\.screenshot\.png/);
+    const nine = run(PILOT, Array.from({ length: 9 }, (_, k) => [at(5 + k, 5), 1]));
+    assert.equal(nine.byKey[PILOT], 'FAIL', 'more outside pixels than maxPixels');
+    assert.equal(nine.exitCode, 1);
+
+    const unlisted = run(OTHER, [[at(10, 5), 1]]);
+    assert.equal(unlisted.byKey[OTHER], 'FAIL', 'a screenshot without an allowlist entry gets no tolerance');
+    assert.equal(unlisted.entries[0].satisfied, false);
+  });
+
   test('rects judge images only: a rect entry matching a differing JSON output makes it a FAIL', () => {
     const r = gate(candidate({ 'cfg/a.json': state({ v: 2 }) }), [manifest([{ output: 'cfg/a.json', change: 'modified', size: [W, H], rects: CORNERS }])]);
     assert.equal(r.byKey['cfg/a.json'], 'FAIL');
@@ -413,7 +444,7 @@ describe('rect allowances (01 T2: rects, size, exclude, --diff-bbox)', () => {
     const m = file(manifest([rectEntry(CORNERS)], [{ output: 'keyboard/other.screenshot.png' }]));
     const r = cli(baseDir, cand, '--expect', m, '--diff-bbox');
     assert.equal(r.status, 1, r.stdout);
-    assert.match(r.stdout, /view\.screenshot\.png .*1 of 2 differing px outside the rects \(bbox \[12,6\]-\[12,6\]\).*diff bbox \[1,1\]-\[12,6\] \(2 px\); outside the rects \[12,6\]-\[12,6\] \(1 px\)/);
+    assert.match(r.stdout, /view\.screenshot\.png .*1 of 2 differing px outside the rects \(max 5, bbox \[12,6\]-\[12,6\]\).*diff bbox \[1,1\]-\[12,6\] \(2 px\); outside the rects \[12,6\]-\[12,6\] \(1 px\)/);
     assert.match(r.stdout, /other\.screenshot\.png .*diff bbox \[4,3\]-\[4,3\] \(1 px\)/);
     const plain = cli(baseDir, cand, '--expect', m);
     assert.doesNotMatch(plain.stdout, /diff bbox/);

@@ -627,7 +627,12 @@ screenshots:
   `EXPECTED` (or `EXPECTED?` for a `mayChange` entry) only when **every** pixel with any channel
   difference lies inside the union of the rectangles; one pixel outside makes it a **FAIL**, even when the
   difference alone would only be a WARN. A bounding-box test would not do: the column and the badge sit in
-  opposite corners.
+  opposite corners. The one exception is the standing jitter (F1-0c): on a screenshot listed in
+  `expected/_nondeterminism.json`, pixels outside the rectangles are tolerated when they stay within that
+  entry's bounds (largest channel difference <= `maxLevel`, at most `maxPixels` of them), exactly what the
+  allowlist accepts on an otherwise unchanged capture; the detail reports them as "outside within the
+  allowlisted jitter". Without it, a step that changes the help badge of `camera/08_camera_moved` would fail
+  whenever that capture's preview-header glyphs flip.
 - **The frame-size check.** The image must have exactly the entry's `size`; a differing capture of
   another size (a camera-preview capture, the narrow page) is a FAIL `rect frame mismatch`. Unchanged
   captures pass whatever their size. `rects` and `size` always go together, and only with

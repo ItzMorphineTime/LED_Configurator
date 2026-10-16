@@ -1,0 +1,10 @@
+{
+  "commit": "F1-0c",
+  "bugs": [],
+  "expect": [],
+  "mayChange": [
+    { "output": "large_wall/final__export-zip__led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen so far: L2_PanelIDs.png (1995, 948), L3_PanelIDs.png (1970, 1003), L4_PanelIDs.png (2026, 858), 1 px each, 3840x1920); this commit changes only compare.mjs" }
+  ],
+  "notes": "01 F1-0 (tooling), follow-up of F1-0b (T2): a rect entry tolerates, outside its rectangles, the standing overlay-glyph jitter of tests/regression/expected/_nondeterminism.json (an allowlisted screenshot whose outside pixels stay within that entry's level and pixel bounds), so a rect-limited re-baseline (01 F1-2) does not fail on the preview-label jitter of camera/*.screenshot.png. Only compare.mjs, its tests and the docs change; run.mjs, the scenarios, the capture lib and the app are untouched, so every output must stay identical (invariance; 01 8.4)."
+}

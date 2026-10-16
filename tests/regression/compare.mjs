@@ -11,7 +11,9 @@
 // allowlist of the known overlay-glyph screenshot jitter; it is never listed by hand.
 // Rect allowances (docs/improvements/01-normals.md 8.4, T2; 07 C57): a manifest entry with `rects` (and its capture
 // frame `size`) accepts an image difference only when every differing pixel lies inside the union of its rectangles and
-// the PNG has exactly that size; otherwise the output is a FAIL. The rectangles are measured from the DOM by
+// the PNG has exactly that size; otherwise the output is a FAIL. The only pixels tolerated outside the rectangles are
+// the allowlisted jitter: on a screenshot listed in _nondeterminism.json, outside pixels within that entry's level and
+// pixel bounds (F1-0c). The rectangles are measured from the DOM by
 // tests/regression/measure-rects.mjs, never typed. --diff-bbox adds the bounding box of the differing pixels (and of
 // those outside an entry's rectangles) to the detail of every differing image, for review.
 import fs from 'node:fs';
@@ -484,9 +486,11 @@ const entryMatches = (entry, key) => entry.re.test(key) && !(entry.excludeRe && 
 
 /**
  * The pixel comparison of one image output against a rect entry (01 T2): the frame size check, then every pixel with
- * any channel difference is either inside the union of the rectangles or counted outside. Bounding boxes are
+ * any channel difference is either inside the union of the rectangles or counted outside (with the largest channel
+ * difference among the outside pixels, which the jitter tolerance of applyRects reads). Bounding boxes are
  * [x0, y0, x1, y1], inclusive. Decoded images are cached on the output record.
- * @returns {{size: number[], sizeOk: boolean, differing: number, outside: number, bbox: number[]|null, outsideBbox: number[]|null}}
+ * @returns {{size: number[], sizeOk: boolean, differing: number, outside: number, outsideMaxDiff: number,
+ *            bbox: number[]|null, outsideBbox: number[]|null}}
  */
 export function rectCheck(o, rects, size) {
     if (!o._pixels) {
@@ -497,9 +501,11 @@ export function rectCheck(o, rects, size) {
     const { a, b } = o._pixels;
     const frame = [b.width, b.height];
     const sizeOk = !size || (a.width === size[0] && a.height === size[1] && b.width === size[0] && b.height === size[1]);
-    if (a.width !== b.width || a.height !== b.height) return { size: frame, sizeOk: false, differing: NaN, outside: NaN, bbox: null, outsideBbox: null };
+    if (a.width !== b.width || a.height !== b.height) {
+        return { size: frame, sizeOk: false, differing: NaN, outside: NaN, outsideMaxDiff: NaN, bbox: null, outsideBbox: null };
+    }
     const inside = (x, y) => (rects || []).some((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
-    let differing = 0, outside = 0;
+    let differing = 0, outside = 0, outsideMaxDiff = 0;
     let bbox = null, outsideBbox = null;
     const grow = (box, x, y) => (box ? [Math.min(box[0], x), Math.min(box[1], y), Math.max(box[2], x), Math.max(box[3], y)] : [x, y, x, y]);
     for (let y = 0; y < a.height; y++) {
@@ -511,10 +517,11 @@ export function rectCheck(o, rects, size) {
             if (rects && !inside(x, y)) {
                 outside++;
                 outsideBbox = grow(outsideBbox, x, y);
+                for (let k = 0; k < 4; k++) outsideMaxDiff = Math.max(outsideMaxDiff, Math.abs(a.rgba[i + k] - b.rgba[i + k]));
             }
         }
     }
-    return { size: frame, sizeOk, differing, outside, bbox, outsideBbox };
+    return { size: frame, sizeOk, differing, outside, outsideMaxDiff, bbox, outsideBbox };
 }
 
 const fmtBox = (box) => (box ? `[${box[0]},${box[1]}]-[${box[2]},${box[3]}]` : 'none');
@@ -523,8 +530,13 @@ const fmtBox = (box) => (box ? `[${box[0]},${box[1]}]-[${box[2]},${box[3]}]` : '
  * Apply a rect entry to a differing output: EXPECTED-able (returns true) only for an image of the entry's frame size
  * whose differing pixels all lie inside the rectangles. Otherwise the output becomes a FAIL with the reason, and the
  * function returns false (the output then satisfies nothing).
+ * The one tolerance outside the rectangles is the standing overlay-glyph jitter (F1-0c): when the output is a
+ * screenshot listed in the nondeterminism allowlist and its pixels outside the rectangles stay within that entry's
+ * bounds (largest channel difference <= maxLevel, count <= maxPixels), those pixels are what the allowlist accepts on
+ * an otherwise unchanged capture, so they do not fail the entry. Without it a re-baseline that changes the help badge
+ * of a camera/* screenshot would fail whenever the preview-label jitter of the same capture flips.
  */
-function applyRects(o, entry, label) {
+function applyRects(o, entry, label, allowlist = []) {
     if (!IMAGE_KINDS.has(o.kind) || !o.baseFile || !o.candFile) {
         o.status = 'FAIL';
         o.detail = `[${label}] rects apply to screenshots and PNG exports only; ${o.detail}`;
@@ -545,8 +557,16 @@ function applyRects(o, entry, label) {
         return false;
     }
     if (c.outside > 0) {
+        const j = o.kind === 'screenshot' ? allowlist.find((a) => a.re.test(o.key)) : null;
+        if (j && c.outsideMaxDiff <= j.maxLevel && c.outside <= j.maxPixels) {
+            o.detail = `${o.detail}; ${c.differing - c.outside} of ${c.differing} differing px inside the rects (bbox ${fmtBox(c.bbox)}), `
+                + `${c.outside} outside within the allowlisted jitter (${j.output}, <= ${j.maxLevel} level / ${j.maxPixels} px; `
+                + `max ${c.outsideMaxDiff}, bbox ${fmtBox(c.outsideBbox)})`;
+            return true;
+        }
         o.status = 'FAIL';
-        o.detail = `[${label}] ${c.outside} of ${c.differing} differing px outside the rects (bbox ${fmtBox(c.outsideBbox)}); ${o.detail}`;
+        o.detail = `[${label}] ${c.outside} of ${c.differing} differing px outside the rects (max ${c.outsideMaxDiff}, bbox ${fmtBox(c.outsideBbox)}`
+            + `${j ? `; beyond the allowlisted jitter of ${j.output}, <= ${j.maxLevel} level / ${j.maxPixels} px` : ''}); ${o.detail}`;
         return false;
     }
     o.detail = `${o.detail}; all ${c.differing} differing px inside the rects (bbox ${fmtBox(c.bbox)})`;
@@ -592,8 +612,10 @@ const isDiffering = (o) => o.change !== null;
  *   2. a difference matching `mayChange` becomes EXPECTED?;
  *   3. every other difference keeps its status.
  * An entry with `rects` (01 T2) accepts a difference only when the image has the entry's frame `size` and every
- * differing pixel lies inside the union of its rectangles; otherwise the output becomes a FAIL (the reason is in its
- * detail) and satisfies no entry. Entries never match the outputs of their `exclude` pattern.
+ * differing pixel lies inside the union of its rectangles, except the allowlisted jitter of step 0 outside them (an
+ * allowlisted screenshot whose outside pixels stay within that allowlist entry's bounds, F1-0c); otherwise the output
+ * becomes a FAIL (the reason is in its detail) and satisfies no entry. Entries never match the outputs of their
+ * `exclude` pattern.
  * Returns one record per `expect` entry: { manifest, entry, matched, differing, satisfied, why }. An entry is
  * satisfied only by differing outputs (a within-tolerance PASS never satisfies it); with `each`, every matching
  * output present in the baseline must differ compatibly. An unsatisfied entry is a FAIL.
@@ -621,7 +643,7 @@ export function applyExpectations(outputs, manifests, allowlist) {
                 if (o.status === 'EXPECTED') { differing.push(o); continue; }   // accepted by an earlier entry
                 if (o.rectFailed) { rectFailures++; continue; }                 // failed an earlier entry's rect check
                 const label = `${m.commit}: ${entry.output}`;
-                if (entry.rects && !applyRects(o, entry, label)) { o.rectFailed = true; rectFailures++; continue; }
+                if (entry.rects && !applyRects(o, entry, label, allowlist)) { o.rectFailed = true; rectFailures++; continue; }
                 o.status = 'EXPECTED';
                 o.detail = `[${label}, ${entry.change}${entry.rects ? `, ${entry.rects.length} rect(s) in ${entry.size[0]}x${entry.size[1]}` : ''}] ${o.detail}`;
                 differing.push(o);
@@ -647,7 +669,7 @@ export function applyExpectations(outputs, manifests, allowlist) {
             for (const o of outputs) {
                 if (!isDiffering(o) || o.rectFailed || o.status === 'EXPECTED' || o.status === 'EXPECTED?' || !entryMatches(entry, o.key)) continue;
                 if (entry.change && entry.change !== o.change) continue;
-                if (entry.rects && !applyRects(o, entry, `${m.commit} mayChange: ${entry.output}`)) { o.rectFailed = true; continue; }
+                if (entry.rects && !applyRects(o, entry, `${m.commit} mayChange: ${entry.output}`, allowlist)) { o.rectFailed = true; continue; }
                 o.status = 'EXPECTED?';
                 o.detail = `[${m.commit} mayChange: ${entry.output}${entry.reason ? ` (${entry.reason})` : ''}] ${o.detail}`;
             }
