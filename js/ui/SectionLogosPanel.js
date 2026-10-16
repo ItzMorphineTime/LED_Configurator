@@ -11,7 +11,9 @@
  * every line inside the backticks (it is part of the innerHTML string), except for the four inline styles that
  * 06 T1 replaced by the classes of css/99-utilities.css: the name div (logo-row__title), the two labels
  * (logo-row__label) and the scale input (logo-row__input). The row div takes the class logo-row instead of the
- * legacy style.cssText; the file input keeps its inline display: none. Do not re-indent it.
+ * legacy style.cssText; the file input keeps its inline display: none. 06 T4c spells the visible position
+ * option labels in British English ("Top Centre", "Centre Left", "Centre", "Centre Right", "Bottom Centre"); the
+ * option values (top-center, ...) are data and do not change. Do not re-indent it.
  */
 import { Events } from '../core/EventBus.js';
 import { legacyHtml } from '../legacy/LegacyCompat.js';
@@ -20,7 +22,8 @@ import { byId } from './dom.js';
 
 /**
  * One logo row's inner markup.
- * Ports: index.html@cd3fd3f lines 2201-2234 (with the 06 T1 classes, see the template note above).
+ * Ports: index.html@cd3fd3f lines 2201-2234 (with the 06 T1 classes and the 06 T4c labels, see the template note
+ * above).
  * Side effects: none.
  * @param {import('../domain/WallSection.js').WallSection} section
  * @param {number} index
@@ -46,13 +49,13 @@ function logoRowHtml(section, index, hasLogo, logoData) {
                         <label class="logo-row__label">Position</label>
                         <select data-section-id="${legacyHtml(section.id)}" data-field="position">
                             <option value="top-left" ${logoData.position === 'top-left' ? 'selected' : ''}>Top Left</option>
-                            <option value="top-center" ${logoData.position === 'top-center' ? 'selected' : ''}>Top Center</option>
+                            <option value="top-center" ${logoData.position === 'top-center' ? 'selected' : ''}>Top Centre</option>
                             <option value="top-right" ${logoData.position === 'top-right' ? 'selected' : ''}>Top Right</option>
-                            <option value="center-left" ${logoData.position === 'center-left' ? 'selected' : ''}>Center Left</option>
-                            <option value="center" ${logoData.position === 'center' ? 'selected' : ''}>Center</option>
-                            <option value="center-right" ${logoData.position === 'center-right' ? 'selected' : ''}>Center Right</option>
+                            <option value="center-left" ${logoData.position === 'center-left' ? 'selected' : ''}>Centre Left</option>
+                            <option value="center" ${logoData.position === 'center' ? 'selected' : ''}>Centre</option>
+                            <option value="center-right" ${logoData.position === 'center-right' ? 'selected' : ''}>Centre Right</option>
                             <option value="bottom-left" ${logoData.position === 'bottom-left' ? 'selected' : ''}>Bottom Left</option>
-                            <option value="bottom-center" ${logoData.position === 'bottom-center' ? 'selected' : ''}>Bottom Center</option>
+                            <option value="bottom-center" ${logoData.position === 'bottom-center' ? 'selected' : ''}>Bottom Centre</option>
                             <option value="bottom-right" ${logoData.position === 'bottom-right' ? 'selected' : ''}>Bottom Right</option>
                         </select>
                     </div>

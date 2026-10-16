@@ -10,8 +10,10 @@
  *
  * Template note: the two template literals below are byte-identical to legacy, including the whitespace at the
  * start of every line inside the backticks (it is part of the innerHTML string), except that the offset hint's
- * inline font-size became the class curve-hint--small of css/99-utilities.css (06 T1). The colour dot's and the
- * swatches' inline backgrounds are per-section data and stay. Do not re-indent them.
+ * inline font-size became the class curve-hint--small of css/99-utilities.css (06 T1), and the British copy of
+ * 06 T4c: the labels "Panel Angle (°)" (was "Angle Between Panels (°)", which wrapped to two lines under
+ * Montserrat) and "Panel Colour", the custom input's title "Custom colour". The colour dot's and the swatches'
+ * inline backgrounds are per-section data and stay. Do not re-indent them.
  */
 import { Events } from '../core/EventBus.js';
 import { legacyHtml } from '../legacy/LegacyCompat.js';
@@ -92,7 +94,7 @@ function cardHtml(section, showDelete) {
                         </div>
                         <div class="section-row">
                             <div class="input-field">
-                                <label>Angle Between Panels (°)</label>
+                                <label>Panel Angle (°)</label>
                                 <input type="number" data-field="curveIntensity" value="${legacyHtml(section.curveIntensity)}" step="0.1">
                                 <div class="curve-hint">${legacyHtml(hint)}</div>
                             </div>
@@ -104,7 +106,7 @@ function cardHtml(section, showDelete) {
                         </div>
                         <div class="section-row single">
                             <div class="input-field">
-                                <label>Panel Color</label>
+                                <label>Panel Colour</label>
                                 <div class="section-color-picker">
                                     <div class="color-swatch-small ${section.color === '#00f0ff' ? 'active' : ''}" data-color="#00f0ff" style="background: #00f0ff;"></div>
                                     <div class="color-swatch-small ${section.color === '#ff00aa' ? 'active' : ''}" data-color="#ff00aa" style="background: #ff00aa;"></div>
@@ -112,7 +114,7 @@ function cardHtml(section, showDelete) {
                                     <div class="color-swatch-small ${section.color === '#ff6b35' ? 'active' : ''}" data-color="#ff6b35" style="background: #ff6b35;"></div>
                                     <div class="color-swatch-small ${section.color === '#ffffff' ? 'active' : ''}" data-color="#ffffff" style="background: #ffffff;"></div>
                                     <div class="color-swatch-small ${section.color === '#ffdd00' ? 'active' : ''}" data-color="#ffdd00" style="background: #ffdd00;"></div>
-                                    <input type="color" class="color-input-custom" value="${legacyHtml(section.color)}" title="Custom color">
+                                    <input type="color" class="color-input-custom" value="${legacyHtml(section.color)}" title="Custom colour">
                                 </div>
                             </div>
                         </div>

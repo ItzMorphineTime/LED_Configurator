@@ -1,0 +1,74 @@
+{
+  "commit": "F6-T4c",
+  "bugs": [],
+  "expect": [
+    {
+      "output": "{box_corner,concave_offsets,convex,default,flat3,large_wall,mixed}/sections_initial.json",
+      "change": "modified",
+      "each": true,
+      "reason": "06 8.4 T4c: the card text of the 7 config scenarios ('Panel Angle (°)', 'Panel Colour')"
+    },
+    {
+      "output": "import_edge/{ii_strings_state,iv_after_delete,iv_after_import,v_after_add,v_after_import,vi_after,vi_before,vii_after,viii_after}.json",
+      "change": "modified",
+      "each": true,
+      "reason": "06 8.4 T4c: the 9 import_edge section states that record the card text"
+    },
+    {
+      "output": "ui_sections/ui_*.json",
+      "change": "modified",
+      "each": true,
+      "reason": "06 8.4 T4c: the 16 ui_sections section states that record the card text"
+    },
+    {
+      "output": "{p2_xss_names/sections_initial,p2_xss_names/sections_renamed,p2_zero_inputs/sections_zero,p2_zip_section_mode/sections_renamed}.json",
+      "change": "modified",
+      "each": true,
+      "reason": "the four 08 P2-0 section-state probes that record the card text (added after 06 8.4 counted 39 files; 8.4 now lists them)"
+    },
+    {
+      "output": "{logos/logos_*,name_with_panel_ids/{name_00_initial,name_01_per_keystroke,name_03_cleared,name_04_after_exports},p2_project_v2/logos_03_uploaded,p2_xss_names/logos_01_panel_ids,p2_xss_names/logos_02_renamed}.json",
+      "change": "modified",
+      "each": true,
+      "reason": "the logo-row probes record the rows' text, whose position options now read 'Top Centre', 'Centre Left', 'Centre', 'Centre Right', 'Bottom Centre' (B14: British English in every visible label; the option values are unchanged)"
+    },
+    {
+      "output": "ui_visual/*.text.json",
+      "change": "modified",
+      "each": true,
+      "reason": "06 8.4 T4c: labels ('Label Font Colour', 'Section Label Colour', 'Panel Angle (°)', 'Panel Colour'), titleAttributes ('Custom colour'), the logo position options (Centre), innerText"
+    },
+    {
+      "output": "ui_visual/*.styles.json",
+      "change": "modified",
+      "each": true,
+      "reason": "06 8.4 T4c: in the states with an expanded card (00, 04, 06, 07, 08) the rect of the shortened label (two lines to one; the T4a label-fit list) and of everything below it (the card and the sidebar shift up by 11 px); in every state the sidebar's controlPanelScroll.scrollHeight (11 px shorter), which the overlay-only snapshots 01, 02, 03 and 05 record too (the first gate run found them); no computed style and no other rect. The narrow 09 snapshot is identical (the label fits on one line at that width)",
+      "exclude": "ui_visual/09_narrow_800.styles.json"
+    },
+    {
+      "output": "ui_visual/*.sidebar.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "06 8.4 T4c: the sidebar captures show the British labels and the shorter card"
+    },
+    {
+      "output": "ui_visual/{00_initial,02_selection_visible,04_options_ledsim_camera_props,05_gizmo_pilot,06_options_panelids_logo,07_two_sections,08_collapsed_and_4k_warning}.viewport.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "06 8.4 T4c: the page captures show the sidebar's British labels and the shorter card (the narrow 09 capture shows only the top of a card, unchanged)"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "large_wall/final__export-zip__led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen so far: L2_PanelIDs.png (1995, 948), L3_PanelIDs.png (1970, 1003), L4_PanelIDs.png (2026, 858), 1 px each, 3840x1920); this commit changes no export and no texture"
+    },
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, 9 px at (401..418, 901..906), one pixel above the allowlist bound of 8 (seen at the same pixels in a 06 T4b run); T4c changes nothing in the viewport, every other canvas capture is identical or allowlisted JITTER"
+    }
+  ],
+  "notes": "06 T4c (8.4): British English in the visible labels and tooltips (Q14/B14): 'Label Font Colour', 'Section Label Colour' (markup), 'Panel Colour' and title 'Custom colour' (card template), and the logo row's position options ('Centre'); the one label on T4a's label-fit list, 'Angle Between Panels (°)', becomes 'Panel Angle (°)'. JSON keys and option values never change, so no export changes. Canvas screenshots are unchanged (the sidebar is not in them)."
+}

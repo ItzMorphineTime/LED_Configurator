@@ -626,6 +626,8 @@ const lines = (a, b) => LEGACY_LINES.slice(a - 1, b).join('\n');
  * comparing every other byte of the templates and every DOM write: [legacy text, new text, occurrences].
  * 06 T1 (docs/improvements/06-morph-branding.md 5.3): the inline styles of the logo rows and of the card's offset hint
  * became the classes of css/99-utilities.css, and the logo row's style.cssText became className = 'logo-row'.
+ * 06 T4c (06 3.1, Q14): the British copy of the card (the shortened "Panel Angle (°)" label, "Panel Colour", the
+ * "Custom colour" title) and of the logo row's position options ("Centre"); option values are unchanged.
  */
 const TEMPLATE_EDITS = Object.freeze([
   ["sectionDiv.style.cssText = 'margin-bottom: 12px; padding: 10px; background: var(--bg-tertiary); border-radius: 6px;';",
@@ -635,6 +637,14 @@ const TEMPLATE_EDITS = Object.freeze([
   ['style="width: 100%; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 6px; border-radius: 4px; font-size: 11px;">',
     'class="logo-row__input">', 1],
   ['<div class="curve-hint" style="font-size: 9px;">', '<div class="curve-hint curve-hint--small">', 1],
+  ['<label>Angle Between Panels (°)</label>', '<label>Panel Angle (°)</label>', 1],
+  ['<label>Panel Color</label>', '<label>Panel Colour</label>', 1],
+  ['title="Custom color">', 'title="Custom colour">', 1],
+  ['>Top Center</option>', '>Top Centre</option>', 1],
+  ['>Center Left</option>', '>Centre Left</option>', 1],
+  ['>Center</option>', '>Centre</option>', 1],
+  ['>Center Right</option>', '>Centre Right</option>', 1],
+  ['>Bottom Center</option>', '>Bottom Centre</option>', 1],
 ]);
 
 /** `src` with every TEMPLATE_EDITS row applied; throws when a row does not occur exactly its declared number of times. */
