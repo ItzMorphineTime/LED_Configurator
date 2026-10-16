@@ -16,6 +16,8 @@
     { "output": "p2_curved_safe_distance/concave_offsets.screenshot.png", "maxLevel": 1, "maxPixels": 8, "overlay": "help badge, preview footer",
       "evidence": "two full runs of the P2-0 build (the baseline promoted by P2-0 and a run of the same app and harness files at 07 G1): 1 level, 4 px, at (365, 905) on the help badge and (1129, 906..911) on the preview footer's resolution label" },
     { "output": "p2_curved_safe_distance/convex.screenshot.png", "maxLevel": 1, "maxPixels": 8, "overlay": "help badge, preview footer",
-      "evidence": "06 T4a: the baseline promoted by F6-T4a and the self-consistency run of the same build: 1 level, 2 px, at (645, 902) on the help badge and (1131, 909) on the preview footer; the same 2 px in a 06 T4b run" }
+      "evidence": "06 T4a: the baseline promoted by F6-T4a and the self-consistency run of the same build: 1 level, 2 px, at (645, 902) on the help badge and (1131, 909) on the preview footer; the same 2 px in a 06 T4b run" },
+    { "output": "p2_curved_safe_distance/concave30.screenshot.png", "maxLevel": 1, "maxPixels": 8, "overlay": "help badge",
+      "evidence": "06 T4a2: the baseline promoted by F6-T4a2 and the self-consistency run of the same build: 1 level, 1 px, at (645, 902) on the help badge (the pixel that jitters on convex and pilot_look look_03_pilot_off)" }
   ]
 }

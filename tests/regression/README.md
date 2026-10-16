@@ -493,8 +493,9 @@ Byte-identical files report `IDENTICAL`. Otherwise:
   `p2_curved_safe_distance/concave_offsets` (1 level, 4 px on the help badge and the preview
   footer's resolution label, between the baseline promoted by P2-0 and a full run of the same build);
   `p2_curved_safe_distance/convex` (1 level, 2 px on the help badge and the preview footer, between the
-  two runs of the 06 T4a build) and `toggles/14_car_default` (1 level, 7 px on the help badge, between two
-  runs of the 06 T4b build). The rect-limited entries of 06 T4b's manifest (a watermark rectangle on
+  two runs of the 06 T4a build), `toggles/14_car_default` (1 level, 7 px on the help badge, between two
+  runs of the 06 T4b build) and `p2_curved_safe_distance/concave30` (1 level, 1 px on the help badge,
+  between the two runs of the 06 T4a2 build). The rect-limited entries of 06 T4b's manifest (a watermark rectangle on
   every canvas capture) judge every pixel outside their rectangles, so they tolerate only this list
   within its bounds: jitter on any other output, or above the bounds (one run of the 06 T4b build showed
   9 px on `toggles/15_car_moved`), fails them, and the gate run is repeated.
