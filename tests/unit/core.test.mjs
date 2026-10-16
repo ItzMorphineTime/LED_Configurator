@@ -196,7 +196,7 @@ describe('Strategies', () => {
     assert.deepEqual(Strategies, {
       mesh: {
         viewport: { winding: 'ccw', normals: 'averaged', combinedUV: 'atlas-u-full-v', side: 'double' },
-        obj: { winding: 'legacy-cw', normals: 'none', stripNormals: 'constant-z',
+        obj: { winding: 'ccw', normals: 'averaged', stripNormals: 'per-vertex',
                combinedUV: 'per-section-overlap', panelNormal: 'facing' },
         gltf: { winding: 'legacy-cw', normals: 'none', attributes: ['POSITION'], indexType: 'auto',
                 doubleSided: 'omit' },

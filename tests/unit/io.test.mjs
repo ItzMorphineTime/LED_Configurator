@@ -26,6 +26,7 @@ import { LegacyProfiles, Strategies, unsupportedStrategy } from '../../js/legacy
 import { layoutProject } from '../../js/geometry/WallLayout.js';
 import { WallMeshBuilder, maxIndexOf } from '../../js/geometry/WallMeshBuilder.js';
 import { checkGltfDocument } from '../../tools/check-gltf.mjs';
+import { checkObjText } from '../../tools/check-orientation.mjs';
 import { computeAtlas } from '../../js/geometry/TextureAtlas.js';
 import { zipTextureFileName } from '../../js/geometry/PanelNaming.js';
 import { ProjectSerializer } from '../../js/io/ProjectSerializer.js';
@@ -729,10 +730,13 @@ describe('strategy reads (foreign profile values throw unsupportedStrategy)', ()
   const args = (mode) => ({ sections: project.wall.sections, meshMode: mode, layout: layoutProject(project) });
   const expectError = (key, value) => (e) => e instanceof Error && e.message === unsupportedStrategy(key, value).message;
 
-  test('ObjExporter: stripNormals in combined and section mode only; combinedUV in combined mode only', () => {
-    const strip = makeObj({ ...LegacyProfiles.mesh.obj, stripNormals: 'per-vertex' });
-    assert.throws(() => strip.write(args('combined')), expectError('mesh.obj.stripNormals', 'per-vertex'));
-    assert.throws(() => strip.write(args('section')), expectError('mesh.obj.stripNormals', 'per-vertex'));
+  test('ObjExporter: winding (the header line) in every mode; stripNormals in combined and section mode only; combinedUV in combined mode only', () => {
+    const winding = makeObj({ ...LegacyProfiles.mesh.obj, winding: 'cw' });
+    for (const mode of MODES) assert.throws(() => winding.write(args(mode)), expectError('mesh.obj.winding', 'cw'), mode);
+
+    const strip = makeObj({ ...LegacyProfiles.mesh.obj, stripNormals: 'smooth' });
+    assert.throws(() => strip.write(args('combined')), expectError('mesh.obj.stripNormals', 'smooth'));
+    assert.throws(() => strip.write(args('section')), expectError('mesh.obj.stripNormals', 'smooth'));
     assert.doesNotThrow(() => strip.write(args('panel')));
 
     const uv = makeObj({ ...LegacyProfiles.mesh.obj, combinedUV: 'atlas' });
@@ -1380,3 +1384,117 @@ describe('structure', () => {
   });
 });
 
+
+// ---------------------------------------------------------------------------------------------------------------
+// Stage-facing exports (B-H2; docs/improvements/08-bugfix-roadmap.md 6.4, P2-2c / P2-2d)
+// ---------------------------------------------------------------------------------------------------------------
+
+/**
+ * Seeded projects with integer inputs only (01 6.3): 1-4 sections, cols 1-12, rows 1-6, curves -30..30 (about 30 %
+ * flat), offsets -180..180, widths 100-1000 mm.
+ */
+function integerProjects(seed, count) {
+  const rand = rng(seed);
+  const int = (lo, hi) => lo + Math.floor(rand() * (hi - lo + 1));
+  const projects = [];
+  for (let w = 0; w < count; w++) {
+    const sections = [];
+    for (let i = 0, n = int(1, 4); i < n; i++) {
+      sections.push(new WallSection({ id: i, name: `S${i}`, panelCols: int(1, 12), panelRows: int(1, 6),
+        panelWidth: int(100, 1000), panelHeight: int(100, 1000), ledX: 32, ledY: 32,
+        curveIntensity: rand() < 0.3 ? 0 : int(-30, 30), angleOffset: int(-180, 180), color: '#00f0ff' }));
+    }
+    projects.push([`int#${w}`, projectOf(sections, 'combined')]);
+  }
+  return projects;
+}
+
+/** The hand-picked walls (harness configs included, the empty wall excluded) and 200 seeded integer walls. */
+const orientationProjects = () => [...handPicked().filter(([label]) => label !== 'empty wall'), ...integerProjects(0x0b1, 200)];
+
+describe('OBJ: stage-facing winding and per-vertex normals (B-H2, 08 P2-2c)', () => {
+  const FACE_LINE = '# Faces: counter-clockwise front faces; vn point out of the LED surface (toward the stage)';
+  const writeArgs = (project, meshMode) => ({ sections: project.wall.sections, meshMode, layout: layoutProject(project) });
+  const lines = (text) => text.split('\n');
+  /** The OBJ text without the lines that P2-2c changes: the orientation header line, `vn` and `f` lines. */
+  const unchangedPart = (text) => lines(text).filter((l) => l !== FACE_LINE && !l.startsWith('vn ') && !l.startsWith('f ')).join('\n');
+
+  test("the production profile winds 'ccw' with 'averaged' per-vertex normals; LegacyProfiles keeps the Phase-1 values", () => {
+    assert.deepEqual({ ...Strategies.mesh.obj }, { winding: 'ccw', normals: 'averaged', stripNormals: 'per-vertex',
+      combinedUV: 'per-section-overlap', panelNormal: 'facing' });
+    assert.deepEqual({ ...LegacyProfiles.mesh.obj }, { winding: 'legacy-cw', normals: 'none', stripNormals: 'constant-z',
+      combinedUV: 'per-section-overlap', panelNormal: 'facing' });
+  });
+
+  test('header: the 01 CR-3 line right after "# Mesh Mode: ..." in every mode; none with the Phase-1 profile', () => {
+    const project = Project.createDefault();
+    for (const mode of MODES) {
+      const head = lines(OBJ.write(writeArgs(project, mode)).objContent).slice(0, 4);
+      assert.deepEqual(head, ['# LED Wall Configuration OBJ Export', `# Mesh Mode: ${mode}`, FACE_LINE, '# Generated by LED Wall Configurator']);
+      assert.ok(!LEGACY_OBJ.write(writeArgs(project, mode)).objContent.includes('# Faces:'), mode);
+    }
+  });
+
+  test('every hand-picked wall in every mode: the MTL and every v, vt, o, usemtl and mtllib line equal the Phase-1 output', () => {
+    for (const [label, project] of handPicked()) {
+      for (const mode of MODES) {
+        const now = run(() => OBJ.write(writeArgs(project, mode)));
+        const old = run(() => LEGACY_OBJ.write(writeArgs(project, mode)));
+        assert.equal(now.ok, old.ok, `${label} [${mode}]`);
+        if (!now.ok) {
+          assert.equal(describeError(now.error), describeError(old.error), `${label} [${mode}]`);
+          continue;
+        }
+        assert.equal(now.value.mtlContent, old.value.mtlContent, `${label} [${mode}] MTL`);
+        assert.equal(unchangedPart(now.value.objContent), unchangedPart(old.value.objContent), `${label} [${mode}] OBJ`);
+      }
+    }
+  });
+
+  test('strip modes: one vn per v (the builder normals, toFixed(6)) and faces a/a/a; panel mode: v, v+1, v+2 / v, v+2, v+3', () => {
+    for (const [label, project] of orientationProjects()) {
+      for (const mode of ['combined', 'section']) {
+        const text = OBJ.write(writeArgs(project, mode)).objContent;
+        const v = lines(text).filter((l) => l.startsWith('v ')).length;
+        const vn = lines(text).filter((l) => l.startsWith('vn '));
+        assert.equal(vn.length, v, `${label} [${mode}]`);
+        for (const f of lines(text).filter((l) => l.startsWith('f '))) {
+          for (const corner of f.slice(2).split(' ')) {
+            const [a, t, n] = corner.split('/');
+            assert.ok(a === t && t === n && Number(a) >= 1 && Number(a) <= v, `${label} [${mode}]: ${f}`);
+          }
+        }
+        const builder = new WallMeshBuilder(Strategies.mesh.obj);
+        const normals = layoutProject(project).sections.flatMap((sl) => builder.sectionGrid(sl).normals);
+        const expected = [];
+        for (let i = 0; i < normals.length; i += 3) expected.push(`vn ${normals[i].toFixed(6)} ${normals[i + 1].toFixed(6)} ${normals[i + 2].toFixed(6)}`);
+        assert.deepEqual(vn, expected, `${label} [${mode}]`);
+      }
+      const panel = lines(OBJ.write(writeArgs(project, 'panel')).objContent).filter((l) => l.startsWith('f '));
+      for (let k = 0; k < panel.length; k += 2) {
+        const v = 1 + 4 * (k / 2), n = 1 + k / 2;
+        assert.equal(panel[k], `f ${v}/${v}/${n} ${v + 1}/${v + 1}/${n} ${v + 2}/${v + 2}/${n}`, label);
+        assert.equal(panel[k + 1], `f ${v}/${v}/${n} ${v + 2}/${v + 2}/${n} ${v + 3}/${v + 3}/${n}`, label);
+      }
+    }
+  });
+
+  test('tools/check-orientation passes for every object in every mode (hand-picked and 200 integer walls); the Phase-1 default wall faces away', (t) => {
+    let objects = 0;
+    for (const [label, project] of orientationProjects()) {
+      for (const mode of MODES) {
+        for (const o of checkObjText(OBJ.write(writeArgs(project, mode)).objContent)) {
+          assert.equal(o.failures, 0, `${label} [${mode}] ${o.name}: ${o.first}`);
+          objects++;
+        }
+        // The Phase-1 OBJ faces away from the stage wherever the wall faces +Z (a wall turned around by its offsets
+        // can agree with the constant `vn 0 0 1` by accident, so only the default wall is asserted).
+        if (label === 'default wall') {
+          const legacy = checkObjText(LEGACY_OBJ.write(writeArgs(project, mode)).objContent);
+          assert.ok(legacy.every((o) => o.failures === o.triangles), `${label} [${mode}]: the Phase-1 OBJ faces away`);
+        }
+      }
+    }
+    t.diagnostic(`${objects} OBJ objects pass`);
+  });
+});

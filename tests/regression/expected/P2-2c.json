@@ -1,0 +1,12 @@
+{
+  "commit": "P2-2c",
+  "bugs": ["B-H2"],
+  "expect": [
+    { "output": "**/*__export-obj__*.obj", "change": "modified", "each": true,
+      "reason": "every OBJ gains the 01 CR-3 header line; strip modes (combined, section) wind 'ccw' and write one averaged `vn` per vertex with `f a/a/a` faces; panel mode winds 'ccw' (faces v, v+1, v+2 / v, v+2, v+3). 29 outputs in the parent baseline: the seven configs x 3 modes, import_edge (4), ui_sections, p2_xss_names, p2_zero_inputs, p2_zip_section_mode; this covers 01 CR-2 (import_edge, ui_sections) by construction" },
+    { "output": "**/*__export-zip__*.zip", "change": "modified", "each": true,
+      "reason": "the entry led-wall-config.obj of every Export All archive (17 in the parent baseline, including the six logos archives of 01 CR-2), as above; every other entry is unchanged" }
+  ],
+  "mayChange": [],
+  "notes": "08 P2-2c: mesh.obj.winding 'ccw', normals 'averaged', stripNormals 'per-vertex'; the MTL files, the safe-distance OBJs (P2-5b), the glTF files (P2-2d), every JSON, PNG and screenshot stay unchanged. The bistable large_wall ZIP texture pixels (P2-0b) need no mayChange here: that archive is an expected change, and the review checks that its OBJ entry is the only systematic difference"
+}

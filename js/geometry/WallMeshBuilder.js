@@ -40,8 +40,9 @@ export function quadIndices(bl, br, tl, tr, winding = 'legacy-cw') {
       // (B-H1 fixed).
       return [bl, br, tr, bl, tr, tl];
     case 'legacy-cw':
-      // LEGACY(B-H2): (bl, tl, tr) / (bl, tr, br) is clockwise seen from +Z, against the +Z normals of every export.
-      // It was the viewport order too until 08 P2-2a (B-H1); kept for the LegacyProfiles oracle tests.
+      // LEGACY(B-H2): (bl, tl, tr) / (bl, tr, br) is clockwise seen from +Z, so the glTF export faces away from the
+      // stage. It was the viewport order until 08 P2-2a (B-H1) and the OBJ order until 08 P2-2c; kept for the
+      // LegacyProfiles oracle tests.
       return [bl, tl, tr, bl, tr, br];
     default:
       throw unsupportedStrategy('mesh.winding', winding);

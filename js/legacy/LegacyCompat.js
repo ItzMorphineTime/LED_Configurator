@@ -40,13 +40,15 @@ function deepFreeze(value) {
 export const Strategies = deepFreeze({
   mesh: {
     viewport: { winding: 'ccw', normals: 'averaged', combinedUV: 'atlas-u-full-v', side: 'double' },
-    obj:      { winding: 'legacy-cw', normals: 'none', stripNormals: 'constant-z',
+    obj:      { winding: 'ccw', normals: 'averaged', stripNormals: 'per-vertex',
                 combinedUV: 'per-section-overlap', panelNormal: 'facing' },
     gltf:     { winding: 'legacy-cw', normals: 'none', attributes: ['POSITION'], indexType: 'auto',
                 doubleSided: 'omit' },             // 'omit' = the material object has NO doubleSided key
   },                                               // gltf.indexType: 'auto' since 08 P2-1b (B-L5), Phase-1 'uint16';
                                                    // viewport.winding: 'ccw' since 08 P2-2a (B-H1), Phase-1 'legacy-cw';
-                                                   // viewport.normals: 'averaged' since 08 P2-2b (B-L3), Phase-1 'right-panel'
+                                                   // viewport.normals: 'averaged' since 08 P2-2b (B-L3), Phase-1 'right-panel';
+                                                   // obj winding/normals/stripNormals since 08 P2-2c (B-H2), Phase-1
+                                                   // 'legacy-cw' / 'none' / 'constant-z'
   exportCombinedColor: 'first-section',            // B-L6
   mtlTextureNaming: 'index',                       // B-M2
   zipTextureNaming: 'sanitized-name',              // B-L14 (no de-duplication)
@@ -127,7 +129,7 @@ const QUIRKS = deepFreeze({
   'B-H1': ['Viewport strip winding vs normals (C-5)',
     'Landed in 08 P2-2a (`mesh.viewport.winding = \'ccw\'`; `mesh.viewport.side = \'double\'` stays as a design choice; no tag site)'],
   'B-H2': ['Export winding, constant/contradicting normals, no doubleSided (R-5, S-2)',
-    'flip profiles + normal writers'],
+    'OBJ landed in 08 P2-2c (`mesh.obj` winding `\'ccw\'`, normals `\'averaged\'`, stripNormals `\'per-vertex\'`); glTF: 08 P2-2d (winding, `NORMAL`)'],
   'B-H3': ['glTF RangeError; ZIP dies silently (S-3, U-4)',
     'Landed in 08 P2-1a (`chunkedBase64` encoder; `ProjectIO.#runExport` reports every export failure; no tag site)'],
   'B-H4': ['Preview off in pilot: alert, stuck in pilot (O-8)',
@@ -273,7 +275,7 @@ const TAG_SITES = deepFreeze([
   ['js/geometry/PanelNaming.js#mtlTextureFile', ['B-M2']],
   ['js/io/ProjectSerializer.js#write', ['B-M3', 'B-L31']],
   ['js/io/ProjectSerializer.js#read', ['B-L8', 'B-M4']],
-  ['js/io/ObjExporter.js#write', ['B-H2', 'B-M6', 'B-L6', 'B-L8']],
+  ['js/io/ObjExporter.js#write', ['B-M6', 'B-L6', 'B-L8']],
   ['js/io/GltfExporter.js#write', ['B-L6', 'B-L8']],
   ['js/io/GltfExporter.js#addMesh', ['B-H2', 'B-M7']],
   ['js/render/SceneManager.js#addHelper', ['B-M11']],

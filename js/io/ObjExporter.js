@@ -13,6 +13,12 @@ import { exportSectionName, exportPanelName, mtlTextureFile } from '../geometry/
 import { Strategies, unsupportedStrategy } from '../legacy/LegacyCompat.js';
 
 /**
+ * The orientation header line (01 CR-3, adopted by 08 P2-2c), written after `# Mesh Mode: ...` when the OBJ profile
+ * winds 'ccw': it documents the convention in every file, for pipelines that compensated for the old inverted output.
+ */
+const FACE_CONVENTION_LINE = '# Faces: counter-clockwise front faces; vn point out of the LED surface (toward the stage)\n';
+
+/**
  * The brand strings this writer uses (a subset of Theme.Brand).
  * @typedef {{objHeader: string, objGeneratorLine: string, mtlHeader: string, safeDistanceObjHeader: string,
  *            files: {mtl: string}}} ObjBrand
@@ -48,8 +54,9 @@ export class ObjExporter {
   #builder;
 
   /**
-   * profile = builder.profile (the injected Strategies.mesh.obj); this class reads profile.stripNormals and
-   * profile.combinedUV; the builder reads profile.winding / normals / panelNormal.
+   * profile = builder.profile (the injected Strategies.mesh.obj); this class reads profile.winding (the header
+   * line only), profile.stripNormals and profile.combinedUV; the builder reads profile.winding / normals /
+   * panelNormal.
    * Side effects: none.
    * @param {{brand: ObjBrand, colorToRgb: ColorToRgb,
    *          builder: import('../geometry/WallMeshBuilder.js').WallMeshBuilder}} deps
@@ -61,14 +68,17 @@ export class ObjExporter {
   }
 
   /**
-   * The OBJ and MTL text of the wall, verbatim string assembly of 4556-4717 (line order, separators and toFixed
-   * precision exactly as legacy). Dispatch: 'combined' / 'section' / anything else is written as panels.
+   * The OBJ and MTL text of the wall, the string assembly of 4556-4717 (line order, separators and toFixed
+   * precision as legacy). Header: brand.objHeader, `# Mesh Mode: ${meshMode}`, the orientation line (01 CR-3)
+   * when the profile winds 'ccw' (none for 'legacy-cw'), brand.objGeneratorLine. Dispatch: 'combined' / 'section' /
+   * anything else is written as panels. Strip normals (#stripNormalLines): 'per-vertex' (08 P2-2c) writes one `vn`
+   * per vertex from the builder normals and faces `f a/a/a`; 'constant-z' (Phase 1) one `vn 0 0 1` per object.
    *   combined: one object `LED_Wall_Combined` coloured by the first section (B-L6); all `v` lines of all
-   *     sections, then all `vt` lines (0..1 per section, B-M6), one constant `vn`, then the faces;
-   *   section: one material and object per section; per-section `vt`, one `vn` per section; `map_Kd` names the
+   *     sections, then all `vt` lines (0..1 per section, B-M6), then the normals, then the faces;
+   *   section: one material and object per section; per-section `v`, `vt` and normals; `map_Kd` names the
    *     texture by index (B-M2, tagged at PanelNaming.mtlTextureFile), except for a section whose `skipped[i]` is
    *     true (the ZIP left its texture out, 08 P2-1c): its material ends without `map_Kd`;
-   *   panel: one object per panel with 4 vertices, 4 `vt`, its facing `vn` and two faces.
+   *   panel: one object per panel with 4 vertices, 4 `vt`, its facing `vn` and two faces (builder.panelQuadIndices).
    * Ports: index.html@cd3fd3f lines 4556-4717.
    * Side effects: none.
    * @param {{sections: import('../domain/WallSection.js').WallSection[], meshMode: *,
@@ -83,6 +93,7 @@ export class ObjExporter {
     const brand = this.#brand;
     let objContent = brand.objHeader;
     objContent += `# Mesh Mode: ${meshMode}\n`;
+    objContent += this.#faceConventionLine();
     objContent += brand.objGeneratorLine;
 
     const text = { objContent, mtlContent: brand.mtlHeader };
@@ -145,19 +156,20 @@ export class ObjExporter {
 
     text.objContent += vertexLines(grid.positions);
     text.objContent += texCoordLines(grid.uvs);
-    text.objContent += this.#stripNormalLine();
+    const { lines, normalIndex: n } = this.#stripNormalLines(grid.normals, 1);
+    text.objContent += lines;
 
     const q = grid.indices;
     for (let k = 0; k < q.length; k += 6) {
-      text.objContent += `f ${q[k]}/${q[k]}/1 ${q[k + 1]}/${q[k + 1]}/1 ${q[k + 2]}/${q[k + 2]}/1\n`;
-      text.objContent += `f ${q[k + 3]}/${q[k + 3]}/1 ${q[k + 4]}/${q[k + 4]}/1 ${q[k + 5]}/${q[k + 5]}/1\n`;
+      text.objContent += `f ${q[k]}/${q[k]}/${n(q[k])} ${q[k + 1]}/${q[k + 1]}/${n(q[k + 1])} ${q[k + 2]}/${q[k + 2]}/${n(q[k + 2])}\n`;
+      text.objContent += `f ${q[k + 3]}/${q[k + 3]}/${n(q[k + 3])} ${q[k + 4]}/${q[k + 4]}/${n(q[k + 4])} ${q[k + 5]}/${q[k + 5]}/${n(q[k + 5])}\n`;
     }
   }
 
   /**
    * Section mode, verbatim 4606-4658: all materials first, then one object per section. The texture-coordinate
    * offset equals the vertex offset at every section (both start at 1 and advance by the declared count), so
-   * each face's `t` is its `v`.
+   * each face's `t` is its `v`; with 'per-vertex' strip normals so is its `n` ('constant-z': one normal per section).
    * @param {{objContent: string, mtlContent: string}} text  appended to
    * @param {import('../domain/WallSection.js').WallSection[]} sections
    * @param {import('../geometry/WallLayout.js').WallLayout} layout
@@ -186,13 +198,13 @@ export class ObjExporter {
       const grid = this.#builder.sectionGrid(sl, { indexBase: vertexOffset, uv: 'unit' });
       text.objContent += vertexLines(grid.positions);
       text.objContent += texCoordLines(grid.uvs);
-      text.objContent += this.#stripNormalLine();
+      const { lines, normalIndex: n } = this.#stripNormalLines(grid.normals, normalOffset);
+      text.objContent += lines;
 
       const q = grid.indices;
-      const n = normalOffset;
       for (let k = 0; k < q.length; k += 6) {
-        text.objContent += `f ${q[k]}/${q[k]}/${n} ${q[k + 1]}/${q[k + 1]}/${n} ${q[k + 2]}/${q[k + 2]}/${n}\n`;
-        text.objContent += `f ${q[k + 3]}/${q[k + 3]}/${n} ${q[k + 4]}/${q[k + 4]}/${n} ${q[k + 5]}/${q[k + 5]}/${n}\n`;
+        text.objContent += `f ${q[k]}/${q[k]}/${n(q[k])} ${q[k + 1]}/${q[k + 1]}/${n(q[k + 1])} ${q[k + 2]}/${q[k + 2]}/${n(q[k + 2])}\n`;
+        text.objContent += `f ${q[k + 3]}/${q[k + 3]}/${n(q[k + 3])} ${q[k + 4]}/${q[k + 4]}/${n(q[k + 4])} ${q[k + 5]}/${q[k + 5]}/${n(q[k + 5])}\n`;
       }
 
       vertexOffset += grid.vertexAdvance;
@@ -252,17 +264,42 @@ export class ObjExporter {
   }
 
   /**
-   * The single normal line of a combined object or of one section object (the legacy literal of 4589 / 4635).
+   * The orientation header line (01 CR-3) for the OBJ profile's winding: FACE_CONVENTION_LINE for 'ccw' (08 P2-2c),
+   * nothing for the Phase-1 'legacy-cw' (kept for the LegacyProfiles oracle tests, whose text has no such line).
    * @returns {string}
+   * @throws {Error} unsupportedStrategy('mesh.obj.winding', ...) for a foreign profile value
+   */
+  #faceConventionLine() {
+    const profile = this.#builder.profile;
+    switch (profile.winding) {
+      case 'ccw':
+        return FACE_CONVENTION_LINE;
+      case 'legacy-cw':
+        return '';
+      default:
+        throw unsupportedStrategy('mesh.obj.winding', profile.winding);
+    }
+  }
+
+  /**
+   * The normal lines of a combined object or of one section object, and the `n` of the face corner of vertex `v`.
+   *   'per-vertex' (08 P2-2c, 08 6.4): one `vn nx ny nz` (toFixed(6)) per builder normal, in vertex order, so the
+   *     corner of vertex v uses normal v (`f a/a/a`). The builder normals ('averaged') point out of the LED surface.
+   *   'constant-z': the legacy literal `vn 0 0 1` of 4589 / 4635, and every corner uses `constantIndex`.
+   * @param {number[]} normals  the builder normals of the object's vertices (profile.normals; unused by 'constant-z')
+   * @param {number} constantIndex  the index of the single 'constant-z' normal (1 combined; the section's normalOffset)
+   * @returns {{lines: string, normalIndex: (v: number) => number}}
    * @throws {Error} unsupportedStrategy('mesh.obj.stripNormals', ...) for a foreign profile value
    */
-  #stripNormalLine() {
+  #stripNormalLines(normals, constantIndex) {
     const profile = this.#builder.profile;
     switch (profile.stripNormals) {
+      case 'per-vertex':
+        return { lines: normalLines(normals), normalIndex: (v) => v };
       case 'constant-z':
-        // LEGACY(B-H2): one constant `vn 0 0 1` for the whole strip, wrong for any curved or offset section and
-        // contradicting the clockwise face winding (the builder's quadIndices).
-        return 'vn 0 0 1\n';
+        // constant-z: Phase-1 behaviour (B-H2: one `vn 0 0 1` for the whole strip, wrong for any curved or offset
+        // section and contradicting the clockwise 'legacy-cw' faces), kept for the LegacyProfiles oracle tests.
+        return { lines: 'vn 0 0 1\n', normalIndex: () => constantIndex };
       default:
         throw unsupportedStrategy('mesh.obj.stripNormals', profile.stripNormals);
     }
@@ -324,6 +361,20 @@ function vertexLines(positions) {
   let lines = '';
   for (let i = 0; i < positions.length; i += 3) {
     lines += `v ${positions[i].toFixed(6)} ${positions[i + 1].toFixed(6)} ${positions[i + 2].toFixed(6)}\n`;
+  }
+  return lines;
+}
+
+/**
+ * The `vn x y z` lines (toFixed(6)) of a flat normal array (08 P2-2c, 08 6.4). As in `v` lines, a tiny negative
+ * component prints as -0.000000; every OBJ importer reads it as 0.
+ * @param {number[]} normals
+ * @returns {string}
+ */
+function normalLines(normals) {
+  let lines = '';
+  for (let i = 0; i < normals.length; i += 3) {
+    lines += `vn ${normals[i].toFixed(6)} ${normals[i + 1].toFixed(6)} ${normals[i + 2].toFixed(6)}\n`;
   }
   return lines;
 }
