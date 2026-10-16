@@ -7,8 +7,11 @@
    the outline and the Morph Black edge becomes a 1 px box-shadow. The selection badge is an opaque --color-surface-1
    chip (not the translucent overlay chip, on which red falls to 2.6:1 over a light wall) with a red left bar and the
    same outline, which lies outside the chip and changes no rect.
-   B-L24 landed here in 06 T4a: the selection badge sits at bottom: 64px, stacked above the help badge of
-   07-viewport.css (bottom: 20px), so the two never overlap. The other half of B-L24, the missing .view-btn.active rule,
+   B-L24 landed here in 06 T4a: the selection badge is stacked 12 px above the help badge of 07-viewport.css
+   (bottom: 20px), so the two never overlap. It is anchored to the help badge (anchor name --help-badge): a fixed
+   bottom: 64px overlapped it by 2 px wherever the help text wraps to two lines (windows below about 1073 px). With a
+   one-line help badge the anchored value is exactly 64 px; bottom: 64px is also the fallback where anchor positioning
+   is unsupported, and 52 px the fallback for a missing anchor. The other half of B-L24, the missing .view-btn.active rule,
    landed in 01 F1-2 (css/features/debug-view.css).
    Slice of the original <style>, rewritten to role tokens (css-slices.mjs --report-only lists the difference, 07 S7);
    link order = file number. Do not reorder rules across files. */
@@ -115,6 +118,7 @@
 .selection-indicator {
     position: absolute;
     bottom: 64px;
+    bottom: calc(anchor(--help-badge top, 52px) + 12px);
     left: 20px;
     background: var(--color-surface-1);
     border: 1px solid var(--color-border-subtle);

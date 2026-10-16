@@ -11,7 +11,9 @@
    anti-aliasing (up to 74 levels on the icon edges, found by the 06 T4b gate), so the watermark would change pixels
    far outside its own rectangle.
    B-L24 (the selection badge covering the help badge) landed in 06 T4a: .selection-indicator in
-   09-viewport-tools.css sits at bottom: 64px, above this file's .viewport-info (bottom: 20px).
+   09-viewport-tools.css sits 12 px above this file's .viewport-info (bottom: 20px), anchored to it by the anchor name
+   --help-badge, so it also clears a help badge that wraps to two lines in a narrow viewport; bottom: 64px while the
+   badge is one line, and the fallback where anchor positioning is unsupported.
    Slice of the original <style> minus the deleted rules, rewritten to role tokens (css-slices.mjs --report-only lists
    the difference, 07 S7); link order = file number. Do not reorder rules across files. */
 .viewport {
@@ -39,6 +41,7 @@
     position: absolute;
     bottom: 20px;
     left: 20px;
+    anchor-name: --help-badge;
 }
 
 .info-badge {

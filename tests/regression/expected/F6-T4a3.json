@@ -1,0 +1,10 @@
+{
+  "commit": "F6-T4a3",
+  "bugs": ["B-L24"],
+  "expect": [],
+  "mayChange": [
+    { "output": "large_wall/final__export-zip__led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen so far: L2_PanelIDs.png (1995, 948), L3_PanelIDs.png (1970, 1003), L4_PanelIDs.png (2026, 858), 1 px each, 3840x1920); this commit changes no export and no texture" }
+  ],
+  "notes": "Review follow-up of 06 T4a (B-L24's badge-overlap half), invariance: the selection badge is anchored 12 px above the help badge (anchor-name --help-badge on .viewport-info; bottom: calc(anchor(--help-badge top, 52px) + 12px) after the bottom: 64px fallback). Below about 1073 px window width (and below about 673 px in the single-column layout) the help badge wraps to two lines (46 px tall) and the fixed bottom: 64px overlapped it by 2 px. At both harness sizes (1600 x 1000 and the 800 px narrow state) the help badge is one line, 32 px tall at bottom 20 px, so the anchored value is exactly 64 px: no computed style, rect or pixel may change."
+}
