@@ -3,7 +3,7 @@
 // (tests/regression/expected/_nondeterminism.json), on synthetic baseline / candidate output trees; and the rect
 // allowances of docs/improvements/01-normals.md 8.4 (T2): `rects` / `size` / `exclude` on manifest entries (the
 // per-pixel rule, the allowlisted jitter tolerated outside the rects (F1-0c) and the frame-size check) and
-// --diff-bbox, on synthetic PNG pairs.
+// --diff-bbox, on synthetic PNG pairs; and --ignore-keys (docs/improvements/06-morph-branding.md 8.3, T1).
 // Run: node --test tests/unit/compare.test.mjs   (zero dependencies)
 
 import { test, describe, after } from 'node:test';
@@ -15,7 +15,7 @@ import zlib from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-import { runCompare, globToRegExp, parseExpectManifest, parseAllowlist, NONDETERMINISM_FILE } from '../regression/compare.mjs';
+import { runCompare, globToRegExp, parseExpectManifest, parseAllowlist, NONDETERMINISM_FILE, DEFAULT_OPTIONS } from '../regression/compare.mjs';
 import { encodePNG, sha256 } from '../regression/lib/formats.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -448,5 +448,53 @@ describe('rect allowances (01 T2: rects, size, exclude, --diff-bbox)', () => {
     assert.match(r.stdout, /other\.screenshot\.png .*diff bbox \[4,3\]-\[4,3\] \(1 px\)/);
     const plain = cli(baseDir, cand, '--expect', m);
     assert.doesNotMatch(plain.stdout, /diff bbox/);
+  });
+});
+
+describe('--ignore-keys (06 T1: classes,class; 06 T5: statusColor)', () => {
+  const styles = (classes, color = 'rgb(1, 2, 3)') => state({
+    viewport: { width: 1600 }, cssTokens: {}, controlPanelScroll: null,
+    elements: { 'card0/offset-hint': { matches: 1, found: true, classes, styles: { color } } },
+  });
+  const text = (cls, label = 'Reset') => state({ buttons: [{ tag: 'button', id: 'reset-camera', class: cls, text: label }] });
+  const both = { a: { 'x.styles.json': styles(['curve-hint']), 'x.text.json': text('export-btn secondary') } };
+  const base = tree(both);
+  const run = (cand, ignoreKeys) => {
+    const lines = [];
+    const opts = ignoreKeys ? { ...DEFAULT_OPTIONS, ignoreKeys } : DEFAULT_OPTIONS;
+    const r = runCompare({ baseDir: base, candDir: cand, opts, log: (l) => lines.push(l) });
+    return { ...r, byKey: Object.fromEntries(r.outputs.map((o) => [o.key, o])), text: lines.join('\n') };
+  };
+
+  test('outputs that differ only in the ignored keys (any depth) are equivalent; without the option they fail', () => {
+    const cand = tree({ a: { 'x.styles.json': styles(['curve-hint', 'curve-hint--small']), 'x.text.json': text('btn-block export-btn mt-10 secondary') } });
+    assert.equal(run(cand).exitCode, 1);
+    const r = run(cand, ['classes', 'class']);
+    assert.equal(r.exitCode, 0, r.text);
+    for (const key of ['a/x.styles.json', 'a/x.text.json']) {
+      assert.equal(r.byKey[key].status, 'PASS');
+      assert.equal(r.byKey[key].change, null);
+      assert.match(r.byKey[key].detail, /classes, class ignored/);
+    }
+    assert.match(r.text, /Ignored JSON keys \(--ignore-keys\): classes, class/);
+  });
+
+  test('any other difference still fails, and a key that is not ignored still counts', () => {
+    const r = run(tree({ a: { 'x.styles.json': styles(['curve-hint', 'x'], 'rgb(9, 9, 9)'), 'x.text.json': text('other', 'Reset camera') } }), ['classes', 'class']);
+    assert.equal(r.exitCode, 1);
+    assert.equal(r.byKey['a/x.styles.json'].status, 'FAIL');
+    assert.match(r.byKey['a/x.styles.json'].detail, /color/);
+    assert.equal(r.byKey['a/x.text.json'].status, 'FAIL');
+    assert.equal(run(tree({ a: { ...both.a, 'x.styles.json': styles(['other']) } }), ['class']).byKey['a/x.styles.json'].status, 'FAIL');
+  });
+
+  test('command line: --ignore-keys a,b; an empty list is a usage error', () => {
+    const cli = (...args) => spawnSync(process.execPath, [COMPARE, ...args], { encoding: 'utf8' });
+    const cand = tree({ a: { 'x.styles.json': styles(['y']), 'x.text.json': text('z') } });
+    assert.equal(cli(base, cand).status, 1);
+    const ok = cli(base, cand, '--ignore-keys', 'classes,class', '--verbose');
+    assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+    assert.match(ok.stdout, /PASS +x\.styles\.json +-- equivalent with the keys classes, class ignored/);
+    assert.equal(cli(base, cand, '--ignore-keys', ',').status, 2);
   });
 });

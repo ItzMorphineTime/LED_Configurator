@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<!-- Static-check fixture (rule 12, 06 R-B2): only display, width and height may stay inline. -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>fixture</title>
+</head>
+<body>
+    <!-- <div style="color: #ff0000; margin-top: 10px;"></div>  (a comment is not markup) -->
+    <div id="options" class="mt-10" style="display: none;"></div>
+    <div id="window" class="preview-window" style="display: none; width: 320px; height: 180px;">
+        <canvas id="canvas" style='width: 100%; height: 100%'></canvas>
+    </div>
+    <div data-style="color: red;" class="readout-row">text with style="color: red" in it is not an attribute of a tag</div>
+</body>
+</html>

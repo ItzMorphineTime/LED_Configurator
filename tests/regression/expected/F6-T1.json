@@ -1,0 +1,14 @@
+{
+  "commit": "F6-T1",
+  "bugs": [],
+  "expect": [
+    { "output": "ui_visual/{00_initial,04_options_ledsim_camera_props,06_options_panelids_logo,07_two_sections,08_collapsed_and_4k_warning,09_narrow_800}.styles.json", "change": "modified", "each": true },
+    { "output": "ui_visual/*.text.json", "change": "modified", "each": true },
+    { "output": "{p2_xss_names/logos_01_panel_ids,p2_xss_names/logos_02_renamed,p2_project_v2/logos_03_uploaded}.json", "change": "modified", "each": true }
+  ],
+  "mayChange": [
+    { "output": "large_wall/final__export-zip__led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen so far: L2_PanelIDs.png (1995, 948), L3_PanelIDs.png (1970, 1003), L4_PanelIDs.png (2026, 858), 1 px each, 3840x1920); this commit changes no export and no texture" }
+  ],
+  "notes": "06 T1 (8.4): inline style attributes to utility classes (css/99-utilities.css, linked last), the logo-row and offset-hint template classes, dead CSS removed (.grid-lines, .section-color-0..7). Only recorded class keys may change: the classes arrays of the probed elements in the ui_visual styles snapshots that probe the sidebar or the preview window (00, 04, 06, 07, 08 and, for #camera-preview-window, the narrow 09; 01, 02, 03 and 05 probe only the overlay groups), and the class of #reset-camera, #export-safe-distance, #led-layout, #camera-filmback and the logo-row labels in every ui_visual text snapshot (every state lists every button); and the class of the logo-row scale input ('' -> 'logo-row__input') in the three 08 P2-0 logo-list probes that record every [data-section-id] element with its class (p2_xss_names logos_01/02, p2_project_v2 logos_03; the first gate run found them, 06 8.4 did not list them). Cross-check: compare --ignore-keys classes,class must report every output identical or equivalent."
+}

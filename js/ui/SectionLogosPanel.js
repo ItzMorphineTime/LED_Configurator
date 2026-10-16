@@ -1,6 +1,6 @@
 /**
  * @module ui/SectionLogosPanel
- * The per-section logo rows inside the panel-ID options (upload, clear, position, scale): a verbatim template,
+ * The per-section logo rows inside the panel-ID options (upload, clear, position, scale): the legacy template,
  * the four logo handlers (LogoLibrary writes, then a rebuild iff panel IDs) and the list's mirror subscriptions.
  * Owns #section-logos-container.
  * Legacy source: index.html@cd3fd3f 2189-2254 (renderSectionLogosUI), 2256-2305 (logo handlers), 4020 / 4106 /
@@ -8,7 +8,10 @@
  * Layer: ui (may import core, legacy, domain static rule tables and ui/dom.js).
  *
  * Template note: the template literal below is byte-identical to legacy, including the whitespace at the start of
- * every line inside the backticks (it is part of the innerHTML string). Do not re-indent it.
+ * every line inside the backticks (it is part of the innerHTML string), except for the four inline styles that
+ * 06 T1 replaced by the classes of css/99-utilities.css: the name div (logo-row__title), the two labels
+ * (logo-row__label) and the scale input (logo-row__input). The row div takes the class logo-row instead of the
+ * legacy style.cssText; the file input keeps its inline display: none. Do not re-indent it.
  */
 import { Events } from '../core/EventBus.js';
 import { legacyHtml } from '../legacy/LegacyCompat.js';
@@ -17,7 +20,7 @@ import { byId } from './dom.js';
 
 /**
  * One logo row's inner markup.
- * Ports: index.html@cd3fd3f lines 2201-2234.
+ * Ports: index.html@cd3fd3f lines 2201-2234 (with the 06 T1 classes, see the template note above).
  * Side effects: none.
  * @param {import('../domain/WallSection.js').WallSection} section
  * @param {number} index
@@ -27,7 +30,7 @@ import { byId } from './dom.js';
  */
 function logoRowHtml(section, index, hasLogo, logoData) {
   return `
-                    <div style="font-size: 11px; color: var(--text-primary); margin-bottom: 8px; font-weight: 500;">${legacyHtml(section.name || 'Wall ' + (index + 1))}</div>
+                    <div class="logo-row__title">${legacyHtml(section.name || 'Wall ' + (index + 1))}</div>
                     <div class="section-logo-upload">
                         <label class="section-logo-upload-btn ${hasLogo ? 'has-logo' : ''}" data-section-id="${legacyHtml(section.id)}">
                             ${hasLogo ? '✓ Logo uploaded' : '+ Upload Logo'}
@@ -40,7 +43,7 @@ function logoRowHtml(section, index, hasLogo, logoData) {
                         </button>
                     </div>
                     <div class="section-logo-position ${hasLogo ? 'visible' : ''}" data-section-id="${legacyHtml(section.id)}">
-                        <label style="font-size: 10px; color: var(--text-secondary); display: block; margin-bottom: 4px;">Position</label>
+                        <label class="logo-row__label">Position</label>
                         <select data-section-id="${legacyHtml(section.id)}" data-field="position">
                             <option value="top-left" ${logoData.position === 'top-left' ? 'selected' : ''}>Top Left</option>
                             <option value="top-center" ${logoData.position === 'top-center' ? 'selected' : ''}>Top Center</option>
@@ -54,10 +57,10 @@ function logoRowHtml(section, index, hasLogo, logoData) {
                         </select>
                     </div>
                     <div class="section-logo-scale ${hasLogo ? 'visible' : ''}" data-section-id="${legacyHtml(section.id)}">
-                        <label style="font-size: 10px; color: var(--text-secondary); display: block; margin-bottom: 4px;">Scale (%)</label>
+                        <label class="logo-row__label">Scale (%)</label>
                         <input type="number" value="${Math.round((logoData.scale || 0.3) * 100)}" min="5" max="100" step="5" 
                                data-section-id="${legacyHtml(section.id)}" data-field="scale"
-                               style="width: 100%; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 6px; border-radius: 4px; font-size: 11px;">
+                               class="logo-row__input">
                     </div>
                 `;
 }
@@ -120,7 +123,7 @@ export class SectionLogosPanel {
       const logoData = logos.get(section.id) || { position: 'center', scale: 0.3 };
 
       const sectionDiv = this.#doc.createElement('div');
-      sectionDiv.style.cssText = 'margin-bottom: 12px; padding: 10px; background: var(--bg-tertiary); border-radius: 6px;';
+      sectionDiv.className = 'logo-row';
       // LEGACY(B-M4, B-L8): the section name is interpolated into innerHTML unescaped (legacyHtml is the identity),
       // and the raw section id is written to data-section-id and parsed back with parseInt by the handlers, while
       // this render (and the panel-ID renderer) read the entry with the raw id: an id whose parseInt has a different

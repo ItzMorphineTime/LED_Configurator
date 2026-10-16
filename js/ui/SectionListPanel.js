@@ -1,6 +1,6 @@
 /**
  * @module ui/SectionListPanel
- * The wall-section cards: verbatim card templates, the card handlers (commands down to WallController), the
+ * The wall-section cards: the legacy card templates, the card handlers (commands down to WallController), the
  * in-place card patch after a number edit, the collapse snapshot/restore around add/delete, and the
  * #add-section-btn button. Owns #wall-sections, #add-section-btn and every card element.
  * Legacy source: index.html@cd3fd3f 3892-4079 (renderWallSections), 4083-4086 / 4109-4116 / 4125-4128 /
@@ -9,7 +9,9 @@
  * Layer: ui (may import core, legacy, domain static rule tables and ui/dom.js).
  *
  * Template note: the two template literals below are byte-identical to legacy, including the whitespace at the
- * start of every line inside the backticks (it is part of the innerHTML string). Do not re-indent them.
+ * start of every line inside the backticks (it is part of the innerHTML string), except that the offset hint's
+ * inline font-size became the class curve-hint--small of css/99-utilities.css (06 T1). The colour dot's and the
+ * swatches' inline backgrounds are per-section data and stay. Do not re-indent them.
  */
 import { Events } from '../core/EventBus.js';
 import { legacyHtml } from '../legacy/LegacyCompat.js';
@@ -97,7 +99,7 @@ function cardHtml(section, showDelete) {
                             <div class="input-field">
                                 <label>Section Offset (°)</label>
                                 <input type="number" data-field="angleOffset" value="${legacyHtml(section.angleOffset || 0)}" min="-180" max="180" step="1">
-                                <div class="curve-hint" style="font-size: 9px;">Rotation before section</div>
+                                <div class="curve-hint curve-hint--small">Rotation before section</div>
                             </div>
                         </div>
                         <div class="section-row single">

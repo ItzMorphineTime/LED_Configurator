@@ -4,8 +4,8 @@
 // Part 1 drives WallController with a real Project and EventBus and spy stubs for the view, the LED tile cache, the
 // orbit controller and the camera hub, and asserts every 6.2 row's rebuild count, cache clears and step order.
 // Part 2 checks the import boundaries of the five WP9 modules.
-// Part 3 (legacy parity) runs the verbatim legacy functions of index.html@cd3fd3f (read with `git show`) and the new
-// panels + controller side by side on two identical fake DOMs built from the legacy markup, replays one long UI
+// Part 3 (legacy parity) runs the verbatim legacy functions of index.html@cd3fd3f (read with `git show`; with the
+// declared template edits of TEMPLATE_EDITS applied, 06 T1) and the new panels + controller side by side on two identical fake DOMs built from the legacy markup, replays one long UI
 // scenario on both, and compares every DOM write, listener registration, rebuild/cache-clear call and the model
 // state after each step. It is skipped when `git show cd3fd3f:index.html` is unavailable.
 //
@@ -621,7 +621,35 @@ const LEGACY_LINES = LEGACY ? LEGACY.split(/\r?\n/) : [];
 /** Lines a..b (1-based, inclusive) of the legacy file. */
 const lines = (a, b) => LEGACY_LINES.slice(a - 1, b).join('\n');
 
-/** Builds the legacy UI functions over `doc` (verbatim source; the legacy globals become closure variables). */
+/**
+ * The declared template edits since Phase 1, applied to the legacy source before it runs, so the parity tests keep
+ * comparing every other byte of the templates and every DOM write: [legacy text, new text, occurrences].
+ * 06 T1 (docs/improvements/06-morph-branding.md 5.3): the inline styles of the logo rows and of the card's offset hint
+ * became the classes of css/99-utilities.css, and the logo row's style.cssText became className = 'logo-row'.
+ */
+const TEMPLATE_EDITS = Object.freeze([
+  ["sectionDiv.style.cssText = 'margin-bottom: 12px; padding: 10px; background: var(--bg-tertiary); border-radius: 6px;';",
+    "sectionDiv.className = 'logo-row';", 1],
+  ['<div style="font-size: 11px; color: var(--text-primary); margin-bottom: 8px; font-weight: 500;">', '<div class="logo-row__title">', 1],
+  ['<label style="font-size: 10px; color: var(--text-secondary); display: block; margin-bottom: 4px;">', '<label class="logo-row__label">', 2],
+  ['style="width: 100%; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 6px; border-radius: 4px; font-size: 11px;">',
+    'class="logo-row__input">', 1],
+  ['<div class="curve-hint" style="font-size: 9px;">', '<div class="curve-hint curve-hint--small">', 1],
+]);
+
+/** `src` with every TEMPLATE_EDITS row applied; throws when a row does not occur exactly its declared number of times. */
+function withTemplateEdits(src) {
+  let out = src;
+  for (const [from, to, count] of TEMPLATE_EDITS) {
+    const parts = out.split(from);
+    if (parts.length - 1 !== count) throw new Error(`template edit found ${parts.length - 1} times, expected ${count}: ${from}`);
+    out = parts.join(to);
+  }
+  return out;
+}
+
+/** Builds the legacy UI functions over `doc` (verbatim source with the TEMPLATE_EDITS; the legacy globals become
+ *  closure variables). */
 function buildLegacy(doc, initialSections) {
   const expectStart = (n, text) => {
     if (!LEGACY_LINES[n - 1].trimStart().startsWith(text)) throw new Error(`index.html line ${n} is not "${text}"`);
@@ -645,8 +673,8 @@ function buildLegacy(doc, initialSections) {
     const sectionColors = ${JSON.stringify(Palette.sectionColors)};
     function createLEDWall() { document.call('createLEDWall'); updateStats(); }
     function clearLEDTextureCache() { document.call('clearCache'); }
-${lines(2189, 2318)}
-${lines(3892, 4146)}
+${withTemplateEdits(`${lines(2189, 2318)}
+${lines(3892, 4146)}`)}
     function setupUIWall() {
 ${lines(4149, 4227)}
     }

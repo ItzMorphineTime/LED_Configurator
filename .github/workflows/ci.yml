@@ -23,6 +23,6 @@ jobs:
       - name: Static checks
         run: |
           node tests/static/check.mjs
-          node tests/static/css-slices.mjs
+          node tests/static/css-slices.mjs --report-only   # report-only since 06 T1, the first change to the slices (07 S7)
       - name: Unit tests
         run: node --test "tests/unit/**/*.test.mjs"

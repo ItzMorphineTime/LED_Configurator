@@ -1,15 +1,7 @@
-/* 10-section-extras.css: index.html@cd3fd3f lines 737-811 (dead .section-color-0..7, section colour picker, swatches, custom colour input, 4K warning).
-   .section-color-0 ... .section-color-7 are dead (no element uses them); kept verbatim.
-   Contiguous slice of the original <style>; link order = file number. Do not reorder rules across files. */
-.section-color-0 { background: #00f0ff; }
-.section-color-1 { background: #ff00aa; }
-.section-color-2 { background: #00ff66; }
-.section-color-3 { background: #ff6b35; }
-.section-color-4 { background: #ffdd00; }
-.section-color-5 { background: #aa66ff; }
-.section-color-6 { background: #66ffaa; }
-.section-color-7 { background: #ff6666; }
-
+/* 10-section-extras.css: index.html@cd3fd3f lines 737-811 (section colour picker, swatches, custom colour input, 4K warning).
+   06 T1 deleted the dead .section-color-0 ... .section-color-7 rules (no element ever used them).
+   Slice of the original <style> minus the deleted rules (css-slices.mjs --report-only lists the difference, 07 S7);
+   link order = file number. Do not reorder rules across files. */
 .section-color-picker {
     display: flex;
     gap: 6px;

@@ -1,9 +1,10 @@
-/* 07-viewport.css: index.html@cd3fd3f lines 446-524 (viewport, canvas, overlay, dead .grid-lines, info badge, viewport/gizmo control bars, company logo).
-   .grid-lines is dead (its only element is commented out in the markup); kept verbatim.
+/* 07-viewport.css: index.html@cd3fd3f lines 446-524 (viewport, canvas, overlay, info badge, viewport/gizmo control bars, company logo).
+   06 T1 deleted the dead .grid-lines rule (its only element was commented out in the markup; that comment went too).
    Legacy note B-L24 (documentation-only, preserved): .viewport-info (bottom: 20px; left: 20px)
    shares its corner with .selection-indicator in 09-viewport-tools.css, so the selection badge
    covers the help badge while visible. Fix = CSS change here + ui_visual re-baseline.
-   Contiguous slice of the original <style>; link order = file number. Do not reorder rules across files. */
+   Slice of the original <style> minus the deleted rule (css-slices.mjs --report-only lists the difference, 07 S7);
+   link order = file number. Do not reorder rules across files. */
 .viewport {
     position: relative;
     background: var(--bg-primary);
@@ -23,18 +24,6 @@
     right: 0;
     bottom: 0;
     pointer-events: none;
-}
-
-.grid-lines {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-image: 
-        linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(0, 240, 255, 0.03) 1px, transparent 1px);
-    background-size: 50px 50px;
 }
 
 .viewport-info {

@@ -2,8 +2,13 @@
 // Golden-master comparator.
 //   node tests/regression/compare.mjs <baselineDir> <candidateDir> [--expect a.json[,b.json]] [--tolerance 1e-5]
 //        [--png-threshold 0] [--png-max-percent 0.01] [--shot-threshold 8] [--shot-max-percent 0.5]
-//        [--only scenarioA,scenarioB] [--diff-bbox] [--verbose]
+//        [--only scenarioA,scenarioB] [--ignore-keys keyA,keyB] [--diff-bbox] [--verbose]
 // Exit code: 0 = no FAIL, 1 = at least one FAIL, 2 = usage error.
+//
+// --ignore-keys (docs/improvements/06-morph-branding.md 8.3, T1) drops the named object keys, at any depth, from both
+// sides of every JSON and state comparison (ZIP JSON entries included) before comparing: a file that then compares
+// equal is reported as equivalent (PASS), never as a difference. It is a review cross-check, not a gate: 06 T1 runs
+// it with `classes,class` to prove that only the recorded class keys changed, 06 T5 with `statusColor`.
 //
 // --expect (docs/improvements/08-bugfix-roadmap.md, sections 8.1 and 8.2) gates a re-baselining commit: every difference
 // must be declared in an expected-change manifest (tests/regression/expected/<commit-id>.json), and every declared
@@ -51,6 +56,10 @@ function parseArgs(argv) {
         else if (k === '--shot-threshold') a.shotThreshold = num();
         else if (k === '--shot-max-percent') a.shotMaxPercent = num();
         else if (k === '--only') a.only = str().split(',').map((s) => s.trim()).filter(Boolean);
+        else if (k === '--ignore-keys') {
+            a.ignoreKeys = str().split(',').map((s) => s.trim()).filter(Boolean);
+            if (!a.ignoreKeys.length) throw new Error('No keys for --ignore-keys');
+        }
         else if (k === '--expect') a.expect.push(...str().split(',').map((s) => s.trim()).filter(Boolean));
         else if (k === '--verbose' || k === '-v') a.verbose = true;
         else if (k === '--diff-bbox') a.diffBbox = true;
@@ -152,11 +161,34 @@ function styleSnapshotDiff(a, b, tol) {
     return parts.length > 15 ? `${head}: ${parts.slice(0, 15).join(' || ')} || ... (${parts.length - 15} more)` : `${head}: ${parts.join(' || ')}`;
 }
 
-function compareJSON(aBuf, bBuf, tol) {
-    const a = parseJSONSafe(aBuf), b = parseJSONSafe(bBuf);
+/** A deep copy of a parsed JSON value without the object keys in `keys` (any depth). */
+function withoutKeys(v, keys) {
+    if (Array.isArray(v)) return v.map((x) => withoutKeys(x, keys));
+    if (v === null || typeof v !== 'object') return v;
+    const out = {};
+    for (const [k, x] of Object.entries(v)) if (!keys.has(k)) out[k] = withoutKeys(x, keys);
+    return out;
+}
+
+/** Whether a parsed JSON value holds one of the object keys in `keys` (any depth). */
+function hasAnyKey(v, keys) {
+    if (Array.isArray(v)) return v.some((x) => hasAnyKey(x, keys));
+    if (v === null || typeof v !== 'object') return false;
+    return Object.entries(v).some(([k, x]) => keys.has(k) || hasAnyKey(x, keys));
+}
+
+function compareJSON(aBuf, bBuf, tol, ignoreKeys = null) {
+    let a = parseJSONSafe(aBuf), b = parseJSONSafe(bBuf);
     if (!a.ok || !b.ok) {
         if (aBuf.equals(bBuf)) return result('PASS', 'unparseable but identical');
         return result('FAIL', `JSON parse error: baseline=${a.error || 'ok'} candidate=${b.error || 'ok'}`);
+    }
+    // --ignore-keys (06 T1): compare without those keys; a file that only differs in them is equivalent.
+    const ignored = ignoreKeys && ignoreKeys.length ? new Set(ignoreKeys) : null;
+    const dropped = ignored && (hasAnyKey(a.value, ignored) || hasAnyKey(b.value, ignored));
+    if (dropped) {
+        a = { ok: true, value: withoutKeys(a.value, ignored) };
+        b = { ok: true, value: withoutKeys(b.value, ignored) };
     }
     const stats = { maxNum: 0 };
     const diffs = deepCompare(a.value, b.value, tol, '$', [], stats);
@@ -164,6 +196,7 @@ function compareJSON(aBuf, bBuf, tol) {
         if (isStyleSnapshot(a.value) && isStyleSnapshot(b.value)) return result('FAIL', styleSnapshotDiff(a.value, b.value, tol));
         return result('FAIL', diffs.join('; '));
     }
+    if (dropped) return result('PASS', `equivalent with the keys ${[...ignored].join(', ')} ignored (--ignore-keys)`);
     return result('PASS', stats.maxNum > 0 ? `numeric diffs <= ${stats.maxNum.toExponential(2)}` : 'equivalent (formatting/key order only)');
 }
 
@@ -314,7 +347,7 @@ function compareContent(kind, aBuf, bBuf, opts, label = '') {
             return compareGLTF(aBuf, bBuf, opts.tolerance);
         case 'json':
         case 'state':
-            return compareJSON(aBuf, bBuf, opts.tolerance);
+            return compareJSON(aBuf, bBuf, opts.tolerance, opts.ignoreKeys);
         case 'png':
             return comparePNG(aBuf, bBuf, opts.pngThreshold, opts.pngMaxPercent, label || 'export png');
         case 'screenshot':
@@ -703,6 +736,7 @@ export function runCompare({ baseDir, candDir, expectFiles = [], allowlistFile =
     log(`Baseline : ${baseDir}\n           ${A.meta?.browser || '?'} captured ${A.meta?.capturedAt || '?'} from ${A.meta?.root || '?'}`);
     log(`Candidate: ${candDir}\n           ${B.meta?.browser || '?'} captured ${B.meta?.capturedAt || '?'} from ${B.meta?.root || '?'}`);
     log(`Tolerance ${opts.tolerance}; export PNG: >${opts.pngThreshold} on >${opts.pngMaxPercent}% px = FAIL; screenshots: >${opts.shotThreshold} on >${opts.shotMaxPercent}% px = FAIL`);
+    if (opts.ignoreKeys && opts.ignoreKeys.length) log(`Ignored JSON keys (--ignore-keys): ${opts.ignoreKeys.join(', ')}`);
     if (expectMode) {
         log(`Expected-change manifests: ${manifests.map((m) => `${m.commit} (${m.file})`).join(', ')}`);
         log(`Nondeterminism allowlist: ${allowlistFile} (${allowlist.length} entries)`);
@@ -773,7 +807,7 @@ function addDiffBoxes(outputs) {
     }
 }
 
-const USAGE = 'Usage: node tests/regression/compare.mjs <baselineDir> <candidateDir> [--expect a.json[,b.json]] [--tolerance 1e-5] [--png-threshold 0] [--png-max-percent 0.01] [--shot-threshold 8] [--shot-max-percent 0.5] [--only a,b] [--diff-bbox] [--verbose]';
+const USAGE = 'Usage: node tests/regression/compare.mjs <baselineDir> <candidateDir> [--expect a.json[,b.json]] [--tolerance 1e-5] [--png-threshold 0] [--png-max-percent 0.01] [--shot-threshold 8] [--shot-max-percent 0.5] [--only a,b] [--ignore-keys a,b] [--diff-bbox] [--verbose]';
 
 export function main(argv = process.argv) {
     let args;

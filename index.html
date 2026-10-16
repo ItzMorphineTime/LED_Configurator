@@ -21,6 +21,7 @@
     <link rel="stylesheet" href="css/11-export.css">
     <link rel="stylesheet" href="css/features/debug-view.css">
     <link rel="stylesheet" href="css/12-responsive.css">
+    <link rel="stylesheet" href="css/99-utilities.css">
 </head>
 <body>
     <div class="app-container">
@@ -60,7 +61,7 @@
                 Add Wall Section
             </button>
 
-            <div class="global-section" style="margin-top: 16px;">
+            <div class="global-section mt-16">
                 <div class="global-section-title">Mesh Options</div>
                 <div class="mesh-mode-select" id="mesh-mode-select">
                     <label class="mesh-mode-option active" data-mode="combined">
@@ -96,9 +97,9 @@
                     <div class="toggle" id="toggle-led-sim"></div>
                 </div>
                 <div id="led-sim-options" style="display: none;">
-                    <div class="input-field" style="margin-top: 10px;">
+                    <div class="input-field mt-10">
                         <label>LED Pixel Layout</label>
-                        <select id="led-layout" style="width: 100%; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 6px; border-radius: 4px; font-size: 12px;">
+                        <select id="led-layout" class="ui-select">
                             <option value="single-dot">Single Dot</option>
                             <option value="rgb-triangle">RGB Triangle</option>
                             <option value="rgb-stripe">RGB Vertical Stripe</option>
@@ -116,31 +117,31 @@
                     <div class="toggle" id="toggle-panel-ids"></div>
                 </div>
                 <div id="panel-id-options" style="display: none;">
-                    <div class="input-field" style="margin-top: 10px;">
+                    <div class="input-field mt-10">
                         <label>Border Thickness (px)</label>
                         <input type="number" id="panel-border-thickness" value="8" min="1" max="32">
                     </div>
-                    <div class="input-field" style="margin-top: 10px;">
+                    <div class="input-field mt-10">
                         <label>Label Font Size (0=auto)</label>
                         <input type="number" id="panel-font-size" value="0" min="0" max="200">
                     </div>
-                    <div class="input-field" style="margin-top: 10px;">
+                    <div class="input-field mt-10">
                         <label>Label Font Color</label>
-                        <input type="color" id="panel-font-color" value="#ffffff" style="width: 100%; height: 30px; cursor: pointer;">
+                        <input type="color" id="panel-font-color" value="#ffffff" class="color-input-full">
                     </div>
-                    <div class="toggle-container" style="margin-top: 10px;">
+                    <div class="toggle-container mt-10">
                         <span class="toggle-label">Show Section Names</span>
                         <div class="toggle active" id="toggle-section-labels"></div>
                     </div>
-                    <div class="input-field" style="margin-top: 10px;">
+                    <div class="input-field mt-10">
                         <label>Section Label Size (0=auto)</label>
                         <input type="number" id="section-label-size" value="0" min="0" max="400">
                     </div>
-                    <div class="input-field" style="margin-top: 10px;">
+                    <div class="input-field mt-10">
                         <label>Section Label Color</label>
-                        <input type="color" id="section-label-color" value="#888888" style="width: 100%; height: 30px; cursor: pointer;">
+                        <input type="color" id="section-label-color" value="#888888" class="color-input-full">
                     </div>
-                    <div class="subsection-title" style="margin-top: 14px; margin-bottom: 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-secondary);">Section Logos</div>
+                    <div class="subsection-title">Section Logos</div>
                     <div id="section-logos-container"></div>
                 </div>
             </div>
@@ -152,9 +153,9 @@
                     <div class="toggle" id="toggle-camera-preview"></div>
                 </div>
                 <div id="camera-preview-options" style="display: none;">
-                    <div class="input-field" style="margin-top: 10px;">
+                    <div class="input-field mt-10">
                         <label>Filmback / Sensor</label>
-                        <select id="camera-filmback" style="width: 100%; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 6px; border-radius: 4px; font-size: 12px;">
+                        <select id="camera-filmback" class="ui-select">
                             <option value="full-frame">Full Frame (36×24mm)</option>
                             <option value="super35">Super 35 (24.89×18.66mm)</option>
                             <option value="arri-lf">ARRI LF (36.70×25.54mm)</option>
@@ -169,7 +170,7 @@
                         </select>
                     </div>
                     <div id="custom-filmback" style="display: none;">
-                        <div class="section-row" style="margin-top: 10px; margin-bottom: 0;">
+                        <div class="section-row section-row--flush">
                             <div class="input-field">
                                 <label>Sensor Width (mm)</label>
                                 <input type="number" id="filmback-width" value="36" min="1" max="100" step="0.01">
@@ -180,26 +181,26 @@
                             </div>
                         </div>
                     </div>
-                    <div class="input-field" style="margin-top: 10px;">
+                    <div class="input-field mt-10">
                         <label>Focal Length (mm)</label>
                         <input type="number" id="camera-focal-length" value="35" min="8" max="800" step="1">
                     </div>
-                    <div class="camera-info" style="margin-top: 10px; padding: 10px; background: var(--bg-secondary); border-radius: 6px; font-size: 11px;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                            <span style="color: var(--text-secondary);">H-FOV:</span>
-                            <span id="camera-hfov" style="color: var(--accent-cyan);">54.4°</span>
+                    <div class="camera-info readout">
+                        <div class="readout-row">
+                            <span class="readout-label">H-FOV:</span>
+                            <span id="camera-hfov" class="readout-value">54.4°</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                            <span style="color: var(--text-secondary);">V-FOV:</span>
-                            <span id="camera-vfov" style="color: var(--accent-cyan);">37.8°</span>
+                        <div class="readout-row">
+                            <span class="readout-label">V-FOV:</span>
+                            <span id="camera-vfov" class="readout-value">37.8°</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="color: var(--text-secondary);">Aspect:</span>
-                            <span id="camera-aspect" style="color: var(--accent-cyan);">1.50:1</span>
+                        <div class="readout-row readout-row--last">
+                            <span class="readout-label">Aspect:</span>
+                            <span id="camera-aspect" class="readout-value">1.50:1</span>
                         </div>
                     </div>
-                    <div class="subsection-title" style="margin-top: 14px; margin-bottom: 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-secondary);">Camera Position</div>
-                    <div class="section-row" style="margin-bottom: 8px;">
+                    <div class="subsection-title">Camera Position</div>
+                    <div class="section-row mb-8">
                         <div class="input-field">
                             <label>X Position (m)</label>
                             <input type="number" id="camera-pos-x" value="0" step="0.1">
@@ -209,12 +210,12 @@
                             <input type="number" id="camera-pos-y" value="1.5" min="0" step="0.1">
                         </div>
                     </div>
-                    <div class="input-field" style="margin-bottom: 10px;">
+                    <div class="input-field mb-10">
                         <label>Z Distance from Wall (m)</label>
                         <input type="number" id="camera-pos-z" value="5" min="0.1" step="0.1">
                     </div>
-                    <div class="subsection-title" style="margin-top: 6px; margin-bottom: 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-secondary);">Camera Rotation</div>
-                    <div class="section-row" style="margin-bottom: 8px;">
+                    <div class="subsection-title subsection-title--tight">Camera Rotation</div>
+                    <div class="section-row mb-8">
                         <div class="input-field">
                             <label>Tilt (°)</label>
                             <input type="number" id="camera-rot-x" value="0" min="-90" max="90" step="0.5">
@@ -224,36 +225,36 @@
                             <input type="number" id="camera-rot-y" value="0" min="-180" max="360" step="0.5">
                         </div>
                     </div>
-                    <div class="section-row single" style="margin-bottom: 10px;">
+                    <div class="section-row single mb-10">
                         <div class="input-field">
                             <label>Roll (°)</label>
                             <input type="number" id="camera-rot-z" value="0" min="-180" max="180" step="0.5">
                         </div>
                     </div>
-                    <div class="frustum-status" style="margin-top: 10px; padding: 10px; background: var(--bg-secondary); border-radius: 6px; font-size: 11px;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                            <span style="color: var(--text-secondary);">Frame Width at Wall:</span>
-                            <span id="frustum-width" style="color: var(--accent-cyan);">--</span>
+                    <div class="frustum-status readout">
+                        <div class="readout-row">
+                            <span class="readout-label">Frame Width at Wall:</span>
+                            <span id="frustum-width" class="readout-value">--</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                            <span style="color: var(--text-secondary);">Frame Height at Wall:</span>
-                            <span id="frustum-height" style="color: var(--accent-cyan);">--</span>
+                        <div class="readout-row">
+                            <span class="readout-label">Frame Height at Wall:</span>
+                            <span id="frustum-height" class="readout-value">--</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                            <span style="color: var(--text-secondary);">Status:</span>
-                            <span id="frustum-status-text" style="color: #ffaa00;">--</span>
+                        <div class="readout-row readout-row--gap">
+                            <span class="readout-label">Status:</span>
+                            <span id="frustum-status-text" class="status-pending">--</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="color: var(--text-secondary);">Max Distance:</span>
-                            <span id="safe-distance" style="color: #00ff66;">--</span>
+                        <div class="readout-row readout-row--last">
+                            <span class="readout-label">Max Distance:</span>
+                            <span id="safe-distance" class="status-ok">--</span>
                         </div>
                     </div>
-                    <div class="toggle-container" style="margin-top: 12px;">
+                    <div class="toggle-container mt-12">
                         <span class="toggle-label">Show Safe Distance 3D</span>
                         <div class="toggle" id="toggle-safe-distance"></div>
                     </div>
-                    <button class="export-btn secondary" id="reset-camera" style="margin-top: 10px; width: 100%;">Reset Camera Position</button>
-                    <button class="export-btn secondary" id="export-safe-distance" style="margin-top: 6px; width: 100%; display: none;">Export Safe Distance OBJ</button>
+                    <button class="export-btn secondary btn-block mt-10" id="reset-camera">Reset Camera Position</button>
+                    <button class="export-btn secondary btn-block mt-6" id="export-safe-distance" style="display: none;">Export Safe Distance OBJ</button>
                 </div>
             </div>
 
@@ -263,8 +264,8 @@
                     <span class="toggle-label">Show Person</span>
                     <div class="toggle" id="toggle-person"></div>
                 </div>
-                <div id="person-options" style="display: none; margin-top: 10px;">
-                    <div class="section-row" style="margin-bottom: 8px;">
+                <div id="person-options" class="mt-10" style="display: none;">
+                    <div class="section-row mb-8">
                         <div class="input-field">
                             <label>X Position (m)</label>
                             <input type="number" id="person-pos-x" value="2" step="0.1">
@@ -274,7 +275,7 @@
                             <input type="number" id="person-pos-z" value="2" step="0.1">
                         </div>
                     </div>
-                    <div class="section-row" style="margin-bottom: 8px;">
+                    <div class="section-row mb-8">
                         <div class="input-field">
                             <label>Rotation (°)</label>
                             <input type="number" id="person-rot-y" value="0" min="-180" max="180" step="5">
@@ -286,12 +287,12 @@
                     </div>
                 </div>
                 
-                <div class="toggle-container" style="margin-top: 12px;">
+                <div class="toggle-container mt-12">
                     <span class="toggle-label">Show Car</span>
                     <div class="toggle" id="toggle-car"></div>
                 </div>
-                <div id="car-options" style="display: none; margin-top: 10px;">
-                    <div class="section-row" style="margin-bottom: 8px;">
+                <div id="car-options" class="mt-10" style="display: none;">
+                    <div class="section-row mb-8">
                         <div class="input-field">
                             <label>X Position (m)</label>
                             <input type="number" id="car-pos-x" value="4" step="0.1">
@@ -301,7 +302,7 @@
                             <input type="number" id="car-pos-z" value="3" step="0.1">
                         </div>
                     </div>
-                    <div class="section-row" style="margin-bottom: 8px;">
+                    <div class="section-row mb-8">
                         <div class="input-field">
                             <label>Rotation (°)</label>
                             <input type="number" id="car-rot-y" value="0" min="-180" max="180" step="5">
@@ -335,24 +336,23 @@
 
         <main class="viewport">
             <canvas id="three-canvas"></canvas>
-            <div id="camera-preview-window" style="display: none; position: absolute; bottom: 20px; right: 20px; width: 320px; height: 180px; background: #000; border: 2px solid var(--accent-cyan); border-radius: 8px; overflow: hidden; box-shadow: 0 4px 20px rgba(0, 240, 255, 0.3);">
-                <div id="camera-preview-resize" style="position: absolute; top: 0; left: 0; width: 20px; height: 20px; cursor: nw-resize; z-index: 20; display: flex; align-items: center; justify-content: center;">
-                    <svg width="10" height="10" viewBox="0 0 10 10" style="opacity: 0.5;">
+            <div id="camera-preview-window" class="preview-window" style="display: none; width: 320px; height: 180px;">
+                <div id="camera-preview-resize" class="preview-window__resize">
+                    <svg class="preview-window__icon" width="10" height="10" viewBox="0 0 10 10">
                         <path d="M0 10 L10 0 M0 6 L6 0 M0 2 L2 0" stroke="var(--accent-cyan)" stroke-width="1.5" fill="none"/>
                     </svg>
                 </div>
-                <div style="position: absolute; top: 0; left: 0; right: 0; padding: 4px 8px; padding-left: 24px; background: rgba(0, 0, 0, 0.7); font-size: 10px; color: var(--accent-cyan); display: flex; justify-content: space-between; align-items: center; z-index: 10;">
+                <div class="preview-window__header">
                     <span>📷 Camera View</span>
                     <span id="camera-preview-info">35mm • Full Frame</span>
                 </div>
                 <canvas id="camera-preview-canvas" style="width: 100%; height: 100%;"></canvas>
-                <div style="position: absolute; bottom: 0; left: 0; right: 0; padding: 4px 8px; background: rgba(0, 0, 0, 0.7); font-size: 9px; color: var(--text-secondary); display: flex; justify-content: space-between;">
+                <div class="preview-window__footer">
                     <span id="camera-preview-fov">H: 54.4° V: 37.8°</span>
                     <span id="camera-preview-res">1920×1080</span>
                 </div>
             </div>
             <div class="viewport-overlay">
-                <!-- <div class="grid-lines"></div> -->
                 <div class="viewport-info">
                     <div class="info-badge">Drag to rotate • Scroll to zoom • WASD to move • G=translate R=rotate L=space P=pilot N=normals</div>
                 </div>

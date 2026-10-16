@@ -28,6 +28,9 @@
  *  10  domain fields are assigned outside js/domain/ only where the ALLOWLIST below permits it
  *  11  no numeric renderOrder literal >= 900 outside js/core/renderOrder.js, the render-order registry
  *      (docs/improvements/01-normals.md 5.5, CR-10; 07 S10): `x.renderOrder = 999` or `renderOrder: 995`
+ *  12  (06 R-B2, since 06 T1) the inline style="" attributes of <root>/index.html declare only display, width and
+ *      height, with no var(--...) and no colour literal (#hex, rgb(), rgba(), hsl(), hsla()); every other inline
+ *      style became a class of css/99-utilities.css. HTML comments are skipped. Skipped without an index.html.
  *
  * "Identifier" means a token of code: comments and the text of string, template and regex literals
  * are blanked first (the code inside template `${...}` is kept), and a name after `.` or `?.` is a
@@ -75,6 +78,7 @@ const RULE_TITLES = Object.freeze({
     9: 'pure layer',
     10: 'domain field write',
     11: 'render order literal',
+    12: 'inline style (R-B2)',
 });
 
 /**
@@ -124,6 +128,11 @@ const ASSIGNMENT_OPS = ['>>>=', '**=', '<<=', '>>=', '&&=', '||=', '??=', '+=', 
 /** Rule 11: the only file that may hold renderOrder literals of 900 and above (relative to js/). */
 const RENDER_ORDER_FILE = 'core/renderOrder.js';
 const RENDER_ORDER_MIN = 900;
+
+/** Rule 12 (06 R-B2): the only properties an inline style="" of index.html may declare (JS-owned state). */
+const INLINE_STYLE_PROPS = new Set(['display', 'width', 'height']);
+/** Rule 12: what an inline style value may not contain (a token or a colour literal). */
+const INLINE_STYLE_FORBIDDEN_RE = /var\(\s*--|#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?)\(/i;
 
 /** Rule 7: the one event that may have no subscriber (the feature seam, ARCHITECTURE.md 5.1 rule 7). */
 const UNSUBSCRIBED_EVENTS = new Set(['WALL_REBUILT']);
@@ -771,6 +780,39 @@ function checkRenderOrder(mod, ctx) {
     }
 }
 
+/** Rule 12: a start tag (quoted attribute values may hold '>') and one attribute inside it. */
+const START_TAG_RE = /<([a-zA-Z][\w:-]*)((?:\s+[^\s=>/]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?)*)\s*\/?>/g;
+const ATTRIBUTE_RE = /([^\s=>/]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g;
+
+/**
+ * Rule 12 (06 R-B2): every inline style attribute of `<root>/index.html` declares only display, width and height, and
+ * no value holds a var(--...) reference or a colour literal. Only the attributes of start tags count (not text, not
+ * data-style); HTML comments are blanked first (newlines kept, so line numbers stay right). A missing index.html is
+ * not checked.
+ */
+function checkInlineStyles(ctx) {
+    const abs = path.join(ctx.root, 'index.html');
+    if (!fs.existsSync(abs)) return;
+    const html = fs.readFileSync(abs, 'utf8').replace(/<!--[\s\S]*?-->/g, (c) => c.replace(/[^\n]/g, ' '));
+    const lineOf = (index) => html.slice(0, index).split('\n').length;
+    for (const tag of html.matchAll(START_TAG_RE)) {
+        for (const attr of tag[2].matchAll(ATTRIBUTE_RE)) {
+            if (attr[1].toLowerCase() !== 'style') continue;
+            const text = attr[2] ?? attr[3] ?? attr[4] ?? '';
+            for (const decl of text.split(';').map((d) => d.trim()).filter(Boolean)) {
+                const colon = decl.indexOf(':');
+                const prop = (colon < 0 ? decl : decl.slice(0, colon)).trim().toLowerCase();
+                const value = colon < 0 ? '' : decl.slice(colon + 1).trim();
+                if (!INLINE_STYLE_PROPS.has(prop)) {
+                    ctx.report('index.html', lineOf(tag.index), 12, `<${tag[1]}> inline style declares '${prop}' ("${decl}"): only display, width and height may stay inline; use a class of css/99-utilities.css (06 R-B2)`);
+                } else if (INLINE_STYLE_FORBIDDEN_RE.test(value)) {
+                    ctx.report('index.html', lineOf(tag.index), 12, `<${tag[1]}> inline style value "${decl}" holds a token or a colour literal (06 R-B2)`);
+                }
+            }
+        }
+    }
+}
+
 // ---- runner -----------------------------------------------------------------------------------
 
 /**
@@ -806,6 +848,7 @@ export async function runChecks(rootDir) {
         checkRenderOrder(mod, ctx);
     }
     checkLookups(ctx);
+    checkInlineStyles(ctx);
 
     const legacy = await importIfPresent(root, 'js/legacy/LegacyCompat.js', 6, ctx);
     if (legacy.missing) notices.push('js/legacy/LegacyCompat.js not found: rules 6 (LEGACY parity) and 8 (Strategies references) skipped');
@@ -875,6 +918,11 @@ const EXPECTED_BAD = Object.freeze([
     ['js/interaction/Gizmo.js', 11, 'renderOrder literal 999'],
     ['js/interaction/Gizmo.js', 11, 'renderOrder literal 9.95e2'],
     ['js/interaction/Gizmo.js', 11, 'renderOrder literal 0x3e3'],
+    ['index.html', 12, "<div> inline style declares 'margin-top'"],
+    ['index.html', 12, "<span> inline style declares 'color'"],
+    ['index.html', 12, '<div> inline style value "width: var(--preview-width)" holds a token'],
+    ['index.html', 12, '<div> inline style value "width: #123456" holds a token or a colour literal'],
+    ['index.html', 12, "<svg> inline style declares 'opacity'"],
 ]);
 
 async function selfTest() {

@@ -46,6 +46,7 @@ Useful options:
 | `--shot-threshold 8` / `--shot-max-percent 0.5` | compare | The same check for viewport screenshots. |
 | `--verbose` | compare | Print every output, including identical ones. |
 | `--diff-bbox` | compare | Add the bounding box of the differing pixels (and of those outside an entry's `rects`) to every differing image. See [Rect allowances](#rect-allowances---diff-bbox-and-the-palette-hook-01-t2). |
+| `--ignore-keys a,b` | compare | Drop these object keys, at any depth, from both sides of every JSON and state comparison (ZIP JSON entries included). A file that then compares equal is reported as equivalent (`PASS`), never as a difference. A review cross-check, not a gate: Feature 6 T1 runs it with `classes,class` to show that only the recorded class keys changed (`docs/improvements/06-morph-branding.md` 8.4), and T5 with `statusColor`. |
 
 `run` only deletes an `--out` directory that is empty or holds a previous harness `manifest.json`.
 
@@ -442,7 +443,7 @@ Byte-identical files report `IDENTICAL`. Otherwise:
 - **JSON and state files:** deep-compared. Numbers use the tolerance, strings must match
   exactly, and object key order is ignored. The `ui_visual` style and text snapshots are state
   files. Every computed value is a string and every rect is rounded to 0.5 px, so in practice they
-  must match exactly. A failing style snapshot is reported per element, style changes before rect
+  must match exactly. `--ignore-keys` removes the named keys from both sides first (a cross-check only). A failing style snapshot is reported per element, style changes before rect
   changes, for example
   `2 element(s) differ: toggle-label [width: ...; font-size: "13px" vs "13.5px"; ...] || card0/chevron [transition-duration: "0.2s" vs "0.25s"]`.
 - **Exported PNGs:** decoded by a built-in PNG decoder. The report gives the maximum channel
@@ -848,8 +849,10 @@ exempt): import layering, relative and case-exact `.js` specifiers, `window` /
 `ui/` and `App.js` with one owner per id, no module-level `let` / `var`, `LEGACY(B-xx)` tags equal to
 `LEGACY_SITES`, every `Events` key emitted and subscribed, every `Strategies` leaf referenced, no
 THREE / DOM in the pure layers, domain fields written only by their owners (plus the
-`ALLOWLIST` at the top of the file), and, since 01 F1-1, no numeric `renderOrder` literal of 900 or more outside
-`js/core/renderOrder.js` (rule 11). Each violation is printed as `file:line: [rule N] message`,
+`ALLOWLIST` at the top of the file), since 01 F1-1, no numeric `renderOrder` literal of 900 or more outside
+`js/core/renderOrder.js` (rule 11), and, since Feature 6 T1, inline `style=""` attributes of `index.html` that
+declare only `display`, `width` and `height`, with no `var(--...)` and no colour literal (rule 12, 06 R-B2; every
+other inline style is a class of `css/99-utilities.css`). Each violation is printed as `file:line: [rule N] message`,
 and the exit code is 1 if there is any. Rule 6 also reports a `LEGACY_SITES` entry whose file under
 `js/` does not exist.
 
@@ -858,7 +861,14 @@ imports, `statusEl.style.color`, a `windowEl` key, "THREE-free" comments, bug id
 `LEGACY(` prefix, `byId(doc, 'x')` lookups, `this.profile.<leaf>`, the allow-listed
 `this.#display.showGrid` write) plus lexer edge cases (regex literals with quotes and slashes, a
 regex right after an `if (...)` header, a `LEGACY(...)` tag wrapped across JSDoc lines). `bad` must
-make every rule fire, and the self-test also checks a list of specific expected violations.
+make every rule fire, and the self-test also checks a list of specific expected violations. Each tree also holds an
+`index.html` for rule 12 (`good`: the allowed inline styles, a commented-out style and `data-style`; `bad`: a
+property that is not allowed, a token and a colour literal in an allowed one, and an SVG style).
+
+`node tests/static/css-slices.mjs --report-only` (07 S7) prints how `css/01-*.css` .. `css/12-*.css` differ from the
+original stylesheet (lines 12-869 of `index.html@cd3fd3f`) and exits 0. Since Feature 6 T1 the slices differ on
+purpose (the dead `.grid-lines` and `.section-color-0..7` rules are gone, and later branding steps rewrite rules), so
+the gate and CI run it report-only; without the flag any difference is still a failure.
 
 ## Unit tests and the local server
 

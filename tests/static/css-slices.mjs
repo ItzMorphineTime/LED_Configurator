@@ -8,10 +8,17 @@
  * Usage:
  *   node tests/static/css-slices.mjs                 original read with `git show cd3fd3f:index.html`
  *   node tests/static/css-slices.mjs <original.html> original read from that path
+ *   node tests/static/css-slices.mjs --report-only [<original.html>]
+ *                                                    every check runs and every difference is printed (REPORT
+ *                                                    lines), but the exit code is 0 (07 S7)
  *
- * Scope (07 S7, C52; since 01 F1-2, the first intentional CSS change): the slices are the stylesheets css/01-*.css to
- * css/12-*.css. Nothing else under css/ is a slice or is scanned: the feature stylesheets in css/features/ and the
- * other numbered ranges of 07 C52's link order (00-fonts, 20-29, 99-utilities).
+ * Scope (07 S7, C52; since 01 F1-2): the slices are the stylesheets css/01-*.css to css/12-*.css. Nothing else under
+ * css/ is a slice or is scanned: the feature stylesheets in css/features/ and the other numbered ranges of 07 C52's
+ * link order (00-fonts, 20-29, 99-utilities).
+ * Report-only (07 S7): since 06 T1, the first intentional change to the slices (it deleted the dead .grid-lines and
+ * .section-color-0..7 rules), css/01-12 no longer equal the original by design, so the gate runs with --report-only:
+ * the report documents how far the slices have moved from the original, and nothing fails on it. The script is kept,
+ * not deleted.
  *
  * Checks:
  *   1. The regular files css/01-*.css .. css/12-*.css are exactly the 12 files of the 2.1 slice table (no more, no
@@ -27,7 +34,8 @@
  *      the body could only hide a change: a comment between `col` and `or` makes CSS read two
  *      tokens, while the normaliser, which deletes comments, would read `color`.
  * A single leading byte-order mark is ignored (the browser's decoder consumes it).
- * Exit code: 0 when every check passes, 1 when a check fails, 2 when the original cannot be read.
+ * Exit code: 0 when every check passes, 1 when a check fails, 2 when the original cannot be read (or an argument is
+ * unknown); with --report-only, 0 whenever the checks could run.
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -134,10 +142,11 @@ function describeDifference(expected, actual) {
 /**
  * Runs every check and reports the result on stdout/stderr.
  * @param {string | undefined} originalPath
+ * @param {{reportOnly?: boolean}} [options]  reportOnly: print every difference as a REPORT line and return 0 (07 S7)
  * @returns {number} the process exit code
  * Side effects: reads css/ and the original; prints a report.
  */
-function main(originalPath) {
+function main(originalPath, { reportOnly = false } = {}) {
   let original;
   try {
     original = readOriginal(originalPath);
@@ -203,6 +212,11 @@ function main(originalPath) {
     if (name === MEDIA_FILE && !normalise(source).includes('@media')) failures.push(`${MEDIA_FILE} must contain the @media rule`);
   }
 
+  if (failures.length && reportOnly) {
+    for (const failure of failures) console.log(`REPORT ${failure}`);
+    console.log(`css-slices: report-only (07 S7): ${failures.length} difference(s) from the original slices reported; exit 0`);
+    return 0;
+  }
   if (failures.length) {
     for (const failure of failures) console.error(`FAIL ${failure}`);
     console.error(`css-slices: ${failures.length} check(s) failed`);
@@ -212,4 +226,26 @@ function main(originalPath) {
   return 0;
 }
 
-process.exitCode = main(process.argv[2]);
+/**
+ * Parses the command line: `[--report-only] [<original.html>]`.
+ * @param {string[]} args  process.argv.slice(2)
+ * @returns {{originalPath: string | undefined, reportOnly: boolean} | null} null for an unknown option or a second path
+ */
+function parseArgs(args) {
+  let originalPath;
+  let reportOnly = false;
+  for (const arg of args) {
+    if (arg === '--report-only') reportOnly = true;
+    else if (arg.startsWith('--') || originalPath !== undefined) return null;
+    else originalPath = arg;
+  }
+  return { originalPath, reportOnly };
+}
+
+const parsed = parseArgs(process.argv.slice(2));
+if (!parsed) {
+  console.error('Usage: node tests/static/css-slices.mjs [--report-only] [<original.html>]');
+  process.exitCode = 2;
+} else {
+  process.exitCode = main(parsed.originalPath, { reportOnly: parsed.reportOnly });
+}

@@ -32,7 +32,7 @@ Phase 1 turns the 3,800-line inline script and the 860-line inline stylesheet in
 
 ### 1.2 Delivery
 
-- `index.html` keeps its `<head>` exactly (including the invalid `<meta author="Joe Loe">`), keeps loading three.js r128 and JSZip 3.10.1 as **classic** scripts from the same cdnjs URLs and Google Fonts from the same URL, then links the 12 stylesheets in `css/` in numeric order. Lines 872-1276 (the `<body>` tag, the markup 873-1275 and the blank line before the script) stay byte-identical. The inline `<script>` is replaced, at the same position at the end of `<body>`, by `<script type="module" src="js/main.js"></script>`.
+- `index.html` keeps its `<head>` exactly (including the invalid `<meta author="Joe Loe">`), keeps loading three.js r128 and JSZip 3.10.1 as **classic** scripts from the same cdnjs URLs and Google Fonts from the same URL, then links the 12 stylesheets in `css/` in numeric order. Lines 872-1276 (the `<body>` tag, the markup 873-1275 and the blank line before the script) stay byte-identical. The inline `<script>` is replaced, at the same position at the end of `<body>`, by `<script type="module" src="js/main.js"></script>`. **Phase 1 only:** this byte-identity (R8) ended with 06 T1, the first intentional markup change. Since then the stylesheet links follow the one link order of 2.1 (07 C52), ending with `css/99-utilities.css`, and the static inline `style=""` attributes are classes of that sheet; only the JS-owned `display` / `width` / `height` stay inline (static rule 12, 06 R-B2). 06 T4a/T4b then change the head (title, metas, favicon, font URL).
 - All URLs are relative (`css/...`, `js/...`) so the site works under the GitHub Pages sub-path `/LED_Configurator/`.
 - Modules obtain THREE and JSZip only through the shims `js/vendor/three.js` and `js/vendor/jszip.js`. Switching to ESM three later (importmap) is a change to `js/vendor/three.js` plus one `<script type="importmap">`.
 - `file://` no longer works (ES modules need HTTP). Local development uses any static server (see `docs/REFACTOR_PLAN.md`, "How to run locally").
@@ -137,7 +137,7 @@ Direction of communication:
 | R5 | **THREE allocation and `scene.add` order equal legacy order** in every builder (geometry -> texture -> material -> mesh, exactly as the legacy statement order). | Same as R4 (draw-order ties at section junctions and at the grid line z = 0). |
 | R6 | **No new renderables, no new scene-graph parents, no layers in Phase 1.** Helpers are *registered* (`SceneManager.addHelper`) but stay on layer 0. | Preview pixels (B-M11) and draw order stay identical. |
 | R7 | **Every output-affecting quirk lives at exactly one site:** a `Strategies` key read by code or a registered `LEGACY(B-xx)` tag. | Each later fix is a one-place change. |
-| R8 | **Markup is byte-identical; CSS is contiguous slices** of the original `<style>` in original order. Inline `style=""` attributes stay. | The cascade is identical by construction; `ui_visual` stays identical. |
+| R8 | **Markup is byte-identical; CSS is contiguous slices** of the original `<style>` in original order. Inline `style=""` attributes stay. **A Phase-1 rule: it ended with 06 T1**, which moved the static inline styles to `css/99-utilities.css` (computed styles unchanged, proved by the harness), deleted the dead CSS and switched `css-slices.mjs` to `--report-only` (07 S7). | The cascade is identical by construction; `ui_visual` stays identical. |
 | R9 | **No globals, call-time browser globals** (section 1.5). | Constraint: no app state on `window`; legacy semantics of `alert` etc. |
 | R10 | **Pure layers are Node-testable:** `core`, `legacy`, `theme`, `domain`, `geometry`, `io` import no THREE and touch no DOM. | Exporters are byte-compared against golden files in plain Node before any wiring. |
 | R11 | **Listener registration order is reproduced:** orbit canvas listeners and keyboard-state listeners in the init phase; panel listeners, shortcut keys and canvas pointer routing in the setupUI phase, in legacy statement order (section 7). | Same handler order on shared targets (`mousedown`, `keydown`, ...). |
@@ -152,9 +152,11 @@ Direction of communication:
 
 The `WP` column names the work package that creates the file (see `docs/REFACTOR_PLAN.md` and the work-package list). Every file belongs to exactly one work package. Totals (Phase 1): 12 stylesheets; 45 application modules plus `main.js`, the composition root `App.js` and 2 vendor shims. Files added since name their spec step instead of a work package (for example `01 F1-2`).
 
-### 2.1 Stylesheets (`css/`): contiguous slices of the original `<style>`, linked in this order
+### 2.1 Stylesheets (`css/`): slices of the original `<style>`, linked in this order
 
-Each file contains a header comment followed by the original lines **verbatim and in order** (leading indentation may be removed; nothing else changes). Concatenating the files in numeric order, minus their header comments, reproduces lines 12-869 of the original modulo whitespace, so the cascade is identical by construction. There are no CSS comments and no `url()` in the original, so moving the rules changes no paths.
+Each file contains a header comment followed by the original lines **verbatim and in order** (leading indentation may be removed; nothing else changes). Concatenating the files in numeric order, minus their header comments, reproduced lines 12-869 of the original modulo whitespace in Phase 1, so the cascade was identical by construction. There are no CSS comments and no `url()` in the original, so moving the rules changes no paths. **Since 06 T1** the files are no longer exact slices: T1 deleted the dead rules `.grid-lines` (07) and `.section-color-0..7` (10), and later steps (06 T4a onwards) rewrite rules on purpose. `tests/static/css-slices.mjs` therefore runs with `--report-only` (07 S7): it still lists every difference from the original, and nothing fails on it.
+
+**Link order** (07 C52, the one order for every spec; the numeric prefix is the link order): `00-fonts.css` (06 T13, when self-hosting lands), `01`-`11`, `css/features/*.css` (specs 01-05), `12-responsive.css`, spec 09's `20`-`29` block, and **`css/99-utilities.css` last of all** (06 T1).
 
 | File | Original lines | Content | WP |
 |---|---|---|---|
@@ -164,10 +166,10 @@ Each file contains a header comment followed by the original lines **verbatim an
 | `css/04-header.css` | 48-102 | `.header`, `.logo*`, `.header-stats`, `.stat*` | WP2 |
 | `css/05-control-panel.css` | 104-295 | `.control-panel` (+ scrollbar), section cards (`.wall-section*`, `.section-*`), `.input-field*`, `.curve-hint`, `.add-section-btn*` | WP2 |
 | `css/06-controls.css` | 297-444 | `.global-section*`, `.mesh-mode-*`, `.toggle-container`, `.toggle*`, **first** `.export-btn` block (425-444) | WP2 |
-| `css/07-viewport.css` | 446-524 | `.viewport`, `#three-canvas`, `.viewport-overlay`, dead `.grid-lines`, `.viewport-info`, `.info-badge`, `.viewport-controls`, `.gizmo-controls`, `.company-logo` | WP2 |
+| `css/07-viewport.css` | 446-524 | `.viewport`, `#three-canvas`, `.viewport-overlay`, `.viewport-info`, `.info-badge`, `.viewport-controls`, `.gizmo-controls`, `.company-logo` (the dead `.grid-lines` was deleted in 06 T1, with the commented-out element in the markup) | WP2 |
 | `css/08-section-logos.css` | 526-602 | `.section-logo-*` | WP2 |
 | `css/09-viewport-tools.css` | 604-735 | `.gizmo-mode-btn*`, `.pilot-info*`, `.gizmo-divider`, `.selection-indicator*`, `.view-btn*` | WP2 |
-| `css/10-section-extras.css` | 737-811 | dead `.section-color-0..7`, `.section-color-picker`, `.color-swatch-small*`, `.color-input-custom*`, `.section-warning*`, `.warning-indicator` | WP2 |
+| `css/10-section-extras.css` | 737-811 | `.section-color-picker`, `.color-swatch-small*`, `.color-input-custom*`, `.section-warning*`, `.warning-indicator` (the dead `.section-color-0..7` were deleted in 06 T1) | WP2 |
 | `css/11-export.css` | 813-857 | `.export-section`, `.export-row`, **second** `.export-btn` block, `.export-btn.secondary*`, `.import-input` | WP2 |
 | `css/12-responsive.css` | 859-869 | `@media (max-width: 900px)` (must stay last) | WP2 |
 
@@ -176,6 +178,8 @@ Each file contains a header comment followed by the original lines **verbatim an
 | File | Content | Step |
 |---|---|---|
 | `css/features/debug-view.css` | `.view-btn.active` (the `.view-btn.active` half of B-L24; its one named owner, 07 C52), `.view-divider`, `.debug-popover*`, `#viewport-top-stack` and `.pilot-info.visible ~ #viewport-top-stack`, `.debug-legend*` (swatches through `var(--swatch)`; the legend takes pointer events so its `title` shows on hover, and its notes keep the secondary text colour, F1-2b), `.debug-normals-stats`, `.visually-hidden`, the `@media (max-height: 444px), (max-width: 900px) and (max-height: 794px)` overflow fallback of `.viewport-controls`. Colours only through `02-tokens.css` custom properties. | 01 F1-2 |
+
+**`css/99-utilities.css`** (06 T1, 06 5.2/5.3) is not a slice either and is linked **last** of all stylesheets. It holds only the classes that replaced the static inline `style=""` attributes of `index.html` and of the two panel templates, with the values copied from those inline styles: the spacing utilities `.mt-6/10/12/16`, `.mb-8/10`, `.section-row--flush`, `.btn-block`; `.ui-select` (`#led-layout`, `#camera-filmback`); `.input-field .color-input-full`; `.subsection-title` (+ `--tight`, the class had no rule before); the read-outs `.readout`, `.readout-row` (+ `--gap`, `--last`), `.readout-label`, `.readout-value`, and the initial status colours `.status-pending` (`#frustum-status-text`) and `.status-ok` (`#safe-distance`), which `CameraPanel` still overrides through `style.color` at runtime; the preview window's static look `.preview-window`, `__resize`, `__icon`, `__header`, `__footer` (`display`, `width` and `height` stay inline: `PreviewWindow` owns them; the canvas keeps its inline size); the logo rows `.logo-row`, `__title`, `__label`, `__input` (`SectionLogosPanel`); `.curve-hint--small` (the cards' offset hint, `SectionListPanel`). An inline style beat every rule and a class does not, so the sheet is linked last (a utility wins over every earlier rule of its specificity) and a utility is qualified where a legacy rule is more specific (`.input-field .color-input-full`). The harness proved the computed styles unchanged (06 8.4 T1). Its colours stay the legacy tokens and literals until 06 T4a maps them to role tokens.
 
 ### 2.2 JavaScript (`js/`)
 
@@ -255,9 +259,10 @@ js/
   ui/
     dom.js                                 WP3   byId, flipToggle, setDisplay, createDialogs
     HeaderStats.js                         WP9   #total-pixels / #total-panels / #total-sections / #total-arc
-    SectionListPanel.js                    WP9   #wall-sections cards (verbatim templates), card handlers, collapse snapshot/restore,
-                                                 #add-section-btn
-    SectionLogosPanel.js                   WP9   #section-logos-container rows (verbatim template) + upload/clear/position/scale
+    SectionListPanel.js                    WP9   #wall-sections cards (verbatim templates; 06 T1: the offset hint's class),
+                                                 card handlers, collapse snapshot/restore, #add-section-btn
+    SectionLogosPanel.js                   WP9   #section-logos-container rows (verbatim template; 06 T1: logo-row classes instead
+                                                 of the inline styles) + upload/clear/position/scale
     WallDisplayPanel.js                    WP9   Mesh-mode labels, wireframe/frame, LED sim + layout, panel IDs + styling inputs
     CameraPanel.js                         WP7   Camera Frustum Preview section: toggles, lens, pose inputs, readouts, reset,
                                                  safe-distance controls
@@ -279,7 +284,8 @@ tests/
     compare.mjs                            WP1; 08 P2-0: `--expect` expected-change manifests and the `JITTER` status from
                                                  expected/_nondeterminism.json (08 8.2; the Phase-1 WARN_ONLY list is gone);
                                                  01 T2: `exclude`, the rect allowances `rects` + `size` (per-pixel rule,
-                                                 frame-size check) and --diff-bbox
+                                                 frame-size check) and --diff-bbox; 06 T1: --ignore-keys a,b (drops those
+                                                 JSON keys on both sides: the class-key cross-check of 06 8.4)
     measure-rects.mjs                      01 T2  writes the measured `rects` and `size` of the manifest entries that
                                                  carry a `measure` object (DOM rects of the candidate page per frame)
     lib/palette.mjs                        01 T2  livePalette(app): probe colours from the running page (section colours,
@@ -303,12 +309,16 @@ tests/
     check.mjs                              WP1   layering, DOM-id ownership, call-time globals, import case, LEGACY parity,
                                                  Strategies references, event subscribers, module-level state, domain field writers;
                                                  01 F1-1: rule 11, no renderOrder literal >= 900 outside core/renderOrder.js;
-                                                 01 F1-2: App.js looks up exactly eight ids (rule 4: + #debug-normals-stats)
-    fixtures/                              WP1   synthetic trees used to self-test check.mjs
+                                                 01 F1-2: App.js looks up exactly eight ids (rule 4: + #debug-normals-stats);
+                                                 06 T1: rule 12 (06 R-B2), the inline style="" attributes of index.html
+                                                 declare only display / width / height, without tokens or colour literals
+    fixtures/                              WP1   synthetic trees used to self-test check.mjs (06 T1: + index.html in good/bad)
     css-slices.mjs                         WP2   proves css/01-*.css .. css/12-*.css == original lines 12-869 (normalised) in
                                                  link order (normalisation: CSS whitespace only, i.e. space, tab, LF, CR, FF;
                                                  each file must hold exactly one leading header comment and no other comment);
-                                                 01 F1-2: scoped to the 01-12 slices (07 S7), so css/features/ is never scanned
+                                                 01 F1-2: scoped to the 01-12 slices (07 S7), so css/features/ is never scanned;
+                                                 06 T1: --report-only (07 S7: every difference is printed, exit 0), the gate
+                                                 mode since 06 T1 changed the slices
   unit/                                    run with: node --test "tests/unit/**/*.test.mjs"
                                            (quoted glob, Node 22.7+: `--test` globs need Node 21+, and the repository has
                                            no package.json, so the typeless js/*.js modules load as ESM only through
@@ -325,9 +335,12 @@ tests/
                                                  harness files (GOLDEN_DIR; Strategies.mesh.*); since 08 P2-1b it writes the
                                                  synthetic 70,000-vertex glTF to the git-ignored unit/out/ (manual validator check)
     camera-hub.test.mjs                    WP7   CameraHub/CameraController pipeline order with spies
-    wall-controller.test.mjs               WP9   rebuild policy: run counts and tile-cache clears for the 24 legacy sites
+    wall-controller.test.mjs               WP9   rebuild policy: run counts and tile-cache clears for the 24 legacy sites;
+                                                 legacy parity runs the legacy source with TEMPLATE_EDITS applied (06 T1: the
+                                                 class map of the logo rows and the offset hint)
     compare.test.mjs                       08 P2-0  compare.mjs --expect semantics and JITTER on synthetic output trees;
-                                                 01 T2: rects, size, exclude and --diff-bbox on synthetic PNG pairs
+                                                 01 T2: rects, size, exclude and --diff-bbox on synthetic PNG pairs;
+                                                 06 T1: --ignore-keys
     normal-lines.test.mjs                  01 F1-1  NormalLines: auto length table, strides, 6.6 line counts, writers, stats
                                                  strings, the AC 14a cap benchmark (200 sections x 50x20)
     material-override.test.mjs             01 F1-1  MaterialOverride with plain objects (Material[] kept; restore before dispose)
@@ -365,12 +378,16 @@ tools/
                                                  after Math.fround, unit NORMALs, TEXCOORD_0 count, references (08 8.2)
 .github/
   workflows/ci.yml                         07 G1  static checks and unit tests on pushes to refactor/** and feature/** and on
-                                                 pull requests (no npm install; actions pinned by commit SHA, 07 Q13)
+                                                 pull requests (no npm install; actions pinned by commit SHA, 07 Q13);
+                                                 06 T1: css-slices.mjs --report-only (07 S7)
   dependabot.yml                           07 G1  weekly updates of the pinned GitHub Actions
 index.html                                 WP10  head + markup verbatim; 12 <link>s; <script type="module" src="js/main.js">;
                                            01 F1-2: the feature markup (view divider, #toggle-normals, #debug-view-btn, the
                                                  debug popover, #viewport-top-stack with the legend, #debug-view-status), the
-                                                 css/features/debug-view.css <link> before 12-responsive.css, badge " N=normals"
+                                                 css/features/debug-view.css <link> before 12-responsive.css, badge " N=normals";
+                                           06 T1: the css/99-utilities.css <link> last; the static inline styles became its
+                                                 classes (only JS-owned display / width / height stay inline, rule 12); the
+                                                 commented-out .grid-lines element removed
 README.md                                  WP10  "How to run locally" section updated (static server required)
 docs/ARCHITECTURE.md, docs/REFACTOR_PLAN.md       this contract and the plan (amended by whoever changes a contract)
 ```
@@ -2065,7 +2082,8 @@ export class SectionListPanel {
   bindAddButton()
   /** Verbatim renderWallSections 3893-4078: container.innerHTML = ''; renderedSections = wall.sections.slice();
    *  for each (section, index): section.ensureName(index); warning block template (verbatim 3909-3916, multi-line, ONLY in render);
-   *  card = div.className 'wall-section collapsed'; card.innerHTML = verbatim template 3920-3980 with EVERY interpolation of a
+   *  card = div.className 'wall-section collapsed'; card.innerHTML = verbatim template 3920-3980 (06 T1: the offset hint is
+   *  <div class="curve-hint curve-hint--small"> instead of its inline font-size: 9px) with EVERY interpolation of a
    *  section value passed through legacyHtml() (LEGACY(B-M4)): name (title and input value), colour (dot style and colour input),
    *  id, the numeric field values (imported strings are not coerced, B-L8), summary (it contains the raw panelCols /
    *  panelRows) and hint; the six swatches stay literal; the 4K warning's canvasWidth / canvasHeight are products of two
@@ -2109,7 +2127,10 @@ export class SectionLogosPanel {
    *  @param {{doc, project: Project, wallController: WallController, bus}} deps */
   constructor({ doc, project, wallController, bus })
   /** Verbatim renderSectionLogosUI 2189-2254: if (!container) return; innerHTML = ''; per section: hasLogo = logos.hasImage(section.id);
-   *  logoData = logos.get(section.id) || { position: 'center', scale: 0.3 }; div.style.cssText verbatim; template verbatim with
+   *  logoData = logos.get(section.id) || { position: 'center', scale: 0.3 }; div.className = 'logo-row' (06 T1; legacy:
+   *  div.style.cssText); template verbatim except the 06 T1 classes of css/99-utilities.css that replaced its inline styles
+   *  (the name div logo-row__title, the two labels logo-row__label, the scale input logo-row__input; the file input keeps
+   *  its inline display: none), with
    *  legacyHtml(section.name || 'Wall ' + (index + 1)) (LEGACY(B-M4)) and every raw section.id interpolation
    *  (the seven data-section-id attributes; imported ids can be arbitrary strings) also through legacyHtml; computed
    *  numbers (the scale percentage) and the conditional class / 'selected' strings stay unwrapped; append; then listeners: file inputs change -> #onUpload,
@@ -2933,7 +2954,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 | **3. Configurable pivot + offset** | `WallPivot`/`PivotMode` in `Wall` (identity); `WallLayout.firstEdge/lastEdge/bounds()/pivotPoint(mode)` including "middle of entire wall" = midpoint of the first section's first edge and the last section's last edge on the floor; the single `framingBounds` switch for the four flat-bounds consumers; the single `layoutProject()` entry. | A baked translation in `layoutProject`: stage frame `−(P.x, 0, P.z)`, export frame `−P`, P = anchor + offset (1.4). The raw walk is translated first, and spec 02's `applySectionOffsets(out)` builds its section matrices from the translated layout (07 C32). **No wall root transform, ever:** the identity `wallGroup` transform is a unit-tested invariant (03 §5.1, §5.9 #2). `ui/PivotPanel`; a pivot Selectable + marker view; switch `framingBounds` to pivot/bounds (fixes B-L2); optional re-expression of camera/prop poses; schema v2. |
 | **4. Clean 0..1 UVs + UV viewer/editor** | UV strategies in one builder function per consumer; `TextureAtlas` as the single source of offsets, widths and start columns (yields per-section `uvRects`); `PanelIdRenderer.sectionCanvas()` for the viewer background; mesh tags; the selection registry; `PreviewWindow`'s resize handle as the floating-panel pattern. | `'per-section'` / `'atlas-pixel-accurate'` strategies (fix B-M5/B-M6) and a baked per-section `uvTransform`; glTF TEXCOORD_0; `ui/UVViewer.js` (2D canvas; subscribes to `SELECTION_CHANGED` and `WALL_REBUILT`); `ui/FloatingPanel.js` extracted from `PreviewWindow`. |
 | **5. HDRI projection (+ reflective car)** | `DisplaySettings.content` enum (`'color' \| 'ledSim' \| 'panelIds'`, ready for `'hdri'`); `LEDMaterialFactory` as the only wall-material constructor; `ResourceTracker` for HDR/PMREM disposal; `SceneManager` owns the main renderer and the helper registry; the second renderer is encapsulated in `PreviewWindow`; `PropView` base with `buildMesh()`; `CineCamera` lens math for the default projection point. | `ContentMode.HDRI` + `render/HdriProjectionMaterial.js` (wall and dome); `ui/HdriPanel.js` + the projection-point Selectable (`'hdri-point'`, kind `'projector'`, 07 C36); the second renderer is replaced by spec 07's `PreviewPass` (scissor rendering, R1/R2; `SceneManager` keeps only `setEnvironment` and `setPunctualLightScale`), which excludes `LAYERS.HELPERS` (B-M9/B-M11, first fixed by 08 P2-10 or 07 R1/R2, 07 C31); the backdrop dome on `LAYERS.ENVIRONMENT`; `GltfCarPropView extends CarPropView`; colour management in `render/ColorManagement.js` as per-material patches (Option L on r128; Option G after 07 U3b); loaders from 07's `vendor/three-addons.js` factories (spec 05 §5.11 #17). |
-| **6. Morph branding** | `css/02-tokens.css` holds every `:root` token; `Theme.js` holds every scene/canvas colour, font, palette and export string, and every consumer receives it by injection from `App`; header and watermark markup in one place in `index.html`. | Role-based tokens; `theme/ThemeBridge.js` reading CSS variables into an object of `Theme`'s shape (one line in `App`); new `Brand` strings and filenames (+ a JSON `generator` field in v2); Morph logo SVG, favicon, valid author meta; inline styles -> classes; card swatches from `Palette`; re-baseline `ui_visual` and exports separately. Gizmo axis colours stay XYZ = RGB. |
+| **6. Morph branding** | `css/02-tokens.css` holds every `:root` token; `Theme.js` holds every scene/canvas colour, font, palette and export string, and every consumer receives it by injection from `App`; header and watermark markup in one place in `index.html`. | Role-based tokens; `theme/ThemeBridge.js` reading CSS variables into an object of `Theme`'s shape (one line in `App`); new `Brand` strings and filenames (+ a JSON `generator` field in v2); Morph logo SVG, favicon, valid author meta; inline styles -> classes; card swatches from `Palette`; re-baseline `ui_visual` and exports separately. Gizmo axis colours stay XYZ = RGB. Landed so far (docs/improvements/06-morph-branding.md 8.4): T1 (the static inline styles of `index.html` and the two panel templates became the classes of `css/99-utilities.css`, linked last; dead CSS removed; `css-slices.mjs --report-only`; static rule 12; `compare.mjs --ignore-keys`). |
 
 ---
 
@@ -2942,9 +2963,9 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 | Gate | Command | Passes when |
 |---|---|---|
 | Unit (pure layers) | `node --test "tests/unit/**/*.test.mjs"` (quoted glob; Node 22.7+: Node 21+ treats `--test` arguments as globs, so the directory form `node --test tests/unit/` fails with "Cannot find module", and the typeless `js/*.js` modules (there is no package.json) load as ESM only through module-syntax detection, unflagged since Node 22.7; the glob does not match the `oracle/*.mjs` helpers) | all green. Required per module: rule tables equal the legacy expressions over a seeded grid (0, '', NaN, negatives, fractions, numeric strings); `computeWallLayout`, `WallMeshBuilder`, `TextureAtlas`, `PanelNaming` equal the verbatim oracle with `Object.is` on every number over fuzzed sections (string fields, fractional cols, NaN/duplicate ids, empty walls); `ObjExporter`, `GltfExporter`, `ProjectSerializer` produce **byte-identical** text/JSON to the oracle (the oracle comparisons inject `LegacyProfiles.mesh.*`, the exact Phase-1 profiles, from 08 P2-0 on) and to the golden harness files of `default` and the 6 config scenarios in all 3 modes (when `GOLDEN_DIR` exists); `CameraHub`/`CameraController` step order with spies; `WallController` rebuild counts for every row of 6.2. Two Node-vs-Chrome facts the byte comparisons handle: (1) the goldens were captured in Chrome, whose `Math.atan2` is correctly rounded, while Node 24's V8 still uses fdlibm's `atan2` (last-ulp differences for about 20% of arguments), so any Node-side byte comparison of full-precision `atan2`-derived values against a Chrome golden (the panel-mode glTF accessor min/max of curved walls) installs a correctly rounded `atan2` for the duration of the test; (2) the NaN bit pattern written into a `Float32Array` is implementation-defined (B-L8 garbage imports give NaN positions), so the oracle fuzz canonicalises NaN inside float32 POSITION views on both sides before comparing; the goldens contain no NaN and are compared raw. |
-| Static | `node tests/static/check.mjs`, `node tests/static/css-slices.mjs` | layering table; DOM-id ownership; no `window`/`document` globals outside `vendor/`, `ui/dom.js`, `App.js`, `main.js` (injected `doc`/`win` everywhere else); import specifiers relative, `.js`, case-exact; no module-level `let`/`var`; LEGACY parity (8.3); every `Strategies` leaf referenced (8.1); every `Events` key emitted and (except `WALL_REBUILT`) subscribed; domain fields written only by the writers of section 4; no numeric `renderOrder` literal >= 900 outside `core/renderOrder.js` (rule 11, 01 F1-1; every spec, 07 S10); CSS slices reproduce lines 12-869 (the `css/01-*.css` to `css/12-*.css` slices only: feature stylesheets in `css/features/` are not scanned, 07 S7, since 01 F1-2). Interpretation (as implemented): a `window`/`document` token in a pure-layer file is reported under both the globals rule and the purity rule; the domain-writer rule treats every assignment operator as a write (`=`, all compound and logical assignments, `++`, `--`). |
+| Static | `node tests/static/check.mjs`, `node tests/static/css-slices.mjs --report-only` (since 06 T1; 07 S7) | layering table; DOM-id ownership; no `window`/`document` globals outside `vendor/`, `ui/dom.js`, `App.js`, `main.js` (injected `doc`/`win` everywhere else); import specifiers relative, `.js`, case-exact; no module-level `let`/`var`; LEGACY parity (8.3); every `Strategies` leaf referenced (8.1); every `Events` key emitted and (except `WALL_REBUILT`) subscribed; domain fields written only by the writers of section 4; no numeric `renderOrder` literal >= 900 outside `core/renderOrder.js` (rule 11, 01 F1-1; every spec, 07 S10); the inline `style=""` attributes of `index.html` declare only `display`, `width` and `height`, with no `var(--...)` and no colour literal (rule 12, 06 R-B2, since 06 T1); CSS slices: the differences of `css/01-*.css` .. `css/12-*.css` from lines 12-869 are reported, not failed, since 06 T1 changed the slices on purpose (`--report-only`, 07 S7; feature stylesheets in `css/features/` and `css/99-utilities.css` are never scanned). Interpretation (as implemented): a `window`/`document` token in a pure-layer file is reported under both the globals rule and the purity rule; the domain-writer rule treats every assignment operator as a write (`=`, all compound and logical assignments, `++`, `--`). |
 | Golden master | `node tests/regression/run.mjs --root . --out <cand>` (always a full run) then `node tests/regression/compare.mjs <baseline> <cand> --expect tests/regression/expected/<commit-id>.json` (Phase 2 onwards; Phase 1 compared without `--expect`) | exit 0. **Phase 2 onwards (08 P2-0; every spec, every golden-changing commit): the baseline of a commit is the harness output of its parent commit (08 8.1); every golden-changing commit carries an expected-change manifest `tests/regression/expected/<commit-id>.json`, in which every difference must be declared and every declared change must happen (a within-tolerance PASS never satisfies an entry; an invariance commit has an empty `expect` list); `tests/regression/expected/_nondeterminism.json` is the only standing allowance (the overlay-glyph jitter described below, reported as `JITTER` within at most 1 level and 8 pixels on the listed screenshots); `run.mjs --only` is for local iteration and never produces a promoted baseline; export commits also run `tools/check-orientation.mjs` and `tools/check-gltf.mjs` on the candidate outputs; a step whose screenshots may change only in known regions (01 F1-2, 06 T4b, 07 I4a) declares measured `rects` and `size` on its `--expect` entries (01 T2: every differing pixel inside them, except the allowlisted jitter of that screenshot outside them (F1-0c), and the capture of that size, or FAIL) and is reviewed with `--diff-bbox`. The procedure is documented in `tests/regression/README.md` ("Phase 2 re-baselining").** Phase 1: the baseline is captured from the pristine `index.html@cd3fd3f` (twice, self-consistent), including the extra scenarios of `tests/regression/scenarios-extra.mjs`. The only accepted WARNs are the 1-level overlay-glyph jitters documented in `tests/regression/README.md` ("Known nondeterminism"): a maximum channel difference of 1 in a few pixels that all lie on glyphs of DOM text composited over a WebGL canvas (the help badge, the pilot banner, the camera preview window's header and footer labels). Each such pixel is bistable: it flips between the same two values, in both directions, between captures. The original shows it too (between its two baseline captures, and in the `keyboard` screenshots WP1 first documented). With ES-module delivery the page can paint before `App.start()` runs (8.4), and the flips occur more often; they occur equally with the verbatim legacy script loaded as a module (integration step I-1). A same-browser A/B run showed identical overlay-free canvas pixels and an identical draw list (object, material and geometry ids, and draw order) for the original and the candidate. Any other WARN, a difference above 1 level, or a pixel outside those overlays is investigated and never accepted by re-capturing the baseline. |
-| Continuous integration (07 G1) | `.github/workflows/ci.yml` on every push to `refactor/**` and `feature/**`, on every pull request, and as the reusable check of the later deploy workflow | the Static gate (`check.mjs`, `css-slices.mjs`) and the Unit gate pass on Node 22 with no `npm install`; the golden-file unit tests skip there (no `GOLDEN_DIR`), so the golden master stays a local gate (08 8.1) until 07 G4 runs it in CI |
+| Continuous integration (07 G1) | `.github/workflows/ci.yml` on every push to `refactor/**` and `feature/**`, on every pull request, and as the reusable check of the later deploy workflow | the Static gate (`check.mjs`, `css-slices.mjs --report-only` since 06 T1) and the Unit gate pass on Node 22 with no `npm install`; the golden-file unit tests skip there (no `GOLDEN_DIR`), so the golden master stays a local gate (08 8.1) until 07 G4 runs it in CI |
 | Manual (not automatable) | side by side with the original | WASD/QE orbit and pilot fly incl. the inverted vertical (B-M13); hover highlight; window resize; a GitHub Pages smoke test (case-sensitive paths, sub-path URLs). |
 
 ---
@@ -2956,7 +2977,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 3. Every ordered step a direct call; every event a pure mirror emitted at the legacy DOM-write point (R2, R3)?
 4. Domain values uncoerced; id-keyed maps with plain-object key semantics (R12)?
 5. Every quirk you touched is a `Strategies` key read at its 8.1 site (switch-and-throw, value or array comparison per 1.5) or a registered `LEGACY(B-xx)` tag (R7)? Every other bug mention written without the `LEGACY(` prefix?
-6. Markup and templates byte-identical; listeners attached in the legacy phase and order (R8, R11)?
+6. Markup and templates byte-identical (R8, Phase 1; since 06 T1 except the declared edits: the 99-utilities classes of `index.html` and the `TEMPLATE_EDITS` of `wall-controller.test.mjs`, which the legacy-parity tests apply to the legacy source); listeners attached in the legacy phase and order (R11)?
 7. No `try/catch` added (the only sanctioned ones since 08 P2-1a: `ProjectIO.#runExport` and the export size guards); async/sync shape unchanged (R13)?
 8. Imports follow the layer table and are case-exact; no globals (R9)?
 9. Unit, static and full golden-master gates green? From Phase 2 on: the commit's expected-change manifest written first, the parent commit's output as the baseline, and `compare.mjs --expect` exiting 0 (10)?
@@ -3101,3 +3122,10 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 
 **01 F1-2c, the DebugViewControls import boundary (review follow-up of F1-2)** (manifest `tests/regression/expected/F1-2c.json`, an invariance gate: empty `expect`; a unit test only):
 - 2.3: `debug-view-controls.test.mjs` checks that `ui/DebugViewControls.js` imports only `core/` and `ui/dom.js` (01 8.1, 3.11). Static rule 1 allows a `ui/` module `legacy/` and `domain/` too, so nothing enforced the narrower boundary before.
+
+**06 T1, inline styles to classes (Feature 6's first step, docs/improvements/06-morph-branding.md 8.4)** (manifest `tests/regression/expected/F6-T1.json`: only class keys change, the `classes` arrays of the `ui_visual` style snapshots that probe the sidebar or the preview window and the `class` of the buttons, selects and logo-row labels in every `ui_visual` text snapshot and of the logo-row scale input in the three 08 P2-0 logo-list probes (`p2_xss_names` logos_01/02, `p2_project_v2` logos_03); the cross-check `compare.mjs --ignore-keys classes,class` reports every output identical or equivalent, so every computed style, rect, text and screenshot is unchanged):
+- 1.2, 1.6 R8, 11 item 6: R8 (byte-identical markup, exact CSS slices) was a Phase-1 rule and ended with 06 T1.
+- 2.1: `css/99-utilities.css`, linked last (07 C52's link order), holds the classes that replaced the static inline styles; the dead `.grid-lines` (07, with its commented-out element) and `.section-color-0..7` (10) are deleted; `css-slices.mjs` runs `--report-only` (07 S7).
+- 2.2, 3.11: the `SectionListPanel` template gives the offset hint `curve-hint curve-hint--small`; `SectionLogosPanel` sets `div.className = 'logo-row'` and its template uses `logo-row__title`, `logo-row__label` and `logo-row__input`. The legacy-parity tests apply the same declared edits (`TEMPLATE_EDITS`) to the legacy source, so every other byte and DOM write is still compared.
+- 2.3, 10: static rule 12 (06 R-B2: inline styles of `index.html` declare only `display`, `width`, `height`, without tokens or colour literals) with `index.html` fixtures in `good/` and `bad/`; `css-slices.mjs --report-only` in the static gate and in CI; `compare.mjs --ignore-keys` (06 8.3) and its tests.
+- 9: Feature 6's landed steps.
