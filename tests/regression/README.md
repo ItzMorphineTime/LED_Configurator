@@ -343,7 +343,7 @@ through its expected-change manifest. They follow the same DOM-only rules as the
 |---|---|---|
 | `p2_xss_names` | Import six 2×1 sections named `<b id="xss-probe">B</b>`, `Say "hi"`, `A B`, `A_B`, `Dup`, `Dup` (the third with the colour `red;outline:3px solid lime`) in section mode; probe; panel IDs on; probe; rename card 1 (the second card) to `<i id="xss-probe2">i</i>` with one `input` event; probe; `section__export-obj`, `section__export-zip` | `sections_initial`, `sections_renamed`, `xss_probe_0{0,1,2}_*` (`xss_probe`, `xss_probe2`, and per card whether the colour injected an outline), `logos_0{1,2}_*`, MTL, ZIP entries and ZIP JSON |
 | `p2_zip_section_mode` | Import `flat3` in section mode, rename `Center` to `Center Stage`, `section__export-obj`, `section__export-zip` | `sections_renamed`, MTL, ZIP entries |
-| `p2_curved_safe_distance` | For `concave_offsets`, `convex`, `box_corner` and the inline `concave30` (one section, 6 × 4 panels of 500 mm, curve +30°), each on a fresh page: import; preview on; camera at (3, 1.5, 6); safe distance on; screenshot `<wall>`; `<wall>__export-safe-distance` | 4 screenshots, the OBJs (none while B-M1 throws), `console.json`, `downloads.json` |
+| `p2_curved_safe_distance` | For `concave_offsets`, `convex`, `box_corner` and the inline `concave30` (one section, 6 × 4 panels of 500 mm, curve +30°), each on a fresh page: import; preview on; camera at (3, 1.5, 6); safe distance on; screenshot `<wall>`; `<wall>__export-safe-distance` | 4 screenshots, the 4 OBJs (since 08 P2-5a; none while B-M1 threw), `console.json`, `downloads.json` |
 | `p2_zero_inputs` | Preview on; camera Y and Z = 0; card 0 width 0 and columns 2.5; panel IDs on with border 0; `combined__export-obj` | `camera_zero`, `sections_zero`, `stats_zero`, `ui_zero_border`, OBJ and MTL |
 | `p2_oversize_canvas` | Import one section of 70 × 2 panels with 1000 × 64 LEDs (a 70,000 × 128 px atlas) in section mode; `section__export-panel-ids`; `section__export-zip`; panel IDs on; screenshot `panel_ids_viewport` | `dialogs.json`, `console.json` (Export Panel IDs throws a `TypeError` today), `downloads.json`, ZIP entries and MTL (a 0-byte texture today), the screenshot |
 | `p2_mixed_content` | Import `mixed`; LED sim on (combined), screenshot; layout `square`, screenshot; panel IDs on, screenshot | 3 screenshots |
@@ -655,9 +655,11 @@ The harness depends on this markup:
 
 ## Baseline facts worth knowing
 
-These were observed in the original app and are part of the golden master:
+These were observed in the original app and are part of the golden master until the Phase 2 fix named
+in parentheses changes them:
 
-- `camera`: Export Safe Distance OBJ throws `ReferenceError: downloadBlob is not defined`, so no file is produced.
+- `camera`: Export Safe Distance OBJ throws `ReferenceError: downloadBlob is not defined`, so no file is
+  produced (08 P2-5a: the OBJ downloads, with the legacy per-column band until P2-5b).
 - `large_wall`: Export glTF in panel mode throws `RangeError: Maximum call stack size exceeded`
   from `btoa(String.fromCharCode(...buffer))`, so no file is produced.
 - `import_edge`: after importing an empty wall, Add Section throws
@@ -671,7 +673,7 @@ These were observed in the original app and are part of the golden master:
 - `p2_xss_names`: `xss_probe` and (after the rename) `xss_probe2` are `true`, the third card's colour
   swatch gets the injected outline, and the second card's name input shows `Say ` (B-M4, B-L8, B-L16).
 - `p2_curved_safe_distance`: each of the four exports throws the B-M1 `ReferenceError`, so no OBJ is
-  produced; the `concave30` screenshot shows the folded band (B-M15).
+  produced (08 P2-5a: the four OBJs download); the `concave30` screenshot shows the folded band (B-M15).
 - `p2_oversize_canvas`: Export Panel IDs throws `TypeError: Failed to execute 'createObjectURL' on
   'URL': Overload resolution failed.` and downloads nothing; the ZIP holds a 0-byte texture (B-L4).
 - `p2_shortcut_filters`: `g` in the focused select turns translate mode on, Ctrl+G turns it off again,

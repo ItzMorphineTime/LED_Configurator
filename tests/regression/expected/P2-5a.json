@@ -1,0 +1,18 @@
+{
+  "commit": "P2-5a",
+  "bugs": ["B-M1"],
+  "expect": [
+    { "output": "camera/export-safe-distance__*.obj", "change": "added",
+      "reason": "Export Safe Distance OBJ downloads safe-distance-floor.obj through downloader.saveBlob (B-M1); the band keeps its legacy per-column geometry until P2-5b" },
+    { "output": "camera/{downloads,console}.json", "change": "modified", "each": true,
+      "reason": "the export-safe-distance step lists the downloaded file, and the ReferenceError 'downloadBlob is not defined' is gone" },
+    { "output": "p2_curved_safe_distance/*__export-safe-distance__*.obj", "change": "added", "each": true,
+      "reason": "the four walls' safe-distance OBJs (concave_offsets, convex, box_corner, concave30) now download" },
+    { "output": "p2_curved_safe_distance/{downloads,console}.json", "change": "modified", "each": true,
+      "reason": "the four export steps list their file, and the four ReferenceErrors are gone" }
+  ],
+  "mayChange": [
+    { "output": "large_wall/final__export-zip__led-wall-export.zip", "change": "modified",
+      "reason": "the bistable export-PNG pixels documented by P2-0b, seen again in this gate although nothing large_wall runs changed: textures/L3_PanelIDs.png (1970, 1003) and L4_PanelIDs.png (2026, 858), 1 level, 1 px each (3840x1920), flipping between the same two values as in the P2-0b gate and self-consistency runs" }
+  ]
+}

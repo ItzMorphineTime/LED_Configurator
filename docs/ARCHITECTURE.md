@@ -182,7 +182,7 @@ js/
     EventBus.js                            WP3   Events catalogue (frozen) + synchronous EventBus (throws on unknown event names)
   legacy/
     LegacyCompat.js                        WP3   Strategies (deep-frozen switches), legacy helpers (orDefault, legacyHtml,
-                                                 legacySpreadBase64, legacyMissingDownloadBlob), unsupportedStrategy, LEGACY_SITES
+                                                 legacySpreadBase64), unsupportedStrategy, LEGACY_SITES
   theme/
     Theme.js                               WP3   SceneTheme, CanvasTheme, UiColors, Palette, Brand, Theme (ThemeBridge-ready shape)
   domain/
@@ -422,10 +422,6 @@ export const legacyHtml = (s) => s;
 /** LEGACY(B-H3): btoa(String.fromCharCode(...bytes)). Throws RangeError ("Maximum call stack size
  *  exceeded") above ~125 KB in V8. Must be called at shallow stack depth (directly from the exporter). */
 export function legacySpreadBase64(bytes)
-
-/** LEGACY(B-M1): calls the undeclared identifier `downloadBlob(blob, filename)` so the engine throws
- *  the identical `ReferenceError: downloadBlob is not defined`. Never define downloadBlob anywhere. */
-export function legacyMissingDownloadBlob(blob, filename)
 
 /** Register of every tagged legacy site (sections 8.2 and 8.3). Frozen array of
  *  { id: 'B-M14', site: 'js/interaction/ViewportInput.js#attachPointer', behaviour: '...', fix: '...' }.
@@ -1741,7 +1737,8 @@ export class ProjectIO {
   async exportZIP()
   /** 2786-2827: group = safeDistance.object3D; if (!group) { dialogs.alert('Enable Safe Distance 3D visualization first'); return }
    *  text = objExporter.writeSafeDistance(group); blob = new Blob([text], {type: 'text/plain'});
-   *  legacyMissingDownloadBlob(blob, brand.files.safeDistanceObj)   LEGACY(B-M1): throws ReferenceError: downloadBlob is not defined */
+   *  downloader.saveBlob(blob, brand.files.safeDistanceObj)   (B-M1 fixed in 08 P2-5a: legacy called the undefined
+   *  `downloadBlob` and threw a ReferenceError; the band keeps its legacy per-column geometry until 08 P2-5b) */
   exportSafeDistanceOBJ()
   /** P-IMPORT (section 6.10), legacy importJSON 4967-5010. The parameter keeps the legacy name `e`, because the
    *  FileReader onload callback inside it names its own argument `event` (legacy importJSON(e) / reader.onload = (event) => ...). */
@@ -2326,7 +2323,7 @@ e.target.value = ''                                // synchronous reset (5009)
 
 ### 6.13 Exports
 
-All exports read the live project and a fresh `layoutProject(project)`; none reads the scene except the safe-distance OBJ (its group). See `ProjectIO` (section 3.10) for the exact sequences of `exportJSON`, `exportOBJ` (OBJ, then MTL after 100 ms), `exportGLTF`, `exportPanelIds` (async, `toBlob`), `exportZIP` (async; JSON -> OBJ -> MTL -> glTF -> textures -> `generateAsync` -> download) and `exportSafeDistanceOBJ` (alert or ReferenceError). Console and dialog behaviour must match the baseline: `RangeError: Maximum call stack size exceeded` for large panel-mode glTF (sync throw for glTF, unhandled rejection for ZIP), `ReferenceError: downloadBlob is not defined` for the safe-distance OBJ.
+All exports read the live project and a fresh `layoutProject(project)`; none reads the scene except the safe-distance OBJ (its group). See `ProjectIO` (section 3.10) for the exact sequences of `exportJSON`, `exportOBJ` (OBJ, then MTL after 100 ms), `exportGLTF`, `exportPanelIds` (async, `toBlob`), `exportZIP` (async; JSON -> OBJ -> MTL -> glTF -> textures -> `generateAsync` -> download) and `exportSafeDistanceOBJ` (alert or download; 08 P2-5a). Console and dialog behaviour must match the baseline: `RangeError: Maximum call stack size exceeded` for large panel-mode glTF (sync throw for glTF, unhandled rejection for ZIP).
 
 ---
 
@@ -2456,7 +2453,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | B-H3 | glTF RangeError; ZIP dies silently (S-3, U-4) | `Strategies.gltfBase64` (`legacySpreadBase64`); no try/catch in `ProjectIO.exportZIP` | chunked encoder + guard |
 | B-H4 | Preview off in pilot: alert, stuck in pilot (O-8) | `CameraController.setPreviewEnabled` (order) + `PilotController.toggle` guard | exit pilot before clearing `enabled` |
 | B-H5 | Wall textures leak (memory only) | `Strategies.dispose.wallTextures` | Landed in Phase 1C H1 (`dispose.wallTextures = true`; no tag site) |
-| B-M1 | Safe-distance OBJ throws ReferenceError (K-3) | `ProjectIO.exportSafeDistanceOBJ` -> `legacyMissingDownloadBlob` | `downloader.saveBlob` |
+| B-M1 | Safe-distance OBJ throws ReferenceError (K-3) | `ProjectIO.exportSafeDistanceOBJ` (fixed) | Landed in 08 P2-5a (`downloader.saveBlob`; no tag site) |
 | B-M2 | Index-based MTL texture path (R-3) | `PanelNaming.mtlTextureFile` | name-based |
 | B-M3 | ZIP JSON lacks angle offsets (U-1) | `Strategies.zipJsonIncludesAngleOffset` | `true` |
 | B-M4 | Unescaped names/colours/values in innerHTML (V-8) | `legacyHtml` (every template interpolation in `SectionListPanel`, `SectionLogosPanel`) | real escaping + import validation |
@@ -2520,7 +2517,6 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/legacy/LegacyCompat.js#orDefault` | B-L9 |
 | `js/legacy/LegacyCompat.js#legacyHtml` | B-M4 |
 | `js/legacy/LegacyCompat.js#legacySpreadBase64` | B-H3 |
-| `js/legacy/LegacyCompat.js#legacyMissingDownloadBlob` | B-M1 |
 | `js/domain/WallSection.js#constructor` | B-L8 |
 | `js/domain/WallSection.js#FIELD_RULES` | B-L15 |
 | `js/domain/WallSection.js#exceeds4K` | B-L17 |
@@ -2581,7 +2577,6 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/app/ProjectIO.js#exportOBJ` | B-L7 |
 | `js/app/ProjectIO.js#exportPanelIds` | B-L4 |
 | `js/app/ProjectIO.js#exportZIP` | B-H3, B-L4, B-L14 |
-| `js/app/ProjectIO.js#exportSafeDistanceOBJ` | B-M1 |
 | `js/ui/SectionListPanel.js#render` | B-M4 |
 | `js/ui/SectionListPanel.js#patchCard` | B-L16 |
 | `js/ui/SectionLogosPanel.js#render` | B-M4, B-L8 |
@@ -2592,7 +2587,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `css/09-viewport-tools.css` (header comment; documentation-only) | B-L24 |
 | `index.html` (markup, untagged; documentation-only) | B-L36 |
 
-Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left). B-L24 has two documentation-only entries, one per stylesheet: the header comment of each of the two stylesheets carries a paragraph `Legacy note B-L24 (documentation-only, preserved): ...`, which does not use the reserved token `LEGACY(` (CSS is untagged; rule 6 scans only `js/`); grep `B-L24` or `Legacy note` to find it.
+Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left). B-L24 has two documentation-only entries, one per stylesheet: the header comment of each of the two stylesheets carries a paragraph `Legacy note B-L24 (documentation-only, preserved): ...`, which does not use the reserved token `LEGACY(` (CSS is untagged; rule 6 scans only `js/`); grep `B-L24` or `Legacy note` to find it.
 
 How rule 6 reads these rows (as implemented in `tests/static/check.mjs`): the comparison is per file, so a tag may sit in a private helper that only the named method calls (for example `ProjectSerializer.#readV1` for `#read`, `ObjExporter.#writeCombined` / `#stripNormalLine` for `#write`, `GltfExporter.#writeCombined` for `#write`); a tag wrapped across JSDoc continuation lines counts as one tag (placeholders are still rejected); and a row whose `js/` file does not exist is reported, so a typo in a site path cannot bypass the check.
 
@@ -2695,3 +2690,8 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 
 **08 P2-0 follow-up (manifest P2-0b)** (harness only; no application behaviour change):
 - 2.3: `AppPage.reload()` keeps the dialogs of the page it leaves and `run.mjs` writes every page's dialogs to `dialogs.json` (`AppPage.allDialogs()`); `p2_project_v2` names its `toggle_aria` probes `toggle_aria_<step>.json` (08 6.18, 8.3; P2-13c's manifest pattern) and records the stored SVG text of step 8 (`stored_svg_08_hostile.json`, read from the Export All archive; 08 8.3, criterion 49).
+
+**08 P2-5a, B-M1 landed** (manifest `tests/regression/expected/P2-5a.json`; the first Phase 2 fix, merged before P2-1a wraps every export in its error alert):
+- 3.10, 6.13: `ProjectIO.exportSafeDistanceOBJ` downloads the floor OBJ through `downloader.saveBlob(blob, brand.files.safeDistanceObj)`. The band keeps its legacy per-column geometry (faces -Y, B-L29; un-mitred, B-M15) until 08 P2-5b.
+- 2.2, 3.3: `legacyMissingDownloadBlob` is deleted.
+- 8.2: the B-M1 row is kept with a `Landed` fix cell; 8.3: its rows `LegacyCompat.js#legacyMissingDownloadBlob` and `ProjectIO.js#exportSafeDistanceOBJ` are deleted, so `LEGACY_SITES` no longer lists B-M1.

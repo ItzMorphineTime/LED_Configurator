@@ -904,19 +904,21 @@ describe('ProjectIO use cases', () => {
     assert.deepEqual(log3.find((e) => e[0] === 'folder.file'), ['folder.file', 'textures/Wall_1_PanelIDs.png', { base64: true }, '']);
   });
 
-  test('exportSafeDistanceOBJ: alert without a group; ReferenceError downloadBlob is not defined with one (B-M1)', async () => {
+  test('exportSafeDistanceOBJ: alert without a group; with one, the OBJ Blob is downloaded (B-M1 fixed in 08 P2-5a)', async () => {
     const log = [];
     fakeIO(Project.createDefault(), log).exportSafeDistanceOBJ();
     assert.deepEqual(log, [['alert', 'Enable Safe Distance 3D visualization first']]);
 
     const group = { traverse: (cb) => cb({ isMesh: true, geometry: { attributes: { position: { count: 1, getX: () => 1, getY: () => 2, getZ: () => 3 } }, index: null } }) };
     const blobs = [];
-    class FakeBlob { constructor(parts, options) { blobs.push([parts, options]); } }
+    class FakeBlob { constructor(parts, options) { this.parts = parts; this.options = options; blobs.push(this); } }
+    const log2 = [];
     await withGlobals([[globalThis, 'Blob', FakeBlob]], () => {
-      assert.throws(() => fakeIO(Project.createDefault(), [], { group }).exportSafeDistanceOBJ(),
-        (e) => e instanceof ReferenceError && e.message === 'downloadBlob is not defined');
+      assert.equal(fakeIO(Project.createDefault(), log2, { group }).exportSafeDistanceOBJ(), undefined);
     });
-    assert.deepEqual(blobs, [[[OBJ.writeSafeDistance(group)], { type: 'text/plain' }]]);
+    assert.equal(blobs.length, 1);
+    assert.deepEqual([blobs[0].parts, blobs[0].options], [[OBJ.writeSafeDistance(group)], { type: 'text/plain' }]);
+    assert.deepEqual(log2, [['saveBlob', 'safe-distance-floor.obj', blobs[0]]], 'one download, no alert');
   });
 
   test('importFromInputEvent: P-IMPORT (read, reset input synchronously; try/catch only around parse + read + apply)', async () => {

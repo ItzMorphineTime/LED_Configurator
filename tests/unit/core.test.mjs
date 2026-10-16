@@ -10,8 +10,9 @@ import { fileURLToPath } from 'node:url';
 
 import { Events, EventBus } from '../../js/core/EventBus.js';
 import {
-  Strategies, unsupportedStrategy, orDefault, legacyHtml, legacySpreadBase64, legacyMissingDownloadBlob, LEGACY_SITES,
+  Strategies, unsupportedStrategy, orDefault, legacyHtml, legacySpreadBase64, LEGACY_SITES,
 } from '../../js/legacy/LegacyCompat.js';
+import * as LegacyCompat from '../../js/legacy/LegacyCompat.js';
 import { SceneTheme, CanvasTheme, UiColors, Palette, Brand, Theme } from '../../js/theme/Theme.js';
 import { byId, flipToggle, setDisplay, createDialogs } from '../../js/ui/dom.js';
 
@@ -294,11 +295,10 @@ describe('legacySpreadBase64', () => {
   });
 });
 
-describe('legacyMissingDownloadBlob', () => {
-  test('throws ReferenceError: downloadBlob is not defined (B-M1)', () => {
+describe('retired legacy helpers', () => {
+  test('legacyMissingDownloadBlob is gone (B-M1 landed in 08 P2-5a: the safe-distance OBJ uses downloader.saveBlob)', () => {
+    assert.equal('legacyMissingDownloadBlob' in LegacyCompat, false);
     assert.equal(typeof globalThis.downloadBlob, 'undefined');
-    assert.throws(() => legacyMissingDownloadBlob({ size: 1 }, 'safe-distance-floor.obj'),
-      (err) => err instanceof ReferenceError && err.message === 'downloadBlob is not defined');
   });
 });
 
@@ -361,6 +361,9 @@ describe('LEGACY_SITES', () => {
 
   // Quirks fixed since Phase 1 keep their 8.2 row, with a fix cell starting with 'Landed', but have no 8.3 site.
   const landed = [...register].filter(([, row]) => /^Landed\b/.test(row.fix)).map(([id]) => id);
+  // The Phase 2 fixes landed so far (docs/improvements/08-bugfix-roadmap.md section 10, merge order), each with the
+  // 08 commit its 8.2 fix cell names. Every landing commit adds its id here.
+  const PHASE2_LANDED = { 'B-M1': 'P2-5a' };
 
   test('ids cover every bug id B-H1..B-H5, B-M1..B-M16, B-L1..B-L36 except the landed fixes, and nothing else', () => {
     const expected = new Set();
@@ -371,12 +374,15 @@ describe('LEGACY_SITES', () => {
     assert.deepEqual(new Set(LEGACY_SITES.map((e) => e.id)), expected);
   });
 
-  test('landed fixes (8.2 "Landed ...") are exactly the Phase 1C flips that are true in Strategies.dispose', () => {
+  test('landed fixes (8.2 "Landed ...") are exactly the Phase 1C flips true in Strategies.dispose and the Phase 2 fixes', () => {
     const flipped = [];
     if (Strategies.dispose.wallTextures === true) flipped.push('B-H5');
     if (Strategies.dispose.gizmo === true) flipped.push('B-L12');
-    assert.deepEqual(landed.slice().sort(), flipped.sort());
+    assert.deepEqual(landed.slice().sort(), [...flipped, ...Object.keys(PHASE2_LANDED)].sort());
     for (const id of landed) assert.ok(!LEGACY_SITES.some((e) => e.id === id), `${id} still has a LEGACY_SITES entry`);
+    for (const [id, commit] of Object.entries(PHASE2_LANDED)) {
+      assert.match(register.get(id).fix, new RegExp(`^Landed in 08 ${commit}\\b`), `${id}: 8.2 names ${commit}`);
+    }
   });
 
   test('behaviour and fix are taken from the ARCHITECTURE.md 8.2 register', () => {

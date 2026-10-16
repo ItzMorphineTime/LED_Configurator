@@ -190,7 +190,9 @@ High-resolution texture map showing:
 - Color-coded borders
 
 ### Safe Distance OBJ
-Export the calculated safe camera zone as 3D geometry.
+Export the calculated safe camera zone as 3D geometry (`safe-distance-floor.obj`).
+
+Release note: this export used to fail without downloading anything; it now downloads the file. Until the next update the floor's faces point down (-Y), and on curved or cornered walls the band is still built from separate per-column quads.
 
 ---
 

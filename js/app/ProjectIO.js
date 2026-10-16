@@ -13,7 +13,7 @@
 
 import { computeAtlas } from '../geometry/TextureAtlas.js';
 import { zipTextureFileName } from '../geometry/PanelNaming.js';
-import { Strategies, legacyMissingDownloadBlob } from '../legacy/LegacyCompat.js';
+import { Strategies } from '../legacy/LegacyCompat.js';
 
 /**
  * The dialogs facade (ui/dom.js createDialogs).
@@ -230,10 +230,10 @@ export class ProjectIO {
 
   /**
    * Export Safe Distance OBJ: alerts when there is no safe-distance group; otherwise builds the text and Blob
-   * and calls the never-defined legacy download helper.
-   * Ports: index.html@cd3fd3f lines 2786-2827.
-   * Side effects: an alert, or a thrown ReferenceError (no download).
-   * @throws {ReferenceError} downloadBlob is not defined (whenever the group exists)
+   * and downloads it (B-M1 fixed in 08 P2-5a: legacy called a download helper that was never defined, so every
+   * click threw a ReferenceError). The band keeps its legacy per-column geometry until 08 P2-5b.
+   * Ports: index.html@cd3fd3f lines 2786-2827 (the download call of 2826 is the Downloader's).
+   * Side effects: an alert, or one download (brand.files.safeDistanceObj, text/plain).
    */
   exportSafeDistanceOBJ() {
     const safeDistanceMesh = this.#safeDistance.object3D;
@@ -245,9 +245,7 @@ export class ProjectIO {
     const objContent = this.#objExporter.writeSafeDistance(safeDistanceMesh);
 
     const blob = new Blob([objContent], { type: 'text/plain' });
-    // LEGACY(B-M1): legacy calls the undefined `downloadBlob`, so every click with a mesh present throws
-    // `ReferenceError: downloadBlob is not defined` and nothing is downloaded.
-    legacyMissingDownloadBlob(blob, this.#brand.files.safeDistanceObj);
+    this.#downloader.saveBlob(blob, this.#brand.files.safeDistanceObj);
   }
 
   /**

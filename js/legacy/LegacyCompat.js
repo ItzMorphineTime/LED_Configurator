@@ -3,15 +3,14 @@
  * The single home of every output-affecting legacy switch and helper of Phase 1:
  * - `Strategies`: deep-frozen switches, each read at exactly one site (ARCHITECTURE.md 8.1);
  * - `LegacyProfiles`: the exact Phase-1 mesh profiles, read only by the oracle tests (ARCHITECTURE.md 3.3);
- * - legacy helpers that reproduce a preserved quirk (`orDefault`, `legacyHtml`, `legacySpreadBase64`,
- *   `legacyMissingDownloadBlob`);
+ * - legacy helpers that reproduce a preserved quirk (`orDefault`, `legacyHtml`, `legacySpreadBase64`);
  * - `unsupportedStrategy`, thrown by every switch-and-throw reader for a non-legacy value (ARCHITECTURE.md 1.5);
  * - `LEGACY_SITES`, the machine-readable register of every tagged legacy site.
  * The human-readable register is docs/ARCHITECTURE.md section 8 (8.1 switches, 8.2 quirks, 8.3 tag sites).
  * A later fix flips one value (plus its new code branch) or edits one tagged site, updates LEGACY_SITES and
  * re-baselines only the affected golden-master outputs.
- * Legacy source: index.html@cd3fd3f 2826 (downloadBlob call), 4902 (btoa spread), every `|| default` input rule,
- * every innerHTML template interpolation.
+ * Legacy source: index.html@cd3fd3f 4902 (btoa spread), every `|| default` input rule, every innerHTML template
+ * interpolation.
  * Layer: legacy (imports no other directory of js/).
  */
 
@@ -130,22 +129,6 @@ export function legacySpreadBase64(bytes) {
 }
 
 /**
- * Reproduces the safe-distance OBJ download, which in legacy calls a function that was never defined.
- * LEGACY(B-M1): calls the undeclared identifier `downloadBlob(blob, filename)` so the engine throws
- * the identical `ReferenceError: downloadBlob is not defined`. Never define downloadBlob anywhere.
- * Ports: index.html@cd3fd3f line 2826.
- * Side effects: none (always throws before anything happens).
- * @param {Blob} blob
- * @param {string} filename
- * @returns {never}
- * @throws {ReferenceError} downloadBlob is not defined
- */
-export function legacyMissingDownloadBlob(blob, filename) {
-  // eslint-disable-next-line no-undef
-  downloadBlob(blob, filename);
-}
-
-/**
  * Quirk register (ARCHITECTURE.md 8.2): bug id -> [preserved behaviour, how the fix lands]. Module-private.
  * A fixed quirk keeps its row (its fix text starts with 'Landed') but has no TAG_SITES pair, so LEGACY_SITES
  * no longer lists it.
@@ -163,7 +146,7 @@ const QUIRKS = deepFreeze({
   'B-H5': ['Wall textures leak (memory only)',
     'Landed in Phase 1C H1 (`dispose.wallTextures = true`; no tag site)'],
   'B-M1': ['Safe-distance OBJ throws ReferenceError (K-3)',
-    '`downloader.saveBlob`'],
+    'Landed in 08 P2-5a (`downloader.saveBlob`; no tag site)'],
   'B-M2': ['Index-based MTL texture path (R-3)',
     'name-based'],
   'B-M3': ['ZIP JSON lacks angle offsets (U-1)',
@@ -277,7 +260,6 @@ const TAG_SITES = deepFreeze([
   ['js/legacy/LegacyCompat.js#orDefault', ['B-L9']],
   ['js/legacy/LegacyCompat.js#legacyHtml', ['B-M4']],
   ['js/legacy/LegacyCompat.js#legacySpreadBase64', ['B-H3']],
-  ['js/legacy/LegacyCompat.js#legacyMissingDownloadBlob', ['B-M1']],
   ['js/domain/WallSection.js#constructor', ['B-L8']],
   ['js/domain/WallSection.js#FIELD_RULES', ['B-L15']],
   ['js/domain/WallSection.js#exceeds4K', ['B-L17']],
@@ -338,7 +320,6 @@ const TAG_SITES = deepFreeze([
   ['js/app/ProjectIO.js#exportOBJ', ['B-L7']],
   ['js/app/ProjectIO.js#exportPanelIds', ['B-L4']],
   ['js/app/ProjectIO.js#exportZIP', ['B-H3', 'B-L4', 'B-L14']],
-  ['js/app/ProjectIO.js#exportSafeDistanceOBJ', ['B-M1']],
   ['js/ui/SectionListPanel.js#render', ['B-M4']],
   ['js/ui/SectionListPanel.js#patchCard', ['B-L16']],
   ['js/ui/SectionLogosPanel.js#render', ['B-M4', 'B-L8']],
