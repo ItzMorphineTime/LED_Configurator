@@ -168,12 +168,17 @@ const LEGACY_IDENTITY = Object.freeze([
     [/company-logo/g, 'third-party logo class'],
     [/rgba\(\s*0\s*,\s*240\s*,\s*255\b/g, 'legacy cyan'],
 ].map(Object.freeze));
-/** Rule 17 (06 R-B3b): the legacy product and file names, each with what it is (file names as whole tokens). */
+/**
+ * Rule 17 (06 R-B3b): the legacy product and file names, each with what it is. A file name matches only as a whole
+ * token, the boundary of compare.mjs --rename: no letter, digit, '_', '-' or '.' before it, and none of those after it
+ * except a '.' that does not continue the name (so 'textures/panel-ids.png' and 'panel-ids.png.' at the end of a
+ * sentence match; 'morph-led-wall-panel-ids.png' and 'panel-ids.png.bak' do not).
+ */
 const LEGACY_NAMES = Object.freeze([
     [/\bOutfit\b/g, 'legacy font'],
     [/LED Wall Configurator/g, 'legacy product name'],
     [/led-wall-config|led-wall-export/g, 'legacy file name'],
-    [/(?<![A-Za-z0-9_.-])(?:panel-ids\.png|PanelIDs_Atlas\.png|safe-distance-floor\.obj)(?![A-Za-z0-9_-])/g, 'legacy file name'],
+    [/(?<![A-Za-z0-9_.-])(?:panel-ids\.png|PanelIDs_Atlas\.png|safe-distance-floor\.obj)(?![A-Za-z0-9_-]|\.[A-Za-z0-9])/g, 'legacy file name'],
 ].map(Object.freeze));
 /** Rule 15 (06 R-B5): the primary CTA class and its one token. */
 const PRIMARY_CTA_CLASS = 'export-btn--primary';
@@ -1170,6 +1175,14 @@ const EXPECTED_BAD = Object.freeze([
     ['css/07-viewport.css', 17, 'legacy font "Outfit"'],
 ]);
 
+/**
+ * Lines of the bad fixture tree that a rule must NOT report (file, rule, line, why): the near misses of a detector,
+ * so a detector that matches too much is caught too.
+ */
+const CLEAN_IN_BAD = Object.freeze([
+    ['js/ui/PanelB.js', 17, 6, 'morph-led-wall-panel-ids.png and panel-ids.png.bak only contain a legacy file name'],
+]);
+
 async function selfTest() {
     let ok = true;
     const fail = (msg) => { ok = false; console.log(`  FAIL ${msg}`); };
@@ -1190,6 +1203,11 @@ async function selfTest() {
     for (const [file, rule, fragment] of EXPECTED_BAD) {
         if (!bad.violations.some((v) => v.file === file && v.rule === rule && v.message.includes(fragment))) {
             fail(`expected on the bad fixture: ${file} [rule ${rule}] ...${fragment}...`);
+        }
+    }
+    for (const [file, rule, line, why] of CLEAN_IN_BAD) {
+        for (const v of bad.violations.filter((x) => x.file === file && x.rule === rule && x.line === line)) {
+            fail(`not expected on the bad fixture (${why}): ${formatViolation(v)}`);
         }
     }
     console.log(`  ${bad.violations.length} violations, rules fired: ${[...fired].sort((a, b) => a - b).join(', ')}`);

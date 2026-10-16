@@ -353,10 +353,12 @@ tests/
                                                  every assets/brand/ reference case-exact, every brand file but NOTICE.md
                                                  referenced); 06 T6b: rule 17 (R-B3b, no legacy product or file name: Outfit,
                                                  LED Wall Configurator, led-wall-config, led-wall-export, the whole tokens
-                                                 panel-ids.png, PanelIDs_Atlas.png, safe-distance-floor.obj)
+                                                 panel-ids.png, PanelIDs_Atlas.png, safe-distance-floor.obj, with the token
+                                                 boundary of compare.mjs --rename: panel-ids.png.bak does not match)
     fixtures/                              WP1   synthetic trees used to self-test check.mjs (06 T1: + index.html in good/bad;
                                                  06 T4a: + css/ in good/bad, the bad tree's legacy residue; 06 T4b: +
-                                                 assets/brand/ in good/bad; 06 T6b: the bad tree's legacy names)
+                                                 assets/brand/ in good/bad; 06 T6b: the bad tree's legacy names, and its
+                                                 near misses, which the self-test asserts are not reported (CLEAN_IN_BAD))
     css-slices.mjs                         WP2   proves css/01-*.css .. css/12-*.css == original lines 12-869 (normalised) in
                                                  link order (normalisation: CSS whitespace only, i.e. space, tab, LF, CR, FF;
                                                  each file must hold exactly one leading header comment and no other comment);
@@ -3377,3 +3379,6 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 **06 T9, the README (docs/improvements/06-morph-branding.md 5.8, 9 AC 18-19, 10; Q2/A8, Q16)** (manifest `tests/regression/expected/F6-T9.json`, an invariance gate: empty `expect`; no app file changes):
 - 2.3 (file tree): `assets/brand/` gains `morph-primary-horizontal.svg` and `morph-dark-event-lockup.svg`, copied byte for byte from the brand source (SHA-256 equal), so it holds exactly the 8 owner-approved files of 06 5.8 plus `NOTICE.md` (which lists them); `README.md` shows them with `<picture>` (320 px), names the product, uses the Signal Red / Morph Black badge colours, names the export files and states in "Brand and licence" that the Morph marks are excluded from Apache-2.0. Static rule 16 holds (both files are referenced by the README). The GitHub social preview image is uploaded by the owner in the repository settings (no file in the repository).
 - 9: Feature 6's landed steps.
+
+**06 T6b2, rule 17 matches a legacy file name only as a whole token (review follow-up of 06 T6b)** (manifest `tests/regression/expected/F6-T6b2.json`, an invariance gate: empty `expect`; `tests/static` and documentation only):
+- 2.3, 10: static rule 17 (06 R-B3b) used the token boundary `(?![A-Za-z0-9_-])` after a legacy file name, so `panel-ids.png.bak`, which the bad fixture documents as a near miss, was reported as `panel-ids.png`. It now uses the boundary of `compare.mjs --rename` (a `.` after the name ends the token only when it does not continue the name), and the static self-test asserts that the bad fixture's near-miss line is not reported (`CLEAN_IN_BAD`); before, the self-test checked only that each expected violation occurred.

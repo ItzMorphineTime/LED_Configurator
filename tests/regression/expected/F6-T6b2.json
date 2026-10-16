@@ -1,0 +1,28 @@
+{
+  "commit": "F6-T6b2",
+  "bugs": [],
+  "expect": [],
+  "mayChange": [
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-T9 runs and the review run of 06 T9); this commit changes no app file"
+    },
+    {
+      "output": "p2_curved_safe_distance/box_corner.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas on the preview footer label row (1 level, 1 px at (920, 912), seen in the 06 T6a, T6b and T7 runs); this commit changes no app file"
+    },
+    {
+      "output": "p2_shortcut_filters/pilot_view_front.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas (1 level, 2 px, seen in the 06 T6b and T7 self-consistency runs); this commit changes no app file"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b); this commit changes no export"
+    }
+  ],
+  "notes": "Review follow-up of 06 T6b, invariance: static rule 17 (06 R-B3b) matches a legacy file name only as a whole token, with the token boundary of compare.mjs --rename (a '.' after the name counts only when it does not continue the name), so panel-ids.png.bak no longer fires while textures/panel-ids.png still does; the static self-test asserts that near miss of the bad fixture is not reported. tests/static and docs only: no app file changes, so no output may change."
+}
