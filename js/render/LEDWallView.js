@@ -102,9 +102,11 @@ export class LEDWallView {
     this.#tracker.track(wallGroup, { detach: () => this.#sceneManager.remove(wallGroup) });
     this.#tracker.track(frameGroup, { detach: () => this.#sceneManager.remove(frameGroup) });
 
-    // 3. Atlas bookkeeping (pure, PR1), then the mesh-mode dispatch.
+    // 3. Atlas bookkeeping (pure, PR1), then the mesh-mode dispatch. The material factory starts a new rebuild, so its
+    // panel-ID fallback warning (08 P2-1d) is given once per section and rebuild.
     const sections = layout.sections.map((sl) => sl.section);
     const atlas = computeAtlas(sections);
+    this.#materials.beginRebuild();
     if (meshMode === 'combined') {
       this.#buildCombined(layout, sections, atlas);
     } else if (meshMode === 'section') {

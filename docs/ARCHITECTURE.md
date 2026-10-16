@@ -291,6 +291,8 @@ tests/
     wall-controller.test.mjs               WP9   rebuild policy: run counts and tile-cache clears for the 24 legacy sites
     compare.test.mjs                       08 P2-0  compare.mjs --expect semantics and JITTER on synthetic output trees
     tools.test.mjs                         08 P2-0  tools/check-orientation.mjs and tools/check-gltf.mjs on hand-built files
+    materials.test.mjs                     08 P2-1d  PanelIdRenderer sizes and null canvases, LEDMaterialFactory's colour
+                                                 fallback and its warning (fake THREE installed as window.THREE)
 tools/
   serve.mjs                                WP1   zero-dependency static server for local development (correct .js MIME type)
   check-orientation.mjs                    08 P2-0  OBJ/glTF face orientation against the vertex normals (01 8.1, 08 8.2)
@@ -1010,7 +1012,8 @@ export class LEDWallView {
    *  2. wallGroup = new THREE.Group(); frameGroup = new THREE.Group();
    *     #tracker = new ResourceTracker({ disposeMaps: Strategies.dispose.wallTextures });
    *     #tracker.track(wallGroup, {detach: () => sceneManager.remove(wallGroup)}); the same for frameGroup
-   *  3. sections = layout.sections.map(sl => sl.section); atlas = computeAtlas(sections)   (pure, no THREE ids)
+   *  3. sections = layout.sections.map(sl => sl.section); atlas = computeAtlas(sections)   (pure, no THREE ids);
+   *     materials.beginRebuild()   (08 P2-1d: the panel-ID fallback warning is given once per section and rebuild)
    *     meshMode === 'combined' -> #buildCombined; === 'section' -> #buildSections;
    *     ELSE -> #buildPanels   LEGACY(B-L8): any unknown imported mode renders as panels   (1551-1557)
    *  4. if (display.showFrame) #buildFrames(layout)                                         (1559-1569)
@@ -1036,8 +1039,11 @@ Builders (private, allocation order = legacy statement order, R5):
 #### `js/render/LEDMaterialFactory.js`
 ```js
 export class LEDMaterialFactory {   // the ONLY constructor of wall materials (legacy triads 1664-1675, 1759-1769, 1783-1793)
-  /** @param {{display: DisplaySettings, panelIds: PanelIdRenderer, ledTiles: LEDPixelTextureFactory}} deps */
-  constructor({ display, panelIds, ledTiles })
+  /** @param {{display: DisplaySettings, panelIds: PanelIdRenderer, ledTiles: LEDPixelTextureFactory, win: Window}} deps
+   *  win: console for the 08 P2-1d warning */
+  constructor({ display, panelIds, ledTiles, win })
+  /** Called by LEDWallView.rebuild (step 3): the fallback warning below may be given again, once per section. (08 P2-1d) */
+  beginRebuild()
   /** panelIds on: canvas = panelIds.atlasCanvas(sections, atlas); texture = new THREE.CanvasTexture(canvas);
    *               texture.needsUpdate = true; MeshBasicMaterial({ map: texture, side, wireframe })
    *  else ledSim: MeshBasicMaterial({ map: ledTiles.tiled(atlas.totalLedX, atlas.totalLedY, color), side, wireframe }) with
@@ -1063,7 +1069,7 @@ export class LEDMaterialFactory {   // the ONLY constructor of wall materials (l
   #side()
 }
 ```
-Precedence: `display.panelIdsEnabled` first, then `display.ledSimEnabled`, then colour (the colour branch creates its `THREE.Color` here, after the geometry: PR6). `side`: `this.#side()` (a constant: no ids, cannot throw in Phase 1). `wireframe: display.wireframe`. The texture is always created before its material (legacy argument evaluation order).
+Precedence: `display.panelIdsEnabled` first, then `display.ledSimEnabled`, then colour (the colour branch creates its `THREE.Color` here, after the geometry: PR6). **Panel-ID fallback (08 P2-1d, B-L4, 08 6.3):** when `atlasCanvas` / `sectionCanvas` / `panelCanvas` returns `null` (the canvas would exceed `CANVAS_HARD_LIMITS`), the mesh gets its colour material instead (combined: `{ vertexColors: true, side, wireframe }`; section and panel: `#colorMaterial(section)`), and `` win.console.warn(`Panel IDs are not shown for "${name}": its ${w}×${h} px texture exceeds this browser's canvas limit.`) `` is called at most once per section (combined: once for the atlas, `name` = the section names joined with ", ") between two `beginRebuild()` calls, with the size from `panelIds.atlasSize/sectionSize/panelSize`. `side`: `this.#side()` (a constant: no ids, cannot throw in Phase 1). `wireframe: display.wireframe`. The texture is always created before its material (legacy argument evaluation order).
 
 #### `js/render/textures/LEDPixelTextureFactory.js`
 ```js
@@ -1098,16 +1104,21 @@ export class PanelIdRenderer {   // pure 2D canvas; creates no THREE objects; sh
    *  panelBorderColors[(col + row) % 3]; borderThickness = style.borderThickness * scale / 4; label
    *  `${columnLabel(col)}${(row + 1).toString()}`; fontSize = style.fontSize * scale / 4 || min(w, h) * 0.4 (=== 0 test);
    *  section name at fontSize * 0.25 when style.sectionLabelEnabled && section && section.name.
-   *  LEGACY(B-L19): no logo, sectionLabelFontSize ignored. @returns {HTMLCanvasElement} */
+   *  LEGACY(B-L19): no logo, sectionLabelFontSize ignored.
+   *  @returns {HTMLCanvasElement|null}  null, with no canvas created, when ledX * scale x ledY * scale does not satisfy
+   *  canvasFits (08 P2-1d; ledX >= 8,192 never does, scale >= 4) */
   panelCanvas(col, row, ledX, ledY, section)
   /** Verbatim 2052-2187 (flipped rows, cumulative column labels from startCol, centred section name, logo via
    *  the private #drawLogo 2115-2184 with logos.get(section.id); LEGACY(B-L35): no zero-size guard, tagged in
-   *  sectionCanvas at the #drawLogo call). sectionIndex is unused (kept for signature parity). @returns {HTMLCanvasElement} */
+   *  sectionCanvas at the #drawLogo call). sectionIndex is unused (kept for signature parity).
+   *  @returns {HTMLCanvasElement|null}  null, with no canvas created, when the sectionSize(section, overrideScale) canvas
+   *  does not satisfy canvasFits (08 P2-1d) */
   sectionCanvas(section, sectionIndex, overrideScale, startCol = 0)
   /** Verbatim 1680-1708 using the atlas: scale = atlas.pxPerLed; canvas totalLedX*scale x totalLedY*scale filled with
    *  the background; per section i: sectionCanvas(section, i, scale, atlas.entries[i].startCol) drawn at
    *  (atlas.entries[i].ledOffsetX * scale, (atlas.totalLedY - section.panelRows * section.ledY) * scale).
-   *  @returns {HTMLCanvasElement} */
+   *  @returns {HTMLCanvasElement|null}  null, with no canvas created, when the atlasSize canvas does not satisfy canvasFits
+   *  (08 P2-1d); the section canvases of an atlas that fits always fit (they are drawn at the atlas scale) */
   atlasCanvas(sections, atlas = computeAtlas(sections))
   /** 08 P2-1c (B-L4, 08 6.3): the size each canvas above would get, by arithmetic only (no canvas is created), so the
    *  exports can test canvasFits before drawing:
@@ -2383,7 +2394,7 @@ interaction = new InteractionState(); keyboard = new KeyboardState({ doc, win })
 sceneManager = new SceneManager({ canvas: byId(doc, 'three-canvas'), win, display: project.display, theme })
 pointerRay = new PointerRay({ sceneManager })
 ledTiles = new LEDPixelTextureFactory({ doc, display, theme }); panelIds = new PanelIdRenderer({ doc, style, logos, theme })
-materials = new LEDMaterialFactory({ display, panelIds, ledTiles })
+materials = new LEDMaterialFactory({ display, panelIds, ledTiles, win })
 wallView = new LEDWallView({ sceneManager, materials, builder: new WallMeshBuilder(Strategies.mesh.viewport), theme })
 rig = new CameraRigView({ sceneManager, bus, theme }); safeDistance = new SafeDistanceView({ sceneManager, doc, theme })
 preview = new PreviewWindow({ doc, win, cine, elements: { windowEl: #camera-preview-window, canvas: #camera-preview-canvas,
@@ -2514,7 +2525,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | B-L1 | Curve before the first panel (B-5) | `Strategies.curveBeforeFirstPanel` | owner decision |
 | B-L2 | Flat bounds for target/reset/D (H-3, J-1, J-9) | `Strategies.framingBounds` | true bounds / pivot |
 | B-L3 | Right-panel normals | `Strategies.mesh.viewport.normals` | `'averaged'` |
-| B-L4 | No canvas-size guard (`toBlob` null throws, ZIP `data:,`) | `ProjectIO.exportPanelIds/exportZIP` (fixed); the viewport panel-ID canvases (untagged) | Landed in 08 P2-1c (export size guards: `canvasFits`, M-EXP-2/3/4, ZIP pre-check and late skip; no tag site); the viewport fallback: 08 P2-1d |
+| B-L4 | No canvas-size guard (`toBlob` null throws, ZIP `data:,`) | `ProjectIO.exportPanelIds/exportZIP`, `PanelIdRenderer` + `LEDMaterialFactory` (fixed) | Landed in 08 P2-1c (export size guards: `canvasFits`, M-EXP-2/3/4, ZIP pre-check and late skip) and 08 P2-1d (viewport: a null panel-ID canvas falls back to the section colour with a console warning); no tag site |
 | B-L5 | Uint16 glTF indices | `Strategies.mesh.gltf.indexType` (fixed) | Landed in 08 P2-1b (glTF `mesh.gltf.indexType = 'auto'`, `indexWidth`; no tag site); the viewport index attribute: 08 P2-1e |
 | B-L6 | Combined exports use section 0's colour | `Strategies.exportCombinedColor` | per-section |
 | B-L7 | MTL second download, textures missing | `Strategies.mtlDownloadDelayMs` | bundle |
@@ -2753,3 +2764,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 3.9: `ProjectSerializer.write(project, {variant: 'zip', skipped})` writes `texture_file: null` and `ObjExporter.write({..., skipped})` omits the section-mode `map_Kd` for a texture the ZIP left out (a boolean per section until 08 P2-6 brings null texture names).
 - 3.10, 6.13: Export Panel IDs refuses an oversize atlas with M-EXP-2 (no canvas) and reports a null `toBlob` result with M-EXP-3; Export All (ZIP) runs the pre-check, the late `data:,` skip with the JSON/MTL re-write, and M-EXP-4 after the download (08 3.3 texts).
 - 8.2: the B-L4 row is kept with a `Landed` fix cell that names P2-1d for the viewport half; 8.3: the row `ProjectIO.js#exportPanelIds` is deleted and B-L4 leaves `ProjectIO.js#exportZIP`.
+
+**08 P2-1d, B-L4 landed for the viewport** (manifest `tests/regression/expected/P2-1d.json`; the viewport half had no tag):
+- 3.7: `PanelIdRenderer.atlasCanvas/sectionCanvas/panelCanvas` return `null` and create no canvas when the canvas would exceed `CANVAS_HARD_LIMITS`; `LEDMaterialFactory` (new dependency `win`, new `beginRebuild()`) then gives that mesh its colour material and warns once per section and rebuild; `LEDWallView.rebuild` step 3 calls `materials.beginRebuild()`. 7: `App` passes `win`.
+- 8.2: the B-L4 row is closed (`Landed` in P2-1c and P2-1d). 2.3: `tests/unit/materials.test.mjs` (fake THREE) checks the sizes, the null canvases, the fallback and the warning spy.

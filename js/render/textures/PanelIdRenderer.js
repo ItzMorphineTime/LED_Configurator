@@ -3,13 +3,14 @@
  * The panel-ID canvases: one canvas per panel (panel mode), one per section (section mode, ZIP textures) and
  * the combined atlas (combined mode, PNG export). Draws the RGB-cycling borders, the column/row labels, the
  * section name and the section logo. Pure 2D canvas: creates no THREE objects; the materials wrap the canvases.
- * Style and logos are read at draw time, exactly like legacy read its globals.
+ * Style and logos are read at draw time, exactly like legacy read its globals. A canvas that would exceed
+ * CANVAS_HARD_LIMITS is not created: the three canvas methods return null instead (08 P2-1d, B-L4, 08 6.3).
  * Legacy source: index.html@cd3fd3f 1680-1708 (combined canvas), 2001-2046 (panel canvas), 2052-2187 (section
  * canvas incl. the logo).
  * Layer: render (may import vendor/three, core, legacy, domain, geometry). The theme and document are injected.
  */
 
-import { computeAtlas, sectionPxPerLed, panelPxPerLed } from '../../geometry/TextureAtlas.js';
+import { computeAtlas, sectionPxPerLed, panelPxPerLed, canvasFits } from '../../geometry/TextureAtlas.js';
 import { columnLabel } from '../../geometry/PanelNaming.js';
 
 /**
@@ -83,21 +84,23 @@ export class PanelIdRenderer {
   /**
    * The panel-mode canvas of one panel: border, label and (optionally) the section name.
    * Ports: index.html@cd3fd3f lines 2002-2046 (the CanvasTexture of 2047-2048 is created by LEDMaterialFactory).
-   * Side effects: creates and draws a canvas.
+   * Side effects: creates and draws a canvas (none when it would not fit).
    * @param {*} col    global column index (cumulative across sections; raw `+` of the start column, B-L8)
    * @param {*} row    row index within the section
    * @param {*} ledX   section.ledX
    * @param {*} ledY   section.ledY
    * @param {import('../../domain/WallSection.js').WallSection} section
-   * @returns {HTMLCanvasElement}
+   * @returns {HTMLCanvasElement|null} null when ledX * scale x ledY * scale exceeds CANVAS_HARD_LIMITS (08 P2-1d;
+   *   ledX >= 8,192 already does, as scale >= 4)
    */
   panelCanvas(col, row, ledX, ledY, section) {
     const style = this.#style;
     const canvasTheme = this.#theme.canvas;
-    const canvas = this.#doc.createElement('canvas');
     // LEGACY(B-M16, B-L19): 4-16 px per LED for every panel with no global budget; panel mode draws no logo and
     // sizes the section name at a fixed 0.25 x the label size (sectionLabelFontSize is ignored).
     const scale = panelPxPerLed(ledX, ledY);
+    if (!canvasFits(ledX * scale, ledY * scale)) return null;
+    const canvas = this.#doc.createElement('canvas');
     canvas.width = ledX * scale;
     canvas.height = ledY * scale;
     const ctx = canvas.getContext('2d');
@@ -148,12 +151,13 @@ export class PanelIdRenderer {
    * One canvas for a whole section: every panel's border and label (rows flipped for texture coordinates,
    * column labels continued from `startCol`), the centred section name and the section logo.
    * Ports: index.html@cd3fd3f lines 2052-2187.
-   * Side effects: creates and draws a canvas (and a canvas per call only; nothing is cached).
+   * Side effects: creates and draws a canvas (and a canvas per call only; nothing is cached); none when it would not
+   * fit.
    * @param {import('../../domain/WallSection.js').WallSection} section
    * @param {number} sectionIndex  unused (kept for signature parity with legacy)
    * @param {number|null} overrideScale  px per LED; falsy -> sectionPxPerLed of the section's LED size
    * @param {*} [startCol]  the section's first global column (raw `+`, B-L8)
-   * @returns {HTMLCanvasElement}
+   * @returns {HTMLCanvasElement|null} null when sectionSize(section, overrideScale) exceeds CANVAS_HARD_LIMITS (08 P2-1d)
    */
   sectionCanvas(section, sectionIndex, overrideScale, startCol = 0) {
     const style = this.#style;
@@ -162,6 +166,7 @@ export class PanelIdRenderer {
     const canvasWidth = section.panelCols * section.ledX;
     const canvasHeight = section.panelRows * section.ledY;
     const scale = overrideScale || sectionPxPerLed(canvasWidth, canvasHeight);
+    if (!canvasFits(canvasWidth * scale, canvasHeight * scale)) return null;
 
     const canvas = this.#doc.createElement('canvas');
     canvas.width = canvasWidth * scale;
@@ -310,14 +315,16 @@ export class PanelIdRenderer {
   /**
    * The combined-mode atlas: every section canvas side by side, bottom-aligned, at the atlas px/LED.
    * Ports: index.html@cd3fd3f lines 1680-1708 (totals, scale and running offsets come from the atlas).
-   * Side effects: creates and draws a canvas (plus one section canvas per section).
+   * Side effects: creates and draws a canvas (plus one section canvas per section); none when it would not fit.
    * @param {import('../../domain/WallSection.js').WallSection[]} sections
    * @param {{totalLedX: number, totalLedY: number, pxPerLed: number,
    *          entries: {startCol: *, ledOffsetX: number}[]}} [atlas]  defaults to computeAtlas(sections)
-   * @returns {HTMLCanvasElement}
+   * @returns {HTMLCanvasElement|null} null when atlasSize(sections, atlas) exceeds CANVAS_HARD_LIMITS (08 P2-1d); every
+   *   section canvas of an atlas that fits fits too (it is drawn at the atlas scale)
    */
   atlasCanvas(sections, atlas = computeAtlas(sections)) {
     const scale = atlas.pxPerLed;
+    if (!canvasFits(atlas.totalLedX * scale, atlas.totalLedY * scale)) return null;
     const canvas = this.#doc.createElement('canvas');
     canvas.width = atlas.totalLedX * scale;
     canvas.height = atlas.totalLedY * scale;

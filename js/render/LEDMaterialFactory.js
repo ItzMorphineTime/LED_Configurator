@@ -3,7 +3,9 @@
  * The only constructor of LED wall materials. Content precedence: panel IDs, then LED simulation, then plain
  * section colour. Every material is a MeshBasicMaterial whose `side` comes from #side() and whose `wireframe`
  * follows display.wireframe. The texture of a material is always created before the material itself (legacy
- * argument evaluation order; THREE ids come from global counters, R5).
+ * argument evaluation order; THREE ids come from global counters, R5). A panel-ID canvas that the browser cannot
+ * create (PanelIdRenderer returns null, 08 P2-1d, B-L4) falls back to the colour material of that mesh, with one
+ * console warning per section and rebuild.
  * Legacy source: index.html@cd3fd3f 1664-1675 (combined), 1759-1769 (section), 1783-1793 + 2047-2048 (panel).
  * Layer: render (may import vendor/three, core, legacy, domain, geometry). Collaborators are injected.
  */
@@ -21,19 +23,33 @@ export class LEDMaterialFactory {
   #panelIds;
   /** @type {import('./textures/LEDPixelTextureFactory.js').LEDPixelTextureFactory} */
   #ledTiles;
+  /** @type {Window} */
+  #win;
+  /** @type {Set<*>} what has been warned about since the last beginRebuild() (sections, or 'atlas') */
+  #warned = new Set();
 
   /**
    * Stores the dependencies only (R4).
    * Side effects: none.
    * @param {{display: import('../domain/Project.js').DisplaySettings,
    *          panelIds: import('./textures/PanelIdRenderer.js').PanelIdRenderer,
-   *          ledTiles: import('./textures/LEDPixelTextureFactory.js').LEDPixelTextureFactory}} deps
-   *   display: project.display (content and wireframe are read at call time)
+   *          ledTiles: import('./textures/LEDPixelTextureFactory.js').LEDPixelTextureFactory, win: Window}} deps
+   *   display: project.display (content and wireframe are read at call time); win: console for the warning of 08 P2-1d
    */
-  constructor({ display, panelIds, ledTiles }) {
+  constructor({ display, panelIds, ledTiles, win }) {
     this.#display = display;
     this.#panelIds = panelIds;
     this.#ledTiles = ledTiles;
+    this.#win = win;
+  }
+
+  /**
+   * Starts a wall rebuild (called by LEDWallView.rebuild before the meshes are built): the panel-ID fallback warning
+   * may be given again, once per section (08 P2-1d).
+   * Side effects: resets the warned set.
+   */
+  beginRebuild() {
+    this.#warned = new Set();
   }
 
   /**
@@ -52,6 +68,12 @@ export class LEDMaterialFactory {
     if (display.panelIdsEnabled) {
       // Create combined panel ID texture
       const combinedCanvas = this.#panelIds.atlasCanvas(sections, atlas);
+      if (combinedCanvas === null) {
+        // 08 P2-1d (B-L4): the atlas does not fit; show the section colours (the colour branch's material).
+        const names = sections.map((section) => section.name).join(', ');
+        this.#warnNotShown('atlas', names, this.#panelIds.atlasSize(sections, atlas));
+        return new THREE.MeshBasicMaterial({ vertexColors: true, side: this.#side(), wireframe: display.wireframe });
+      }
       const texture = this.#canvasTexture(combinedCanvas);
       material = new THREE.MeshBasicMaterial({ map: texture, side: this.#side(), wireframe: display.wireframe });
     } else if (display.ledSimEnabled) {
@@ -88,6 +110,11 @@ export class LEDMaterialFactory {
     let material;
     if (display.panelIdsEnabled) {
       const panelIdCanvas = this.#panelIds.sectionCanvas(section, sectionIndex, null, startCol);
+      if (panelIdCanvas === null) {
+        // 08 P2-1d (B-L4): the section canvas does not fit; show the section colour.
+        this.#warnNotShown(section, section.name, this.#panelIds.sectionSize(section, null));
+        return this.#colorMaterial(section);
+      }
       const texture = this.#canvasTexture(panelIdCanvas);
       material = new THREE.MeshBasicMaterial({ map: texture, side: this.#side(), wireframe: display.wireframe });
     } else if (display.ledSimEnabled) {
@@ -115,6 +142,11 @@ export class LEDMaterialFactory {
     if (display.panelIdsEnabled) {
       // Use cumulative column for sequential labeling across all sections
       const canvas = this.#panelIds.panelCanvas(globalCol, row, section.ledX, section.ledY, section);
+      if (canvas === null) {
+        // 08 P2-1d (B-L4): the panel canvas does not fit (ledX >= 8,192 at 4 px/LED); show the section colour.
+        this.#warnNotShown(section, section.name, this.#panelIds.panelSize(section));
+        return this.#colorMaterial(section);
+      }
       const texture = this.#canvasTexture(canvas);
       material = new THREE.MeshBasicMaterial({ map: texture, side: this.#side(), wireframe: display.wireframe });
     } else if (display.ledSimEnabled) {
@@ -123,6 +155,20 @@ export class LEDMaterialFactory {
       material = this.#colorMaterial(section);
     }
     return material;
+  }
+
+  /**
+   * The console warning of the panel-ID fallback (08 6.3, P2-1d), at most once per key and rebuild (a section in
+   * section and panel mode, 'atlas' in combined mode, whose name lists the section names).
+   * Side effects: one win.console.warn the first time a key is seen since beginRebuild().
+   * @param {*} key
+   * @param {*} name
+   * @param {{width: number, height: number}} size  the canvas size that does not fit
+   */
+  #warnNotShown(key, name, { width, height }) {
+    if (this.#warned.has(key)) return;
+    this.#warned.add(key);
+    this.#win.console.warn(`Panel IDs are not shown for "${name}": its ${width}×${height} px texture exceeds this browser's canvas limit.`);
   }
 
   /**

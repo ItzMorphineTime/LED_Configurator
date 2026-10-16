@@ -171,7 +171,7 @@ const QUIRKS = deepFreeze({
   'B-L3': ['Right-panel normals',
     '`\'averaged\'`'],
   'B-L4': ['No canvas-size guard (`toBlob` null throws, ZIP `data:,`)',
-    'Landed in 08 P2-1c (export size guards: `canvasFits`, M-EXP-2/3/4, ZIP pre-check and late skip; no tag site); the viewport fallback: 08 P2-1d'],
+    'Landed in 08 P2-1c (export size guards: `canvasFits`, M-EXP-2/3/4, ZIP pre-check and late skip) and 08 P2-1d (viewport: a null panel-ID canvas falls back to the section colour with a console warning); no tag site'],
   'B-L5': ['Uint16 glTF indices',
     'Landed in 08 P2-1b (glTF `mesh.gltf.indexType = \'auto\'`, `indexWidth`; no tag site); the viewport index attribute: 08 P2-1e'],
   'B-L6': ['Combined exports use section 0\'s colour',

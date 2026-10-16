@@ -1,0 +1,13 @@
+{
+  "commit": "P2-1d",
+  "bugs": ["B-L4"],
+  "expect": [
+    { "output": "p2_oversize_canvas/panel_ids_viewport.screenshot.png", "change": "modified",
+      "reason": "the 70,000 x 128 px section canvas does not fit CANVAS_HARD_LIMITS, so sectionCanvas returns null and the section shows its colour instead of the blank panel-ID texture" }
+  ],
+  "mayChange": [
+    { "output": "large_wall/final__export-zip__led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen so far: L2_PanelIDs.png (1995, 948), L3_PanelIDs.png (1970, 1003), L4_PanelIDs.png (2026, 858), 1 px each, 3840x1920); this commit changes only viewport materials" }
+  ],
+  "notes": "the once-per-rebuild console warning is checked by the unit-test spy (tests/unit/materials.test.mjs), not by the harness, which records no warnings (08 2.4)"
+}

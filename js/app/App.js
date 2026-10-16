@@ -105,7 +105,7 @@ export class App {
     const pointerRay = new PointerRay({ sceneManager });
     const ledTiles = new LEDPixelTextureFactory({ doc, display, theme });
     const panelIds = new PanelIdRenderer({ doc, style, logos, theme });
-    const materials = new LEDMaterialFactory({ display, panelIds, ledTiles });
+    const materials = new LEDMaterialFactory({ display, panelIds, ledTiles, win });
     const wallView = new LEDWallView({
       sceneManager, materials, builder: new WallMeshBuilder(Strategies.mesh.viewport), theme,
     });
