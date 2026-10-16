@@ -14,7 +14,7 @@
 
 **Every item on your list has an implementation-ready spec.** The five requests and the Morph branding are specs 01-06. Three further specs support them:
 
-- spec 08 is the Phase 2 bug-fix roadmap, which fixes all 57 verified defects;
+- spec 08 is the Phase 2 bug-fix roadmap, which fixes all 57 verified defects ([`DEFECTS.md`](DEFECTS.md));
 - spec 07 builds the shared platform the features need: one project file, undo, a single renderer, selection and the gizmo;
 - spec 09 lists optional ideas beyond your list.
 
@@ -34,7 +34,7 @@ Section 4 maps each request to its spec.
 - The spec totals already include the review's consolidations: one documentation commit replaces six, and nothing is built twice. That saves about 11 days compared with the pre-review sum.
 - **Calendar.** For one maintainer the full route is about 13 working months; for two people about 6.6 months. §3.4 gives the day each request becomes usable.
 
-**Two routes.** Even the lean core puts every requested feature except normals, pivot and branding behind about 45 gate-days of platform work (v2 file and session, keymap and gizmo rewrite, single renderer, undo and autosave). The **minimum path** (§1.1) uses the fallbacks the specs already describe (path B, session-only state) to deliver all six requests in about **162 days** (about 7.7 months alone, about 3.9 months for two people; on the full route the last request, the UV editor, is usable on about day 223 alone or day 130 for two), and leaves the platform for later. You choose the route (decision A0).
+**Two routes.** Even the lean core puts every requested feature except normals, pivot and branding behind about 45 gate-days of platform work (v2 file and session, keymap and gizmo rewrite, single renderer, undo and autosave). The **minimum path** (§1.1) uses the fallbacks the specs already describe (path B, session-only state) to deliver all six requests in about **162 days** (about 7.7 months alone, about 3.9 months for two people; on the full route the last request, the UV editor, is usable on about day 223 alone or day 130 for two), and leaves the platform for later. You choose the route (decision A0; decided 2026-10-16: the full platform route).
 
 **What we need from you now** (§8, part A):
 - the route: the full platform route or the minimum path first (A0);
@@ -45,6 +45,8 @@ Section 4 maps each request to its spec.
 - which spec 09 ideas you want.
 
 Every question has a recommended default, so nothing stalls if you accept the defaults.
+
+**Decided 2026-10-16** (§8): the full platform route (A0), publication of the 8 brand files approved (A8), and the recommended default for every other question, including keeping the curve convention (A1), path A for section editing (A4), the gizmo sign-off (A7) and spec 09's Release A (A14).
 
 ### 1.1 Minimum path per request
 
@@ -486,54 +488,56 @@ Recommendation: accept Release A now. Decide on B and C after M10.
 
 Every question has a recommended default. If you accept the defaults, only the items marked **blocking** need an explicit answer.
 
+**Decided 2026-10-16 (M0 kick-off).** The owner chose the **full platform route** (A0) and **approved** publishing the 8 Morph brand files (A8). Every other question in tables A and B, and every remaining question in the specs (§11.2), takes its recommended default. The last column of each table records the outcome. The specs record the decisions they gate where they require it: B-L1 in 08 §5.6 and Q10 and in ARCHITECTURE §1.4; the 03 T13 sign-off in 03 §5.10.1 and 02 §10.3; 02 Q24-Q26 and 06 Q2 in their question tables; the kick-off list in 07 §1.5.
+
 ### A. At kick-off (M0)
 
-| # | Decision | Source | Recommended default |
-|---|---|---|---|
-| A0 | Route: the full platform route (§3), or the minimum path per request first (§1.1) and the platform afterwards? | this plan | **One maintainer: the minimum path first** (all six requests usable by about day 162 instead of about day 223; the platform follows in §3's order for about 5 extra days of porting). **Two people: the full route** (everything in about 140 days, with undo, autosave and the shared gizmo from the start). Blocking: it decides 02 Q26 and the order of M7-M12. |
-| A1 | Curve convention (step before the first panel) | 08 Q10 | **Keep it** and document it (blocking for 02 T3) |
-| A2 | Which fixes the preview bugs: the single renderer first, or the old second renderer? | 07 Q18 | **Single renderer (R1/R2) first** |
-| A3 | three.js version during the features | 07 Q1, 05 Q18 | **Stay on r128 through Feature 5**, then upgrade (Track F) |
-| A4 | Build section editing on 07's keymap, selection and gizmo ("path A")? | 02 Q26 | **Path A** on the full route; **path B** on the minimum path (A0) (blocking before 02 T8) |
-| A5 | Persisted offset key names | 02 Q24 | **`offset.position_m` and `offset.rotation_origin`** |
-| A6 | Detached sections in the section-editing MVP? | 02 Q25 | **No: defer them to 3b** (or to 09 X10, which builds on them). They are the only change to the generative walk, detaching can move a centred pivot (02 §6.17), and you asked for basic offsets. Say **yes** only if you need soffits, ceilings or risers now; 3a then takes 27 days instead of 25. |
-| A7 | Sign off the shared gizmo and composition contract | 03 T13 | **Sign off** (blocking before 03 T5) |
-| A8 | Publish the 8 Morph brand files in the public repo | 06 Q2 | **Yes, exactly those 8, with your written OK**; otherwise a text-only header (blocking for 06 T4b) |
-| A9 | Product name | 06 Q1 | **"Morph LED Configurator"** |
-| A10 | Fix the glTF crash before the normals | 08 Q1 | **Yes** |
-| A11 | Phase 2 UVs: pixel-accurate atlas now, per-section 0..1 in Feature 4 | 08 Q4, Q5 | **Yes**; accept the second re-baseline if B7 keeps the per-section default; ship the atlas PNG in every ZIP |
-| A12 | Owner-visible fixes before the feature-gate block | 08 Q17 | **Yes** (UV fix first) |
-| A13 | Replace the hand-written gizmo and orbit with three.js controls | 07 Q2 | **Yes**, after 08 P2-9, keeping its behaviour as the contract |
-| A14 | Which spec 09 ideas | 09 §0 | **Release A (X1-X4)**; decide B and C later |
+| # | Decision | Source | Recommended default | Decided 2026-10-16 |
+|---|---|---|---|---|
+| A0 | Route: the full platform route (§3), or the minimum path per request first (§1.1) and the platform afterwards? | this plan | **One maintainer: the minimum path first** (all six requests usable by about day 162 instead of about day 223; the platform follows in §3's order for about 5 extra days of porting). **Two people: the full route** (everything in about 140 days, with undo, autosave and the shared gizmo from the start). Blocking: it decides 02 Q26 and the order of M7-M12. | **Full platform route** (§3), the owner's choice. A4 follows as path A. |
+| A1 | Curve convention (step before the first panel) | 08 Q10 | **Keep it** and document it (blocking for 02 T3) | Recommended default: **keep** (recorded in 08 §5.6 and ARCHITECTURE §1.4) |
+| A2 | Which fixes the preview bugs: the single renderer first, or the old second renderer? | 07 Q18 | **Single renderer (R1/R2) first** | Recommended default |
+| A3 | three.js version during the features | 07 Q1, 05 Q18 | **Stay on r128 through Feature 5**, then upgrade (Track F) | Recommended default |
+| A4 | Build section editing on 07's keymap, selection and gizmo ("path A")? | 02 Q26 | **Path A** on the full route; **path B** on the minimum path (A0) (blocking before 02 T8) | Recommended default for the full route: **path A** |
+| A5 | Persisted offset key names | 02 Q24 | **`offset.position_m` and `offset.rotation_origin`** | Recommended default |
+| A6 | Detached sections in the section-editing MVP? | 02 Q25 | **No: defer them to 3b** (or to 09 X10, which builds on them). They are the only change to the generative walk, detaching can move a centred pivot (02 §6.17), and you asked for basic offsets. Say **yes** only if you need soffits, ceilings or risers now; 3a then takes 27 days instead of 25. | Recommended default: defer to 3b |
+| A7 | Sign off the shared gizmo and composition contract | 03 T13 | **Sign off** (blocking before 03 T5) | Recommended default: **signed off** (recorded in 03 §5.10.1 and 02 §10.3) |
+| A8 | Publish the 8 Morph brand files in the public repo | 06 Q2 | **Yes, exactly those 8, with your written OK**; otherwise a text-only header (blocking for 06 T4b) | **Approved:** exactly the 8 files of 06 §5.8, with `NOTICE.md` |
+| A9 | Product name | 06 Q1 | **"Morph LED Configurator"** | Recommended default |
+| A10 | Fix the glTF crash before the normals | 08 Q1 | **Yes** | Recommended default |
+| A11 | Phase 2 UVs: pixel-accurate atlas now, per-section 0..1 in Feature 4 | 08 Q4, Q5 | **Yes**; accept the second re-baseline if B7 keeps the per-section default; ship the atlas PNG in every ZIP | Recommended default |
+| A12 | Owner-visible fixes before the feature-gate block | 08 Q17 | **Yes** (UV fix first) | Recommended default |
+| A13 | Replace the hand-written gizmo and orbit with three.js controls | 07 Q2 | **Yes**, after 08 P2-9, keeping its behaviour as the contract | Recommended default |
+| A14 | Which spec 09 ideas | 09 §0 | **Release A (X1-X4)**; decide B and C later | Recommended default: Release A |
 
 ### B. Before a specific step
 
-| # | Decision | Source | Recommended default | Needed before |
-|---|---|---|---|---|
-| B1 | What the back of a wall looks like after the FrontSide switch | 01 Q1 | **Dark matte cabinet back `#403C37`** | F1-5 |
-| B2 | Per-section LED side in Feature 1 | 01 Q2 | **Yes**; no per-project flag | F1-4 |
-| B3 | A "legacy inverted" export option | 01 Q5 | **No**; a release note and the checker tool instead | F1-5 |
-| B4 | Default pivot for new projects | 03 Q1 | **Bottom-left** (today's behaviour). Optionally, a "Use for new projects" button keeps your preferred mode per device in 07's `app/Prefs` (03 T17, 0.5 d, after 07 H3); files are unaffected | 03 T1 (T17 after 07 H3) |
-| B5 | Meaning of "middle of wall mesh" | 03 Q2 | **3D bounding-box centre**; add an optional surface-centre mode if you meant the content centre | 03 T2 |
-| B5a | Does the pivot anchor use the generated wall or the live mesh (with section offsets and detached sections)? | 03 Q5 | **Generated wall only**, so the pivot stays still while sections are nudged. **Consequence:** once risers, leaned flats or soffits exist, "middle of wall mesh" is the middle of the generated wall, not of the exported mesh, and the file origin sits off the centre of the exported geometry; correct it with the pivot offset (a later "Use current mesh" button can fill it in). Choose "live mesh" only if exports must always be centred on the final geometry; the pivot then moves while you drag sections. | 03 T2 |
-| B6 | Grid relative to the stage origin | 03 Q8 | **100 m grid centred on the stage origin** | 03 T10 |
-| B7 | Combined-mesh UV default | 04 Q1, Q18 | **Per-section 0..1 if you apply content per material slot; Atlas if your main pipelines are one feed per mesh** (nDisplay mesh projection, disguise), or export Individual Section Meshes. Both fill the UV space; per-section islands overlap across sections, which repeats a single feed. B8's test decides. A per-export-target default (04 Q18) is not recommended now | UV-7 |
-| B8 | Test exports in your Unreal nDisplay and disguise setups | 04 Q12 | **Yes, required go/no-go**; it also decides B7 | UV-7 |
-| B9 | Viewport texture budget for section textures | 04 Q17 | **16 MP per rebuild** | UV-7 |
-| B10 | HDRI: MVP first, then increments one by one | 05 Q19 | **Yes** | 05 T1 |
-| B11 | Car asset, and when the glTF car becomes the default | 05 Q3, Q2 | **Khronos CarConcept (CC BY 4.0, credited in the app)** prepared to 05's quality bar (AC 33), with the **Kenney Car Kit (CC0)** as the fallback; you choose from a side-by-side render, and the glTF car becomes the default only after that sign-off | 05 T10 (sign-off before T11) |
-| B12 | Watermark, and gold only on Export All | 06 Q6, Q7 | **Watermark on (hidden in pilot); gold only on Export All** | 06 T4b |
-| B13 | Typeface and font hosting | 06 Q4, Q5 | **Montserrat**; Google Fonts first, self-hosted later | 06 T4a |
-| B14 | British English labels ("Colour") | 06 Q14 | **Yes**, visible labels only | 06 T4c |
-| B15 | Default first-section colour | 06 Q8 | **Studio Grey `#d9d9d6`** | 06 T7 |
-| B16 | One global undo stack (also inside the UV viewer) | 07 Q17 | **Yes** | 07 H1 |
-| B17 | Re-centre the orbit on every wall edit | 07 Q6 | **No**; frame only on boot, open, `F` and Reset | 07 I4b |
-| B18 | `Ctrl/⌘+S` saves the project | 07 Q11 | **Yes** | 07 I1 |
-| B19 | Exact modifier matching (`Shift+G` no longer acts as `G`) | 07 Q19 | **Yes** | 07 I1 |
-| B20 | Remove the camera Z ≥ 0.1 m minimum | 08 Q13 | **Yes**, in P2-11c; the label becomes "Z Position (m)" | P2-11c |
-| B21 | Product catalogue contents | 09 Q1 | **Verified ROE entries**; you add Morph's rental inventory | 09 X1 |
+| # | Decision | Source | Recommended default | Needed before | Decided 2026-10-16 |
+|---|---|---|---|---|---|
+| B1 | What the back of a wall looks like after the FrontSide switch | 01 Q1 | **Dark matte cabinet back `#403C37`** | F1-5 | Recommended default |
+| B2 | Per-section LED side in Feature 1 | 01 Q2 | **Yes**; no per-project flag | F1-4 | Recommended default |
+| B3 | A "legacy inverted" export option | 01 Q5 | **No**; a release note and the checker tool instead | F1-5 | Recommended default |
+| B4 | Default pivot for new projects | 03 Q1 | **Bottom-left** (today's behaviour). Optionally, a "Use for new projects" button keeps your preferred mode per device in 07's `app/Prefs` (03 T17, 0.5 d, after 07 H3); files are unaffected | 03 T1 (T17 after 07 H3) | Recommended default |
+| B5 | Meaning of "middle of wall mesh" | 03 Q2 | **3D bounding-box centre**; add an optional surface-centre mode if you meant the content centre | 03 T2 | Recommended default |
+| B5a | Does the pivot anchor use the generated wall or the live mesh (with section offsets and detached sections)? | 03 Q5 | **Generated wall only**, so the pivot stays still while sections are nudged. **Consequence:** once risers, leaned flats or soffits exist, "middle of wall mesh" is the middle of the generated wall, not of the exported mesh, and the file origin sits off the centre of the exported geometry; correct it with the pivot offset (a later "Use current mesh" button can fill it in). Choose "live mesh" only if exports must always be centred on the final geometry; the pivot then moves while you drag sections. | 03 T2 | Recommended default |
+| B6 | Grid relative to the stage origin | 03 Q8 | **100 m grid centred on the stage origin** | 03 T10 | Recommended default |
+| B7 | Combined-mesh UV default | 04 Q1, Q18 | **Per-section 0..1 if you apply content per material slot; Atlas if your main pipelines are one feed per mesh** (nDisplay mesh projection, disguise), or export Individual Section Meshes. Both fill the UV space; per-section islands overlap across sections, which repeats a single feed. B8's test decides. A per-export-target default (04 Q18) is not recommended now | UV-7 | Recommended default (B8's test chooses between the two) |
+| B8 | Test exports in your Unreal nDisplay and disguise setups | 04 Q12 | **Yes, required go/no-go**; it also decides B7 | UV-7 | Recommended default: you run the test before UV-7 |
+| B9 | Viewport texture budget for section textures | 04 Q17 | **16 MP per rebuild** | UV-7 | Recommended default |
+| B10 | HDRI: MVP first, then increments one by one | 05 Q19 | **Yes** | 05 T1 | Recommended default |
+| B11 | Car asset, and when the glTF car becomes the default | 05 Q3, Q2 | **Khronos CarConcept (CC BY 4.0, credited in the app)** prepared to 05's quality bar (AC 33), with the **Kenney Car Kit (CC0)** as the fallback; you choose from a side-by-side render, and the glTF car becomes the default only after that sign-off | 05 T10 (sign-off before T11) | Recommended default; you choose from the side-by-side render before T11 |
+| B12 | Watermark, and gold only on Export All | 06 Q6, Q7 | **Watermark on (hidden in pilot); gold only on Export All** | 06 T4b | Recommended default |
+| B13 | Typeface and font hosting | 06 Q4, Q5 | **Montserrat**; Google Fonts first, self-hosted later | 06 T4a | Recommended default |
+| B14 | British English labels ("Colour") | 06 Q14 | **Yes**, visible labels only | 06 T4c | Recommended default |
+| B15 | Default first-section colour | 06 Q8 | **Studio Grey `#d9d9d6`** | 06 T7 | Recommended default |
+| B16 | One global undo stack (also inside the UV viewer) | 07 Q17 | **Yes** | 07 H1 | Recommended default |
+| B17 | Re-centre the orbit on every wall edit | 07 Q6 | **No**; frame only on boot, open, `F` and Reset | 07 I4b | Recommended default |
+| B18 | `Ctrl/⌘+S` saves the project | 07 Q11 | **Yes** | 07 I1 | Recommended default |
+| B19 | Exact modifier matching (`Shift+G` no longer acts as `G`) | 07 Q19 | **Yes** | 07 I1 | Recommended default |
+| B20 | Remove the camera Z ≥ 0.1 m minimum | 08 Q13 | **Yes**, in P2-11c; the label becomes "Z Position (m)" | P2-11c | Recommended default |
+| B21 | Product catalogue contents | 09 Q1 | **Verified ROE entries**; you add Morph's rental inventory | 09 X1 | Recommended default |
 
-The remaining questions in each spec (§11.2) have defaults that need no action unless you disagree.
+The remaining questions in each spec (§11.2) have defaults that need no action unless you disagree. As decided on 2026-10-16, they all take their recommended defaults.
 
 ---
 

@@ -565,7 +565,10 @@ export function formatNormalStats({ vertexLines, faceLines, total, stride, lengt
 
 ```js
 export class MaterialOverride {
-  /** For each mesh: if it is not stashed yet, stash mesh.material; then mesh.material = material. Idempotent. */
+  /** For each mesh: if it is not stashed yet, stash mesh.material; then mesh.material = material. Idempotent.
+   *  The stash holds mesh.material by reference, so a Material[] (spec 04's per-section Combined layout) is restored
+   *  intact. The debug material is applied as one material: r128 then draws the whole index range and ignores the
+   *  geometry groups (04 2.3 row 01-1). */
   apply(meshes, material)
   /** Puts every stashed material back on its mesh and clears the stash. @returns {number} restored count */
   restore()
@@ -953,6 +956,8 @@ nor = geometry.attributes.normal.array;  for (j = 0; j < nor.length; j++) nor[j]
 
 A mirroring scale (`scale.z = −1`) is **not** used. It would rely on `frontFaceCW`, and r128's `Mesh.raycast` back-face test runs in local space, so it would mis-pick under `FrontSide`.
 
+The flip moves no vertex, so the plane's local +x still runs along the column order and no panel mesh carries `userData.uMirrored` (spec 04 6.9 reads it as `false`; 04 2.3 row 01-3). A later flip that moved vertices so that local +x ran against the column order would have to set `uMirrored = true` on that mesh.
+
 ### 6.6 Line counts
 
 | Wall | Vertex lines (strip modes) | Face lines | Vertex lines (panel mode) |
@@ -1193,7 +1198,7 @@ This is the acceptance oracle for orientation. It parses OBJ text, decodes glTF 
   - T7 extends it: the model write, then exactly one `DEBUG_VIEW_CHANGED`, then the render call, in that order (R2).
 - `debug-view-controls.test.mjs` (new, T7; `ui/` modules take an injected `doc`/`win`, so plain event-target stubs suffice): a `keydown` with `repeat: true` does not toggle; before 07 I1 the Escape capture listener exists only while the popover is open, acts only on `'Escape'`, and stops propagation only then; from 07 I1 the registry entry at priority 70 returns `true` only while `isPopoverOpen()` and closes the popover; the pointer-change flag is cleared by the post-`pointerup` timer and by a `keydown`, so a later keyboard change keeps focus.
 - `wall-mesh-tags.test.mjs` (new, T10): `backShellUserData` copies `mode`, `sectionId` and `sectionIndex`, sets `kind: 'led-wall-back'`, and keeps the same `sectionRanges` reference; `pickList` over a mixed list returns LED meshes in add order, then shells in add order, and ignores frames and helpers (AC 10).
-- `material-override.test.mjs` (new): `apply` twice stashes the original once; `restore` returns it and clears; a rebuild-order simulation shows `restore` before a fake dispose never passes the debug material to `dispose` (AC 12).
+- `material-override.test.mjs` (new): `apply` twice stashes the original once; `restore` returns it and clears; a mesh whose material is a `Material[]` gets the same array object back (04 2.3 row 01-1); a rebuild-order simulation shows `restore` before a fake dispose never passes the debug material to `dispose` (AC 12).
 - `typing-target.test.mjs` (08's file, P2-9b; 07 C52): 07 §3.8's truth table, including `BODY` and buttons returning false, the excluded input types returning false, and any element inside an open `[role=dialog]` (modal or not) returning true.
 - `tests/static/check.mjs` stays green after **every** step:
   - layering (`NormalLines` and `MaterialOverride` import nothing from THREE; `DebugViewControls` imports only `core` and `ui`);
@@ -1427,7 +1432,7 @@ Effort: S ≤ 0.5 d, M 1-2 d, L 3-5 d, XL > 5 d. The prerequisites owned by spec
 | T2 | Harness-only PR, the second of 07 C57's series (after 08 P2-0, before 07 G3): the `rects` field of `--expect` manifest entries (per-pixel rule, frame-size check) and `--diff-bbox`, unit-tested with synthetic PNG pairs; `tests/regression/measure-rects.mjs`; the live palette hook `lib/palette.mjs` (07 C53); README section | M (1 d) | 08 P2-0 (`--expect`) |
 | T3 | `geometry/NormalLines.js` (writers, caps, auto length, `uploadCount`, `formatCount`, `formatNormalStats`) + `normal-lines.test.mjs` incl. the cap benchmark | M (1.5 d) | Phase 1 WP4 |
 | T4 | `render/NormalsDebugView.js` (buffers with `updateRange`, scratch matrices, layers, optional stats element), `core/renderOrder.js` (+ the `TransformGizmo` literal and the static rule), `SceneManager.init` layer enable | M (1 d) | T3, WP6 |
-| T5 | `render/DebugMaterials.js` (GLSL 6.8), `render/MaterialOverride.js` + test, `LEDWallView.setDebugShading` with restore-before-dispose and re-apply in `rebuild`, `withContentMaterials(fn)` + test (07 C48) | M (1.5 d) | WP6 |
+| T5 | `render/DebugMaterials.js` (GLSL 6.8), `render/MaterialOverride.js` + test (including the `Material[]` case), `LEDWallView.setDebugShading` with restore-before-dispose and re-apply in `rebuild`, `withContentMaterials(fn)` + test (07 C48) | M (1.5 d) | WP6 |
 | T6 | `DebugViewSettings`, `DebugViewController` **without** bus or event, App wiring (5.7, F1-1 part), ARCHITECTURE section 4 rows for `DebugViewSettings`, controller spy test; **F1-1** gate (no new `Events` key, no new DOM id) | M (1 d) | T4, T5 |
 | T7 | UI: markup (buttons, divider, popover incl. `#debug-normals-stats`, legend in `#viewport-top-stack`, announcer, badge text ` N=normals`, the only per-feature badge token, 07 C35), `css/features/debug-view.css` (incl. `.view-btn.active`, of which T7 is the one named owner, 07 C52; the `@media` overflow fallback), `DebugViewControls` (mirror, placement, keyboard/pointer open focus, blur rule, Escape capture listener until 07 I1 then registry 70, debounced announcer, N / Shift+N, "As displayed" label), `DEBUG_VIEW_CHANGED` (visual) + `#emit()` + `bus` dependency, the stats lookup and ownership entry, consumes 08 P2-9b's `core/typingTarget.js`, the B-L24 note narrowing; **F1-2** re-baseline with measured `--expect` `rects` | M (2 d) | T6, T2, WP8, 08 P2-9b |
 | T8 | Harness: `normals_debug` (Part A, Part B with S0 preconditions), `lib/probe.mjs` (`largestComponent`, `diffStats`, `withinJitter`, `PALETTE` from the palette hook), `screenshotElement`, `pointerClick`, `overlayRects`, N keys with modifiers, `findPersonPixel` export; two captures and flake triage; **F1-3** | L (3 d) | T7, WP1 |

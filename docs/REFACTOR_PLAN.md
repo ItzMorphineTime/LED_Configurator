@@ -114,7 +114,7 @@ Pure layers (domain, geometry, io and the app controllers) are verified in Node 
 - **H2** dispose gizmo resources (B-L12) by setting `Strategies.dispose.gizmo = true` (watch the `keyboard` screenshots: freeing materials can change WebGL program ids and so draw order). **Landed** (on top of H1). `TransformGizmo.rebuild/detach` now dispose the replaced or removed group's geometries and materials. Unit and static gates green; the full harness (`tests/regression/output/h2`) passed against the baseline with 12 WARNs, every differing pixel a documented 1-level overlay-glyph flip; the `keyboard` and `gizmo_drag` screenshots show no other difference, so no draw order changed. B-L12 left `LEGACY_SITES` (its 8.2 row is kept and marked landed).
 
 ### Phase 2: bug fixes (each one separately re-baselined)
-Each fix flips one switch or edits one tagged site, updates `LEGACY_SITES`, and re-captures only the affected harness outputs in its own commit. Suggested order (bug ids from the verified defect list):
+Each fix flips one switch or edits one tagged site, updates `LEGACY_SITES`, and re-captures only the affected harness outputs in its own commit. Suggested order (bug ids from the verified defect list, `docs/DEFECTS.md`):
 1. **B-H1 + B-H2** inverted winding and wrong/missing normals in the viewport and every export (the owner-reported "inverted normals"; this is the core of Feature 1).
 2. **B-M4 + B-L8** unescaped names in HTML and unvalidated imports (security and robustness): real `legacyHtml` escaping and a `ProjectValidator` inside `ProjectSerializer.read`.
 3. **B-H3 + B-L4** glTF/ZIP export failing on large walls; canvas-size guard and user-visible error messages.
@@ -155,7 +155,7 @@ Rules: a failing comparison is never "fixed" by re-capturing the baseline during
 |---|---|---|
 | 1 | WP1, WP2, WP3 | no code dependencies (WP1 works on the original page, WP2 on the stylesheet, WP3 is the foundation) |
 | 2 | WP4 | its tests import WP3 |
-| 3 | WP5, WP6, WP7, WP8, WP9 (in parallel) | WP5, WP7 and WP9 tests import WP3 and WP4 (`layoutProject`, a real `Project` and `EventBus`); WP6 and WP8 have no unit tests and need only WP3, so with spare agents they may start in wave 2 |
+| 3 | WP5, WP6, WP7, WP8, WP9 (in parallel) | WP5, WP7 and WP9 tests import WP3 and WP4 (`layoutProject`, a real `Project` and `EventBus`); WP6 and WP8 have no unit tests and need only WP3, so with spare capacity they may start in wave 2 |
 | 4 | WP10 | integration needs everything |
 
 - Within wave 3 some modules import a sibling's file statically (`CameraRigView`, `SafeDistanceView`, `PropViews` and `TransformGizmo` import `render/ResourceTracker.js` from WP6). No unit test loads those modules, so this is an interface, not a scheduling edge; `node tests/static/check.mjs` reports the missing file until WP6 is merged, which is expected and is cleared at WP10.

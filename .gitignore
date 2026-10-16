@@ -4,5 +4,5 @@ Morph Brand Assets/
 # Regression harness output
 tests/regression/output/
 
-# Local Claude Code preview config
+# Local editor/preview config
 .claude/
