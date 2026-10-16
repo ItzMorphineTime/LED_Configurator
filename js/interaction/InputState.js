@@ -2,10 +2,10 @@
  * @module interaction/InputState
  * Shared interaction flags (InteractionState), the held-key table (KeyboardState), the shared pick ray
  * (PointerRay: ONE THREE.Raycaster and ONE THREE.Vector2, exactly as the legacy globals) and the two
- * keyboard target guards.
+ * keyboard target guards (the shortcut guard is core/typingTarget.js, re-exported here).
  * Legacy source: index.html@cd3fd3f 1363, 1368-1370 (flags, raycaster, mouse), 3198-3203 / 3235-3240 /
  * 3312-3317 / 3431-3436 (the four mouse -> NDC copies), 3753 (keysPressed), 3842-3854 (key state listeners),
- * 4411 (shortcut target guard).
+ * 4411 (shortcut target guard, replaced by core/typingTarget.js in 08 P2-9b).
  * Layer: interaction (may import vendor/three, core, legacy, interaction, and render/ResourceTracker only).
  */
 import THREE from '../vendor/three.js';
@@ -32,14 +32,12 @@ export class InteractionState {
 export const isKeyStateIgnoredTarget = (t) => t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA';
 
 /**
- * Shortcut guard (G/R/L/P/Escape).
- * LEGACY(B-L11): SELECT, modifiers and key repeat are NOT filtered for shortcuts (4411).
- * Ports: index.html@cd3fd3f line 4411.
- * Side effects: none.
- * @param {EventTarget & {tagName?: string}} t  the keydown event target
- * @returns {boolean} true when the shortcut must be ignored
+ * The shortcut guard (G/R/L/P/Escape) is the one typing guard, core/typingTarget.js isTypingTarget: 07 3.8's
+ * truth table, created by 08 P2-9b (B-L11). It is re-exported, never redefined (01 CR-9); the name
+ * isShortcutIgnoredTarget stays until 07 I1 deletes it (07 C18). The modifier and repeat filters live in
+ * ViewportInput.attachShortcuts.
  */
-export const isShortcutIgnoredTarget = (t) => t.tagName === 'INPUT' || t.tagName === 'TEXTAREA';
+export { isTypingTarget, isTypingTarget as isShortcutIgnoredTarget } from '../core/typingTarget.js';
 
 /**
  * The table of held keys (legacy `keysPressed`, 3753), keyed by `KeyboardEvent.code` with plain-object

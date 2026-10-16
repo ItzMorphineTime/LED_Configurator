@@ -690,7 +690,8 @@ in parentheses changes them:
   canvas, and the ZIP leaves the texture out, with `texture_file: null`, no `map_Kd` and the M-EXP-4 alert;
   08 P2-1d: with panel IDs on, the viewport shows the section colour instead of a blank texture).
 - `p2_shortcut_filters`: `g` in the focused select turns translate mode on, Ctrl+G turns it off again,
-  and the three auto-repeated `p` presses leave pilot mode on (B-L11).
+  and the three auto-repeated `p` presses leave pilot mode on (B-L11) (08 P2-9b: the select is a typing target and
+  Ctrl and auto-repeat are filtered, so translate mode and pilot mode stay off in steps 1 to 3).
 - `p2_project_v2`: the JSON exports are v1 (sections and mesh mode only), so the restored page has the
   default camera, props, display and no logos (B-L31); the hostile file's logos are never stored, so
   `stored_svg_08_hostile` lists no SVG; `network.json` is empty.

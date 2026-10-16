@@ -131,7 +131,7 @@ The authoritative plan is `docs/improvements/08-bugfix-roadmap.md` (batch cards 
 
 **Feature-gate block**
 12. **P2-8b–d** **B-L9, B-L10** (pilot half), **B-L13**: numeric input semantics.
-13. **P2-9a–d** **B-M14, B-L11, B-M12, B-L22**: click-select, shortcut filters, gizmo rotation sign, prop axes.
+13. **P2-9a–d** **B-M14, B-L11, B-M12, B-L22**: click-select, shortcut filters, gizmo rotation sign, prop axes. Landed so far: P2-9b (B-L11, the shared typing guard `core/typingTarget.js` and the modifier and repeat filters; manifest P2-9b).
 14. **P2-13a** **B-L35**: logo guards, sanitising and the post-conversion size cap.
 15. **P2-13e** **B-L31**: the v2 project file (07 section 4.2).
 

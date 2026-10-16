@@ -1,0 +1,13 @@
+{
+  "commit": "P2-9b",
+  "bugs": ["B-L11"],
+  "expect": [
+    { "output": "p2_shortcut_filters/{gizmo_01_g_in_select,gizmo_03_p_autorepeat}.json", "change": "modified", "each": true,
+      "reason": "step 1: `g` typed into the focused #led-layout SELECT is a typing target (core/typingTarget.js, 07 3.8), so translate mode stays off; step 3: the three `p` key downs are auto-repeats (e.repeat), so pilot mode stays off" }
+  ],
+  "mayChange": [
+    { "output": "large_wall/final__export-zip__led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen so far: L2_PanelIDs.png (1995, 948), L3_PanelIDs.png (1970, 1003), L4_PanelIDs.png (2026, 858), 1 px each, 3840x1920); this commit changes only the shortcut key filter" }
+  ],
+  "notes": "08 P2-9b (B-L11). Unchanged by construction, and therefore not declared: gizmo_02_ctrl_g records translate off before and after (before, Ctrl+G toggled off the mode that step 1's `g` had set; now neither key acts); gizmo_04_view_front and pilot_view_front: step 4's Escape and one plain `p` reach pilot mode from either outcome of step 3 (08 8.3), and leaving and re-entering pilot restores the same saved orbit state, so the pose and the preset are the same. No other scenario presses a shortcut with a modifier, as a repeat, or with focus in a SELECT or a non-text INPUT (every keyPress blurs first)."
+}

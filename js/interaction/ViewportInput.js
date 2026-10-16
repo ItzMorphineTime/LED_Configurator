@@ -5,7 +5,7 @@
  * Legacy source: index.html@cd3fd3f 4409-4479.
  * Layer: interaction (may import vendor/three, core, legacy, interaction, and render/ResourceTracker only).
  */
-import { isShortcutIgnoredTarget } from './InputState.js';
+import { isTypingTarget } from './InputState.js';   // core/typingTarget.js, re-exported (01 CR-9)
 
 /**
  * Routes the viewport input that legacy handled inline in setupUI: the G/R/L/P/Escape shortcut keys on the
@@ -52,6 +52,10 @@ export class ViewportInput {
   /**
    * The gizmo keyboard shortcuts on the document (registered after KeyboardState's keydown):
    * G translate, R rotate, L space, P pilot, Escape (pilot ? leave pilot : deselect and clear the mode).
+   * The key is ignored (08 P2-9b, B-L11; 08 6.11) when the target is a typing target (core/typingTarget.js,
+   * 07 3.8: text-like INPUT, SELECT, TEXTAREA, contenteditable, inside an open dialog), when Ctrl, Meta or
+   * Alt is held (Ctrl+P is the print dialog, not pilot mode), or when it is an auto-repeat (holding P no longer
+   * flips pilot mode). Shift is allowed (Shift+G still means G).
    * Ports: index.html@cd3fd3f lines 4409-4434.
    * Side effects: adds 1 document keydown listener; the handler calls the gizmo, selection and pilot.
    */
@@ -59,9 +63,7 @@ export class ViewportInput {
     const gizmo = this.#gizmo;
     const pilot = this.#pilot;
     this.#doc.addEventListener('keydown', (e) => {
-      // LEGACY(B-L11): only INPUT and TEXTAREA targets are ignored (a focused SELECT is not), and modifier
-      // keys (Ctrl+R, Ctrl+P, ...) and auto-repeat are not filtered.
-      if (isShortcutIgnoredTarget(e.target)) return;
+      if (isTypingTarget(e.target) || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
 
       if (e.key.toLowerCase() === 'g') {
         gizmo.setMode('translate');

@@ -59,7 +59,7 @@ Phase 1 turns the 3,800-line inline script and the 860-line inline stylesheet in
       io/        pure writers/readers: ProjectSerializer (v1), ObjExporter, GltfExporter          (THREE-free, DOM-free)
       geometry/  pure: WallLayout, WallMeshBuilder, TextureAtlas, PanelNaming                     (THREE-free, DOM-free)
       domain/    pure entities: Project, Wall, WallSection, CineCamera, Prop, LogoLibrary, ...     (THREE-free, DOM-free)
-      core/ EventBus + Events     legacy/ LegacyCompat (Strategies, legacy helpers, LEGACY_SITES)     theme/ Theme constants
+      core/ EventBus + Events, typingTarget     legacy/ LegacyCompat (Strategies, legacy helpers, LEGACY_SITES)     theme/ Theme constants
       vendor/ three.js, jszip.js shims (window.THREE / window.JSZip)
 ```
 
@@ -181,6 +181,7 @@ js/
     jszip.js                               WP3   const JSZip = window.JSZip; export default JSZip; export { JSZip };
   core/
     EventBus.js                            WP3   Events catalogue (frozen) + synchronous EventBus (throws on unknown event names)
+    typingTarget.js                        08 P2-9b  isTypingTarget(t): the one typing guard (07 3.8 truth table; 07 C18, C52)
   legacy/
     LegacyCompat.js                        WP3   Strategies (deep-frozen switches), LegacyProfiles, legacy helpers (orDefault,
                                                  legacyHtml), unsupportedStrategy, LEGACY_SITES
@@ -216,6 +217,7 @@ js/
     PropViews.js                           WP7   PropView base, PersonPropView, CarPropView (procedural meshes)
   interaction/
     InputState.js                          WP8   InteractionState, KeyboardState, PointerRay (one shared Raycaster), target guards
+                                                 (the shortcut guard re-exports core/typingTarget.js since 08 P2-9b)
     OrbitController.js                     WP8   Custom spherical orbit: drag, wheel, WASD/QE offset, presets, retarget, snapshot
     SelectionManager.js                    WP8   Selectable registry, selection state, raycast picking; Selectable typedef
     TransformGizmo.js                      WP8   Hand-written translate/rotate gizmo bound to the selected Selectable
@@ -292,6 +294,8 @@ tests/
     wall-controller.test.mjs               WP9   rebuild policy: run counts and tile-cache clears for the 24 legacy sites
     compare.test.mjs                       08 P2-0  compare.mjs --expect semantics and JITTER on synthetic output trees
     tools.test.mjs                         08 P2-0  tools/check-orientation.mjs and tools/check-gltf.mjs on hand-built files
+    typing-target.test.mjs                 08 P2-9b  the 07 3.8 truth table of core/typingTarget.js (plain objects) and the
+                                                 InputState re-exports (fake THREE)
     materials.test.mjs                     08 P2-1d  PanelIdRenderer sizes and null canvases, LEDMaterialFactory's colour
                                                  fallback and its warning, LEDWallView's index attribute (08 P2-1e)
                                                  (fake THREE installed as window.THREE)
@@ -368,6 +372,16 @@ export class EventBus {
 }
 ```
 State: `#handlers: Map<string, Function[]>`. No wildcards, no async, no de-duplication, no once().
+
+**`js/core/typingTarget.js`** (08 P2-9b, B-L11; the one typing guard, 07 C18; its one named owner is 08 P2-9b, 07 C52). Pure: it reads only the target's `tagName`, `type`, `isContentEditable` and `closest`, so it is Node-tested with plain objects (`tests/unit/typing-target.test.mjs`).
+```js
+const NON_TEXT_INPUT_TYPES = new Set(['checkbox', 'radio', 'button', 'submit', 'reset', 'color', 'file', 'range']);
+/** 07 3.8 (01 3.4): true for an INPUT whose type is not in NON_TEXT_INPUT_TYPES, a SELECT, a TEXTAREA, an element
+ *  with isContentEditable, and any element inside an open [role=dialog] (or open <dialog>), modal or not;
+ *  false otherwise (null, BODY, the document, buttons, checkboxes, radios, ranges, ...). */
+export function isTypingTarget(t)
+```
+Consumers: `interaction/InputState.js` re-exports it (also as `isShortcutIgnoredTarget` until 07 I1), `ViewportInput.attachShortcuts` (through that re-export), 01 T7's `DebugViewControls.bindShortcuts`; 07 I1 adds `isMovementBlockedTarget(t)` to the same module.
 
 ### 3.3 `js/legacy/LegacyCompat.js`
 
@@ -1295,8 +1309,9 @@ export class CarPropView    extends PropView { buildMesh() /* verbatim 2914-2968
 export class InteractionState { pilotMode = false; isDraggingGizmo = false; }
 
 export const isKeyStateIgnoredTarget = (t) => t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA';  // 3845
-/** LEGACY(B-L11): SELECT, modifiers and key repeat are NOT filtered for shortcuts (4411). */
-export const isShortcutIgnoredTarget = (t) => t.tagName === 'INPUT' || t.tagName === 'TEXTAREA';
+/** The shortcut guard is the one typing guard (08 P2-9b fixed B-L11): re-exported, never redefined (01 CR-9);
+ *  the name isShortcutIgnoredTarget stays until 07 I1 deletes it (07 C18). */
+export { isTypingTarget, isTypingTarget as isShortcutIgnoredTarget } from '../core/typingTarget.js';
 
 export class KeyboardState {     // legacy keysPressed (3753)
   /** @param {{doc: Document, win: Window}} deps */
@@ -1494,10 +1509,11 @@ export class PilotController {
 export class ViewportInput {
   /** @param {{doc, win, sceneManager, interaction, gizmo: TransformGizmo, selection: SelectionManager, pilot: PilotController}} deps */
   constructor({ doc, win, sceneManager, interaction, gizmo, selection, pilot })
-  /** Verbatim 4410-4434 (doc keydown, registered AFTER KeyboardState's): if (isShortcutIgnoredTarget(e.target)) return;
+  /** 4410-4434 (doc keydown, registered AFTER KeyboardState's), with the 08 P2-9b filters (B-L11 fixed, 08 6.11):
+   *  if (isTypingTarget(e.target) || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;   (Shift is allowed)
    *  e.key.toLowerCase() 'g' -> gizmo.setMode('translate'); 'r' -> gizmo.setMode('rotate'); 'l' -> gizmo.toggleSpace();
    *  'p' -> pilot.toggle(); e.key === 'Escape' -> interaction.pilotMode ? pilot.toggle()
-   *  : (selection.deselect(), gizmo.mode && gizmo.clearMode()).  LEGACY(B-L11) */
+   *  : (selection.deselect(), gizmo.mode && gizmo.clearMode()).  isTypingTarget comes through InputState's re-export. */
   attachShortcuts()
   /** Verbatim 4437-4479 on canvas = sceneManager.renderer.domElement (registered AFTER the orbit listeners):
    *  mousedown: pilot ? pilot.onMouseDown(e) : (handled = gizmo.onMouseDown(e); if (!handled && gizmo.mode) selection.pickAt(e))
@@ -2574,7 +2590,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | B-L8 | No import validation; unknown mode renders as panels; raw coercion | `Strategies.importValidation` + `LEDWallView.rebuild` dispatch `else` (tag) + `WallSection` constructor (tag) | validator |
 | B-L9 | `\|\| default` turns 0 into the default (D-7, J-5, V-3) | `orDefault` | change `orDefault` or per rule |
 | B-L10 | Gizmo posY >= 0 vs pilot >= 0.1 per frame; Z unclamped | `CineCamera.translateBy`, `CineCamera.pilotFly` (tags) | validated setter |
-| B-L11 | Shortcuts ignore SELECT focus, modifiers, repeat (W-1) | `isShortcutIgnoredTarget` + `ViewportInput.attachShortcuts` (tag) | shared typing guard + filters |
+| B-L11 | Shortcuts ignore SELECT focus, modifiers, repeat (W-1) | `core/typingTarget.js isTypingTarget` + `ViewportInput.attachShortcuts` (fixed) | Landed in 08 P2-9b (`core/typingTarget.js isTypingTarget` with the 07 3.8 truth table, re-exported by `InputState` as `isShortcutIgnoredTarget`; `ViewportInput.attachShortcuts` also ignores Ctrl, Meta, Alt and auto-repeat; no tag site) |
 | B-L12 | Gizmo resources leak (memory only) | `Strategies.dispose.gizmo` | Landed in Phase 1C H2 (`dispose.gizmo = true`; no tag site) |
 | B-L13 | Mesh-mode handler fires twice (C-4) | `WallDisplayPanel.bind` (tag + warning) | "mode unchanged -> no-op" guard, never radio `change` |
 | B-L14 | Colliding ZIP texture names (U-3) | `Strategies.zipTextureNaming` | de-duplicate |
@@ -2650,7 +2666,6 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/render/PreviewWindow.js#updateCamera` | B-L34 |
 | `js/render/PreviewWindow.js#render` | B-M11 |
 | `js/render/PreviewWindow.js#setupResize` | B-L32 |
-| `js/interaction/InputState.js#isShortcutIgnoredTarget` | B-L11 |
 | `js/interaction/OrbitController.js#updateTargetPosition` | B-L2 |
 | `js/interaction/OrbitController.js#tickKeyboard` | B-L27 |
 | `js/interaction/OrbitController.js#setView` | B-L25 |
@@ -2660,7 +2675,6 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/interaction/TransformGizmo.js#onMouseMove` | B-M12 |
 | `js/interaction/PilotController.js#toggle` | B-H4, B-L26 |
 | `js/interaction/PilotController.js#tickKeyboard` | B-M13, B-L27 |
-| `js/interaction/ViewportInput.js#attachShortcuts` | B-L11 |
 | `js/interaction/ViewportInput.js#attachPointer` | B-M14 |
 | `js/app/WallController.js#setMeshMode` | B-L13 |
 | `js/app/WallController.js#applyImport` | B-L21 |
@@ -2678,7 +2692,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `css/09-viewport-tools.css` (header comment; documentation-only) | B-L24 |
 | `index.html` (markup, untagged; documentation-only) | B-L36 |
 
-Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14) and B-L5 (08 P2-1b; its only site was the tag in `GltfExporter.addMesh`, which keeps B-H2 and B-M7) and B-L4 (08 P2-1c; its sites were the tags in `ProjectIO.exportPanelIds`, which has no tag left, and `ProjectIO.exportZIP`, which keeps B-L14; its viewport half never had a tag and is fixed by 08 P2-1d) and B-H1 (08 P2-2a; its sites were the tags in `WallMeshBuilder.quadIndices`, which keeps B-H2 until 08 P2-2d, and `LEDMaterialFactory.side`, whose `'double'` value is now a design choice) and B-L3 (08 P2-2b; its only site was the tag in `WallMeshBuilder.sectionGrid`, which keeps B-L15 and B-L8) and B-H2 (08 P2-2c and P2-2d; its sites were the tags in `ObjExporter.write`'s `#stripNormalLine`, which left with P2-2c (`write` keeps B-M6, B-L6 and B-L8), `WallMeshBuilder.quadIndices`, which has no tag left, and `GltfExporter.addMesh`, which keeps B-M7). B-L24 has two documentation-only entries, one per stylesheet: the header comment of each of the two stylesheets carries a paragraph `Legacy note B-L24 (documentation-only, preserved): ...`, which does not use the reserved token `LEGACY(` (CSS is untagged; rule 6 scans only `js/`); grep `B-L24` or `Legacy note` to find it.
+Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14) and B-L5 (08 P2-1b; its only site was the tag in `GltfExporter.addMesh`, which keeps B-H2 and B-M7) and B-L4 (08 P2-1c; its sites were the tags in `ProjectIO.exportPanelIds`, which has no tag left, and `ProjectIO.exportZIP`, which keeps B-L14; its viewport half never had a tag and is fixed by 08 P2-1d) and B-H1 (08 P2-2a; its sites were the tags in `WallMeshBuilder.quadIndices`, which keeps B-H2 until 08 P2-2d, and `LEDMaterialFactory.side`, whose `'double'` value is now a design choice) and B-L3 (08 P2-2b; its only site was the tag in `WallMeshBuilder.sectionGrid`, which keeps B-L15 and B-L8) and B-H2 (08 P2-2c and P2-2d; its sites were the tags in `ObjExporter.write`'s `#stripNormalLine`, which left with P2-2c (`write` keeps B-M6, B-L6 and B-L8), `WallMeshBuilder.quadIndices`, which has no tag left, and `GltfExporter.addMesh`, which keeps B-M7) and B-L11 (08 P2-9b; its sites were the tags in `InputState.isShortcutIgnoredTarget`, now a re-export of `core/typingTarget.js isTypingTarget`, and `ViewportInput.attachShortcuts`, which has no tag left). B-L24 has two documentation-only entries, one per stylesheet: the header comment of each of the two stylesheets carries a paragraph `Legacy note B-L24 (documentation-only, preserved): ...`, which does not use the reserved token `LEGACY(` (CSS is untagged; rule 6 scans only `js/`); grep `B-L24` or `Legacy note` to find it.
 
 How rule 6 reads these rows (as implemented in `tests/static/check.mjs`): the comparison is per file, so a tag may sit in a private helper that only the named method calls (for example `ProjectSerializer.#readV1` for `#read`, `ObjExporter.#writeCombined` for `#write`, `GltfExporter.#writeCombined` for `#write`); a tag wrapped across JSDoc continuation lines counts as one tag (placeholders are still rejected); and a row whose `js/` file does not exist is reported, so a typo in a site path cannot bypass the check.
 
@@ -2837,3 +2851,8 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 3.6: `quadIndices`' `'legacy-cw'` case loses its tag (no production profile uses it); `WallMeshBuilder.panelNormals(panel)` (4 x `panelFacingNormal`) and `static PANEL_UVS` (08 5.2, for 08 P2-7c).
 - 3.9: `GltfExporter.#addMesh(name, attrs, primitives)` (08 5.2) writes the attributes in list order (`NORMAL`: VEC3 5126 in its own view, target 34962, no min/max) and one index view, accessor and material per primitive; every caller passes one primitive, so materials, positions, POSITION min/max, meshes and nodes are unchanged. Panel meshes carry 4 copies of the facing normal. `large_wall`'s combined buffer grows from 79,728 to 121,056 bytes (01 2.4), which the chunked encoder of 08 P2-1a writes.
 - 8.2: the B-H2 row is closed (`Landed` in P2-2c and P2-2d); the B-M7 fix cell records `NORMAL`. 8.3: the row `WallMeshBuilder.js#quadIndices` is deleted and B-H2 leaves `GltfExporter.js#addMesh` (B-M7 stays).
+
+**08 P2-9b, B-L11 landed** (manifest `tests/regression/expected/P2-9b.json`: `p2_shortcut_filters/gizmo_01_g_in_select` and `gizmo_03_p_autorepeat`, each; landed ahead of P2-9a, which it does not depend on):
+- 1.3, 2.2, 3.2: `js/core/typingTarget.js isTypingTarget(t)`, the one typing guard with the 07 3.8 truth table (07 C18; 08 P2-9b is its one named owner, 07 C52): text-like `INPUT`, `SELECT`, `TEXTAREA`, contenteditable and anything inside an open dialog are typing; checkbox, radio, button, submit, reset, color, file and range inputs are not. 2.3: `tests/unit/typing-target.test.mjs`.
+- 3.8: `InputState` re-exports it as `isTypingTarget` and as `isShortcutIgnoredTarget` (until 07 I1; 01 CR-9), and `ViewportInput.attachShortcuts` ignores a key when `isTypingTarget(e.target) || e.ctrlKey || e.metaKey || e.altKey || e.repeat` (08 6.11; Shift is allowed). `KeyboardState` (movement) is unchanged.
+- 8.2: the B-L11 row is kept with a `Landed` fix cell; 8.3: the rows `InputState.js#isShortcutIgnoredTarget` and `ViewportInput.js#attachShortcuts` are deleted, so `LEGACY_SITES` no longer lists B-L11.
