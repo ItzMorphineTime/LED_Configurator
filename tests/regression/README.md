@@ -45,6 +45,7 @@ Useful options:
 | `--png-threshold 0` / `--png-max-percent 0.01` | compare | Exported PNGs fail when more than this % of pixels differ by more than the threshold. |
 | `--shot-threshold 8` / `--shot-max-percent 0.5` | compare | The same check for viewport screenshots. |
 | `--verbose` | compare | Print every output, including identical ones. |
+| `--diff-bbox` | compare | Add the bounding box of the differing pixels (and of those outside an entry's `rects`) to every differing image. See [Rect allowances](#rect-allowances---diff-bbox-and-the-palette-hook-01-t2). |
 
 `run` only deletes an `--out` directory that is empty or holds a previous harness `manifest.json`.
 
@@ -539,6 +540,9 @@ exit 0 with every remaining difference reported as `JITTER`.
   (08 section 8.2, R10).
 - `change` is `added` (only in the candidate), `removed` (only in the baseline) or `modified`.
 - `mayChange` entries take an optional `change` and a `reason`; plain pattern strings are accepted.
+- `exclude` (optional, any entry) is a pattern of outputs the entry does not match, for example
+  `"output": "*/*.screenshot.png", "exclude": "ui_visual/**"`.
+- `rects`, `size` and `measure` are the rect allowances of the next section.
 - Other keys are refused (exit code 2), so a typo cannot silently disable an entry.
 
 **`compare.mjs --expect a.json[,b.json]` semantics:**
@@ -604,6 +608,52 @@ then the summary.
 
 Their unit tests are `tests/unit/tools.test.mjs`; the `--expect` semantics are unit-tested in
 `tests/unit/compare.test.mjs` on synthetic output trees.
+
+### Rect allowances, `--diff-bbox` and the palette hook (01 T2)
+
+The second step of the harness-only series (08 P2-0, then this, then 07 G3; 07 C57). A step whose
+screenshots may change only inside known screen regions (01 F1-2's toolbar column and help badge, 06 T4b,
+07 I4a's badge rewrite) declares those regions on its `--expect` entries instead of accepting whole
+screenshots:
+
+```jsonc
+{ "output": "*/*.screenshot.png", "exclude": "ui_visual/**", "change": "modified",
+  "measure": { "frame": "canvas", "window": [1600, 1000], "selectors": [".viewport-controls", ".viewport-info"], "pad": 8 },
+  "size": [1200, 940],                                                   // written by measure-rects.mjs
+  "rects": [{ "x": 1132, "y": 12, "w": 56, "h": 248, "label": ".viewport-controls" }, ...] }
+```
+
+- **The per-pixel rule.** A differing screenshot (or exported PNG) matched by an entry with `rects` is
+  `EXPECTED` (or `EXPECTED?` for a `mayChange` entry) only when **every** pixel with any channel
+  difference lies inside the union of the rectangles; one pixel outside makes it a **FAIL**, even when the
+  difference alone would only be a WARN. A bounding-box test would not do: the column and the badge sit in
+  opposite corners.
+- **The frame-size check.** The image must have exactly the entry's `size`; a differing capture of
+  another size (a camera-preview capture, the narrow page) is a FAIL `rect frame mismatch`. Unchanged
+  captures pass whatever their size. `rects` and `size` always go together, and only with
+  `"change": "modified"`; a rect entry that matches a differing non-image output makes it a FAIL.
+- **Rectangles are measured, never typed.** `node tests/regression/measure-rects.mjs --root . --manifest
+  tests/regression/expected/<commit-id>.json` opens the candidate page with the harness lib at each
+  `measure.window` size, takes the `getBoundingClientRect` of each selector that is present and visible,
+  pads it by `measure.pad` (default 8 px), rounds outwards, clips it to the frame, and writes `rects` and
+  `size` into every entry that has a `measure` object: `frame: "canvas"` gives rectangles relative to
+  `#three-canvas` and its size (the `screenshotCanvas` captures), `frame: "page"` the page frame at the
+  window size (`ui_visual`'s page captures). `--dry-run` prints without writing. compare refuses an
+  entry with `measure` but no `rects` (not measured yet). Like the harness, it runs one Chrome at a time.
+- **`--diff-bbox`** adds, to every differing image output, the bounding box of its differing pixels and,
+  for an output judged by a rect entry, the box of the pixels outside the rectangles. The reviewer copies
+  it into the compare report.
+- **The palette hook** (`lib/palette.mjs`, 07 C53): `livePalette(app)` returns the colours a pixel probe
+  looks for, read from the running page, never from literals: the section colours from the cards' colour
+  inputs (`wall` is section 0), and each scene colour (`background`, `cabinet`, `faceFront`,
+  `faceBack`, `vertexNormal`, `faceNormal`, `frame`, `gridCenter`, `gridLine`) from its `--scene-*`
+  token on `:root` when spec 06 defines it, else from the served build's `js/theme/Theme.js`
+  `SceneTheme` (imported inside the page, only when it loads `js/main.js` as a module), else `null`.
+  No scenario uses it yet (01 T8's probes will).
+
+None of this changes a capture: the rect fields only change how `compare.mjs --expect` judges a
+difference, and `measure-rects.mjs` and the hook are not run by `run.mjs`. Their unit tests are the rect
+section of `tests/unit/compare.test.mjs` (synthetic PNG pairs) and `tests/unit/harness-lib.test.mjs`.
 
 ## Contract the refactor must keep
 

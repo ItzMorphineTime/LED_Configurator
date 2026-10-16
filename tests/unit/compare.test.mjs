@@ -1,6 +1,8 @@
 // Unit tests for the golden-master gate of docs/improvements/08-bugfix-roadmap.md section 8.2:
 // tests/regression/compare.mjs --expect (expected-change manifests) and the nondeterminism allowlist
-// (tests/regression/expected/_nondeterminism.json), on synthetic baseline / candidate output trees.
+// (tests/regression/expected/_nondeterminism.json), on synthetic baseline / candidate output trees; and the rect
+// allowances of docs/improvements/01-normals.md 8.4 (T2): `rects` / `size` / `exclude` on manifest entries (the
+// per-pixel rule and the frame-size check) and --diff-bbox, on synthetic PNG pairs.
 // Run: node --test tests/unit/compare.test.mjs   (zero dependencies)
 
 import { test, describe, after } from 'node:test';
@@ -307,5 +309,113 @@ describe('command line', () => {
     assert.match(ok.stdout, /Nondeterminism allowlist: .*_nondeterminism\.json/);
     assert.equal(cli(baseDir, cand, '--expect', file({ expect: [{ output: 'x', change: 'nope' }] })).status, 2);
     assert.equal(cli(baseDir).status, 2);
+  });
+});
+
+describe('rect allowances (01 T2: rects, size, exclude, --diff-bbox)', () => {
+  const at = (x, y) => y * W + x;
+  const VIEW = 'cfg/view.screenshot.png';
+  /** One `rects` entry on cfg/view in the W x H frame. */
+  const rectEntry = (rects, extra = {}) => ({ output: VIEW, change: 'modified', size: [W, H], rects, ...extra });
+  const CORNERS = [{ x: 0, y: 0, w: 3, h: 3, label: 'column' }, { x: 17, y: 7, w: 3, h: 3, label: 'badge' }];
+
+  test('a difference whose every pixel lies in the union of the rects is EXPECTED, though the rects sit in opposite corners', () => {
+    const cand = candidate({ [VIEW]: shot(png([[at(0, 0), 5], [at(2, 2), 3], [at(19, 9), 40]])) });
+    const r = gate(cand, [manifest([rectEntry(CORNERS)])]);
+    assert.equal(r.exitCode, 0, r.text);
+    assert.equal(r.byKey[VIEW], 'EXPECTED');
+    assert.equal(r.entries[0].satisfied, true);
+    assert.match(r.text, /all 3 differing px inside the rects \(bbox \[0,0\]-\[19,9\]\)/);
+  });
+
+  test('one differing pixel outside the rects is a FAIL, even when the diff alone is only a WARN, and satisfies nothing', () => {
+    const cand = candidate({ [VIEW]: shot(png([[at(0, 0), 1], [at(10, 5), 1]])) });
+    const plain = gate(cand, [manifest([{ output: VIEW, change: 'modified' }])]);
+    assert.equal(plain.exitCode, 0, 'without rects the 1-level WARN is EXPECTED');
+    const r = gate(cand, [manifest([rectEntry(CORNERS)])]);
+    assert.equal(r.byKey[VIEW], 'FAIL');
+    assert.equal(r.exitCode, 1);
+    assert.equal(r.entries[0].satisfied, false);
+    assert.match(r.text, /1 of 2 differing px outside the rects \(bbox \[10,5\]-\[10,5\]\)/);
+    assert.match(r.text, /1 differing output\(s\) failed the rect check/);
+  });
+
+  test('a differing capture of another frame size is a FAIL "rect frame mismatch"', () => {
+    const cand = candidate({ [VIEW]: shot(png([[at(0, 0), 5]])) });
+    const r = gate(cand, [manifest([rectEntry(CORNERS, { size: [1200, 940] })])]);
+    assert.equal(r.byKey[VIEW], 'FAIL');
+    assert.match(r.text, /rect frame mismatch: the capture is 20x10, the entry's frame is 1200x940/);
+    assert.equal(r.exitCode, 1);
+  });
+
+  test('unchanged captures pass whatever their size; "each" still needs every matching baseline capture to change', () => {
+    const big = () => shot(encodePNG(40, 10, new Uint8Array(40 * 10 * 4).fill(100)));
+    const base = tree({ s: { 'small.screenshot.png': shot(png()), 'big.screenshot.png': big() } });
+    const cand = tree({ s: { 'small.screenshot.png': shot(png([[0, 9]])), 'big.screenshot.png': big() } });
+    const run = (entry) => {
+      const lines = [];
+      const r = runCompare({ baseDir: base, candDir: cand, expectFiles: [file(manifest([entry]))], allowlistFile: ALLOWLIST, log: (l) => lines.push(l) });
+      return { ...r, byKey: Object.fromEntries(r.outputs.map((o) => [o.key, o.status])), text: lines.join('\n') };
+    };
+    const ok = run({ output: 's/*.screenshot.png', change: 'modified', size: [W, H], rects: [{ x: 0, y: 0, w: 1, h: 1 }] });
+    assert.equal(ok.exitCode, 0, ok.text);
+    assert.equal(ok.byKey['s/big.screenshot.png'], 'IDENTICAL');
+    assert.equal(ok.byKey['s/small.screenshot.png'], 'EXPECTED');
+    const each = run({ output: 's/*.screenshot.png', change: 'modified', each: true, size: [W, H], rects: [{ x: 0, y: 0, w: 1, h: 1 }] });
+    assert.equal(each.exitCode, 1);
+  });
+
+  test('exclude: an output matched by "output" and by "exclude" is not matched (expect and mayChange)', () => {
+    const cand = candidate({ [VIEW]: shot(png([[at(0, 0), 5]])), 'keyboard/other.screenshot.png': shot(png([[at(5, 5), 30]])) });
+    const r = gate(cand, [manifest([{ output: '*/*.screenshot.png', exclude: 'keyboard/**', change: 'modified', size: [W, H], rects: CORNERS }])]);
+    assert.equal(r.byKey[VIEW], 'EXPECTED');
+    assert.equal(r.byKey['keyboard/other.screenshot.png'], 'WARN', 'excluded, so it keeps its status');
+    const m = gate(cand, [manifest([], [{ output: '**', exclude: 'keyboard/**' }])]);
+    assert.equal(m.byKey[VIEW], 'EXPECTED?');
+    assert.equal(m.byKey['keyboard/other.screenshot.png'], 'WARN');
+  });
+
+  test('a mayChange entry with rects: inside is EXPECTED?, outside is a FAIL', () => {
+    const inside = gate(candidate({ [VIEW]: shot(png([[at(1, 1), 5]])) }), [manifest([], [rectEntry(CORNERS)])]);
+    assert.equal(inside.byKey[VIEW], 'EXPECTED?');
+    assert.equal(inside.exitCode, 0);
+    const outside = gate(candidate({ [VIEW]: shot(png([[at(9, 4), 5]])) }), [manifest([], [rectEntry(CORNERS)])]);
+    assert.equal(outside.byKey[VIEW], 'FAIL');
+    assert.equal(outside.exitCode, 1);
+  });
+
+  test('rects judge images only: a rect entry matching a differing JSON output makes it a FAIL', () => {
+    const r = gate(candidate({ 'cfg/a.json': state({ v: 2 }) }), [manifest([{ output: 'cfg/a.json', change: 'modified', size: [W, H], rects: CORNERS }])]);
+    assert.equal(r.byKey['cfg/a.json'], 'FAIL');
+    assert.match(r.text, /rects apply to screenshots and PNG exports only/);
+  });
+
+  test('validation: rects and size go together, modified only, integer fields; an unmeasured "measure" entry is refused', () => {
+    const bad = (entry, re) => assert.throws(() => parseExpectManifest(manifest([entry])), re);
+    bad({ output: VIEW, change: 'modified', rects: CORNERS }, /"rects" and "size" go together/);
+    bad({ output: VIEW, change: 'modified', size: [W, H] }, /"rects" and "size" go together/);
+    bad(rectEntry(CORNERS, { change: 'added' }), /only apply to "change": "modified"/);
+    bad(rectEntry([{ x: 0.5, y: 0, w: 1, h: 1 }]), /"x" must be an integer/);
+    bad(rectEntry([{ x: 0, y: 0, w: -1, h: 1 }]), /must not be negative/);
+    bad(rectEntry([{ x: 0, y: 0, w: 1, h: 1, colour: 'red' }]), /unknown key "colour"/);
+    bad(rectEntry([]), /non-empty array/);
+    bad(rectEntry(CORNERS, { size: [W] }), /"size" must be \[width, height\]/);
+    bad({ output: VIEW, change: 'modified', measure: { frame: 'canvas' } }, /run tests\/regression\/measure-rects\.mjs/);
+    bad({ output: VIEW, change: 'modified', exclude: '' }, /"exclude" must be a non-empty pattern/);
+    const ok = parseExpectManifest(manifest([rectEntry(CORNERS, { measure: { frame: 'page', window: [W, H], selectors: ['.x'] } })]));
+    assert.deepEqual(ok.expect[0].size, [W, H]);
+    assert.equal(ok.expect[0].rects.length, 2);
+  });
+
+  test('--diff-bbox (command line) prints the box of the differing pixels and, for a rect entry, of those outside', () => {
+    const cli = (...args) => spawnSync(process.execPath, [COMPARE, ...args], { encoding: 'utf8' });
+    const cand = candidate({ [VIEW]: shot(png([[at(1, 1), 5], [at(12, 6), 5]])), 'keyboard/other.screenshot.png': shot(png([[at(4, 3), 50]])) });
+    const m = file(manifest([rectEntry(CORNERS)], [{ output: 'keyboard/other.screenshot.png' }]));
+    const r = cli(baseDir, cand, '--expect', m, '--diff-bbox');
+    assert.equal(r.status, 1, r.stdout);
+    assert.match(r.stdout, /view\.screenshot\.png .*1 of 2 differing px outside the rects \(bbox \[12,6\]-\[12,6\]\).*diff bbox \[1,1\]-\[12,6\] \(2 px\); outside the rects \[12,6\]-\[12,6\] \(1 px\)/);
+    assert.match(r.stdout, /other\.screenshot\.png .*diff bbox \[4,3\]-\[4,3\] \(1 px\)/);
+    const plain = cli(baseDir, cand, '--expect', m);
+    assert.doesNotMatch(plain.stdout, /diff bbox/);
   });
 });

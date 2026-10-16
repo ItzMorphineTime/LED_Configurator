@@ -1,0 +1,10 @@
+{
+  "commit": "F1-0b",
+  "bugs": [],
+  "expect": [],
+  "mayChange": [
+    { "output": "large_wall/final__export-zip__led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen so far: L2_PanelIDs.png (1995, 948), L3_PanelIDs.png (1970, 1003), L4_PanelIDs.png (2026, 858), 1 px each, 3840x1920); this commit changes no app code and no capture" }
+  ],
+  "notes": "01 F1-0 (tooling), second commit: T2, the second commit of the harness-only series (07 C57): compare.mjs `exclude`, `rects` + `size` and --diff-bbox, measure-rects.mjs and lib/palette.mjs. run.mjs, the scenarios and the capture lib are unchanged, so every output must stay identical (invariance; 01 8.4: harness tooling that does not change outputs needs no re-capture)."
+}

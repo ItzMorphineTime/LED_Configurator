@@ -1318,17 +1318,19 @@ node -e "const m=require('./$B/manifest.json');for(const k of Object.keys(m.scen
 
 **Two kinds of screenshot.** `#three-canvas` captures (`app.screenshotCanvas`) are 1200×940 at the harness window of 1600×1000 and contain the canvas plus the DOM overlays drawn over it (toolbar column, help badge). `ui_visual/*.viewport.screenshot.png` are **full-page** captures (`uiprobe.screenshotViewport`: 1600×1000, or 800×1000 for `narrow_800`, with both canvases masked), so they also contain the header and the sidebar. `ui_visual/*.sidebar.screenshot.png` are the stitched sidebar scroller. Each step below treats them separately.
 
-**Allowed rectangles are measured, not typed** (T2; 07 C57). `node tests/regression/measure-rects.mjs --root . --manifest tests/regression/expected/F1-2.json` opens the **candidate** page with the harness lib at each capture size (1600×1000 and 800×1000), records the `getBoundingClientRect` of `.viewport-controls`, `.viewport-info` (the help badge) and `#three-canvas`, pads each by 8 px (focus rings, shadows, anti-aliasing), and writes the `rects` field of one `--expect` entry per capture frame (the same mechanism 07 I4a's badge rewrite uses):
+**Allowed rectangles are measured, not typed** (T2; 07 C57). `node tests/regression/measure-rects.mjs --root . --manifest tests/regression/expected/F1-2.json` opens the **candidate** page with the harness lib at each capture size (1600×1000 and 800×1000), records the `getBoundingClientRect` of `.viewport-controls`, `.viewport-info` (the help badge) and `#three-canvas`, pads each by 8 px (focus rings, shadows, anti-aliasing), and writes the `rects` and `size` fields of one `--expect` entry per capture frame (the same mechanism 07 I4a's badge rewrite uses). As implemented in F1-0b, an entry keeps the manifest's `output` pattern, excludes outputs with `exclude` (not `glob`/`notGlob`), and says what to measure in a `measure` object, which `measure-rects` reads (compare refuses a `measure` entry that has no `rects` yet):
 
 ```jsonc
-[ { "glob": "*/*.screenshot.png", "notGlob": "ui_visual/**", "size": [1200, 940],     // canvas frame: rects minus the canvas origin
-    "rects": [ /* column */ {...}, /* badge */ {...} ] },
-  { "glob": "ui_visual/*.viewport.screenshot.png", "notGlob": "ui_visual/*narrow_800*", "size": [1600, 1000],   // page frame
-    "rects": [ ... ] },
-  { "glob": "ui_visual/*narrow_800*.viewport.screenshot.png", "size": [800, 1000], "rects": [ ... ] } ]
+[ { "output": "*/*.screenshot.png", "exclude": "ui_visual/**", "change": "modified",          // canvas frame: rects minus the canvas origin
+    "measure": { "frame": "canvas", "window": [1600, 1000], "selectors": [".viewport-controls", ".viewport-info"] },
+    "size": [1200, 940], "rects": [ /* column */ {"x": ..., "y": ..., "w": ..., "h": ..., "label": ".viewport-controls"}, /* badge */ {...} ] },
+  { "output": "ui_visual/*.viewport.screenshot.png", "exclude": "ui_visual/*narrow_800*", "change": "modified",   // page frame
+    "measure": { "frame": "page", "window": [1600, 1000], "selectors": [...] }, "size": [1600, 1000], "rects": [ ... ] },
+  { "output": "ui_visual/*narrow_800*.viewport.screenshot.png", "change": "modified",
+    "measure": { "frame": "page", "window": [800, 1000], "selectors": [...] }, "size": [800, 1000], "rects": [ ... ] } ]
 ```
 
-The candidate rectangles contain the baseline ones: the column only gains buttons below the existing ones and the badge only gains text at its end (` N=normals`, the only per-feature badge token, 07 C35), both with unchanged anchors (top-right and bottom-left). `compare.mjs --expect` then reports a screenshot diff of an entry with `rects` as EXPECTED only when **every differing pixel** lies inside the union of the entry's rects (a per-pixel test: a bounding-box test would fail, because the column and the badge sit in opposite corners), and only when the PNG size equals the entry's `size` (a differing capture of another size, for example a camera-preview capture, is a FAIL "rect frame mismatch"; unchanged captures pass whatever their size). `--diff-bbox` prints the bounding box of the differing pixels outside the rects, for review.
+The candidate rectangles contain the baseline ones: the column only gains buttons below the existing ones and the badge only gains text at its end (` N=normals`, the only per-feature badge token, 07 C35), both with unchanged anchors (top-right and bottom-left). `compare.mjs --expect` then reports a screenshot diff of an entry with `rects` as EXPECTED only when **every differing pixel** lies inside the union of the entry's rects (a per-pixel test: a bounding-box test would fail, because the column and the badge sit in opposite corners), and only when the PNG size equals the entry's `size` (a differing capture of another size, for example a camera-preview capture, is a FAIL "rect frame mismatch"; unchanged captures pass whatever their size). `--diff-bbox` prints the bounding box of the differing pixels, and of those outside the rects, for review. The rule also applies to `mayChange` entries with `rects`, and a rect entry that matches a differing non-image output makes it a FAIL (`tests/regression/README.md`, "Rect allowances").
 
 | Step (commit) | Tasks | Expected manifest (`expect` / `mayChange`) | Must stay identical |
 |---|---|---|---|

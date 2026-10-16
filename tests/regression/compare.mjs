@@ -2,13 +2,18 @@
 // Golden-master comparator.
 //   node tests/regression/compare.mjs <baselineDir> <candidateDir> [--expect a.json[,b.json]] [--tolerance 1e-5]
 //        [--png-threshold 0] [--png-max-percent 0.01] [--shot-threshold 8] [--shot-max-percent 0.5]
-//        [--only scenarioA,scenarioB] [--verbose]
+//        [--only scenarioA,scenarioB] [--diff-bbox] [--verbose]
 // Exit code: 0 = no FAIL, 1 = at least one FAIL, 2 = usage error.
 //
 // --expect (docs/improvements/08-bugfix-roadmap.md, sections 8.1 and 8.2) gates a re-baselining commit: every difference
 // must be declared in an expected-change manifest (tests/regression/expected/<commit-id>.json), and every declared
 // change must happen. Every --expect run also loads tests/regression/expected/_nondeterminism.json, the standing
 // allowlist of the known overlay-glyph screenshot jitter; it is never listed by hand.
+// Rect allowances (docs/improvements/01-normals.md 8.4, T2; 07 C57): a manifest entry with `rects` (and its capture
+// frame `size`) accepts an image difference only when every differing pixel lies inside the union of its rectangles and
+// the PNG has exactly that size; otherwise the output is a FAIL. The rectangles are measured from the DOM by
+// tests/regression/measure-rects.mjs, never typed. --diff-bbox adds the bounding box of the differing pixels (and of
+// those outside an entry's rectangles) to the detail of every differing image, for review.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -33,7 +38,7 @@ export const NONDETERMINISM_FILE = path.join(HERE, 'expected', '_nondeterminism.
 // ---------------------------------------------------------------------------------------------
 
 function parseArgs(argv) {
-    const a = { tolerance: 1e-5, pngThreshold: 0, pngMaxPercent: 0.01, shotThreshold: 8, shotMaxPercent: 0.5, verbose: false, expect: [], positional: [] };
+    const a = { tolerance: 1e-5, pngThreshold: 0, pngMaxPercent: 0.01, shotThreshold: 8, shotMaxPercent: 0.5, verbose: false, diffBbox: false, expect: [], positional: [] };
     for (let i = 2; i < argv.length; i++) {
         const k = argv[i];
         const num = () => { const v = Number(argv[++i]); if (!Number.isFinite(v)) throw new Error('Bad number for ' + k); return v; };
@@ -46,6 +51,7 @@ function parseArgs(argv) {
         else if (k === '--only') a.only = str().split(',').map((s) => s.trim()).filter(Boolean);
         else if (k === '--expect') a.expect.push(...str().split(',').map((s) => s.trim()).filter(Boolean));
         else if (k === '--verbose' || k === '-v') a.verbose = true;
+        else if (k === '--diff-bbox') a.diffBbox = true;
         else if (k.startsWith('--')) throw new Error('Unknown option ' + k);
         else a.positional.push(k);
     }
@@ -330,7 +336,8 @@ export const DEFAULT_OPTIONS = Object.freeze({ tolerance: 1e-5, pngThreshold: 0,
 
 /**
  * Compare two harness output trees. Every output of the union is reported once as
- * { key: '<scenario>/<output>', scenario, output, kind, status, detail, change, maxDiff?, anyDiff? }, where status is
+ * { key: '<scenario>/<output>', scenario, output, kind, status, detail, change, maxDiff?, anyDiff?, baseFile, candFile }
+ * (the two file paths, null on the side that lacks the output), where status is
  * IDENTICAL | PASS | WARN | FAIL and `change` is 'added' (only in the candidate), 'removed' (only in the baseline),
  * 'modified' (in both, status WARN or FAIL) or null (no difference). A scenario present on one side only reports
  * each of its outputs as added or removed.
@@ -366,7 +373,10 @@ export function compareTrees(baseDir, candDir, opts = DEFAULT_OPTIONS, only = nu
                 }
             }
             if (!change && (r.status === 'WARN' || r.status === 'FAIL')) change = 'modified';
-            outputs.push({ key: `${s}/${o}`, scenario: s, output: o, kind: (oa || ob).kind, inBaseline: !!oa, inCandidate: !!ob, ...r, change });
+            outputs.push({
+                key: `${s}/${o}`, scenario: s, output: o, kind: (oa || ob).kind, inBaseline: !!oa, inCandidate: !!ob, ...r, change,
+                baseFile: oa ? path.join(baseDir, oa.file) : null, candFile: ob ? path.join(candDir, ob.file) : null,
+            });
         }
         out.push({ name: s, inBaseline: !!sa, inCandidate: !!sb, outputs });
     }
@@ -413,18 +423,134 @@ export function globToRegExp(pattern) {
 }
 
 const CHANGES = ['added', 'removed', 'modified'];
-const ENTRY_KEYS = new Set(['output', 'change', 'each', 'reason', 'note']);
+const ENTRY_KEYS = new Set(['output', 'exclude', 'change', 'each', 'size', 'rects', 'measure', 'reason', 'note']);
+/** The output kinds a `rects` entry can judge pixel by pixel. */
+const IMAGE_KINDS = new Set(['screenshot', 'png']);
 
+/** Validate a `rects` list: [{x, y, w, h, label?}] with integer pixel coordinates and non-negative sizes. */
+function validateRects(rects, where) {
+    if (!Array.isArray(rects) || !rects.length) throw new Error(`${where}: "rects" must be a non-empty array of {x, y, w, h}`);
+    return rects.map((r, k) => {
+        const at = `${where} rects[${k}]`;
+        if (!r || typeof r !== 'object') throw new Error(`${at}: must be an object {x, y, w, h}`);
+        for (const key of Object.keys(r)) if (!['x', 'y', 'w', 'h', 'label'].includes(key)) throw new Error(`${at}: unknown key "${key}"`);
+        for (const key of ['x', 'y', 'w', 'h']) {
+            if (!Number.isInteger(r[key])) throw new Error(`${at}: "${key}" must be an integer`);
+        }
+        if (r.w < 0 || r.h < 0) throw new Error(`${at}: "w" and "h" must not be negative`);
+        return { x: r.x, y: r.y, w: r.w, h: r.h, label: typeof r.label === 'string' ? r.label : '' };
+    });
+}
+
+/**
+ * Validate one manifest entry. Keys: `output` (pattern), `exclude` (pattern of outputs the entry does not match),
+ * `change`, `each`, `reason`/`note`, and the rect allowance of 01 T2: `rects` with the capture frame `size` [w, h]
+ * (both or neither; `change` 'modified' only), plus `measure`, the instructions measure-rects.mjs reads to write
+ * `rects` and `size`. An entry with `measure` but no `rects` has not been measured and is refused.
+ */
 function validateEntry(e, where, { changeRequired }) {
     if (typeof e === 'string') e = { output: e };
     if (!e || typeof e !== 'object' || Array.isArray(e)) throw new Error(`${where}: an entry must be an object or a pattern string`);
     for (const k of Object.keys(e)) if (!ENTRY_KEYS.has(k)) throw new Error(`${where}: unknown key "${k}"`);
     if (typeof e.output !== 'string' || !e.output) throw new Error(`${where}: "output" must be a non-empty pattern`);
+    if (e.exclude !== undefined && (typeof e.exclude !== 'string' || !e.exclude)) throw new Error(`${where}: "exclude" must be a non-empty pattern`);
     if (changeRequired || e.change !== undefined) {
         if (!CHANGES.includes(e.change)) throw new Error(`${where}: "change" must be one of ${CHANGES.join(' | ')}`);
     }
     if (e.each !== undefined && typeof e.each !== 'boolean') throw new Error(`${where}: "each" must be a boolean`);
-    return { output: e.output, change: e.change ?? null, each: e.each === true, reason: e.reason ?? e.note ?? '', re: globToRegExp(e.output) };
+    let rects = null;
+    let size = null;
+    if (e.rects !== undefined || e.size !== undefined) {
+        if (e.rects === undefined || e.size === undefined) throw new Error(`${where}: "rects" and "size" go together (the rectangles and their capture frame)`);
+        if (!Array.isArray(e.size) || e.size.length !== 2 || !e.size.every((n) => Number.isInteger(n) && n > 0)) {
+            throw new Error(`${where}: "size" must be [width, height] in pixels`);
+        }
+        if (e.change !== undefined && e.change !== 'modified') throw new Error(`${where}: "rects" only apply to "change": "modified"`);
+        rects = validateRects(e.rects, where);
+        size = [e.size[0], e.size[1]];
+    }
+    if (e.measure !== undefined) {
+        if (!e.measure || typeof e.measure !== 'object' || Array.isArray(e.measure)) throw new Error(`${where}: "measure" must be an object`);
+        if (!rects) throw new Error(`${where}: "measure" without "rects": run tests/regression/measure-rects.mjs on this manifest first`);
+    }
+    return {
+        output: e.output, exclude: e.exclude ?? null, change: e.change ?? null, each: e.each === true, reason: e.reason ?? e.note ?? '',
+        re: globToRegExp(e.output), excludeRe: e.exclude ? globToRegExp(e.exclude) : null, rects, size,
+    };
+}
+
+/** Whether an entry matches an output key (its pattern, minus its `exclude` pattern). */
+const entryMatches = (entry, key) => entry.re.test(key) && !(entry.excludeRe && entry.excludeRe.test(key));
+
+/**
+ * The pixel comparison of one image output against a rect entry (01 T2): the frame size check, then every pixel with
+ * any channel difference is either inside the union of the rectangles or counted outside. Bounding boxes are
+ * [x0, y0, x1, y1], inclusive. Decoded images are cached on the output record.
+ * @returns {{size: number[], sizeOk: boolean, differing: number, outside: number, bbox: number[]|null, outsideBbox: number[]|null}}
+ */
+export function rectCheck(o, rects, size) {
+    if (!o._pixels) {
+        const a = decodePNG(fs.readFileSync(o.baseFile));
+        const b = decodePNG(fs.readFileSync(o.candFile));
+        o._pixels = { a, b };
+    }
+    const { a, b } = o._pixels;
+    const frame = [b.width, b.height];
+    const sizeOk = !size || (a.width === size[0] && a.height === size[1] && b.width === size[0] && b.height === size[1]);
+    if (a.width !== b.width || a.height !== b.height) return { size: frame, sizeOk: false, differing: NaN, outside: NaN, bbox: null, outsideBbox: null };
+    const inside = (x, y) => (rects || []).some((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
+    let differing = 0, outside = 0;
+    let bbox = null, outsideBbox = null;
+    const grow = (box, x, y) => (box ? [Math.min(box[0], x), Math.min(box[1], y), Math.max(box[2], x), Math.max(box[3], y)] : [x, y, x, y]);
+    for (let y = 0; y < a.height; y++) {
+        for (let x = 0; x < a.width; x++) {
+            const i = (y * a.width + x) * 4;
+            if (a.rgba[i] === b.rgba[i] && a.rgba[i + 1] === b.rgba[i + 1] && a.rgba[i + 2] === b.rgba[i + 2] && a.rgba[i + 3] === b.rgba[i + 3]) continue;
+            differing++;
+            bbox = grow(bbox, x, y);
+            if (rects && !inside(x, y)) {
+                outside++;
+                outsideBbox = grow(outsideBbox, x, y);
+            }
+        }
+    }
+    return { size: frame, sizeOk, differing, outside, bbox, outsideBbox };
+}
+
+const fmtBox = (box) => (box ? `[${box[0]},${box[1]}]-[${box[2]},${box[3]}]` : 'none');
+
+/**
+ * Apply a rect entry to a differing output: EXPECTED-able (returns true) only for an image of the entry's frame size
+ * whose differing pixels all lie inside the rectangles. Otherwise the output becomes a FAIL with the reason, and the
+ * function returns false (the output then satisfies nothing).
+ */
+function applyRects(o, entry, label) {
+    if (!IMAGE_KINDS.has(o.kind) || !o.baseFile || !o.candFile) {
+        o.status = 'FAIL';
+        o.detail = `[${label}] rects apply to screenshots and PNG exports only; ${o.detail}`;
+        return false;
+    }
+    let c;
+    try {
+        c = rectCheck(o, entry.rects, entry.size);
+    } catch (e) {
+        o.status = 'FAIL';
+        o.detail = `[${label}] rect check: ${e.message}; ${o.detail}`;
+        return false;
+    }
+    o.rectResult = c;
+    if (!c.sizeOk) {
+        o.status = 'FAIL';
+        o.detail = `[${label}] rect frame mismatch: the capture is ${c.size[0]}x${c.size[1]}, the entry's frame is ${entry.size[0]}x${entry.size[1]}; ${o.detail}`;
+        return false;
+    }
+    if (c.outside > 0) {
+        o.status = 'FAIL';
+        o.detail = `[${label}] ${c.outside} of ${c.differing} differing px outside the rects (bbox ${fmtBox(c.outsideBbox)}); ${o.detail}`;
+        return false;
+    }
+    o.detail = `${o.detail}; all ${c.differing} differing px inside the rects (bbox ${fmtBox(c.bbox)})`;
+    return true;
 }
 
 /** Parse and validate an expected-change manifest ({ commit, bugs?, expect: [...], mayChange?: [...] }). */
@@ -465,6 +591,9 @@ const isDiffering = (o) => o.change !== null;
  *   1. a difference matching an `expect` entry with a compatible `change` becomes EXPECTED;
  *   2. a difference matching `mayChange` becomes EXPECTED?;
  *   3. every other difference keeps its status.
+ * An entry with `rects` (01 T2) accepts a difference only when the image has the entry's frame `size` and every
+ * differing pixel lies inside the union of its rectangles; otherwise the output becomes a FAIL (the reason is in its
+ * detail) and satisfies no entry. Entries never match the outputs of their `exclude` pattern.
  * Returns one record per `expect` entry: { manifest, entry, matched, differing, satisfied, why }. An entry is
  * satisfied only by differing outputs (a within-tolerance PASS never satisfies it); with `each`, every matching
  * output present in the baseline must differ compatibly. An unsatisfied entry is a FAIL.
@@ -484,14 +613,23 @@ export function applyExpectations(outputs, manifests, allowlist) {
     const entries = [];
     for (const m of manifests) {
         for (const entry of m.expect) {
-            const matched = outputs.filter((o) => entry.re.test(o.key));
-            const differing = matched.filter((o) => isDiffering(o) && o.change === entry.change);
-            for (const o of differing) {
-                if (o.status !== 'EXPECTED') { o.status = 'EXPECTED'; o.detail = `[${m.commit}: ${entry.output}, ${entry.change}] ${o.detail}`; }
+            const matched = outputs.filter((o) => entryMatches(entry, o.key));
+            const candidates = matched.filter((o) => isDiffering(o) && o.change === entry.change);
+            const differing = [];
+            let rectFailures = 0;
+            for (const o of candidates) {
+                if (o.status === 'EXPECTED') { differing.push(o); continue; }   // accepted by an earlier entry
+                if (o.rectFailed) { rectFailures++; continue; }                 // failed an earlier entry's rect check
+                const label = `${m.commit}: ${entry.output}`;
+                if (entry.rects && !applyRects(o, entry, label)) { o.rectFailed = true; rectFailures++; continue; }
+                o.status = 'EXPECTED';
+                o.detail = `[${label}, ${entry.change}${entry.rects ? `, ${entry.rects.length} rect(s) in ${entry.size[0]}x${entry.size[1]}` : ''}] ${o.detail}`;
+                differing.push(o);
             }
             let satisfied = differing.length > 0;
             let why = '';
             if (!matched.length) why = 'no output matches the pattern';
+            else if (!differing.length && rectFailures) why = `${rectFailures} differing output(s) failed the rect check`;
             else if (!differing.length) why = `none of the ${matched.length} matching output(s) differs with change "${entry.change}"`;
             if (satisfied && entry.each) {
                 const notChanged = matched.filter((o) => o.inBaseline && !differing.includes(o));
@@ -507,8 +645,9 @@ export function applyExpectations(outputs, manifests, allowlist) {
     for (const m of manifests) {
         for (const entry of m.mayChange) {
             for (const o of outputs) {
-                if (!isDiffering(o) || o.status === 'EXPECTED' || o.status === 'EXPECTED?' || !entry.re.test(o.key)) continue;
+                if (!isDiffering(o) || o.rectFailed || o.status === 'EXPECTED' || o.status === 'EXPECTED?' || !entryMatches(entry, o.key)) continue;
                 if (entry.change && entry.change !== o.change) continue;
+                if (entry.rects && !applyRects(o, entry, `${m.commit} mayChange: ${entry.output}`)) { o.rectFailed = true; continue; }
                 o.status = 'EXPECTED?';
                 o.detail = `[${m.commit} mayChange: ${entry.output}${entry.reason ? ` (${entry.reason})` : ''}] ${o.detail}`;
             }
@@ -522,7 +661,7 @@ export function applyExpectations(outputs, manifests, allowlist) {
  * (empty: plain comparison); with at least one, the allowlist at `allowlistFile` is loaded as well.
  * Returns { exitCode, outputs, entries, lines } and writes the report through `log`.
  */
-export function runCompare({ baseDir, candDir, expectFiles = [], allowlistFile = NONDETERMINISM_FILE, opts = DEFAULT_OPTIONS, only = null, verbose = false, log = console.log }) {
+export function runCompare({ baseDir, candDir, expectFiles = [], allowlistFile = NONDETERMINISM_FILE, opts = DEFAULT_OPTIONS, only = null, verbose = false, diffBbox = false, log = console.log }) {
     const expectMode = expectFiles.length > 0;
     let manifests = [], allowlist = [];
     if (expectMode) {
@@ -537,6 +676,7 @@ export function runCompare({ baseDir, candDir, expectFiles = [], allowlistFile =
     const { A, B, scenarios } = compareTrees(baseDir, candDir, opts, only);
     const outputs = scenarios.flatMap((s) => s.outputs);
     const entries = expectMode ? applyExpectations(outputs, manifests, allowlist) : [];
+    if (diffBbox) addDiffBoxes(outputs);
 
     log(`Baseline : ${baseDir}\n           ${A.meta?.browser || '?'} captured ${A.meta?.capturedAt || '?'} from ${A.meta?.root || '?'}`);
     log(`Candidate: ${candDir}\n           ${B.meta?.browser || '?'} captured ${B.meta?.capturedAt || '?'} from ${B.meta?.root || '?'}`);
@@ -590,7 +730,28 @@ export function runCompare({ baseDir, candDir, expectFiles = [], allowlistFile =
 
 export class UsageError extends Error {}
 
-const USAGE = 'Usage: node tests/regression/compare.mjs <baselineDir> <candidateDir> [--expect a.json[,b.json]] [--tolerance 1e-5] [--png-threshold 0] [--png-max-percent 0.01] [--shot-threshold 8] [--shot-max-percent 0.5] [--only a,b] [--verbose]';
+/**
+ * --diff-bbox (01 T2): append the bounding box of the differing pixels to every differing image output (any status,
+ * JITTER included), and for an output judged by a rect entry also the box of the pixels outside its rectangles.
+ */
+function addDiffBoxes(outputs) {
+    for (const o of outputs) {
+        if (!IMAGE_KINDS.has(o.kind) || !o.baseFile || !o.candFile) continue;
+        const was = o.originalStatus ?? o.status;
+        if (was !== 'WARN' && was !== 'FAIL') continue;
+        let c = o.rectResult;
+        try {
+            if (!c) c = rectCheck(o, null, null);
+        } catch (e) {
+            o.detail = `${o.detail}; diff bbox: ${e.message}`;
+            continue;
+        }
+        o.detail = `${o.detail}; diff bbox ${fmtBox(c.bbox)} (${c.differing} px)`
+            + (o.rectResult ? `; outside the rects ${fmtBox(c.outsideBbox)} (${c.outside} px)` : '');
+    }
+}
+
+const USAGE = 'Usage: node tests/regression/compare.mjs <baselineDir> <candidateDir> [--expect a.json[,b.json]] [--tolerance 1e-5] [--png-threshold 0] [--png-max-percent 0.01] [--shot-threshold 8] [--shot-max-percent 0.5] [--only a,b] [--diff-bbox] [--verbose]';
 
 export function main(argv = process.argv) {
     let args;
@@ -604,7 +765,7 @@ export function main(argv = process.argv) {
         const { exitCode } = runCompare({
             baseDir, candDir,
             expectFiles: args.expect.map((f) => path.resolve(f)),
-            opts: args, only: args.only || null, verbose: args.verbose,
+            opts: args, only: args.only || null, verbose: args.verbose, diffBbox: args.diffBbox,
         });
         return exitCode;
     } catch (e) {
