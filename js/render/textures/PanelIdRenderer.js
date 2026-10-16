@@ -40,6 +40,47 @@ export class PanelIdRenderer {
   }
 
   /**
+   * The size of the panel-mode canvas of one panel of `section` (panelCanvas), by arithmetic only (no canvas):
+   * ledX * scale x ledY * scale with scale = panelPxPerLed(ledX, ledY) (4-16 px/LED, so ledX >= 8,192 already exceeds
+   * 32,767 px). 08 P2-1c (B-L4, 08 6.3).
+   * Side effects: none.
+   * @param {import('../../domain/WallSection.js').WallSection} section
+   * @returns {{width: number, height: number}}
+   */
+  panelSize(section) {
+    const scale = panelPxPerLed(section.ledX, section.ledY);
+    return { width: section.ledX * scale, height: section.ledY * scale };
+  }
+
+  /**
+   * The size of the canvas sectionCanvas(section, i, overrideScale) creates, by arithmetic only (no canvas):
+   * (panelCols * ledX) * scale x (panelRows * ledY) * scale with scale = overrideScale || sectionPxPerLed(...).
+   * 08 P2-1c (B-L4, 08 6.3).
+   * Side effects: none.
+   * @param {import('../../domain/WallSection.js').WallSection} section
+   * @param {number|null} overrideScale  px per LED; falsy -> sectionPxPerLed, as in sectionCanvas
+   * @returns {{width: number, height: number}}
+   */
+  sectionSize(section, overrideScale) {
+    const canvasWidth = section.panelCols * section.ledX;
+    const canvasHeight = section.panelRows * section.ledY;
+    const scale = overrideScale || sectionPxPerLed(canvasWidth, canvasHeight);
+    return { width: canvasWidth * scale, height: canvasHeight * scale };
+  }
+
+  /**
+   * The size of the combined atlas canvas atlasCanvas(sections, atlas) creates, by arithmetic only (no canvas):
+   * totalLedX * pxPerLed x totalLedY * pxPerLed. 08 P2-1c (B-L4, 08 6.3).
+   * Side effects: none.
+   * @param {import('../../domain/WallSection.js').WallSection[]} sections
+   * @param {{totalLedX: number, totalLedY: number, pxPerLed: number}} [atlas]  defaults to computeAtlas(sections)
+   * @returns {{width: number, height: number}}
+   */
+  atlasSize(sections, atlas = computeAtlas(sections)) {
+    return { width: atlas.totalLedX * atlas.pxPerLed, height: atlas.totalLedY * atlas.pxPerLed };
+  }
+
+  /**
    * The panel-mode canvas of one panel: border, label and (optionally) the section name.
    * Ports: index.html@cd3fd3f lines 2002-2046 (the CanvasTexture of 2047-2048 is created by LEDMaterialFactory).
    * Side effects: creates and draws a canvas.

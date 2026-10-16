@@ -66,18 +66,20 @@ export class ObjExporter {
    *   combined: one object `LED_Wall_Combined` coloured by the first section (B-L6); all `v` lines of all
    *     sections, then all `vt` lines (0..1 per section, B-M6), one constant `vn`, then the faces;
    *   section: one material and object per section; per-section `vt`, one `vn` per section; `map_Kd` names the
-   *     texture by index (B-M2, tagged at PanelNaming.mtlTextureFile);
+   *     texture by index (B-M2, tagged at PanelNaming.mtlTextureFile), except for a section whose `skipped[i]` is
+   *     true (the ZIP left its texture out, 08 P2-1c): its material ends without `map_Kd`;
    *   panel: one object per panel with 4 vertices, 4 `vt`, its facing `vn` and two faces.
    * Ports: index.html@cd3fd3f lines 4556-4717.
    * Side effects: none.
    * @param {{sections: import('../domain/WallSection.js').WallSection[], meshMode: *,
-   *          layout: import('../geometry/WallLayout.js').WallLayout}} args  layout = layoutProject(project) of
-   *   the same sections
+   *          layout: import('../geometry/WallLayout.js').WallLayout, skipped?: boolean[]|null}} args  layout =
+   *   layoutProject(project) of the same sections; skipped (Export All ZIP only, 08 P2-1c): per section, true when its
+   *   texture is not shipped, so its section-mode material gets no map_Kd (P2-6 replaces it with null texture names)
    * @returns {{objContent: string, mtlContent: string}}
    * @throws {TypeError} combined mode on an empty wall (`sections[0].color`, as legacy);
    *   {Error} unsupportedStrategy for a foreign profile value
    */
-  write({ sections, meshMode, layout }) {
+  write({ sections, meshMode, layout, skipped = null }) {
     const brand = this.#brand;
     let objContent = brand.objHeader;
     objContent += `# Mesh Mode: ${meshMode}\n`;
@@ -88,7 +90,7 @@ export class ObjExporter {
     if (meshMode === 'combined') {
       this.#writeCombined(text, sections, layout);
     } else if (meshMode === 'section') {
-      this.#writeSections(text, sections, layout);
+      this.#writeSections(text, sections, layout, skipped);
     } else {
       // LEGACY(B-L8): any other mesh mode (an unvalidated imported string) is written as individual panels.
       this.#writePanels(text, sections, layout);
@@ -159,15 +161,17 @@ export class ObjExporter {
    * @param {{objContent: string, mtlContent: string}} text  appended to
    * @param {import('../domain/WallSection.js').WallSection[]} sections
    * @param {import('../geometry/WallLayout.js').WallLayout} layout
+   * @param {boolean[]|null} skipped  sections whose texture the ZIP left out get no map_Kd (08 P2-1c)
    */
-  #writeSections(text, sections, layout) {
+  #writeSections(text, sections, layout, skipped) {
     sections.forEach((section, i) => {
       const color = this.#colorToRgb(section.color);
       text.mtlContent += `newmtl ${exportSectionName(i)}\n`;
       text.mtlContent += `Kd ${color.r.toFixed(4)} ${color.g.toFixed(4)} ${color.b.toFixed(4)}\n`;
       text.mtlContent += `Ka 0.1 0.1 0.1\nKs 0.5 0.5 0.5\nNs 100\nd 1.0\n`;
-      // The index-based texture path is B-M2 (tagged at PanelNaming.mtlTextureFile).
-      text.mtlContent += `map_Kd ${mtlTextureFile(i)}\n\n`;
+      // The index-based texture path is B-M2 (tagged at PanelNaming.mtlTextureFile). A texture the ZIP left out
+      // (08 P2-1c) is not referenced.
+      text.mtlContent += skipped && skipped[i] ? '\n' : `map_Kd ${mtlTextureFile(i)}\n\n`;
     });
 
     text.objContent += `mtllib ${this.#brand.files.mtl}\n\n`;

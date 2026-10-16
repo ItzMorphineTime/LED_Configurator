@@ -33,6 +33,7 @@ import { ObjExporter } from '../../js/io/ObjExporter.js';
 import { GltfExporter, chunkedBase64 } from '../../js/io/GltfExporter.js';
 import { ProjectIO, Downloader } from '../../js/app/ProjectIO.js';
 import { ExportPanel } from '../../js/ui/ExportPanel.js';
+import { PanelIdRenderer } from '../../js/render/textures/PanelIdRenderer.js';
 import { Brand, Palette } from '../../js/theme/Theme.js';
 import * as L from './oracle/legacy-io.mjs';
 import { CONFIGS } from '../regression/configs.mjs';
@@ -801,6 +802,41 @@ describe('chunkedBase64 (B-H3, 08 6.1)', () => {
   });
 });
 
+describe("ProjectSerializer and ObjExporter: textures the ZIP left out (B-L4, 08 P2-1c)", () => {
+  const project = projectOf([
+    new WallSection({ id: 1, name: 'A', panelCols: 2, panelRows: 1, panelWidth: 500, panelHeight: 500, ledX: 32, ledY: 32,
+      curveIntensity: 0, angleOffset: 0, color: '#ff00aa' }),
+    new WallSection({ id: 2, name: 'B', panelCols: 2, panelRows: 1, panelWidth: 500, panelHeight: 500, ledX: 32, ledY: 32,
+      curveIntensity: 5, angleOffset: 0, color: '#00ff66' }),
+  ], 'section');
+  const args = (meshMode, skipped) => ({ sections: project.wall.sections, meshMode, layout: layoutProject(project), skipped });
+
+  test("'zip' JSON: texture_file null where skipped; the names are still computed (a numeric name still throws)", () => {
+    const plain = serializer.write(project, { variant: 'zip' });
+    const doc = serializer.write(project, { variant: 'zip', skipped: [false, true] });
+    assert.deepEqual(doc.sections.map((s) => s.texture_file), ['textures/A_PanelIDs.png', null]);
+    assert.equal(json2({ ...doc, sections: doc.sections.map((s) => ({ ...s, texture_file: 'x' })) }),
+      json2({ ...plain, sections: plain.sections.map((s) => ({ ...s, texture_file: 'x' })) }), 'nothing else changes');
+    assert.equal(json2(serializer.write(project, { variant: 'zip', skipped: [false, false] })), json2(plain));
+    assert.equal(json2(serializer.write(project, { variant: 'file', skipped: [true, true] })), json2(serializer.write(project)));
+    const named = projectOf([new WallSection({ ...project.wall.sections[0], name: 7 })], 'section');
+    assert.throws(() => serializer.write(named, { variant: 'zip', skipped: [true] }), { message: 'name.replace is not a function' });
+  });
+
+  test('section-mode MTL: no map_Kd for a skipped section, the rest byte-identical; other modes ignore skipped', () => {
+    const plain = OBJ.write(args('section', null));
+    const out = OBJ.write(args('section', [false, true]));
+    assert.equal(out.objContent, plain.objContent);
+    assert.equal(out.mtlContent, plain.mtlContent.replace('d 1.0\nmap_Kd textures/Wall_2_PanelIDs.png\n\n', 'd 1.0\n\n'));
+    assert.ok(out.mtlContent.endsWith('d 1.0\n\n'));
+    for (const mode of ['combined', 'panel']) {
+      const a = OBJ.write(args(mode, [true, true]));
+      const b = OBJ.write(args(mode, null));
+      assert.equal(objText(a), objText(b), mode);
+    }
+  });
+});
+
 describe("glTF index width: mesh.gltf.indexType 'auto' (B-L5, 08 6.2)", () => {
   /** A project with one flat section of cols x rows panels in meshMode. */
   const bigProject = (cols, rows, meshMode) => projectOf([new WallSection({ id: 0, name: 'Big', panelCols: cols, panelRows: rows,
@@ -912,13 +948,15 @@ function fakeIO(project, log, extra = {}) {
     applyImport: (parsed) => log.push(['applyImport', parsed]),
   };
   const panelIds = {
+    atlasSize: () => extra.atlasSize ?? { width: 640, height: 384 },
+    sectionSize: (section) => (extra.sectionSize ? extra.sectionSize(section) : { width: 640, height: 384 }),
     atlasCanvas: (sections) => {
       log.push(['atlasCanvas', sections]);
       return { toBlob: (cb, type) => { log.push(['toBlob', type]); extra.toBlobCallback = cb; } };
     },
     sectionCanvas: (section, i, scale, startCol) => {
       log.push(['sectionCanvas', i, scale, startCol]);
-      return { toDataURL: (type) => (log.push(['toDataURL', type]), extra.dataUrl ?? 'data:image/png;base64,QUJD') };
+      return { toDataURL: (type) => (log.push(['toDataURL', type]), (extra.dataUrlFor && extra.dataUrlFor(i)) ?? 'data:image/png;base64,QUJD') };
     },
   };
   class FakeZip {
@@ -942,6 +980,11 @@ function fakeIO(project, log, extra = {}) {
 
 /** The M-EXP-1 text of 08 3.3. */
 const mExp1 = (label, message) => `${label} failed: ${message}. No file was downloaded.`;
+/** The M-EXP-2, M-EXP-3 and M-EXP-4 texts of 08 3.3 (CANVAS_HARD_LIMITS: 32,767 px, 268 MP). */
+const mExp2 = (w, h) => `The Panel ID image would be ${w}×${h} px, larger than this browser can create (32767 px per side, 268 MP). ` +
+  'Reduce Pixels X/Y or the number of columns, or use Export All (ZIP), which writes one image per section.';
+const mExp3 = (w, h) => `This browser could not create the ${w}×${h} px Panel ID image. Reduce Pixels X/Y or the number of columns.`;
+const mExp4 = (names) => `The ZIP was created, but ${names.length} texture(s) were too large for this browser and were left out: ${names.join(', ')}.`;
 
 describe('ProjectIO use cases', () => {
   test('exportJSON downloads the pretty-printed file document', () => {
@@ -993,15 +1036,36 @@ describe('ProjectIO use cases', () => {
     assert.deepEqual(log.at(-1), ['saveBlob', 'panel-ids.png', 'PNG-BLOB']);
   });
 
-  test('exportPanelIds: a null toBlob result is reported as M-EXP-1, not thrown (B-L4 is guarded in P2-1c)', async () => {
+  test('exportPanelIds: an atlas beyond CANVAS_HARD_LIMITS alerts M-EXP-2 and creates no canvas (B-L4, 08 P2-1c)', async () => {
+    for (const [width, height] of [[70000, 128], [32768, 10], [16384, 16385]]) {
+      const log = [];
+      await fakeIO(Project.createDefault(), log, { atlasSize: { width, height } }).exportPanelIds();
+      assert.deepEqual(log, [['alert', mExp2(width, height)]], `${width}x${height}`);
+    }
+    const log = [];
+    const extra = { atlasSize: { width: 32767, height: 8192 } };
+    const promise = fakeIO(Project.createDefault(), log, extra).exportPanelIds();
+    extra.toBlobCallback('PNG-BLOB');
+    await promise;
+    assert.deepEqual(log.map((e) => e[0]), ['atlasCanvas', 'toBlob', 'saveBlob'], 'the largest atlas that fits is exported');
+  });
+
+  test('exportPanelIds: a null toBlob result (a device limit) alerts M-EXP-3, downloads nothing, throws nothing', async () => {
     const log = [];
     const extra = {};
     const promise = fakeIO(Project.createDefault(), log, extra).exportPanelIds();
     extra.toBlobCallback(null);
     await promise;
-    assert.deepEqual(log.slice(2).map((e) => e[0]), ['alert', 'warn']);
-    assert.equal(log[2][1], mExp1('Export Panel IDs', "Failed to execute 'createObjectURL' on 'URL': Overload resolution failed."));
-    assert.ok(log[3][1] instanceof TypeError, 'the error itself goes to win.console.warn');
+    assert.deepEqual(log.slice(2), [['alert', mExp3(640, 384)]]);
+  });
+
+  test('exportPanelIds: the real atlas size of the p2_oversize_canvas wall is refused (PanelIdRenderer.atlasSize)', async () => {
+    const project = projectOf([new WallSection({ id: 0, name: 'Oversize', panelCols: 70, panelRows: 2, panelWidth: 500,
+      panelHeight: 500, ledX: 1000, ledY: 64, curveIntensity: 0, angleOffset: 0, color: '#00f0ff' })], 'section');
+    const renderer = new PanelIdRenderer({ doc: null, style: project.panelIdStyle, logos: project.logos, theme: { canvas: {} } });
+    const log = [];
+    await fakeIO(project, log, { atlasSize: renderer.atlasSize(project.wall.sections) }).exportPanelIds();
+    assert.deepEqual(log, [['alert', mExp2(70000, 128)]]);
   });
 
   test('exportZIP: legacy order (JSON zip variant, layout, OBJ, MTL, glTF, textures, generateAsync, download)', async () => {
@@ -1049,9 +1113,62 @@ describe('ProjectIO use cases', () => {
     assert.equal(log2[1][1], mExp1('Export All (ZIP)', 'name.replace is not a function'));
     assert.ok(log2[2][1] instanceof TypeError);
 
-    const log3 = [];
-    await fakeIO(Project.createDefault(), log3, { dataUrl: 'data:,' }).exportZIP();
-    assert.deepEqual(log3.find((e) => e[0] === 'folder.file'), ['folder.file', 'textures/Wall_1_PanelIDs.png', { base64: true }, '']);
+  });
+
+  test('exportZIP pre-check: an oversize section is skipped up front (JSON null, no map_Kd, no canvas) and named by M-EXP-4', async () => {
+    const project = projectFromConfig(CONFIGS.flat3);
+    project.meshMode = 'section';
+    const sections = project.wall.sections;
+    const tooBig = sections[1];
+    const log = [];
+    await fakeIO(project, log, { sectionSize: (s) => (s === tooBig ? { width: 70000, height: 128 } : { width: 640, height: 384 }) }).exportZIP();
+    const skipped = sections.map((s) => s === tooBig);
+    const layout = layoutProject(project);
+    const json = json2(serializer.write(project, { variant: 'zip', skipped }));
+    assert.equal(JSON.parse(json).sections[1].texture_file, null);
+    assert.equal(JSON.parse(json).sections[0].texture_file, 'textures/Left_PanelIDs.png');
+    const { objContent, mtlContent } = OBJ.write({ sections, meshMode: 'section', layout, skipped });
+    assert.ok(!mtlContent.includes('map_Kd textures/Wall_2_PanelIDs.png'));
+    assert.ok(mtlContent.includes('map_Kd textures/Wall_1_PanelIDs.png') && mtlContent.includes('map_Kd textures/Wall_3_PanelIDs.png'));
+    const atlas = computeAtlas(sections);
+    assert.deepEqual(log, [
+      ['new JSZip'],
+      ['zip.file', 'led-wall-config.json', undefined, json],
+      ['layout'],
+      ['zip.file', 'led-wall-config.obj', undefined, objContent],
+      ['zip.file', 'led-wall-config.mtl', undefined, mtlContent],
+      ['zip.file', 'led-wall-config.gltf', undefined, json2(GLTF.write({ sections, meshMode: 'section', layout }))],
+      ['zip.folder', 'textures'],
+      ...[0, 2].flatMap((i) => [
+        ['sectionCanvas', i, null, atlas.entries[i].startCol],
+        ['toDataURL', 'image/png'],
+        ['folder.file', `textures/${zipTextureFileName(sections[i], i)}`, { base64: true }, 'QUJD'],
+      ]),
+      ['generateAsync', { type: 'blob' }],
+      ['saveBlob', 'led-wall-export.zip', 'ZIP-BLOB'],
+      ['alert', mExp4(['textures/Center_PanelIDs.png'])],
+    ]);
+  });
+
+  test('exportZIP late skip: a data:, PNG is left out, the JSON and MTL entries are re-written, M-EXP-4 names it', async () => {
+    const project = projectFromConfig(CONFIGS.flat3);
+    project.meshMode = 'section';
+    const sections = project.wall.sections;
+    const log = [];
+    await fakeIO(project, log, { dataUrlFor: (i) => (i === 2 ? 'data:,' : undefined) }).exportZIP();
+    const skipped = [false, false, true];
+    const layout = layoutProject(project);
+    const files = log.filter((e) => e[0] === 'zip.file' || e[0] === 'folder.file').map((e) => e[1]);
+    assert.deepEqual(files, ['led-wall-config.json', 'led-wall-config.obj', 'led-wall-config.mtl', 'led-wall-config.gltf',
+      'textures/Left_PanelIDs.png', 'textures/Center_PanelIDs.png', 'led-wall-config.json', 'led-wall-config.mtl']);
+    const rewrites = log.filter((e) => e[0] === 'zip.file').slice(-2);
+    assert.equal(rewrites[0][3], json2(serializer.write(project, { variant: 'zip', skipped })));
+    assert.equal(rewrites[1][3], OBJ.write({ sections, meshMode: 'section', layout, skipped }).mtlContent);
+    assert.deepEqual(log.slice(-2), [['saveBlob', 'led-wall-export.zip', 'ZIP-BLOB'], ['alert', mExp4(['textures/Right_PanelIDs.png'])]]);
+    // No left-out texture: no alert at all.
+    const log2 = [];
+    await fakeIO(project, log2).exportZIP();
+    assert.ok(!log2.some((e) => e[0] === 'alert'));
   });
 
   test('exportSafeDistanceOBJ: alert without a group; with one, the OBJ Blob is downloaded (B-M1 fixed in 08 P2-5a)', async () => {

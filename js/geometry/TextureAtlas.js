@@ -5,9 +5,32 @@
  * 4 legacy `cumulativeCol` loops (1696-1705, 1711/1772, 1777/1800, 4534-4542) and the 2 totals loops (1586-1590,
  * 1681-1685); also hosts the two per-canvas px/LED rules.
  * Legacy source: index.html@cd3fd3f 1586-1596 + 1643 (combined mesh UVs), 1681-1705 (combined panel-ID atlas),
- * 2003 (panel canvas px/LED), 2056 (section canvas px/LED).
+ * 2003 (panel canvas px/LED), 2056 (section canvas px/LED). The canvas-size guard (CANVAS_HARD_LIMITS, canvasFits) is
+ * new in 08 P2-1c (B-L4, 08 6.3).
  * Layer: geometry (may import domain, legacy; THREE-free and DOM-free).
  */
+
+/**
+ * The largest canvas every supported browser can create (08 6.3): 32,767 px per side and 268,435,456 px (16,384 x 16,384)
+ * in area. Chrome itself draws up to 65,535 px per side; 32,767 is the stricter limit of other browsers. A device with
+ * lower limits (iOS Safari allows about 16.7 MP) can still fail, which the exports detect from toBlob / toDataURL
+ * (M-EXP-3, the ZIP's late skip); 07's CanvasProbe later replaces these hard limits with probed ones (08 5.6).
+ * @type {Readonly<{maxSide: number, maxArea: number}>}
+ */
+export const CANVAS_HARD_LIMITS = Object.freeze({ maxSide: 32767, maxArea: 268435456 });
+
+/**
+ * Whether a w x h canvas can be created (08 6.3, B-L4 fixed in 08 P2-1c):
+ * w >= 1 && h >= 1 && w <= maxSide && h <= maxSide && w * h <= maxArea. NaN, 0 and negative sizes do not fit.
+ * Side effects: none.
+ * @param {number} w  width in px
+ * @param {number} h  height in px
+ * @param {{maxSide: number, maxArea: number}} [limits]
+ * @returns {boolean}
+ */
+export function canvasFits(w, h, limits = CANVAS_HARD_LIMITS) {
+  return w >= 1 && h >= 1 && w <= limits.maxSide && h <= limits.maxSide && w * h <= limits.maxArea;
+}
 
 /**
  * Per-section atlas bookkeeping.

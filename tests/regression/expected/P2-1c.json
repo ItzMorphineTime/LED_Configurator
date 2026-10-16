@@ -1,0 +1,15 @@
+{
+  "commit": "P2-1c",
+  "bugs": ["B-L4"],
+  "expect": [
+    { "output": "p2_oversize_canvas/dialogs.json", "change": "modified",
+      "reason": "Export Panel IDs: the M-EXP-1 alert of P2-1a becomes M-EXP-2 (the 70,000 x 128 px atlas exceeds CANVAS_HARD_LIMITS, refused before any canvas); Export All (ZIP) adds M-EXP-4 naming textures/Oversize_PanelIDs.png" },
+    { "output": "p2_oversize_canvas/*__export-zip__*.zip", "change": "modified",
+      "reason": "the 0-byte textures/Oversize_PanelIDs.png entry is gone, the ZIP JSON says texture_file: null and the section-mode MTL has no map_Kd for that section" }
+  ],
+  "mayChange": [
+    { "output": "large_wall/final__export-zip__led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen so far: L2_PanelIDs.png (1995, 948), L3_PanelIDs.png (1970, 1003), L4_PanelIDs.png (2026, 858), 1 px each, 3840x1920); every large_wall section fits CANVAS_HARD_LIMITS, so this commit changes nothing there" }
+  ],
+  "notes": "console.json is not expected to change: the Export Panel IDs error was already caught in P2-1a, and warnings are not recorded (08 2.4)"
+}

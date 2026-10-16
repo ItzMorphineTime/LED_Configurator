@@ -678,7 +678,8 @@ in parentheses changes them:
   produced (08 P2-5a: the four OBJs download); the `concave30` screenshot shows the folded band (B-M15).
 - `p2_oversize_canvas`: Export Panel IDs throws `TypeError: Failed to execute 'createObjectURL' on
   'URL': Overload resolution failed.` and downloads nothing; the ZIP holds a 0-byte texture (B-L4)
-  (08 P2-1a: the TypeError is an M-EXP-1 alert).
+  (08 P2-1a: the TypeError is an M-EXP-1 alert; 08 P2-1c: Export Panel IDs alerts M-EXP-2 and creates no
+  canvas, and the ZIP leaves the texture out, with `texture_file: null`, no `map_Kd` and the M-EXP-4 alert).
 - `p2_shortcut_filters`: `g` in the focused select turns translate mode on, Ctrl+G turns it off again,
   and the three auto-repeated `p` presses leave pilot mode on (B-L11).
 - `p2_project_v2`: the JSON exports are v1 (sections and mesh mode only), so the restored page has the

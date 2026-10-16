@@ -199,7 +199,7 @@ js/
     WallMeshBuilder.js                     WP4   quadIndices + WallMeshBuilder: the one owner of winding, normals, UVs, panel quads;
                                                  maxIndexOf, indexWidth (index component width, 08 P2-1b)
     TextureAtlas.js                        WP4   computeAtlas (LED totals, px/LED, start columns, x offsets, UV offsets),
-                                                 sectionPxPerLed, panelPxPerLed
+                                                 sectionPxPerLed, panelPxPerLed; CANVAS_HARD_LIMITS, canvasFits (08 P2-1c)
     PanelNaming.js                         WP4   Column letters, panel labels, export object names, filename sanitising, texture names
   render/
     ResourceTracker.js                     WP6   disposeObject3D(root, {maps}) + ResourceTracker
@@ -900,6 +900,11 @@ export function computeAtlas(sections)
 export function sectionPxPerLed(w, h)
 /** LEGACY(B-M16): Math.max(4, Math.min(16, Math.floor(4096 / Math.max(ledX, ledY))))  panel canvas px/LED (2003) */
 export function panelPxPerLed(ledX, ledY)
+/** 08 6.3 (B-L4, 08 P2-1c): Object.freeze({ maxSide: 32767, maxArea: 268435456 }), the largest canvas every supported
+ *  browser can create (Chrome draws up to 65,535 px per side; 07's CanvasProbe later probes device limits). */
+export const CANVAS_HARD_LIMITS
+/** w >= 1 && h >= 1 && w <= limits.maxSide && h <= limits.maxSide && w * h <= limits.maxArea (NaN and 0 do not fit). */
+export function canvasFits(w, h, limits = CANVAS_HARD_LIMITS)
 ```
 
 #### `js/geometry/PanelNaming.js`
@@ -1104,6 +1109,15 @@ export class PanelIdRenderer {   // pure 2D canvas; creates no THREE objects; sh
    *  (atlas.entries[i].ledOffsetX * scale, (atlas.totalLedY - section.panelRows * section.ledY) * scale).
    *  @returns {HTMLCanvasElement} */
   atlasCanvas(sections, atlas = computeAtlas(sections))
+  /** 08 P2-1c (B-L4, 08 6.3): the size each canvas above would get, by arithmetic only (no canvas is created), so the
+   *  exports can test canvasFits before drawing:
+   *  panelSize(section): scale = panelPxPerLed(section.ledX, section.ledY); {width: ledX * scale, height: ledY * scale}
+   *  sectionSize(section, overrideScale): w = panelCols * ledX, h = panelRows * ledY, scale = overrideScale ||
+   *    sectionPxPerLed(w, h); {width: w * scale, height: h * scale}
+   *  atlasSize(sections, atlas = computeAtlas(sections)): {width: totalLedX * pxPerLed, height: totalLedY * pxPerLed} */
+  panelSize(section)
+  sectionSize(section, overrideScale)
+  atlasSize(sections, atlas = computeAtlas(sections))
 }
 ```
 
@@ -1486,8 +1500,11 @@ export class ProjectSerializer {
    *  LEGACY(B-L31): v1 saves only sections, mesh_mode and totals.
    *  Any other variant throws RangeError('Unknown ProjectSerializer variant ...') (no legacy counterpart; App and
    *  ProjectIO pass only 'file' and 'zip').
-   *  @param {Project} project  @param {{variant?: 'file'|'zip'}} [options]  @returns {object} */
-  write(project, { variant = 'file' } = {})
+   *  'zip' with `skipped` (08 P2-1c, B-L4): texture_file is null for a section whose skipped[i] is true (its texture is not
+   *  in the ZIP); the path is computed first anyway, so a numeric name still throws. 08 P2-6 replaces skipped with null
+   *  textureNames.
+   *  @param {Project} project  @param {{variant?: 'file'|'zip', skipped?: boolean[]|null}} [options]  @returns {object} */
+  write(project, { variant = 'file', skipped = null } = {})
   /** Verbatim 4975-4988. Phase 1 reads EVERY version as v1 (legacy ignores `version`); this is the version-dispatch seam.
    *  Evaluates `data.sections && Array.isArray(data.sections)` first, so `data === null` throws TypeError inside the
    *  caller's try (V-5 alert); returns null otherwise (V-6: silently ignored). Then, before the map:
@@ -1527,7 +1544,8 @@ export class ObjExporter {
    *  private #stripNormalLine(): switch (profile.stripNormals) { case 'constant-z': return 'vn 0 0 1\n';
    *    default: throw unsupportedStrategy('mesh.obj.stripNormals', ...) }  (the legacy literal of 4589 and 4635)
    *  section: mtl per section `newmtl Wall_${i+1}` ... `d 1.0\n` + `map_Kd ${mtlTextureFile(i)}\n\n` (index-based path:
-   *    B-M2, tagged at PanelNaming.mtlTextureFile);
+   *    B-M2, tagged at PanelNaming.mtlTextureFile), or `\n` instead of the map_Kd line when skipped[i] (the ZIP left that
+   *    texture out, 08 P2-1c; Export OBJ passes no skipped);
    *    obj `mtllib ...\n\n`; per section: `o Wall_${i+1}\n usemtl Wall_${i+1}\n`, v lines, vt lines, #stripNormalLine(),
    *    faces `f ${v}/${t}/${n} ...` with t === v (texCoordOffset equals vertexOffset at every section) and n = normalOffset
    *    (starts 1, +1 per section), then '\n'.
@@ -1536,7 +1554,7 @@ export class ObjExporter {
    *    `vt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\n`, `vn ${n.x.toFixed(6)} 0 ${n.z.toFixed(6)}\n` from builder.panelFacingNormal,
    *    faces from builder.panelQuadIndices(vertexOffset) and (texCoordOffset) with /${normalOffset}; offsets += 4, normalOffset += 1; '\n'.
    *  @returns {{objContent: string, mtlContent: string}} */
-  write({ sections, meshMode, layout })
+  write({ sections, meshMode, layout, skipped = null })
   /** Verbatim 2792-2823: brand.safeDistanceObjHeader; group.traverse(child => child.isMesh && child.geometry): `v` lines from
    *  position.getX/Y/Z(i).toFixed(6), '\n', `f a b c` from index.getX + running vertexOffset (starts 1). Duck-typed: no THREE import. */
   writeSafeDistance(group)
@@ -1740,17 +1758,25 @@ export class ProjectIO {
   exportOBJ()
   /** 4919-4924: saveText(JSON.stringify(gltfExporter.write({...}), null, 2), brand.files.gltf, 'application/json') */
   exportGLTF()
-  /** 4926-4940 (stays async): canvas = panelIds.atlasCanvas(sections); blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
-   *  downloader.saveBlob(blob, brand.files.panelIdsPng)   LEGACY(B-L4): no null-blob guard (the TypeError of
-   *  URL.createObjectURL(null) becomes the M-EXP-1 alert since 08 P2-1a) */
+  /** 4926-4940 (stays async), with the 08 6.3 size guard (B-L4 fixed in 08 P2-1c): atlas = computeAtlas(sections);
+   *  {width, height} = panelIds.atlasSize(sections, atlas); if (!canvasFits(width, height)) { dialogs.alert(M-EXP-2); return }
+   *  canvas = panelIds.atlasCanvas(sections, atlas); blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+   *  if (blob === null) { dialogs.alert(M-EXP-3); return }  downloader.saveBlob(blob, brand.files.panelIdsPng).
+   *  M-EXP-2/3 are the exact 08 3.3 texts (CANVAS_HARD_LIMITS: 32767 px per side, Math.round(maxArea / 1e6) = 268 MP). */
   async exportPanelIds()
-  /** 4491-4554, same order: zip = new JSZip(); zip.file(brand.files.json, JSON.stringify(serializer.write(project, {variant: 'zip'}), null, 2));
-   *  layout = wallController.layout(); OBJ + MTL files; glTF file; folder = zip.folder('textures'); atlas = computeAtlas(sections);
-   *  for i: canvas = panelIds.sectionCanvas(sections[i], i, null, atlas.entries[i].startCol); base64 = canvas.toDataURL('image/png').split(',')[1];
-   *  folder.file(zipTextureFileName(sections[i], i), base64, {base64: true}) (LEGACY(B-L14): same names overwrite);
-   *  content = await zip.generateAsync({type: 'blob'}); downloader.saveBlob(content, brand.files.zip).
-   *  LEGACY(B-L4): `data:,` for oversized canvases. The body is the private #writeZip(), run by #runExport (08 P2-1a: a
-   *  failure is the M-EXP-1 alert instead of an unhandled rejection). */
+  /** 4491-4554, same order, with the 08 6.3 size guard (B-L4 fixed in 08 P2-1c): zip = new JSZip();
+   *  1. skipped[i] = !canvasFits(panelIds.sectionSize(sections[i], null))  (pure arithmetic, before anything is written);
+   *  2. zip.file(brand.files.json, JSON.stringify(serializer.write(project, {variant: 'zip', skipped}), null, 2));
+   *     layout = wallController.layout(); OBJ + MTL files (objExporter.write({..., skipped})); glTF file;
+   *  3. folder = zip.folder('textures'); atlas = computeAtlas(sections); for i not skipped: canvas = panelIds.sectionCanvas(
+   *     sections[i], i, null, atlas.entries[i].startCol); dataUrl = canvas.toDataURL('image/png'); `data:,` (a device limit
+   *     below the hard limit) -> late.push(i); else folder.file(zipTextureFileName(sections[i], i), base64, {base64: true})
+   *     (LEGACY(B-L14): same names overwrite);
+   *  4. if late: skipped[i] = true for each, then the JSON and MTL entries are written again (JSZip keeps their position);
+   *  content = await zip.generateAsync({type: 'blob'}); downloader.saveBlob(content, brand.files.zip);
+   *  5. if any skipped: dialogs.alert(M-EXP-4) with every left-out entry name `textures/${zipTextureFileName(s, i)}`.
+   *  Before 08 P2-7f the ZIP holds no atlas, so only section textures are guarded. The body is the private #writeZip(),
+   *  run by #runExport (08 P2-1a: a failure is the M-EXP-1 alert instead of an unhandled rejection). */
   async exportZIP()
   /** 2786-2827: group = safeDistance.object3D; if (!group) { dialogs.alert('Enable Safe Distance 3D visualization first'); return }
    *  text = objExporter.writeSafeDistance(group); blob = new Blob([text], {type: 'text/plain'});
@@ -2340,7 +2366,7 @@ e.target.value = ''                                // synchronous reset (5009)
 
 ### 6.13 Exports
 
-All exports read the live project and a fresh `layoutProject(project)`; none reads the scene except the safe-distance OBJ (its group). See `ProjectIO` (section 3.10) for the exact sequences of `exportJSON`, `exportOBJ` (OBJ, then MTL after 100 ms), `exportGLTF`, `exportPanelIds` (async, `toBlob`), `exportZIP` (async; JSON -> OBJ -> MTL -> glTF -> textures -> `generateAsync` -> download) and `exportSafeDistanceOBJ` (alert or download; 08 P2-5a). Every export runs inside `ProjectIO.#runExport` (08 P2-1a): an export that throws or rejects shows the M-EXP-1 alert `<label> failed: <message>. No file was downloaded.` and warns in the console instead of raising an uncaught exception or an unhandled rejection (for example the empty-wall combined OBJ/glTF TypeError of `import_edge`). Console and dialog behaviour must match the baseline of the parent commit.
+All exports read the live project and a fresh `layoutProject(project)`; none reads the scene except the safe-distance OBJ (its group). See `ProjectIO` (section 3.10) for the exact sequences of `exportJSON`, `exportOBJ` (OBJ, then MTL after 100 ms), `exportGLTF`, `exportPanelIds` (async, `toBlob`), `exportZIP` (async; JSON -> OBJ -> MTL -> glTF -> textures -> `generateAsync` -> download) and `exportSafeDistanceOBJ` (alert or download; 08 P2-5a). Export Panel IDs and Export All (ZIP) check every canvas against `CANVAS_HARD_LIMITS` before drawing it (08 P2-1c): an oversize atlas alerts M-EXP-2 and a null `toBlob` result M-EXP-3, with no download; the ZIP leaves oversize (or `data:,`) section textures out, writes `texture_file: null` and no `map_Kd` for them, and alerts M-EXP-4 after the download. Every export runs inside `ProjectIO.#runExport` (08 P2-1a): an export that throws or rejects shows the M-EXP-1 alert `<label> failed: <message>. No file was downloaded.` and warns in the console instead of raising an uncaught exception or an unhandled rejection (for example the empty-wall combined OBJ/glTF TypeError of `import_edge`). Console and dialog behaviour must match the baseline of the parent commit.
 
 ---
 
@@ -2488,7 +2514,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | B-L1 | Curve before the first panel (B-5) | `Strategies.curveBeforeFirstPanel` | owner decision |
 | B-L2 | Flat bounds for target/reset/D (H-3, J-1, J-9) | `Strategies.framingBounds` | true bounds / pivot |
 | B-L3 | Right-panel normals | `Strategies.mesh.viewport.normals` | `'averaged'` |
-| B-L4 | No canvas-size guard (`toBlob` null throws, ZIP `data:,`) | `ProjectIO.exportPanelIds/exportZIP` (tag) | budget + message |
+| B-L4 | No canvas-size guard (`toBlob` null throws, ZIP `data:,`) | `ProjectIO.exportPanelIds/exportZIP` (fixed); the viewport panel-ID canvases (untagged) | Landed in 08 P2-1c (export size guards: `canvasFits`, M-EXP-2/3/4, ZIP pre-check and late skip; no tag site); the viewport fallback: 08 P2-1d |
 | B-L5 | Uint16 glTF indices | `Strategies.mesh.gltf.indexType` (fixed) | Landed in 08 P2-1b (glTF `mesh.gltf.indexType = 'auto'`, `indexWidth`; no tag site); the viewport index attribute: 08 P2-1e |
 | B-L6 | Combined exports use section 0's colour | `Strategies.exportCombinedColor` | per-section |
 | B-L7 | MTL second download, textures missing | `Strategies.mtlDownloadDelayMs` | bundle |
@@ -2590,8 +2616,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/app/CameraController.js#CameraHub.refresh` | B-L30 |
 | `js/app/CameraController.js#setPreviewEnabled` | B-H4, B-M8 |
 | `js/app/ProjectIO.js#exportOBJ` | B-L7 |
-| `js/app/ProjectIO.js#exportPanelIds` | B-L4 |
-| `js/app/ProjectIO.js#exportZIP` | B-L4, B-L14 |
+| `js/app/ProjectIO.js#exportZIP` | B-L14 |
 | `js/ui/SectionListPanel.js#render` | B-M4 |
 | `js/ui/SectionListPanel.js#patchCard` | B-L16 |
 | `js/ui/SectionLogosPanel.js#render` | B-M4, B-L8 |
@@ -2602,7 +2627,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `css/09-viewport-tools.css` (header comment; documentation-only) | B-L24 |
 | `index.html` (markup, untagged; documentation-only) | B-L36 |
 
-Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14) and B-L5 (08 P2-1b; its only site was the tag in `GltfExporter.addMesh`, which keeps B-H2 and B-M7). B-L24 has two documentation-only entries, one per stylesheet: the header comment of each of the two stylesheets carries a paragraph `Legacy note B-L24 (documentation-only, preserved): ...`, which does not use the reserved token `LEGACY(` (CSS is untagged; rule 6 scans only `js/`); grep `B-L24` or `Legacy note` to find it.
+Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14) and B-L5 (08 P2-1b; its only site was the tag in `GltfExporter.addMesh`, which keeps B-H2 and B-M7) and B-L4 (08 P2-1c; its sites were the tags in `ProjectIO.exportPanelIds`, which has no tag left, and `ProjectIO.exportZIP`, which keeps B-L14; its viewport half never had a tag and is fixed by 08 P2-1d). B-L24 has two documentation-only entries, one per stylesheet: the header comment of each of the two stylesheets carries a paragraph `Legacy note B-L24 (documentation-only, preserved): ...`, which does not use the reserved token `LEGACY(` (CSS is untagged; rule 6 scans only `js/`); grep `B-L24` or `Legacy note` to find it.
 
 How rule 6 reads these rows (as implemented in `tests/static/check.mjs`): the comparison is per file, so a tag may sit in a private helper that only the named method calls (for example `ProjectSerializer.#readV1` for `#read`, `ObjExporter.#writeCombined` / `#stripNormalLine` for `#write`, `GltfExporter.#writeCombined` for `#write`); a tag wrapped across JSDoc continuation lines counts as one tag (placeholders are still rejected); and a row whose `js/` file does not exist is reported, so a typo in a site path cannot bypass the check.
 
@@ -2721,3 +2746,10 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 2.2, 3.6: `WallMeshBuilder.js` exports `maxIndexOf(indices)` and `indexWidth(maxIndex)` (08 6.2: 32-bit indices from 65,535 on, the 5123 restart value).
 - 3.9: `GltfExporter.#addMesh` writes Uint32 (5125) indices when the largest index reaches 65,535 and Uint16 (5123) otherwise; every harness glTF keeps 5123 and is unchanged. 2.3: `io.test.mjs` writes the synthetic 70,000-vertex glTF of 08 8.6 to `tests/unit/out/` (git-ignored).
 - 8.2: the B-L5 row is kept with a `Landed` fix cell (the viewport index attribute, untagged, follows in 08 P2-1e); 8.3: B-L5 leaves `GltfExporter.js#addMesh`.
+
+**08 P2-1c, B-L4 landed for the exports** (manifest `tests/regression/expected/P2-1c.json`):
+- 2.2, 3.6: `TextureAtlas.js` exports `CANVAS_HARD_LIMITS` (32,767 px per side, 268,435,456 px) and `canvasFits(w, h, limits)` (08 6.3).
+- 3.7: `PanelIdRenderer.panelSize/sectionSize/atlasSize`, the canvas sizes by arithmetic only.
+- 3.9: `ProjectSerializer.write(project, {variant: 'zip', skipped})` writes `texture_file: null` and `ObjExporter.write({..., skipped})` omits the section-mode `map_Kd` for a texture the ZIP left out (a boolean per section until 08 P2-6 brings null texture names).
+- 3.10, 6.13: Export Panel IDs refuses an oversize atlas with M-EXP-2 (no canvas) and reports a null `toBlob` result with M-EXP-3; Export All (ZIP) runs the pre-check, the late `data:,` skip with the JSON/MTL re-write, and M-EXP-4 after the download (08 3.3 texts).
+- 8.2: the B-L4 row is kept with a `Landed` fix cell that names P2-1d for the viewport half; 8.3: the row `ProjectIO.js#exportPanelIds` is deleted and B-L4 leaves `ProjectIO.js#exportZIP`.

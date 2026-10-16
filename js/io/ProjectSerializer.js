@@ -18,6 +18,18 @@ import { Strategies, unsupportedStrategy } from '../legacy/LegacyCompat.js';
  *   undefined or any JSON value; WallController.applyImport applies it only when truthy)
  */
 
+/**
+ * The 'zip' texture_file value: the path, or null when the ZIP left that texture out (08 P2-1c, B-L4). The path is
+ * computed first in both cases, so a numeric imported name keeps throwing `name.replace is not a function`.
+ * @param {string} path
+ * @param {boolean[]|null} skipped
+ * @param {number} i
+ * @returns {string|null}
+ */
+function unlessSkipped(path, skipped, i) {
+  return skipped && skipped[i] ? null : path;
+}
+
 /** Writes and reads the project JSON (schema v1). */
 export class ProjectSerializer {
   /** @type {{sectionColors: string[]}} */
@@ -37,17 +49,19 @@ export class ProjectSerializer {
    * Two explicit object literals, so the key order is exactly the legacy one:
    *   'file' (Export JSON, 4943-4963): curvature carries `angle_offset_degrees: s.angleOffset || 0`;
    *   'zip'  (Export All ZIP, 4499-4519): no angle offset (B-M3, selected through
-   *          Strategies.zipJsonIncludesAngleOffset), plus `texture_file: textures/${zipTextureFileName(s, i)}`.
+   *          Strategies.zipJsonIncludesAngleOffset), plus `texture_file: textures/${zipTextureFileName(s, i)}`, or null
+   *          for a section whose `skipped[i]` is true (its texture is not in the ZIP, 08 P2-1c; the name is still
+   *          computed, so a numeric name keeps throwing).
    * Field values are copied raw (imported strings and NaN stay as they are; JSON.stringify writes NaN as null).
    * Ports: index.html@cd3fd3f lines 4943-4963 ('file') and 4499-4519 ('zip').
    * Side effects: none.
    * @param {import('../domain/Project.js').Project} project  reads project.wall.sections and project.meshMode
-   * @param {{variant?: 'file'|'zip'}} [options]
+   * @param {{variant?: 'file'|'zip', skipped?: boolean[]|null}} [options]  skipped: 'zip' only (08 P2-1c)
    * @returns {object} the plain JSON document
    * @throws {TypeError} 'zip' variant with a non-string truthy section name: `name.replace is not a function`
    *   (sanitizeFilename, as legacy); RangeError for an unknown variant
    */
-  write(project, { variant = 'file' } = {}) {
+  write(project, { variant = 'file', skipped = null } = {}) {
     // LEGACY(B-L31): v1 saves only sections, mesh_mode and totals (no camera, props, panel-ID styling, logos or
     // display toggles), although the legacy README promised the full project state (README.md now lists what v1 saves).
     const wallSections = project.wall.sections;
@@ -60,7 +74,7 @@ export class ProjectSerializer {
           case false:
             // LEGACY(B-M3): the ZIP's copy of the config drifted from Export JSON and drops angle_offset_degrees,
             // so re-importing the ZIP JSON resets every section offset to 0.
-            return ProjectSerializer.#zipDocument(wallSections, meshMode);
+            return ProjectSerializer.#zipDocument(wallSections, meshMode, skipped);
           default:
             throw unsupportedStrategy('zipJsonIncludesAngleOffset', Strategies.zipJsonIncludesAngleOffset);
         }
@@ -105,9 +119,10 @@ export class ProjectSerializer {
    * through zipTextureFileName; duplicate names collide, B-L14, tagged at PanelNaming.zipTextureFileName).
    * @param {WallSection[]} wallSections
    * @param {*} meshMode
+   * @param {boolean[]|null} skipped  texture_file is null where skipped[i] (08 P2-1c)
    * @returns {object}
    */
-  static #zipDocument(wallSections, meshMode) {
+  static #zipDocument(wallSections, meshMode, skipped) {
     const jsonData = {
       version: '1.0',
       sections: wallSections.map((s, i) => ({
@@ -120,7 +135,7 @@ export class ProjectSerializer {
           angle_degrees: s.curveIntensity
         },
         color: s.color,
-        texture_file: `textures/${zipTextureFileName(s, i)}`
+        texture_file: unlessSkipped(`textures/${zipTextureFileName(s, i)}`, skipped, i)
       })),
       mesh_mode: meshMode,
       totals: {

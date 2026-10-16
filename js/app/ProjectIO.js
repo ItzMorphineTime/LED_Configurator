@@ -12,7 +12,7 @@
  * Layer: app (may import core, legacy, domain, geometry; collaborators are injected).
  */
 
-import { computeAtlas } from '../geometry/TextureAtlas.js';
+import { computeAtlas, canvasFits, CANVAS_HARD_LIMITS } from '../geometry/TextureAtlas.js';
 import { zipTextureFileName } from '../geometry/PanelNaming.js';
 import { Strategies } from '../legacy/LegacyCompat.js';
 
@@ -26,6 +26,24 @@ import { Strategies } from '../legacy/LegacyCompat.js';
  * @typedef {{files: {json: string, obj: string, mtl: string, gltf: string, zip: string, panelIdsPng: string,
  *            safeDistanceObj: string}}} IoBrand
  */
+
+/**
+ * The export size messages of 08 3.3 (B-L4, 08 P2-1c), exact texts.
+ * M-EXP-2: the panel-ID atlas is larger than CANVAS_HARD_LIMITS; M-EXP-3: toBlob returned null (a device limit below
+ * the hard limit); M-EXP-4: the ZIP left out textures that do not fit.
+ */
+const ExportMessages = Object.freeze({
+  /** @param {number} w @param {number} h @returns {string} */
+  atlasTooLarge: (w, h) => `The Panel ID image would be ${w}×${h} px, larger than this browser can create ` +
+    `(${CANVAS_HARD_LIMITS.maxSide} px per side, ${Math.round(CANVAS_HARD_LIMITS.maxArea / 1e6)} MP). Reduce Pixels X/Y or ` +
+    'the number of columns, or use Export All (ZIP), which writes one image per section.',
+  /** @param {number} w @param {number} h @returns {string} */
+  atlasNotCreated: (w, h) => `This browser could not create the ${w}×${h} px Panel ID image. Reduce Pixels X/Y or the ` +
+    'number of columns.',
+  /** @param {string[]} names  the left-out ZIP entry names @returns {string} */
+  zipTexturesLeftOut: (names) => `The ZIP was created, but ${names.length} texture(s) were too large for this browser and ` +
+    `were left out: ${names.join(', ')}.`,
+});
 
 /** The single anchor-download sequence (legacy 5082-5091 == 4547-4553 == 4932-4938). */
 export class Downloader {
@@ -181,18 +199,29 @@ export class ProjectIO {
 
   /**
    * Export Panel IDs: the combined atlas canvas as PNG. Stays async; the toBlob callback is awaited (08 P2-1a), so
-   * an error of the download step is reported by #runExport like any other.
+   * an error of the download step is reported by #runExport like any other. The size guard (08 6.3, B-L4 fixed in
+   * 08 P2-1c): an atlas beyond CANVAS_HARD_LIMITS alerts M-EXP-2 before any canvas is created, and a null toBlob
+   * result (a device limit below the hard limit) alerts M-EXP-3; neither downloads anything.
    * Ports: index.html@cd3fd3f lines 4926-4940.
-   * Side effects: draws a canvas; one download (brand.files.panelIdsPng) when toBlob calls back, or the M-EXP-1
-   * alert.
+   * Side effects: draws a canvas; one download (brand.files.panelIdsPng) when toBlob calls back; or one alert
+   * (M-EXP-2, M-EXP-3, or M-EXP-1 from #runExport).
    * @returns {Promise<void>} never rejects
    */
   async exportPanelIds() {
     await this.#runExport('Export Panel IDs', async () => {
-      const combinedCanvas = this.#panelIds.atlasCanvas(this.#project.wall.sections);
-      // LEGACY(B-L4): no canvas-size guard: past the browser canvas limit toBlob yields null and
-      // URL.createObjectURL(null) throws (since 08 P2-1a reported as the M-EXP-1 alert).
+      const sections = this.#project.wall.sections;
+      const atlas = computeAtlas(sections);
+      const { width, height } = this.#panelIds.atlasSize(sections, atlas);
+      if (!canvasFits(width, height)) {
+        this.#dialogs.alert(ExportMessages.atlasTooLarge(width, height));
+        return;
+      }
+      const combinedCanvas = this.#panelIds.atlasCanvas(sections, atlas);
       const blob = await new Promise((resolve) => combinedCanvas.toBlob(resolve, 'image/png'));
+      if (blob === null) {
+        this.#dialogs.alert(ExportMessages.atlasNotCreated(width, height));
+        return;
+      }
       this.#downloader.saveBlob(blob, this.#brand.files.panelIdsPng);
     });
   }
@@ -200,10 +229,14 @@ export class ProjectIO {
   /**
    * Export All (ZIP), in the legacy order: JSON ('zip' variant) -> layout -> OBJ + MTL -> glTF -> textures
    * folder -> one panel-ID PNG per section -> generateAsync -> download. The start columns come from
-   * computeAtlas before the texture loop (PR7c).
+   * computeAtlas before the texture loop (PR7c). Size guard (08 6.3, B-L4 fixed in 08 P2-1c): a section whose
+   * texture exceeds CANVAS_HARD_LIMITS is skipped up front (no canvas; JSON texture_file null; no MTL map_Kd), one
+   * whose PNG still comes back as `data:,` is skipped late (the JSON and MTL entries are re-written), and after the
+   * download M-EXP-4 names every left-out entry.
    * Ports: index.html@cd3fd3f lines 4491-4554.
-   * Side effects: draws one canvas per section; one download (brand.files.zip) after the archive is generated, or
-   * the M-EXP-1 alert (#runExport; for example `name.replace is not a function` for a numeric imported name).
+   * Side effects: draws one canvas per shipped section; one download (brand.files.zip) after the archive is
+   * generated, then the M-EXP-4 alert if textures were left out; or the M-EXP-1 alert (#runExport; for example
+   * `name.replace is not a function` for a numeric imported name).
    * @returns {Promise<void>} never rejects (08 P2-1a; legacy rejected unhandled)
    */
   async exportZIP() {
@@ -211,7 +244,7 @@ export class ProjectIO {
   }
 
   /**
-   * The body of exportZIP (legacy 4491-4554).
+   * The body of exportZIP (legacy 4491-4554, with the 08 6.3 steps 1-5 of the size guard).
    * @returns {Promise<void>}
    */
   async #writeZip() {
@@ -221,24 +254,39 @@ export class ProjectIO {
     const project = this.#project;
     const sections = project.wall.sections;
 
-    const jsonData = this.#serializer.write(project, { variant: 'zip' });
-    zip.file(brand.files.json, JSON.stringify(jsonData, null, 2));
+    // 08 6.3 step 1: the pre-check, pure arithmetic before anything is written. Before 08 P2-6 the MTL keeps the
+    // index naming (B-M2), so the left-out textures travel as a boolean per section, not as null names.
+    const skipped = sections.map((section) => {
+      const { width, height } = this.#panelIds.sectionSize(section, null);
+      return !canvasFits(width, height);
+    });
+    const jsonText = () => JSON.stringify(this.#serializer.write(project, { variant: 'zip', skipped }), null, 2);
+
+    // Step 2: JSON (texture_file null when skipped), OBJ + MTL (no map_Kd when skipped), glTF.
+    zip.file(brand.files.json, jsonText());
 
     const layout = this.#wallController.layout();
-    const { objContent, mtlContent } = this.#objExporter.write({ sections, meshMode: project.meshMode, layout });
+    const objArgs = { sections, meshMode: project.meshMode, layout };
+    const { objContent, mtlContent } = this.#objExporter.write({ ...objArgs, skipped });
     zip.file(brand.files.obj, objContent);
     zip.file(brand.files.mtl, mtlContent);
 
-    const gltfContent = this.#gltfExporter.write({ sections, meshMode: project.meshMode, layout });
+    const gltfContent = this.#gltfExporter.write(objArgs);
     zip.file(brand.files.gltf, JSON.stringify(gltfContent, null, 2));
 
+    // Step 3: the textures that fit; a `data:,` result (a device limit below the hard limit) is skipped late.
     const texturesFolder = zip.folder('textures');
     const atlas = computeAtlas(sections);
+    const late = [];
     for (let i = 0; i < sections.length; i++) {
+      if (skipped[i]) continue;
       const section = sections[i];
       const canvas = this.#panelIds.sectionCanvas(section, i, null, atlas.entries[i].startCol);
-      // LEGACY(B-L4): no canvas-size guard: an oversized canvas yields `data:,`, i.e. a silent 0-byte PNG.
       const dataUrl = canvas.toDataURL('image/png');
+      if (dataUrl === 'data:,') {
+        late.push(i);
+        continue;
+      }
       const base64Data = dataUrl.split(',')[1];
       // LEGACY(B-L14): duplicate (or equally sanitised) section names give the same path, and JSZip silently
       // replaces the earlier texture.
@@ -246,8 +294,22 @@ export class ProjectIO {
       texturesFolder.file(filename, base64Data, { base64: true });
     }
 
+    // Step 4: re-write the JSON and MTL entries without the late textures (JSZip keeps an entry's position).
+    if (late.length) {
+      for (const i of late) skipped[i] = true;
+      zip.file(brand.files.json, jsonText());
+      zip.file(brand.files.mtl, this.#objExporter.write({ ...objArgs, skipped }).mtlContent);
+    }
+
     const content = await zip.generateAsync({ type: 'blob' });
     this.#downloader.saveBlob(content, brand.files.zip);
+
+    // Step 5: name every left-out entry (the ZIP entry names, in section order).
+    const leftOut = [];
+    sections.forEach((section, i) => {
+      if (skipped[i]) leftOut.push(`textures/${zipTextureFileName(section, i)}`);
+    });
+    if (leftOut.length) this.#dialogs.alert(ExportMessages.zipTexturesLeftOut(leftOut));
   }
 
   /**

@@ -119,7 +119,7 @@ The authoritative plan is `docs/improvements/08-bugfix-roadmap.md` (batch cards 
 **Owner-visible block**
 1. **P2-0** Phase 2 tooling (no bug id): `compare.mjs --expect`, the nondeterminism allowlist, the eight `p2_*` harness scenarios, `LegacyProfiles`, the structural export checkers.
 2. **P2-5a** **B-M1**: Export Safe Distance OBJ downloads (one line), merged before P2-1a wraps every export in its error alert. **Landed** (manifest `P2-5a`).
-3. **P2-1** **B-H3, B-L5, B-L4**: exports never fail silently (chunked base64, 32-bit indices from 65,535 on, canvas-size guards and messages). Landed so far: P2-1a (B-H3), P2-1b (B-L5, glTF).
+3. **P2-1** **B-H3, B-L5, B-L4**: exports never fail silently (chunked base64, 32-bit indices from 65,535 on, canvas-size guards and messages). Landed so far: P2-1a (B-H3), P2-1b (B-L5, glTF), P2-1c (B-L4, exports).
 4. **P2-2** **B-H1, B-H2, B-L3**: stage-facing winding and real normals in the viewport and every export (the owner-reported "inverted normals"). It must follow P2-1: adding `NORMAL` puts `large_wall`'s glTF buffer at 121,056 bytes, inside the band where the legacy spread encoder throws `RangeError` (B-H3).
 5. **P2-8a** **B-L15**: integer counts and sanity caps in the UI rules, before the validator.
 6. **P2-3** **B-M4, B-L8, B-L16, B-L21**: escaped names and validated imports.

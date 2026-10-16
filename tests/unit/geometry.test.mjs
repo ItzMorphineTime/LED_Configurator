@@ -17,7 +17,7 @@ import { Project } from '../../js/domain/Project.js';
 import { LegacyProfiles, Strategies, unsupportedStrategy } from '../../js/legacy/LegacyCompat.js';
 import { computeWallLayout, layoutProject, framingBounds, SectionLayout, WallLayout } from '../../js/geometry/WallLayout.js';
 import { quadIndices, WallMeshBuilder, maxIndexOf, indexWidth } from '../../js/geometry/WallMeshBuilder.js';
-import { computeAtlas, sectionPxPerLed, panelPxPerLed } from '../../js/geometry/TextureAtlas.js';
+import { computeAtlas, sectionPxPerLed, panelPxPerLed, canvasFits, CANVAS_HARD_LIMITS } from '../../js/geometry/TextureAtlas.js';
 import {
   columnLabel, panelLabel, exportSectionName, exportPanelName, sanitizeFilename, zipTextureFileName, mtlTextureFile,
 } from '../../js/geometry/PanelNaming.js';
@@ -723,6 +723,45 @@ describe('quadIndices and the builder profiles', () => {
     const gs = obj.sectionGrid(str);
     assert.equal(gs.vertexAdvance, 101 * 2);
     assert.deepEqual(gs.indices.slice(0, 6), [0, 101, 102, 0, 102, 1]);
+  });
+});
+
+describe('canvasFits (B-L4, 08 6.3)', () => {
+  test('CANVAS_HARD_LIMITS: 32,767 px per side, 268,435,456 px in area, frozen', () => {
+    assert.deepEqual(CANVAS_HARD_LIMITS, { maxSide: 32767, maxArea: 268435456 });
+    assert.ok(Object.isFrozen(CANVAS_HARD_LIMITS));
+  });
+
+  test('side boundaries: 32,767 fits, 32,768 does not; 1 is the minimum', () => {
+    assert.equal(canvasFits(32767, 1), true);
+    assert.equal(canvasFits(1, 32767), true);
+    assert.equal(canvasFits(32768, 1), false);
+    assert.equal(canvasFits(1, 32768), false);
+    assert.equal(canvasFits(1, 1), true);
+    for (const bad of [0, 0.5, -1, NaN, Infinity]) {
+      assert.equal(canvasFits(bad, 10), false, String(bad));
+      assert.equal(canvasFits(10, bad), false, String(bad));
+    }
+  });
+
+  test('area boundaries: 268,435,456 fits, one pixel more does not', () => {
+    assert.equal(canvasFits(16384, 16384), true, '16,384 x 16,384 = 268,435,456');
+    assert.equal(canvasFits(16384, 16385), false);
+    assert.equal(canvasFits(32767, 8192), true, '268,427,264');
+    assert.equal(canvasFits(32767, 8193), false, '268,460,031');
+    const wide = { maxSide: 1e12, maxArea: 268435456 };
+    assert.equal(canvasFits(268435456, 1, wide), true);
+    assert.equal(canvasFits(268435457, 1, wide), false);
+  });
+
+  test('the p2_oversize_canvas wall (70,000 x 128 px) does not fit; the default wall does', () => {
+    const oversize = new WallSection({ id: 0, name: 'Oversize', panelCols: 70, panelRows: 2, panelWidth: 500, panelHeight: 500,
+      ledX: 1000, ledY: 64, curveIntensity: 0, angleOffset: 0, color: '#00f0ff' });
+    const atlas = computeAtlas([oversize]);
+    assert.equal(atlas.totalLedX * atlas.pxPerLed, 70000);
+    assert.equal(canvasFits(atlas.totalLedX * atlas.pxPerLed, atlas.totalLedY * atlas.pxPerLed), false);
+    const small = computeAtlas(Project.createDefault().wall.sections);
+    assert.equal(canvasFits(small.totalLedX * small.pxPerLed, small.totalLedY * small.pxPerLed), true);
   });
 });
 
