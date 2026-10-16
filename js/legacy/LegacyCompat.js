@@ -1,0 +1,349 @@
+/**
+ * @module legacy/LegacyCompat
+ * The single home of every output-affecting legacy switch and helper of Phase 1:
+ * - `Strategies`: deep-frozen switches, each read at exactly one site (ARCHITECTURE.md 8.1);
+ * - legacy helpers that reproduce a preserved quirk (`orDefault`, `legacyHtml`, `legacySpreadBase64`,
+ *   `legacyMissingDownloadBlob`);
+ * - `unsupportedStrategy`, thrown by every switch-and-throw reader for a non-legacy value (ARCHITECTURE.md 1.5);
+ * - `LEGACY_SITES`, the machine-readable register of every tagged legacy site.
+ * The human-readable register is docs/ARCHITECTURE.md section 8 (8.1 switches, 8.2 quirks, 8.3 tag sites).
+ * A later fix flips one value (plus its new code branch) or edits one tagged site, updates LEGACY_SITES and
+ * re-baselines only the affected golden-master outputs.
+ * Legacy source: index.html@cd3fd3f 2826 (downloadBlob call), 4902 (btoa spread), every `|| default` input rule,
+ * every innerHTML template interpolation.
+ * Layer: legacy (imports no other directory of js/).
+ */
+
+/**
+ * Recursively freezes plain objects and arrays (module-private).
+ * @template T
+ * @param {T} value
+ * @returns {T} the same value, frozen
+ */
+function deepFreeze(value) {
+  if (value !== null && typeof value === 'object') {
+    for (const key of Object.keys(value)) deepFreeze(value[key]);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+/**
+ * Deep-frozen compatibility switches. Phase 1 implements only these values: the legacy value of every key, except
+ * the `dispose.*` keys flipped by the non-observable Phase 1C clean-ups (ARCHITECTURE.md 8.1). Each leaf key is read at
+ * the single site named in ARCHITECTURE.md 8.1; enumerated keys are read with switch-and-throw, the numeric
+ * keys and the `dispose.*` booleans are used as values, `mesh.gltf.attributes` is compared with ['POSITION'],
+ * and the `mesh.*` profiles are injected into the mesh builder and exporters as `profile`.
+ * No module of WP3 reads any key.
+ */
+export const Strategies = deepFreeze({
+  mesh: {
+    viewport: { winding: 'legacy-cw', normals: 'right-panel', combinedUV: 'atlas-u-full-v', side: 'double' },
+    obj:      { winding: 'legacy-cw', normals: 'none', stripNormals: 'constant-z',
+                combinedUV: 'per-section-overlap', panelNormal: 'facing' },
+    gltf:     { winding: 'legacy-cw', normals: 'none', attributes: ['POSITION'], indexType: 'uint16',
+                doubleSided: 'omit' },             // 'omit' = the material object has NO doubleSided key
+  },
+  gltfBase64: 'spread',                            // B-H3
+  exportCombinedColor: 'first-section',            // B-L6
+  mtlTextureNaming: 'index',                       // B-M2
+  zipTextureNaming: 'sanitized-name',              // B-L14 (no de-duplication)
+  mtlDownloadDelayMs: 100,                         // B-L7
+  zipJsonIncludesAngleOffset: false,               // B-M3
+  importValidation: 'none',                        // B-L8
+  framingBounds: 'flat',                           // B-L2, B-M10
+  curveBeforeFirstPanel: true,                     // B-L1
+  safeDistanceBand: 'per-column-own-normal',       // B-M15, B-L29
+  frustumDepthM: 15,                               // B-L33
+  previewRendererSize: [320, 180],                 // B-M9
+  previewRendersHelpers: true,                     // B-M11
+  gizmoRotateSign: -1,                             // B-M12
+  pilotForwardYSign: -1,                           // B-M13
+  combinedLedSimColor: 'white',                    // B-L18
+  dispose: { wallTextures: true, gizmo: true },    // B-H5 fixed (Phase 1C H1); B-L12 fixed (Phase 1C H2)
+});
+
+/**
+ * The error every switch-and-throw reader throws in its `default` branch.
+ * Side effects: none (the caller throws it).
+ * @param {string} key    the Strategies key path, e.g. 'mesh.viewport.side'
+ * @param {*} value       the unsupported value
+ * @returns {Error} Error(`Unsupported strategy ${key}=${JSON.stringify(value)}`)
+ */
+export function unsupportedStrategy(key, value) {
+  return new Error(`Unsupported strategy ${key}=${JSON.stringify(value)}`);
+}
+
+/**
+ * The legacy `value || default` idiom used by every input rule table and import default.
+ * LEGACY(B-L9): `v || d` (0, '', NaN fall back to the default). Every input rule table uses it.
+ * Side effects: none.
+ * @template V, D
+ * @param {V} v
+ * @param {D} d
+ * @returns {V|D} v when truthy, otherwise d
+ */
+export const orDefault = (v, d) => v || d;
+
+/**
+ * Identity "escaper" for user text interpolated into innerHTML templates.
+ * LEGACY(B-M4): returns s unchanged; every template interpolation of user text goes through it,
+ * so escaping is a one-function fix.
+ * Side effects: none.
+ * @template S
+ * @param {S} s
+ * @returns {S} s, unchanged (no coercion either)
+ */
+export const legacyHtml = (s) => s;
+
+/**
+ * Base64 of a byte array, exactly as the legacy glTF writer (index.html 4902) computed it.
+ * LEGACY(B-H3): btoa(String.fromCharCode(...bytes)). Throws RangeError ("Maximum call stack size
+ * exceeded") above ~125 KB in V8. Must be called at shallow stack depth (directly from the exporter).
+ * Ports: index.html@cd3fd3f line 4902.
+ * Side effects: none.
+ * @param {ArrayLike<number>} bytes  e.g. a Uint8Array
+ * @returns {string} base64 text
+ * @throws {RangeError} for large inputs (the preserved quirk)
+ */
+export function legacySpreadBase64(bytes) {
+  return btoa(String.fromCharCode(...bytes));
+}
+
+/**
+ * Reproduces the safe-distance OBJ download, which in legacy calls a function that was never defined.
+ * LEGACY(B-M1): calls the undeclared identifier `downloadBlob(blob, filename)` so the engine throws
+ * the identical `ReferenceError: downloadBlob is not defined`. Never define downloadBlob anywhere.
+ * Ports: index.html@cd3fd3f line 2826.
+ * Side effects: none (always throws before anything happens).
+ * @param {Blob} blob
+ * @param {string} filename
+ * @returns {never}
+ * @throws {ReferenceError} downloadBlob is not defined
+ */
+export function legacyMissingDownloadBlob(blob, filename) {
+  // eslint-disable-next-line no-undef
+  downloadBlob(blob, filename);
+}
+
+/**
+ * Quirk register (ARCHITECTURE.md 8.2): bug id -> [preserved behaviour, how the fix lands]. Module-private.
+ * A fixed quirk keeps its row (its fix text starts with 'Landed') but has no TAG_SITES pair, so LEGACY_SITES
+ * no longer lists it.
+ * @type {Readonly<Record<string, readonly [string, string]>>}
+ */
+const QUIRKS = deepFreeze({
+  'B-H1': ['Viewport strip winding vs normals (C-5)',
+    'flip profile (Feature 1)'],
+  'B-H2': ['Export winding, constant/contradicting normals, no doubleSided (R-5, S-2)',
+    'flip profiles + normal writers'],
+  'B-H3': ['glTF RangeError; ZIP dies silently (S-3, U-4)',
+    'chunked encoder + guard'],
+  'B-H4': ['Preview off in pilot: alert, stuck in pilot (O-8)',
+    'exit pilot before clearing `enabled`'],
+  'B-H5': ['Wall textures leak (memory only)',
+    'Landed in Phase 1C H1 (`dispose.wallTextures = true`; no tag site)'],
+  'B-M1': ['Safe-distance OBJ throws ReferenceError (K-3)',
+    '`downloader.saveBlob`'],
+  'B-M2': ['Index-based MTL texture path (R-3)',
+    'name-based'],
+  'B-M3': ['ZIP JSON lacks angle offsets (U-1)',
+    '`true`'],
+  'B-M4': ['Unescaped names/colours/values in innerHTML (V-8)',
+    'real escaping + import validation'],
+  'B-M5': ['Combined V full height (E-5)',
+    'new UV strategy (Feature 4)'],
+  'B-M6': ['Overlapping combined OBJ UVs (R-6)',
+    'atlas UVs'],
+  'B-M7': ['glTF POSITION only (S-2)',
+    'add attributes'],
+  'B-M8': ['Safe-distance group survives preview off (K-2)',
+    '`safeDistance.remove()` there'],
+  'B-M9': ['Preview 320x180 stretch (L-1)',
+    'client-box sizing'],
+  'B-M10': ['Coverage from posZ against a flat rectangle (J-7, J-8)',
+    'layout-aware analyser'],
+  'B-M11': ['Preview renders helpers and tint (L-4)',
+    'helpers layer'],
+  'B-M12': ['Rotate gizmo direction inverted (N-9)',
+    '`+1`'],
+  'B-M13': ['Pilot vertical inverted (O-5)',
+    '`+1`'],
+  'B-M14': ['Select on mousedown; misses deselect (N-5)',
+    'select on click under 4 px travel'],
+  'B-M15': ['Overlapping/gapped safe-distance quads',
+    'mitred band'],
+  'B-M16': ['Panel-mode 4-16 px/LED per panel (E-10)',
+    'atlas UVs or budget'],
+  'B-L1': ['Curve before the first panel (B-5)',
+    'owner decision'],
+  'B-L2': ['Flat bounds for target/reset/D (H-3, J-1, J-9)',
+    'true bounds / pivot'],
+  'B-L3': ['Right-panel normals',
+    '`\'averaged\'`'],
+  'B-L4': ['No canvas-size guard (`toBlob` null throws, ZIP `data:,`)',
+    'budget + message'],
+  'B-L5': ['Uint16 glTF indices',
+    'Uint32 when needed'],
+  'B-L6': ['Combined exports use section 0\'s colour',
+    'per-section'],
+  'B-L7': ['MTL second download, textures missing',
+    'bundle'],
+  'B-L8': ['No import validation; unknown mode renders as panels; raw coercion',
+    'validator'],
+  'B-L9': ['`|| default` turns 0 into the default (D-7, J-5, V-3)',
+    'change `orDefault` or per rule'],
+  'B-L10': ['Gizmo posY >= 0 vs pilot >= 0.1 per frame; Z unclamped',
+    'validated setter'],
+  'B-L11': ['Shortcuts ignore SELECT focus, modifiers, repeat (W-1)',
+    'shared typing guard + filters'],
+  'B-L12': ['Gizmo resources leak (memory only)',
+    'Landed in Phase 1C H2 (`dispose.gizmo = true`; no tag site)'],
+  'B-L13': ['Mesh-mode handler fires twice (C-4)',
+    '"mode unchanged -> no-op" guard, never radio `change`'],
+  'B-L14': ['Colliding ZIP texture names (U-3)',
+    'de-duplicate'],
+  'B-L15': ['Fractional integer fields (D-8); declared vertex advance',
+    '`Math.round` + `step`'],
+  'B-L16': ['4K ⚠ via `/Wall \\d+/` (D-10)',
+    'title from the model'],
+  'B-L17': ['4K check per section only',
+    'wall-level check'],
+  'B-L18': ['Combined LED sim white (E-4)',
+    'colour + key fix'],
+  'B-L19': ['Panel mode: no logos, fixed label size (F-4, G-4)',
+    'shared drawer / atlas UVs'],
+  'B-L20': ['Unbounded LED tile cache',
+    'LRU or one shared tile'],
+  'B-L21': ['Import keeps logos; no logo-list re-render (G-8)',
+    'reset + render'],
+  'B-L22': ['Prop Y arrow and X/Z rings inert (N-7)',
+    '`Selectable.allowedAxes()`'],
+  'B-L23': ['Local gizmo orientation stale (N-10)',
+    'also re-orient'],
+  'B-L24': ['Badge overlaps help badge; no `.view-btn.active` style',
+    'CSS change + `ui_visual` re-baseline'],
+  'B-L25': ['View presets work in pilot (W-2)',
+    'guard'],
+  'B-L26': ['Gizmo visible in pilot',
+    'hide/detach'],
+  'B-L27': ['Frame-rate-dependent movement (I-3)',
+    '`dt` from `startLoop`'],
+  'B-L28': ['World rings write Euler channels',
+    'quaternion composition'],
+  'B-L29': ['Safe-distance floor faces -Y',
+    'swap order'],
+  'B-L30': ['Pose changes rebuild frustum + safe distance',
+    'pose-only refresh'],
+  'B-L31': ['JSON v1 saves only sections + mesh_mode (Q-3)',
+    'v2 writer'],
+  'B-L32': ['Preview resize clamp blow-out',
+    'clamp both axes'],
+  'B-L33': ['Frustum fixed 15 m',
+    'clip at wall'],
+  'B-L34': ['Preview header first word; fake resolution (L-3)',
+    'short names'],
+  'B-L35': ['Logo load: no error / zero-size guard',
+    'guards'],
+  'B-L36': ['Toggles not keyboard accessible',
+    'markup + `flipToggle` keys'],
+});
+
+/**
+ * Tag sites (ARCHITECTURE.md 8.3), in table order: [site, ids]. Sites outside js/ are documentation-only.
+ * Module-private; LEGACY_SITES expands it to one entry per (id, site) pair.
+ * @type {ReadonlyArray<readonly [string, readonly string[]]>}
+ */
+const TAG_SITES = deepFreeze([
+  ['js/legacy/LegacyCompat.js#orDefault', ['B-L9']],
+  ['js/legacy/LegacyCompat.js#legacyHtml', ['B-M4']],
+  ['js/legacy/LegacyCompat.js#legacySpreadBase64', ['B-H3']],
+  ['js/legacy/LegacyCompat.js#legacyMissingDownloadBlob', ['B-M1']],
+  ['js/domain/WallSection.js#constructor', ['B-L8']],
+  ['js/domain/WallSection.js#FIELD_RULES', ['B-L15']],
+  ['js/domain/WallSection.js#exceeds4K', ['B-L17']],
+  ['js/domain/Wall.js#appendLikeLast', ['B-L8']],
+  ['js/domain/Wall.js#replaceAll', ['B-L8']],
+  ['js/domain/Wall.js#flatBounds', ['B-L2', 'B-M10']],
+  ['js/domain/LogoLibrary.js#get', ['B-L8']],
+  ['js/domain/CineCamera.js#coverage', ['B-M10']],
+  ['js/domain/CineCamera.js#presetShortName', ['B-L34']],
+  ['js/domain/CineCamera.js#translateBy', ['B-L10']],
+  ['js/domain/CineCamera.js#rotateBy', ['B-L28']],
+  ['js/domain/CineCamera.js#pilotFly', ['B-L10']],
+  ['js/domain/Prop.js#translateBy', ['B-L22']],
+  ['js/domain/Prop.js#rotateBy', ['B-L22']],
+  ['js/geometry/WallLayout.js#computeWallLayout', ['B-L1']],
+  ['js/geometry/WallLayout.js#flatEdges', ['B-M15']],
+  ['js/geometry/WallLayout.js#framingBounds', ['B-L2', 'B-M10']],
+  ['js/geometry/WallMeshBuilder.js#quadIndices', ['B-H1', 'B-H2']],
+  ['js/geometry/WallMeshBuilder.js#sectionGrid', ['B-L3', 'B-L15', 'B-L8']],
+  ['js/geometry/WallMeshBuilder.js#combinedGrid', ['B-M5']],
+  ['js/geometry/TextureAtlas.js#panelPxPerLed', ['B-M16']],
+  ['js/geometry/PanelNaming.js#zipTextureFileName', ['B-L14']],
+  ['js/geometry/PanelNaming.js#mtlTextureFile', ['B-M2']],
+  ['js/io/ProjectSerializer.js#write', ['B-M3', 'B-L31']],
+  ['js/io/ProjectSerializer.js#read', ['B-L8', 'B-M4']],
+  ['js/io/ObjExporter.js#write', ['B-H2', 'B-M6', 'B-L6', 'B-L8']],
+  ['js/io/GltfExporter.js#write', ['B-H3', 'B-L6', 'B-L8']],
+  ['js/io/GltfExporter.js#addMesh', ['B-H2', 'B-M7', 'B-L5']],
+  ['js/render/SceneManager.js#addHelper', ['B-M11']],
+  ['js/render/LEDWallView.js#rebuild', ['B-L8']],
+  ['js/render/LEDMaterialFactory.js#side', ['B-H1']],
+  ['js/render/LEDMaterialFactory.js#combined', ['B-M5', 'B-L18']],
+  ['js/render/textures/LEDPixelTextureFactory.js#tile', ['B-L18', 'B-L20']],
+  ['js/render/textures/PanelIdRenderer.js#panelCanvas', ['B-L19', 'B-M16']],
+  ['js/render/textures/PanelIdRenderer.js#sectionCanvas', ['B-L35']],
+  ['js/render/CameraRigView.js#rebuildFrustum', ['B-L33']],
+  ['js/render/SafeDistanceView.js#create', ['B-M15', 'B-L29']],
+  ['js/render/PreviewWindow.js#init', ['B-M9']],
+  ['js/render/PreviewWindow.js#updateCamera', ['B-L34']],
+  ['js/render/PreviewWindow.js#render', ['B-M11']],
+  ['js/render/PreviewWindow.js#setupResize', ['B-L32']],
+  ['js/interaction/InputState.js#isShortcutIgnoredTarget', ['B-L11']],
+  ['js/interaction/OrbitController.js#updateTargetPosition', ['B-L2']],
+  ['js/interaction/OrbitController.js#tickKeyboard', ['B-L27']],
+  ['js/interaction/OrbitController.js#setView', ['B-L25']],
+  ['js/interaction/SelectionManager.js#pickAt', ['B-M14']],
+  ['js/interaction/TransformGizmo.js#rebuild', ['B-L22', 'B-L26']],
+  ['js/interaction/TransformGizmo.js#updatePosition', ['B-L23']],
+  ['js/interaction/TransformGizmo.js#onMouseMove', ['B-M12']],
+  ['js/interaction/PilotController.js#toggle', ['B-H4', 'B-L26']],
+  ['js/interaction/PilotController.js#tickKeyboard', ['B-M13', 'B-L27']],
+  ['js/interaction/ViewportInput.js#attachShortcuts', ['B-L11']],
+  ['js/interaction/ViewportInput.js#attachPointer', ['B-M14']],
+  ['js/app/WallController.js#setMeshMode', ['B-L13']],
+  ['js/app/WallController.js#applyImport', ['B-L21']],
+  ['js/app/CameraController.js#CameraHub.refresh', ['B-L30']],
+  ['js/app/CameraController.js#setPreviewEnabled', ['B-H4', 'B-M8']],
+  ['js/app/ProjectIO.js#exportOBJ', ['B-L7']],
+  ['js/app/ProjectIO.js#exportPanelIds', ['B-L4']],
+  ['js/app/ProjectIO.js#exportZIP', ['B-H3', 'B-L4', 'B-L14']],
+  ['js/app/ProjectIO.js#exportSafeDistanceOBJ', ['B-M1']],
+  ['js/ui/SectionListPanel.js#render', ['B-M4']],
+  ['js/ui/SectionListPanel.js#patchCard', ['B-L16']],
+  ['js/ui/SectionLogosPanel.js#render', ['B-M4', 'B-L8']],
+  ['js/ui/SectionLogosPanel.js#onUpload', ['B-L35']],
+  ['js/ui/SectionLogosPanel.js#constructor', ['B-L21']],
+  ['js/ui/WallDisplayPanel.js#bind', ['B-L13']],
+  ['css/07-viewport.css', ['B-L24']],          // header comment; documentation-only
+  ['css/09-viewport-tools.css', ['B-L24']],    // header comment; documentation-only
+  ['index.html', ['B-L36']],                   // markup, untagged; documentation-only
+]);
+
+/**
+ * Register of every tagged legacy site (ARCHITECTURE.md 8.2 and 8.3). Frozen array of frozen entries
+ * { id: 'B-M14', site: 'js/interaction/ViewportInput.js#attachPointer', behaviour: '...', fix: '...' },
+ * exactly one per (bug id, site) pair of the 8.3 table, in table order. Entries whose site is not under
+ * js/ (CSS, markup) are documentation-only. tests/static/check.mjs compares, per js/ file, the ids of its
+ * LEGACY tags with the ids of the entries whose site starts with that file's path followed by '#'.
+ * @type {ReadonlyArray<Readonly<{id: string, site: string, behaviour: string, fix: string}>>}
+ */
+export const LEGACY_SITES = Object.freeze(
+  TAG_SITES.flatMap(([site, ids]) => ids.map((id) => Object.freeze({
+    id,
+    site,
+    behaviour: QUIRKS[id][0],
+    fix: QUIRKS[id][1],
+  }))),
+);

@@ -1,0 +1,7 @@
+/* 01-reset.css: index.html@cd3fd3f lines 12-16 (universal * reset: margin, padding, box-sizing).
+   Contiguous slice of the original <style>; link order = file number. Do not reorder rules across files. */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}

@@ -1,0 +1,152 @@
+/* 06-controls.css: index.html@cd3fd3f lines 297-444 (global sections, mesh-mode options, toggles, FIRST .export-btn block).
+   The first .export-btn block (lines 425-444, with its :hover) stays here: it supplies width: 100%,
+   which the second block in 11-export.css (lines 824-843) does not override. Do not merge them.
+   Contiguous slice of the original <style>; link order = file number. Do not reorder rules across files. */
+.global-section {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 16px;
+}
+
+.global-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-secondary);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.global-section-title::before {
+    content: '';
+    width: 3px;
+    height: 12px;
+    background: var(--accent-magenta);
+    border-radius: 2px;
+}
+
+.mesh-mode-select {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 14px;
+}
+
+.mesh-mode-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.mesh-mode-option:hover {
+    border-color: var(--accent-cyan);
+}
+
+.mesh-mode-option.active {
+    background: rgba(0, 240, 255, 0.1);
+    border-color: var(--accent-cyan);
+}
+
+.mesh-mode-option input {
+    display: none;
+}
+
+.mesh-mode-radio {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border-color);
+    border-radius: 50%;
+    position: relative;
+}
+
+.mesh-mode-option.active .mesh-mode-radio {
+    border-color: var(--accent-cyan);
+}
+
+.mesh-mode-option.active .mesh-mode-radio::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 6px;
+    height: 6px;
+    background: var(--accent-cyan);
+    border-radius: 50%;
+}
+
+.mesh-mode-label {
+    font-size: 12px;
+}
+
+.toggle-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+}
+
+.toggle-label {
+    font-size: 13px;
+}
+
+.toggle {
+    width: 44px;
+    height: 24px;
+    background: var(--bg-primary);
+    border-radius: 12px;
+    cursor: pointer;
+    position: relative;
+    transition: background 0.3s ease;
+}
+
+.toggle.active {
+    background: var(--accent-cyan);
+}
+
+.toggle::after {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    background: white;
+    border-radius: 50%;
+    top: 3px;
+    left: 3px;
+    transition: transform 0.3s ease;
+}
+
+.toggle.active::after {
+    transform: translateX(20px);
+}
+
+.export-btn {
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, var(--accent-cyan), var(--accent-magenta));
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-family: 'Outfit', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.export-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 30px rgba(0, 240, 255, 0.3);
+}

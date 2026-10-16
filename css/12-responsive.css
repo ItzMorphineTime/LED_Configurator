@@ -1,0 +1,14 @@
+/* 12-responsive.css: index.html@cd3fd3f lines 859-869 (@media (max-width: 900px) single-column layout).
+   The only @media rule of the stylesheet: this file must be linked last.
+   Contiguous slice of the original <style>; link order = file number. Do not reorder rules across files. */
+@media (max-width: 900px) {
+    .app-container {
+        grid-template-columns: 1fr;
+        grid-template-rows: 60px 1fr 350px;
+    }
+    .control-panel {
+        order: 3;
+        border-right: none;
+        border-top: 1px solid var(--border-color);
+    }
+}

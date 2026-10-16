@@ -1,0 +1,19 @@
+/* 02-tokens.css: index.html@cd3fd3f lines 18-31 (:root custom properties).
+   The single theme-token file (Feature 6 seam: a later ThemeBridge reads these variables).
+   Do not rename tokens: the other slices, inline style="" attributes in index.html and
+   strings in the script reference them by name.
+   Contiguous slice of the original <style>; link order = file number. Do not reorder rules across files. */
+:root {
+    --bg-primary: #0a0a0f;
+    --bg-secondary: #12121a;
+    --bg-tertiary: #1a1a24;
+    --accent-cyan: #00f0ff;
+    --accent-magenta: #ff00aa;
+    --accent-orange: #ff6b35;
+    --accent-green: #00ff66;
+    --text-primary: #e8e8ec;
+    --text-secondary: #8a8a9a;
+    --text-dim: #4a4a5a;
+    --border-color: #2a2a3a;
+    --glow-cyan: 0 0 20px rgba(0, 240, 255, 0.3);
+}

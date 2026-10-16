@@ -1,0 +1,584 @@
+// Verbatim legacy oracle for the IO layer (used by tests/unit/io.test.mjs).
+//
+// Every function body below was copied line for line from index.html@cd3fd3f (`git show cd3fd3f:index.html`) by a
+// script that slices the original line ranges. Edits are limited to:
+//   - globals turned into parameters (`wallSections`, `meshMode`, `sectionColors`, `safeDistanceMesh`);
+//   - `new THREE.Color(x)` replaced by the injected `colorToRgb(x)` (the tests pass a parser equal to THREE r128
+//     Color#setStyle for '#rrggbb'); `btoa` and the argument spread are kept;
+//   - the statements that consumed a built value (downloadFile / zip.file / global assignment) replaced by a
+//     `// [oracle]`-marked `return` or `const`.
+// No arithmetic, operand order, coercion, template literal or loop structure was changed. THREE-free, DOM-free.
+// It is a helper, not a test file: the unit glob `tests/unit/**/*.test.mjs` does not match it.
+
+// ---------------------------------------------------------------------------------------------------------------
+// generateAllSectionsGeometry: index.html 5012-5080 (globals: wallSections)
+// ---------------------------------------------------------------------------------------------------------------
+
+/** index.html 5012-5080. */
+export function generateAllSectionsGeometry(wallSections, scale) {
+            const allSectionsGeometry = [];
+            let currentX = 0, currentZ = 0, currentAngle = 0;
+
+            wallSections.forEach((section, sectionIndex) => {
+                const panelW = section.panelWidth * scale;
+                const panelH = section.panelHeight * scale;
+                const curveAngleRad = (section.curveIntensity * Math.PI) / 180;
+                const isFlat = section.curveIntensity === 0;
+                
+                // Apply section angle offset
+                const angleOffsetRad = ((section.angleOffset || 0) * Math.PI) / 180;
+                currentAngle += angleOffsetRad;
+
+                const edgePositions = [{ x: currentX, z: currentZ, angle: currentAngle }];
+
+                for (let col = 0; col < section.panelCols; col++) {
+                    if (!isFlat) {
+                        currentAngle += curveAngleRad;
+                    }
+
+                    const moveDirection = currentAngle;
+                    currentX += panelW * Math.cos(moveDirection);
+                    currentZ += panelW * Math.sin(moveDirection);
+                    
+                    edgePositions.push({ x: currentX, z: currentZ, angle: currentAngle });
+                }
+
+                // Generate vertices
+                const vertices = [];
+                for (let row = 0; row <= section.panelRows; row++) {
+                    const y = row * panelH;
+                    for (let col = 0; col <= section.panelCols; col++) {
+                        const edge = edgePositions[col];
+                        vertices.push(edge.x, y, edge.z);
+                    }
+                }
+
+                // Generate panel data for individual panels mode
+                const panelData = [];
+                for (let row = 0; row < section.panelRows; row++) {
+                    const y = row * panelH;
+                    for (let col = 0; col < section.panelCols; col++) {
+                        const leftEdge = edgePositions[col];
+                        const rightEdge = edgePositions[col + 1];
+                        const centerX = (leftEdge.x + rightEdge.x) / 2;
+                        const centerZ = (leftEdge.z + rightEdge.z) / 2;
+                        const centerY = y + panelH / 2;
+                        const dx = rightEdge.x - leftEdge.x;
+                        const dz = rightEdge.z - leftEdge.z;
+                        const rotY = -Math.atan2(dz, dx);
+
+                        panelData.push({ x: centerX, y: centerY, z: centerZ, rotY, col, row });
+                    }
+                }
+
+                allSectionsGeometry.push({
+                    section,
+                    sectionIndex,
+                    vertices,
+                    edgePositions,
+                    panelData,
+                    panelW,
+                    panelH
+                });
+            });
+
+            return allSectionsGeometry;
+        }
+
+// ---------------------------------------------------------------------------------------------------------------
+// generateOBJContent: index.html 4556-4717 (globals: wallSections, meshMode; THREE.Color -> colorToRgb)
+// ---------------------------------------------------------------------------------------------------------------
+
+/** index.html 4556-4717. @returns {{objContent: string, mtlContent: string}} */
+export function generateOBJContent(allSectionsGeometry, scale, wallSections, meshMode, colorToRgb) {
+            let objContent = '# LED Wall Configuration OBJ Export\n';
+            objContent += `# Mesh Mode: ${meshMode}\n`;
+            objContent += '# Generated by LED Wall Configurator\n\n';
+            
+            let mtlContent = '# LED Wall Materials\n\n';
+
+            if (meshMode === 'combined') {
+                const color = colorToRgb(wallSections[0].color);
+                mtlContent += `newmtl LED_Wall_Combined\n`;
+                mtlContent += `Kd ${color.r.toFixed(4)} ${color.g.toFixed(4)} ${color.b.toFixed(4)}\n`;
+                mtlContent += `Ka 0.1 0.1 0.1\nKs 0.5 0.5 0.5\nNs 100\nd 1.0\n\n`;
+
+                objContent += 'mtllib led-wall-config.mtl\n\n';
+                objContent += 'o LED_Wall_Combined\n';
+                objContent += 'usemtl LED_Wall_Combined\n';
+
+                let vertexOffset = 1;
+                
+                allSectionsGeometry.forEach(({ vertices }) => {
+                    for (let i = 0; i < vertices.length; i += 3) {
+                        objContent += `v ${vertices[i].toFixed(6)} ${vertices[i+1].toFixed(6)} ${vertices[i+2].toFixed(6)}\n`;
+                    }
+                });
+
+                allSectionsGeometry.forEach(({ section }) => {
+                    for (let row = 0; row <= section.panelRows; row++) {
+                        for (let col = 0; col <= section.panelCols; col++) {
+                            objContent += `vt ${(col / section.panelCols).toFixed(6)} ${(row / section.panelRows).toFixed(6)}\n`;
+                        }
+                    }
+                });
+
+                objContent += 'vn 0 0 1\n';
+
+                allSectionsGeometry.forEach(({ section }) => {
+                    const vertsPerRow = section.panelCols + 1;
+                    for (let row = 0; row < section.panelRows; row++) {
+                        for (let col = 0; col < section.panelCols; col++) {
+                            const bl = vertexOffset + row * vertsPerRow + col;
+                            const br = bl + 1;
+                            const tl = vertexOffset + (row + 1) * vertsPerRow + col;
+                            const tr = tl + 1;
+                            objContent += `f ${bl}/${bl}/1 ${tl}/${tl}/1 ${tr}/${tr}/1\n`;
+                            objContent += `f ${bl}/${bl}/1 ${tr}/${tr}/1 ${br}/${br}/1\n`;
+                        }
+                    }
+                    vertexOffset += (section.panelCols + 1) * (section.panelRows + 1);
+                });
+
+            } else if (meshMode === 'section') {
+                wallSections.forEach((section, i) => {
+                    const color = colorToRgb(section.color);
+                    mtlContent += `newmtl Wall_${i + 1}\n`;
+                    mtlContent += `Kd ${color.r.toFixed(4)} ${color.g.toFixed(4)} ${color.b.toFixed(4)}\n`;
+                    mtlContent += `Ka 0.1 0.1 0.1\nKs 0.5 0.5 0.5\nNs 100\nd 1.0\n`;
+                    mtlContent += `map_Kd textures/Wall_${i + 1}_PanelIDs.png\n\n`;
+                });
+
+                objContent += 'mtllib led-wall-config.mtl\n\n';
+
+                let vertexOffset = 1;
+                let texCoordOffset = 1;
+                let normalOffset = 1;
+                
+                allSectionsGeometry.forEach(({ section, vertices }, sectionIndex) => {
+                    objContent += `o Wall_${sectionIndex + 1}\n`;
+                    objContent += `usemtl Wall_${sectionIndex + 1}\n`;
+
+                    for (let i = 0; i < vertices.length; i += 3) {
+                        objContent += `v ${vertices[i].toFixed(6)} ${vertices[i+1].toFixed(6)} ${vertices[i+2].toFixed(6)}\n`;
+                    }
+
+                    for (let row = 0; row <= section.panelRows; row++) {
+                        for (let col = 0; col <= section.panelCols; col++) {
+                            objContent += `vt ${(col / section.panelCols).toFixed(6)} ${(row / section.panelRows).toFixed(6)}\n`;
+                        }
+                    }
+
+                    objContent += `vn 0 0 1\n`;
+
+                    const vertsPerRow = section.panelCols + 1;
+                    for (let row = 0; row < section.panelRows; row++) {
+                        for (let col = 0; col < section.panelCols; col++) {
+                            const bl = vertexOffset + row * vertsPerRow + col;
+                            const br = bl + 1;
+                            const tl = vertexOffset + (row + 1) * vertsPerRow + col;
+                            const tr = tl + 1;
+                            const tbl = texCoordOffset + row * vertsPerRow + col;
+                            const tbr = tbl + 1;
+                            const ttl = texCoordOffset + (row + 1) * vertsPerRow + col;
+                            const ttr = ttl + 1;
+                            objContent += `f ${bl}/${tbl}/${normalOffset} ${tl}/${ttl}/${normalOffset} ${tr}/${ttr}/${normalOffset}\n`;
+                            objContent += `f ${bl}/${tbl}/${normalOffset} ${tr}/${ttr}/${normalOffset} ${br}/${tbr}/${normalOffset}\n`;
+                        }
+                    }
+
+                    const numVerts = (section.panelCols + 1) * (section.panelRows + 1);
+                    vertexOffset += numVerts;
+                    texCoordOffset += numVerts;
+                    normalOffset += 1;
+                    objContent += '\n';
+                });
+
+            } else {
+                wallSections.forEach((section, i) => {
+                    const color = colorToRgb(section.color);
+                    mtlContent += `newmtl Wall_${i + 1}\n`;
+                    mtlContent += `Kd ${color.r.toFixed(4)} ${color.g.toFixed(4)} ${color.b.toFixed(4)}\n`;
+                    mtlContent += `Ka 0.1 0.1 0.1\nKs 0.5 0.5 0.5\nNs 100\nd 1.0\n\n`;
+                });
+
+                objContent += 'mtllib led-wall-config.mtl\n\n';
+
+                let vertexOffset = 1;
+                let texCoordOffset = 1;
+                let normalOffset = 1;
+                
+                allSectionsGeometry.forEach(({ section, panelData, panelW, panelH }, sectionIndex) => {
+                    panelData.forEach((panel) => {
+                        const panelName = `Wall_${sectionIndex + 1}_Panel_R${panel.row + 1}_C${panel.col + 1}`;
+                        objContent += `o ${panelName}\n`;
+                        objContent += `usemtl Wall_${sectionIndex + 1}\n`;
+
+                        const hw = panelW / 2;
+                        const hh = panelH / 2;
+                        const cos = Math.cos(panel.rotY);
+                        const sin = Math.sin(panel.rotY);
+
+                        const corners = [
+                            { x: panel.x + (-hw) * cos, y: panel.y - hh, z: panel.z - (-hw) * sin },
+                            { x: panel.x + (hw) * cos,  y: panel.y - hh, z: panel.z - (hw) * sin },
+                            { x: panel.x + (hw) * cos,  y: panel.y + hh, z: panel.z - (hw) * sin },
+                            { x: panel.x + (-hw) * cos, y: panel.y + hh, z: panel.z - (-hw) * sin }
+                        ];
+
+                        corners.forEach(c => {
+                            objContent += `v ${c.x.toFixed(6)} ${c.y.toFixed(6)} ${c.z.toFixed(6)}\n`;
+                        });
+
+                        objContent += `vt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\n`;
+
+                        const nx = Math.sin(panel.rotY);
+                        const nz = Math.cos(panel.rotY);
+                        objContent += `vn ${nx.toFixed(6)} 0 ${nz.toFixed(6)}\n`;
+
+                        const v = vertexOffset;
+                        const t = texCoordOffset;
+                        const n = normalOffset;
+                        objContent += `f ${v}/${t}/${n} ${v+3}/${t+3}/${n} ${v+2}/${t+2}/${n}\n`;
+                        objContent += `f ${v}/${t}/${n} ${v+2}/${t+2}/${n} ${v+1}/${t+1}/${n}\n`;
+
+                        vertexOffset += 4;
+                        texCoordOffset += 4;
+                        normalOffset += 1;
+                        objContent += '\n';
+                    });
+                });
+            }
+
+            return { objContent, mtlContent };
+        }
+
+// ---------------------------------------------------------------------------------------------------------------
+// generateGLTFContent: index.html 4719-4909 (globals: wallSections, meshMode; THREE.Color -> colorToRgb)
+// ---------------------------------------------------------------------------------------------------------------
+
+/** index.html 4719-4909 (inner addMesh 4737-4828). @returns {object} the glTF document */
+export function generateGLTFContent(allSectionsGeometry, wallSections, meshMode, colorToRgb) {
+            const gltf = {
+                asset: { version: "2.0", generator: "LED Wall Configurator" },
+                scene: 0,
+                scenes: [{ nodes: [] }],
+                nodes: [],
+                meshes: [],
+                accessors: [],
+                bufferViews: [],
+                buffers: [],
+                materials: []
+            };
+
+            const allBufferData = [];
+            let byteOffset = 0;
+            let accessorIndex = 0;
+            let meshIndex = 0;
+
+            function addMesh(name, vertices, indices, color) {
+                const materialIndex = gltf.materials.length;
+                gltf.materials.push({
+                    name: name + "_Material",
+                    pbrMetallicRoughness: {
+                        baseColorFactor: [color.r, color.g, color.b, 1.0],
+                        metallicFactor: 0.0,
+                        roughnessFactor: 0.8
+                    }
+                });
+
+                const vertexBuffer = new Float32Array(vertices);
+                const vertexBytes = new Uint8Array(vertexBuffer.buffer);
+                allBufferData.push(vertexBytes);
+                
+                const vertexBufferView = gltf.bufferViews.length;
+                gltf.bufferViews.push({
+                    buffer: 0,
+                    byteOffset: byteOffset,
+                    byteLength: vertexBytes.length,
+                    target: 34962
+                });
+                byteOffset += vertexBytes.length;
+                const vertPadding = (4 - (byteOffset % 4)) % 4;
+                if (vertPadding > 0) {
+                    allBufferData.push(new Uint8Array(vertPadding));
+                    byteOffset += vertPadding;
+                }
+
+                let minX = Infinity, minY = Infinity, minZ = Infinity;
+                let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+                for (let i = 0; i < vertices.length; i += 3) {
+                    minX = Math.min(minX, vertices[i]);
+                    maxX = Math.max(maxX, vertices[i]);
+                    minY = Math.min(minY, vertices[i + 1]);
+                    maxY = Math.max(maxY, vertices[i + 1]);
+                    minZ = Math.min(minZ, vertices[i + 2]);
+                    maxZ = Math.max(maxZ, vertices[i + 2]);
+                }
+
+                const positionAccessor = accessorIndex++;
+                gltf.accessors.push({
+                    bufferView: vertexBufferView,
+                    byteOffset: 0,
+                    componentType: 5126,
+                    count: vertices.length / 3,
+                    type: "VEC3",
+                    min: [minX, minY, minZ],
+                    max: [maxX, maxY, maxZ]
+                });
+
+                const indexBuffer = new Uint16Array(indices);
+                const indexBytes = new Uint8Array(indexBuffer.buffer);
+                allBufferData.push(indexBytes);
+                
+                const indexBufferView = gltf.bufferViews.length;
+                gltf.bufferViews.push({
+                    buffer: 0,
+                    byteOffset: byteOffset,
+                    byteLength: indexBytes.length,
+                    target: 34963
+                });
+                byteOffset += indexBytes.length;
+                const idxPadding = (4 - (byteOffset % 4)) % 4;
+                if (idxPadding > 0) {
+                    allBufferData.push(new Uint8Array(idxPadding));
+                    byteOffset += idxPadding;
+                }
+
+                const indexAccessor = accessorIndex++;
+                gltf.accessors.push({
+                    bufferView: indexBufferView,
+                    byteOffset: 0,
+                    componentType: 5123,
+                    count: indices.length,
+                    type: "SCALAR"
+                });
+
+                const currentMeshIndex = meshIndex++;
+                gltf.meshes.push({
+                    name: name,
+                    primitives: [{
+                        attributes: { POSITION: positionAccessor },
+                        indices: indexAccessor,
+                        material: materialIndex
+                    }]
+                });
+
+                const nodeIndex = gltf.nodes.length;
+                gltf.nodes.push({ name: name, mesh: currentMeshIndex });
+                gltf.scenes[0].nodes.push(nodeIndex);
+            }
+
+            if (meshMode === 'combined') {
+                const allVertices = [];
+                const allIndices = [];
+                let indexOffset = 0;
+
+                allSectionsGeometry.forEach(({ section, vertices }) => {
+                    for (let i = 0; i < vertices.length; i++) allVertices.push(vertices[i]);
+                    const vertsPerRow = section.panelCols + 1;
+                    for (let row = 0; row < section.panelRows; row++) {
+                        for (let col = 0; col < section.panelCols; col++) {
+                            const bl = indexOffset + row * vertsPerRow + col;
+                            const br = bl + 1;
+                            const tl = indexOffset + (row + 1) * vertsPerRow + col;
+                            const tr = tl + 1;
+                            allIndices.push(bl, tl, tr, bl, tr, br);
+                        }
+                    }
+                    indexOffset += (section.panelCols + 1) * (section.panelRows + 1);
+                });
+
+                const color = colorToRgb(wallSections[0].color);
+                addMesh('LED_Wall_Combined', allVertices, allIndices, color);
+
+            } else if (meshMode === 'section') {
+                allSectionsGeometry.forEach(({ section, vertices }, sectionIndex) => {
+                    const indices = [];
+                    const vertsPerRow = section.panelCols + 1;
+                    for (let row = 0; row < section.panelRows; row++) {
+                        for (let col = 0; col < section.panelCols; col++) {
+                            const bl = row * vertsPerRow + col;
+                            const br = bl + 1;
+                            const tl = (row + 1) * vertsPerRow + col;
+                            const tr = tl + 1;
+                            indices.push(bl, tl, tr, bl, tr, br);
+                        }
+                    }
+                    const color = colorToRgb(section.color);
+                    addMesh(`Wall_${sectionIndex + 1}`, vertices, indices, color);
+                });
+
+            } else {
+                allSectionsGeometry.forEach(({ section, panelData, panelW, panelH }, sectionIndex) => {
+                    const color = colorToRgb(section.color);
+
+                    panelData.forEach((panel) => {
+                        const hw = panelW / 2;
+                        const hh = panelH / 2;
+                        const cos = Math.cos(panel.rotY);
+                        const sin = Math.sin(panel.rotY);
+
+                        const vertices = [
+                            panel.x + (-hw) * cos, panel.y - hh, panel.z - (-hw) * sin,
+                            panel.x + (hw) * cos,  panel.y - hh, panel.z - (hw) * sin,
+                            panel.x + (hw) * cos,  panel.y + hh, panel.z - (hw) * sin,
+                            panel.x + (-hw) * cos, panel.y + hh, panel.z - (-hw) * sin
+                        ];
+
+                        const indices = [0, 3, 2, 0, 2, 1];
+                        const name = `Wall_${sectionIndex + 1}_Panel_R${panel.row + 1}_C${panel.col + 1}`;
+                        addMesh(name, vertices, indices, color);
+                    });
+                });
+            }
+
+            const totalLength = allBufferData.reduce((sum, arr) => sum + arr.length, 0);
+            const combinedBuffer = new Uint8Array(totalLength);
+            let offset = 0;
+            for (const arr of allBufferData) {
+                combinedBuffer.set(arr, offset);
+                offset += arr.length;
+            }
+
+            const base64 = btoa(String.fromCharCode(...combinedBuffer));
+            gltf.buffers.push({
+                byteLength: combinedBuffer.length,
+                uri: "data:application/octet-stream;base64," + base64
+            });
+
+            return gltf;
+        }
+
+// ---------------------------------------------------------------------------------------------------------------
+// exportJSON builder: index.html 4942-4965 (globals: wallSections, meshMode)
+// ---------------------------------------------------------------------------------------------------------------
+
+/** index.html 4943-4963. @returns {object} the 'file' JSON document (before JSON.stringify(_, null, 2)) */
+export function exportJSONData(wallSections, meshMode) {
+            const exportData = {
+                version: '1.0',
+                sections: wallSections.map((s, i) => ({
+                    name: s.name || `Wall ${i + 1}`,
+                    id: s.id,
+                    panel: { columns: s.panelCols, rows: s.panelRows, width_mm: s.panelWidth, height_mm: s.panelHeight },
+                    led_resolution: { x: s.ledX, y: s.ledY, pixel_pitch_mm: parseFloat((s.panelWidth / s.ledX).toFixed(2)) },
+                    curvature: { 
+                        type: s.curveIntensity === 0 ? 'flat' : (s.curveIntensity > 0 ? 'concave' : 'convex'), 
+                        angle_degrees: s.curveIntensity,
+                        angle_offset_degrees: s.angleOffset || 0
+                    },
+                    color: s.color
+                })),
+                mesh_mode: meshMode,
+                totals: {
+                    sections: wallSections.length,
+                    total_panels: wallSections.reduce((sum, s) => sum + s.panelCols * s.panelRows, 0),
+                    total_pixels: wallSections.reduce((sum, s) => sum + s.panelCols * s.panelRows * s.ledX * s.ledY, 0)
+                }
+            };
+            return exportData; // [oracle] replaces downloadFile(JSON.stringify(exportData, null, 2), ...) (4964)
+        }
+
+// ---------------------------------------------------------------------------------------------------------------
+// exportZIP JSON builder: index.html 4495-4519 (globals: wallSections, meshMode)
+// ---------------------------------------------------------------------------------------------------------------
+
+/** index.html 4495-4519 (with the inner sanitizeFilename of 4496). @returns {object} the 'zip' JSON document */
+export function exportZIPJSONData(wallSections, meshMode) {
+            // Helper function to sanitize filename
+            const sanitizeFilename = (name) => name.replace(/[^a-zA-Z0-9_-]/g, '_');
+            
+            // Add JSON config
+            const jsonData = {
+                version: '1.0',
+                sections: wallSections.map((s, i) => ({
+                    name: s.name || `Wall ${i + 1}`,
+                    id: s.id,
+                    panel: { columns: s.panelCols, rows: s.panelRows, width_mm: s.panelWidth, height_mm: s.panelHeight },
+                    led_resolution: { x: s.ledX, y: s.ledY, pixel_pitch_mm: parseFloat((s.panelWidth / s.ledX).toFixed(2)) },
+                    curvature: { 
+                        type: s.curveIntensity === 0 ? 'flat' : (s.curveIntensity > 0 ? 'concave' : 'convex'), 
+                        angle_degrees: s.curveIntensity 
+                    },
+                    color: s.color,
+                    texture_file: `textures/${sanitizeFilename(s.name || `Wall_${i + 1}`)}_PanelIDs.png`
+                })),
+                mesh_mode: meshMode,
+                totals: {
+                    sections: wallSections.length,
+                    total_panels: wallSections.reduce((sum, s) => sum + s.panelCols * s.panelRows, 0),
+                    total_pixels: wallSections.reduce((sum, s) => sum + s.panelCols * s.panelRows * s.ledX * s.ledY, 0)
+                }
+            };
+            return jsonData; // [oracle] replaces zip.file('led-wall-config.json', JSON.stringify(jsonData, null, 2)) (4520)
+        }
+
+// ---------------------------------------------------------------------------------------------------------------
+// importJSON mapping: index.html 4974-4988 (+ the raw mesh_mode read of 4991) (globals: sectionColors)
+// ---------------------------------------------------------------------------------------------------------------
+
+/**
+ * index.html 4975-4988: the section mapping of importJSON's reader.onload, given the parsed `data`.
+ * @returns {{wallSections: object[], meshMode: *}|null} null when the legacy `if` is not taken
+ */
+export function importJSONMapping(data, sectionColors) {
+                    if (data.sections && Array.isArray(data.sections)) {
+                        const wallSections = data.sections.map((s, i) => ({ // [oracle] was the global assignment `wallSections = ...` (4976)
+                            id: s.id !== undefined ? s.id : i,
+                            name: s.name || `Wall ${i + 1}`,
+                            panelCols: s.panel?.columns || 5,
+                            panelRows: s.panel?.rows || 3,
+                            panelWidth: s.panel?.width_mm || 500,
+                            panelHeight: s.panel?.height_mm || 500,
+                            ledX: s.led_resolution?.x || 32,
+                            ledY: s.led_resolution?.y || 32,
+                            curveIntensity: s.curvature?.angle_degrees || 0,
+                            angleOffset: s.curvature?.angle_offset_degrees || 0,
+                            color: s.color || sectionColors[i % sectionColors.length]
+                        }));
+                        return { wallSections, meshMode: data.mesh_mode }; // [oracle] the value 4991-4992 tests and assigns
+                    }
+                    return null; // [oracle] the `if` was not taken: nothing happens
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// exportSafeDistanceOBJ text: index.html 2792-2823 (globals: safeDistanceMesh)
+// ---------------------------------------------------------------------------------------------------------------
+
+/** index.html 2792-2823 (the text only; the alert guard 2787-2790 and the downloadBlob call 2825-2826 are not copied). */
+export function safeDistanceObjText(safeDistanceMesh) {
+            let objContent = '# Safe Distance Floor Mesh\n# Exported from LED Wall Configurator\n\n';
+            
+            let vertexOffset = 1;
+            
+            safeDistanceMesh.traverse((child) => {
+                if (child.isMesh && child.geometry) {
+                    const positions = child.geometry.attributes.position;
+                    const indices = child.geometry.index;
+                    
+                    // Export vertices
+                    for (let i = 0; i < positions.count; i++) {
+                        const x = positions.getX(i);
+                        const y = positions.getY(i);
+                        const z = positions.getZ(i);
+                        objContent += `v ${x.toFixed(6)} ${y.toFixed(6)} ${z.toFixed(6)}\n`;
+                    }
+                    
+                    objContent += '\n';
+                    
+                    // Export faces
+                    if (indices) {
+                        for (let i = 0; i < indices.count; i += 3) {
+                            const a = indices.getX(i) + vertexOffset;
+                            const b = indices.getX(i + 1) + vertexOffset;
+                            const c = indices.getX(i + 2) + vertexOffset;
+                            objContent += `f ${a} ${b} ${c}\n`;
+                        }
+                    }
+                    
+                    vertexOffset += positions.count;
+                }
+            });
+            return objContent; // [oracle] replaces the Blob + downloadBlob call (2825-2826)
+}

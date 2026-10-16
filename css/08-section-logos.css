@@ -1,0 +1,79 @@
+/* 08-section-logos.css: index.html@cd3fd3f lines 526-602 (per-section logo upload, clear, position and scale controls).
+   Contiguous slice of the original <style>; link order = file number. Do not reorder rules across files. */
+.section-logo-upload {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.section-logo-upload-btn {
+    flex: 1;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border: 1px dashed var(--border-color);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+}
+
+.section-logo-upload-btn:hover {
+    border-color: var(--accent-cyan);
+    color: var(--accent-cyan);
+}
+
+.section-logo-upload-btn.has-logo {
+    border-style: solid;
+    border-color: var(--accent-cyan);
+    color: var(--accent-cyan);
+}
+
+.section-logo-clear {
+    padding: 8px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: none;
+}
+
+.section-logo-clear.visible {
+    display: block;
+}
+
+.section-logo-clear:hover {
+    border-color: #ff4466;
+    color: #ff4466;
+}
+
+.section-logo-position {
+    display: none;
+    margin-top: 8px;
+}
+
+.section-logo-position.visible {
+    display: block;
+}
+
+.section-logo-position select {
+    width: 100%;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 6px;
+    border-radius: 4px;
+    font-size: 11px;
+}
+
+.section-logo-scale {
+    display: none;
+    margin-top: 8px;
+}
+
+.section-logo-scale.visible {
+    display: block;
+}

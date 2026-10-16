@@ -15,6 +15,24 @@ No installation required. Works in any modern browser.
 
 ---
 
+## 💻 Run Locally
+
+The app is plain static files (HTML, CSS and native ES modules; no build step and no `npm install`).
+ES modules do not load from `file://`, so opening `index.html` directly no longer works: serve the folder
+over HTTP with any local static server and open the printed URL.
+
+```bash
+node tools/serve.mjs            # zero-dependency server from this repo: http://127.0.0.1:8000/
+# or
+python -m http.server 8000      # then open http://localhost:8000/
+```
+
+If the browser console reports a MIME-type error for a `.js` file, the server is sending JavaScript as
+`text/plain` (some Windows setups do); use `node tools/serve.mjs`, which always serves `.js` as JavaScript.
+The hosted version on [GitHub Pages](https://itzmorphinetime.github.io/LED_Configurator/) needs nothing.
+
+---
+
 ## ✨ Features
 
 ### Multi-Section Wall Design
@@ -113,13 +131,15 @@ No installation required. Works in any modern browser.
 | Parameter | Description | Range |
 |-----------|-------------|-------|
 | Panel Columns | Number of panels horizontally | 1-50 |
-| Panel Rows | Number of panels vertically | 1-50 |
-| Panel Width | Width in millimeters | 100-2000mm |
-| Panel Height | Height in millimeters | 100-2000mm |
-| LED X Resolution | Horizontal pixels per panel | 8-512 |
-| LED Y Resolution | Vertical pixels per panel | 8-512 |
-| Curve Intensity | Curvature angle per panel | -45° to +45° |
+| Panel Rows | Number of panels vertically | 1-20 |
+| Panel Width | Width in millimeters | 50-5000mm |
+| Panel Height | Height in millimeters | 50mm minimum, no maximum |
+| LED X Resolution | Horizontal pixels per panel | 8 minimum, no maximum |
+| LED Y Resolution | Vertical pixels per panel | 8 minimum, no maximum |
+| Curve Intensity | Curvature angle per panel (positive = concave, negative = convex) | not limited |
 | Section Offset | Rotation before section | -180° to +180° |
+
+A value outside its range is clamped to it when the field is changed. An empty field, or 0 in a field whose default is not 0, falls back to the default (columns and rows 1, width and height 500mm, LED resolution 32).
 
 ### Camera Settings
 | Parameter | Description |
@@ -135,11 +155,12 @@ No installation required. Works in any modern browser.
 ## 📤 Export Options
 
 ### JSON Configuration
-Export and import complete wall configurations including:
-- All section parameters
-- Camera settings
-- Scene prop positions
-- Full project state
+Export and import wall configurations. The JSON file (format version 1.0) contains:
+- All section parameters (name, panels, LED resolution, curvature, angle offset, color)
+- The mesh mode
+- Totals (sections, panels, pixels)
+
+Camera settings, scene props, panel ID styling, section logos and display toggles are not saved yet; they will come with the JSON v2 format. The copy of the JSON inside the ZIP package has no angle offsets, so importing it resets every section's offset to 0.
 
 ### OBJ Export
 Industry-standard 3D mesh format compatible with:
@@ -206,11 +227,21 @@ Export the calculated safe camera zone as 3D geometry.
 - **Vanilla JavaScript** - No framework dependencies
 - **CSS3** - Modern styling with CSS variables
 
+### Project Structure
+- `index.html`: page markup; loads three.js r128 and JSZip from cdnjs, the stylesheets in `css/` and the entry module `js/main.js`
+- `css/`: 12 stylesheets (`01-reset.css` ... `12-responsive.css`), linked in numeric order
+- `js/`: native ES modules in layers (`core`, `legacy`, `theme`, `domain`, `geometry`, `io`, `render`, `interaction`, `app`, `ui`); `js/app/App.js` is the composition root
+- `tests/`: unit tests (`node --test "tests/unit/**/*.test.mjs"`), static checks (`tests/static/`) and the golden-master regression harness (`tests/regression/`)
+- `tools/serve.mjs`: the local static server
+- Architecture and module contracts: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); refactor plan, decisions and how to run the checks: [docs/REFACTOR_PLAN.md](docs/REFACTOR_PLAN.md)
+
 ### Browser Support
-- Chrome (recommended)
-- Firefox
-- Safari
-- Edge
+- Chrome 84+ (recommended)
+- Firefox 90+
+- Safari 15+ (macOS and iOS)
+- Edge 84+
+
+The modules use modern JavaScript class syntax (private fields and methods), so older browsers cannot load the app.
 
 ### Performance Notes
 - Large configurations (many sections, high LED counts) may impact performance

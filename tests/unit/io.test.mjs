@@ -1,0 +1,1068 @@
+// Unit tests for the IO layer (js/io/*) and its use cases (js/app/ProjectIO.js, js/ui/ExportPanel.js).
+//
+// 1. Oracle equality: ObjExporter, GltfExporter and ProjectSerializer produce BYTE-identical text / JSON to the
+//    verbatim legacy oracle (tests/unit/oracle/legacy-io.mjs, copied from index.html@cd3fd3f) over hand-picked walls,
+//    the harness configurations and seeded fuzzed walls (fractional and string fields, NaN / duplicate / string ids,
+//    numeric names, odd colours, unknown mesh modes, empty walls). Where legacy throws, both throw the same error
+//    type and message. ProjectSerializer.read equals the legacy import mapping over fuzzed documents. (NaN byte
+//    encodings in the glTF Float32 buffer are canonicalised first: they are implementation-defined, see gltfText.)
+// 2. Golden files: the projects of the 'default' scenario and of every config in tests/regression/configs.mjs are
+//    rebuilt in Node and every export is compared byte for byte with the golden-master downloads in GOLDEN_DIR
+//    (default tests/regression/output/baseline; skipped with a message when absent), under correctly rounded
+//    Math.atan2 / sin / cos as in the Chrome that captured them (see "Chrome math emulation").
+// 3. ProjectSerializer.read edge cases; 4. strategy reads (foreign profile values throw unsupportedStrategy);
+// 5. ProjectIO / Downloader / ExportPanel sequences with fakes (order, async shape, no added try/catch).
+// Run: node --test tests/unit/io.test.mjs   (zero dependencies)
+
+import { test, describe } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { WallSection } from '../../js/domain/WallSection.js';
+import { Project } from '../../js/domain/Project.js';
+import { Strategies, unsupportedStrategy, legacySpreadBase64 } from '../../js/legacy/LegacyCompat.js';
+import { layoutProject } from '../../js/geometry/WallLayout.js';
+import { WallMeshBuilder } from '../../js/geometry/WallMeshBuilder.js';
+import { computeAtlas } from '../../js/geometry/TextureAtlas.js';
+import { zipTextureFileName } from '../../js/geometry/PanelNaming.js';
+import { ProjectSerializer } from '../../js/io/ProjectSerializer.js';
+import { ObjExporter } from '../../js/io/ObjExporter.js';
+import { GltfExporter } from '../../js/io/GltfExporter.js';
+import { ProjectIO, Downloader } from '../../js/app/ProjectIO.js';
+import { ExportPanel } from '../../js/ui/ExportPanel.js';
+import { Brand, Palette } from '../../js/theme/Theme.js';
+import * as L from './oracle/legacy-io.mjs';
+import { CONFIGS } from '../regression/configs.mjs';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const REPO = path.resolve(HERE, '..', '..');
+const GOLDEN_DIR = path.resolve(REPO, process.env.GOLDEN_DIR || 'tests/regression/output/baseline');
+const MODES = ['combined', 'section', 'panel'];
+
+// ---------------------------------------------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------------------------------------------
+
+/**
+ * THREE r128 `new THREE.Color(style)` for '#rrggbb' and '#rgb' (Color#setStyle; r128 has no colour management):
+ * r = parseInt(hex.slice(1, 3), 16) / 255, etc. Every other value returns white here. That matches r128 only for
+ * strings it cannot parse ('', '#12345': it warns and keeps its default white); r128 itself maps CSS keywords
+ * ('red'), rgb()/hsl() strings and numbers (setHex) to other colours. The difference is harmless for these tests:
+ * the oracle and the exporters receive the same injected parser, and the golden files use '#rrggbb' only.
+ */
+function colorToRgb(style) {
+  const m = typeof style === 'string' ? /^#([A-Fa-f\d]+)$/.exec(style) : null;
+  if (m) {
+    const hex = m[1];
+    if (hex.length === 6) {
+      return { r: parseInt(style.slice(1, 3), 16) / 255, g: parseInt(style.slice(3, 5), 16) / 255, b: parseInt(style.slice(5, 7), 16) / 255 };
+    }
+    if (hex.length === 3) {
+      return { r: parseInt(hex[0] + hex[0], 16) / 255, g: parseInt(hex[1] + hex[1], 16) / 255, b: parseInt(hex[2] + hex[2], 16) / 255 };
+    }
+  }
+  return { r: 1, g: 1, b: 1 };
+}
+
+const serializer = new ProjectSerializer({ palette: Palette });
+const makeObj = (profile = Strategies.mesh.obj) => new ObjExporter({ brand: Brand, colorToRgb, builder: new WallMeshBuilder(profile) });
+const makeGltf = (profile = Strategies.mesh.gltf, encodeBase64 = undefined) =>
+  new GltfExporter({ brand: Brand, colorToRgb, builder: new WallMeshBuilder(profile), encodeBase64 });
+const OBJ = makeObj();
+const GLTF = makeGltf();
+
+/** A project whose wall is exactly `sections` (Wall.replaceAll, as the import does) in `meshMode`. */
+function projectOf(sections, meshMode) {
+  const project = Project.createDefault();
+  project.wall.replaceAll(sections);
+  project.meshMode = meshMode;
+  return project;
+}
+
+/** Runs fn and captures its value or its exception. */
+function run(fn) {
+  try {
+    return { ok: true, value: fn() };
+  } catch (error) {
+    return { ok: false, error };
+  }
+}
+
+const describeError = (e) => `${e && e.constructor ? e.constructor.name : typeof e}: ${e && e.message}`;
+
+/** Both outcomes returned equal strings (after `toText`), or both threw the same error type and message. */
+function assertSameOutcome(actual, expected, label, toText = (v) => v) {
+  if (!expected.ok || !actual.ok) {
+    assert.equal(actual.ok, expected.ok,
+      `${label}: ${actual.ok ? 'returned' : `threw ${describeError(actual.error)}`}, legacy ${expected.ok ? 'returned' : `threw ${describeError(expected.error)}`}`);
+    assert.equal(describeError(actual.error), describeError(expected.error), `${label}: error`);
+    return 'threw';
+  }
+  const a = toText(actual.value);
+  const e = toText(expected.value);
+  if (a !== e) assert.fail(`${label}: output differs from legacy ${firstDifference(a, e)}`);
+  return 'equal';
+}
+
+/** "at char N: got '...' expected '...'" for two strings. */
+function firstDifference(a, e) {
+  let i = 0;
+  while (i < a.length && i < e.length && a[i] === e[i]) i++;
+  return `at char ${i} (lengths ${a.length} / ${e.length}): got ${JSON.stringify(a.slice(Math.max(0, i - 40), i + 40))}, ` +
+    `expected ${JSON.stringify(e.slice(Math.max(0, i - 40), i + 40))}`;
+}
+
+const legacyGeometry = (sections) => L.generateAllSectionsGeometry(sections, 0.001);
+const objText = ({ objContent, mtlContent }) => `${objContent}\u0000MTL\u0000${mtlContent}`;
+const json2 = (value) => JSON.stringify(value, null, 2);
+
+/**
+ * The glTF text with every NaN of the Float32 POSITION views (target 34962) rewritten to the canonical quiet NaN.
+ * Garbage imports (B-L8) make positions NaN. ECMAScript leaves the bytes a NaN gets in a Float32Array
+ * implementation-defined (SetValueInBuffer: "any implementation chosen ... NaN encoding"), and V8's sign bit depends
+ * on which operand of a commutative add/multiply the interpreter or the JIT propagates, so two textually identical
+ * expressions can store different NaN bytes. Only the fuzz comparison canonicalises; the golden files contain no NaN
+ * and are compared raw.
+ */
+function gltfText(gltf) {
+  const doc = JSON.parse(JSON.stringify(gltf));
+  for (const buffer of doc.buffers) {
+    const comma = buffer.uri.indexOf(',');
+    const bytes = Buffer.from(buffer.uri.slice(comma + 1), 'base64');
+    for (const view of doc.bufferViews) {
+      if (view.target !== 34962) continue;
+      for (let o = view.byteOffset; o + 4 <= view.byteOffset + view.byteLength; o += 4) {
+        const bits = bytes.readUInt32LE(o);
+        if ((bits & 0x7f800000) === 0x7f800000 && (bits & 0x007fffff) !== 0) bytes.writeUInt32LE(0x7fc00000, o);
+      }
+    }
+    buffer.uri = `${buffer.uri.slice(0, comma + 1)}${bytes.toString('base64')}`;
+  }
+  return json2(doc);
+}
+
+/** Legacy and new OBJ / glTF / JSON outcomes of one project. */
+function compareAll(project, label, tally) {
+  const sections = project.wall.sections;
+  const meshMode = project.meshMode;
+  const r = (key, actual, expected, toText) => {
+    const outcome = assertSameOutcome(actual, expected, `${label} ${key}`, toText);
+    tally[outcome]++;
+  };
+  r('obj', run(() => OBJ.write({ sections, meshMode, layout: layoutProject(project) })),
+    run(() => L.generateOBJContent(legacyGeometry(sections), 0.001, sections, meshMode, colorToRgb)), objText);
+  r('gltf', run(() => GLTF.write({ sections, meshMode, layout: layoutProject(project) })),
+    run(() => L.generateGLTFContent(legacyGeometry(sections), sections, meshMode, colorToRgb)), gltfText);
+  r('json:file', run(() => serializer.write(project, { variant: 'file' })), run(() => L.exportJSONData(sections, meshMode)), json2);
+  r('json:zip', run(() => serializer.write(project, { variant: 'zip' })), run(() => L.exportZIPJSONData(sections, meshMode)), json2);
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Inputs: hand-picked walls, the harness configurations and seeded fuzzed walls
+// ---------------------------------------------------------------------------------------------------------------
+
+/** Deterministic PRNG (mulberry32). */
+function rng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const COLS = [1, 2, 3, 4, 5, 6, 8, 2.5, 0.5, 1.5, 3.75, '10', '5', '3', '2.5', '1'];
+const ROWS = [1, 2, 3, 4, 2.5, 0.5, 1.25, '5', '3', '2', '1.5'];
+const RARE_COUNTS = [0, -0, -1, -2.5, NaN, '', '0', 'abc', null, true];
+const SIZES = [500, 250, 600, 1000, 333.3, 337.5, 499.9, 50, 5000, 562.5, '500', '250', '337.5', 0];
+const LEDS = [32, 64, 16, 8, 128, 96, 54, 7.5, 33, '32', '64', 0, ''];
+const CURVES = [0, -0, 5, -5, 10, -10, 2.5, -7.25, 3.5, -1.5, 45, 90, 180, 4.75, -9.5, 19, '5', '-3', '0', '2.5', '', NaN, null];
+const OFFSETS = [0, 90, -90, 180, -180, 45, 12.5, 9.5, -19, 89, '30', '-90', '4.75', '', null, undefined, NaN, 'abc'];
+const NAMES = ['Wall 1', 'A B', 'A_B', 'Stage-Left', 'x/y:z*?', 'Ünïcödé wall', 'Curve C', 'L1', '   ', '', 0, 42];
+const COLORS = ['#00f0ff', '#ff00aa', '#00ff66', '#FF6B35', '#ffdd00', '#AbCdEf', '#abc', 'red', '', '#12345', 0];
+const MESH_MODES = ['combined', 'section', 'panel', 'Panel', 'bogus', undefined, null, '', 42, {}];
+
+/** A fuzzed WallSection with raw (possibly imported) field values. */
+function fuzzSection(rand, i, previousId) {
+  const pick = (pool) => pool[Math.floor(rand() * pool.length)];
+  const count = (pool) => (rand() < 0.05 ? pick(RARE_COUNTS) : pick(pool));
+  const r = rand();
+  const id = r < 0.08 ? NaN : r < 0.16 ? `id-${i}` : r < 0.22 ? String(i) : r < 0.32 && previousId !== undefined ? previousId : i;
+  return new WallSection({
+    id,
+    name: pick(NAMES),
+    panelCols: count(COLS),
+    panelRows: count(ROWS),
+    panelWidth: pick(SIZES),
+    panelHeight: pick(SIZES),
+    ledX: pick(LEDS),
+    ledY: pick(LEDS),
+    curveIntensity: pick(CURVES),
+    angleOffset: pick(OFFSETS),
+    color: pick(COLORS),
+  });
+}
+
+/** `count` fuzzed projects (0-5 sections each). */
+function fuzzProjects(seed, count) {
+  const rand = rng(seed);
+  const projects = [];
+  for (let w = 0; w < count; w++) {
+    const n = Math.floor(rand() * 6);
+    const sections = [];
+    for (let i = 0; i < n; i++) sections.push(fuzzSection(rand, i, sections.length ? sections[sections.length - 1].id : undefined));
+    projects.push(projectOf(sections, MESH_MODES[Math.floor(rand() * MESH_MODES.length)]));
+  }
+  return projects;
+}
+
+/** The project the harness builds by importing CONFIGS[key] (JSON round trip, then the import mapping). */
+function projectFromConfig(config) {
+  const parsed = serializer.read(JSON.parse(JSON.stringify(config, null, 2)));
+  const project = Project.createDefault();
+  project.wall.replaceAll(parsed.sections);
+  if (parsed.meshMode) project.meshMode = parsed.meshMode;
+  return project;
+}
+
+const handPicked = () => [
+  ['default wall', Project.createDefault()],
+  ['empty wall', projectOf([], 'combined')],
+  ['two defaults', projectOf([WallSection.createDefault(), WallSection.createDefault()], 'combined')],
+  ...Object.entries(CONFIGS).map(([key, config]) => [`config ${key}`, projectFromConfig(config)]),
+];
+
+// ---------------------------------------------------------------------------------------------------------------
+// 1. Oracle equality
+// ---------------------------------------------------------------------------------------------------------------
+
+describe('oracle equality (byte for byte)', () => {
+  test('hand-picked walls and the harness configs, in every mesh mode (plus unknown modes)', (t) => {
+    const tally = { equal: 0, threw: 0 };
+    for (const [label, project] of handPicked()) {
+      for (const mode of [...MODES, 'bogus', undefined]) {
+        project.meshMode = mode;
+        compareAll(project, `${label} [${String(mode)}]`, tally);
+      }
+    }
+    t.diagnostic(`${tally.equal} identical outputs, ${tally.threw} identical exceptions`);
+    assert.ok(tally.equal > 50);
+    assert.ok(tally.threw > 0, 'expected the empty-wall combined exports and the large panel-mode glTF to throw');
+  });
+
+  test('empty wall: combined OBJ and glTF throw the legacy TypeError; section/panel do not', () => {
+    for (const mode of MODES) {
+      const project = projectOf([], mode);
+      const sections = project.wall.sections;
+      const obj = run(() => OBJ.write({ sections, meshMode: mode, layout: layoutProject(project) }));
+      const gltf = run(() => GLTF.write({ sections, meshMode: mode, layout: layoutProject(project) }));
+      if (mode === 'combined') {
+        assert.ok(!obj.ok && obj.error instanceof TypeError, describeError(obj.error));
+        assert.ok(!gltf.ok && gltf.error instanceof TypeError, describeError(gltf.error));
+        assert.match(obj.error.message, /reading 'color'/);
+      } else {
+        assert.ok(obj.ok && gltf.ok);
+      }
+    }
+  });
+
+  test('large_wall panel-mode glTF throws RangeError in both (B-H3); combined does not', () => {
+    const project = projectFromConfig(CONFIGS.large_wall);
+    const sections = project.wall.sections;
+    for (const [mode, throws] of [['panel', true], ['combined', false]]) {
+      project.meshMode = mode;
+      const actual = run(() => GLTF.write({ sections, meshMode: mode, layout: layoutProject(project) }));
+      const expected = run(() => L.generateGLTFContent(legacyGeometry(sections), sections, mode, colorToRgb));
+      assert.equal(actual.ok, !throws, `${mode}: ${actual.ok ? 'returned' : describeError(actual.error)}`);
+      assert.equal(expected.ok, !throws);
+      if (throws) {
+        assert.ok(actual.error instanceof RangeError);
+        assert.equal(actual.error.message, 'Maximum call stack size exceeded');
+      }
+    }
+  });
+
+  test('>= 600 seeded fuzzed walls: OBJ, MTL, glTF and both JSON variants identical to legacy', (t) => {
+    const tally = { equal: 0, threw: 0 };
+    const projects = fuzzProjects(0x5eed, 600);
+    projects.forEach((project, w) => compareAll(project, `fuzz #${w} [${String(project.meshMode)}]`, tally));
+    // The same walls once more in each of the three real modes.
+    projects.slice(0, 200).forEach((project, w) => {
+      for (const mode of MODES) {
+        project.meshMode = mode;
+        compareAll(project, `fuzz #${w} [${mode}]`, tally);
+      }
+    });
+    t.diagnostic(`${tally.equal} identical outputs, ${tally.threw} identical exceptions`);
+    assert.ok(tally.equal > 3000);
+    assert.ok(tally.threw > 0);
+  });
+
+  test('ProjectSerializer.read equals the legacy import mapping (fields, order, Object.is)', (t) => {
+    const docs = [];
+    // Round trips of exported documents (both variants) of fuzzed walls.
+    for (const project of fuzzProjects(0xbeef, 150)) {
+      for (const variant of ['file', 'zip']) {
+        const r = run(() => JSON.parse(JSON.stringify(serializer.write(project, { variant }))));
+        if (r.ok) docs.push(r.value);
+      }
+    }
+    // Hand-made raw documents: missing / zero / string / null / nested-null fields, odd containers.
+    const rand = rng(7);
+    const RAW = [undefined, null, 0, '', '0', 3, 2.5, '12', -4, true, [], {}, 'abc', NaN];
+    const pick = () => RAW[Math.floor(rand() * RAW.length)];
+    for (let k = 0; k < 150; k++) {
+      const n = Math.floor(rand() * 5);
+      const sections = [];
+      for (let i = 0; i < n; i++) {
+        const s = {};
+        if (rand() < 0.7) s.id = pick();
+        if (rand() < 0.7) s.name = rand() < 0.5 ? `S${i}` : pick();
+        if (rand() < 0.8) s.panel = rand() < 0.1 ? null : { columns: pick(), rows: pick(), width_mm: pick(), height_mm: pick() };
+        if (rand() < 0.8) s.led_resolution = rand() < 0.1 ? 7 : { x: pick(), y: pick() };
+        if (rand() < 0.8) s.curvature = { angle_degrees: pick(), angle_offset_degrees: pick() };
+        if (rand() < 0.7) s.color = rand() < 0.5 ? '#123456' : pick();
+        sections.push(rand() < 0.03 ? 5 : s);
+      }
+      docs.push({ version: rand() < 0.5 ? '1.0' : '9.9', sections, mesh_mode: MESH_MODES[k % MESH_MODES.length] });
+    }
+    docs.push(5, 'text', [], true, {}, { foo: 1 }, { sections: 'x' }, { sections: {} }, { sections: [] }, { sections: [null] },
+      { sections: [{}], mesh_mode: 'panel' }, null);
+
+    let compared = 0;
+    for (const [k, data] of docs.entries()) {
+      const actual = run(() => serializer.read(data));
+      const expected = run(() => L.importJSONMapping(data, Palette.sectionColors));
+      if (!expected.ok || !actual.ok) {
+        assert.equal(actual.ok, expected.ok, `doc #${k}`);
+        assert.equal(describeError(actual.error), describeError(expected.error), `doc #${k}`);
+        continue;
+      }
+      if (expected.value === null) {
+        assert.equal(actual.value, null, `doc #${k}`);
+        continue;
+      }
+      assert.ok(Object.is(actual.value.meshMode, expected.value.meshMode), `doc #${k} meshMode`);
+      assert.deepEqual(Object.keys(actual.value), ['sections', 'meshMode']);
+      assert.equal(actual.value.sections.length, expected.value.wallSections.length, `doc #${k}`);
+      actual.value.sections.forEach((s, i) => {
+        const e = expected.value.wallSections[i];
+        assert.ok(s instanceof WallSection);
+        assert.deepEqual(Object.keys(s), Object.keys(e), `doc #${k} section ${i} key order`);
+        for (const key of Object.keys(e)) {
+          compared++;
+          assert.ok(Object.is(s[key], e[key]), `doc #${k} section ${i}.${key}: ${String(s[key])} vs ${String(e[key])}`);
+        }
+      });
+    }
+    t.diagnostic(`${docs.length} documents, ${compared} fields compared with Object.is`);
+    assert.ok(compared > 2000);
+  });
+
+  test('writeSafeDistance equals the legacy text over a duck-typed group', () => {
+    const attr = (values, itemSize) => ({
+      count: values.length / itemSize,
+      getX: (i) => values[i * itemSize],
+      getY: (i) => values[i * itemSize + 1],
+      getZ: (i) => values[i * itemSize + 2],
+    });
+    const mesh = (positions, index) => ({ isMesh: true, geometry: { attributes: { position: attr(positions, 3) }, index: index && attr(index, 1) } });
+    const children = [
+      mesh([0, 0.005, 0, 1.25, 0.005, 0, 1.25, 0.005, 3.3333333, 0, 0.005, 3.3333333], [0, 1, 2, 0, 2, 3]),
+      { isMesh: false, isLine: true, geometry: {} },
+      mesh([0.1, 0.02, 4.5, -2.123456789, 0.02, 4.5], null),
+      mesh([1, 2, 3, 4, 5, 6, 7, 8, 9], [0, 1, 2]),
+      { isSprite: true },
+    ];
+    const group = { traverse(cb) { cb(this); children.forEach(cb); } };
+    const actual = OBJ.writeSafeDistance(group);
+    assert.equal(actual, L.safeDistanceObjText(group));
+    assert.ok(actual.startsWith(Brand.safeDistanceObjHeader));
+    assert.match(actual, /\nf 7 8 9\n$/);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// Chrome math emulation for the golden comparisons
+// ---------------------------------------------------------------------------------------------------------------
+//
+// The baseline was captured in Chrome 154, whose Math.atan2 is correctly rounded, while Node 24's V8 still uses the
+// fdlibm atan2, which computes atan(y / x) from a rounded quotient and differs in the last ulp for ~20% of
+// arguments. The verbatim legacy oracle run in plain Node therefore misses exactly the three golden files that print
+// atan2-derived values at full precision (panel-mode glTF min/max of curved walls: concave_offsets, convex, mixed).
+// The golden comparisons thus run with correctly rounded Math.atan2, Math.sin and Math.cos (Chrome's sin/cos come from
+// glibc and are correctly rounded in practice; the golden files cannot tell the two sin/cos apart). The functions
+// below compute in 1200-bit BigInt fixed point and round to nearest-even; they are installed only inside the golden
+// tests (withChromeMath) and the oracle comparisons above use Node's own Math on both sides.
+
+const CR = (() => {
+  const P = 1200n;
+  const ONE = 1n << P;
+  const atanInv = (n) => {          // atan(1/n) * 2^P (Taylor series)
+    const N2 = BigInt(n) * BigInt(n);
+    let term = ONE / BigInt(n);
+    let sum = term;
+    for (let k = 1n; term !== 0n; k++) {
+      term /= N2;
+      sum += (k % 2n === 1n ? -term : term) / (2n * k + 1n);
+    }
+    return sum;
+  };
+  const PI = 16n * atanInv(5) - 4n * atanInv(239);   // Machin
+  const HALF_PI = PI / 2n;
+  const view = new DataView(new ArrayBuffer(8));
+
+  /** The exact fixed-point value of a finite double (every double is a multiple of 2^-1074, so this is exact). */
+  const fixed = (x) => {
+    view.setFloat64(0, x);
+    const hi = view.getUint32(0);
+    const exp = (hi >>> 20) & 0x7ff;
+    let mant = (BigInt(hi & 0xfffff) << 32n) | BigInt(view.getUint32(4));
+    if (exp !== 0) mant |= 1n << 52n;
+    const v = mant << (BigInt(exp === 0 ? -1074 : exp - 1075) + P);
+    return hi >>> 31 ? -v : v;
+  };
+
+  /** The nearest double (ties to even) of a fixed-point value (normal range only, which is all we need). */
+  const double = (v) => {
+    if (v === 0n) return 0;
+    const a = v < 0n ? -v : v;
+    const shift = BigInt(a.toString(2).length) - 53n;
+    let q = a >> shift;
+    const rem = a - (q << shift);
+    const half = 1n << (shift - 1n);
+    if (rem > half || (rem === half && (q & 1n) === 1n)) q += 1n;
+    const r = Number(q) * 2 ** Number(shift - P);
+    return v < 0n ? -r : r;
+  };
+
+  const isqrt = (n) => {
+    let x = 1n << BigInt(Math.ceil(n.toString(2).length / 2));
+    for (;;) {
+      const y = (x + n / x) >> 1n;
+      if (y >= x) return x;
+      x = y;
+    }
+  };
+
+  /** [sin, cos] of a fixed-point argument reduced to |r| <= pi/4, with its quadrant. */
+  const sinCos = (x) => {
+    const X = fixed(x);
+    let k = X / HALF_PI;
+    let r = X - k * HALF_PI;
+    if (r * 2n > HALF_PI) { k += 1n; r -= HALF_PI; }
+    if (r * 2n < -HALF_PI) { k -= 1n; r += HALF_PI; }
+    const r2 = (r * r) >> P;
+    let term = r, s = r;
+    for (let i = 1n; term !== 0n; i++) { term = -((term * r2) >> P) / ((2n * i) * (2n * i + 1n)); s += term; }
+    term = ONE;
+    let c = ONE;
+    for (let i = 1n; term !== 0n; i++) { term = -((term * r2) >> P) / ((2n * i - 1n) * (2n * i)); c += term; }
+    return { q: Number(((k % 4n) + 4n) % 4n), s, c };
+  };
+
+  /** atan of a fixed-point value: invert above 1, halve three times, then the Taylor series. */
+  const atan = (t) => {
+    let a = t < 0n ? -t : t;
+    const invert = a > ONE;
+    if (invert) a = (ONE * ONE) / a;
+    for (let h = 0; h < 3; h++) a = (a * ONE) / (ONE + isqrt(ONE * ONE + a * a));
+    const a2 = (a * a) >> P;
+    let term = a, sum = a;
+    for (let i = 1n; term !== 0n; i++) { term = -((term * a2) >> P); sum += term / (2n * i + 1n); }
+    let r = sum * 8n;
+    if (invert) r = HALF_PI - r;
+    return t < 0n ? -r : r;
+  };
+
+  const memo = (fn) => {
+    const cache = new Map();
+    return (...args) => {
+      const key = args.map((a) => (Object.is(a, -0) ? '-0' : String(a))).join(',');
+      let v = cache.get(key);
+      if (v === undefined) cache.set(key, (v = fn(...args)));
+      return v;
+    };
+  };
+  const native = { sin: Math.sin, cos: Math.cos, atan2: Math.atan2 };
+  const sin = (x) => {
+    if (!Number.isFinite(x) || x === 0) return native.sin(x);   // NaN, +-Infinity, +-0 are exact
+    const { q, s, c } = sinCos(x);
+    return double([s, c, -s, -c][q]);
+  };
+  const cos = (x) => {
+    if (!Number.isFinite(x) || x === 0) return native.cos(x);
+    const { q, s, c } = sinCos(x);
+    return double([c, -s, -c, s][q]);
+  };
+  const atan2 = (y, x) => {
+    if (!Number.isFinite(y) || !Number.isFinite(x) || y === 0 || x === 0) return native.atan2(y, x);   // exact cases
+    let r = atan((fixed(y) * ONE) / fixed(x));
+    if (x < 0) r = y > 0 ? r + PI : r - PI;
+    return double(r);
+  };
+  // Memoised (String(x) is exact for doubles; -0 gets its own key).
+  return { native, sin: memo(sin), cos: memo(cos), atan2: memo(atan2) };
+})();
+
+/** Runs body with the correctly rounded Math.sin / Math.cos / Math.atan2 installed (always restored). */
+function withChromeMath(body) {
+  Object.assign(Math, { sin: CR.sin, cos: CR.cos, atan2: CR.atan2 });
+  try {
+    return body();
+  } finally {
+    Object.assign(Math, CR.native);
+  }
+}
+
+test('Chrome math emulation: correctly rounded, within 1 ulp of Node, exact cases native', (t) => {
+  const ulp = (v) => { const a = Math.abs(v); return a === 0 ? Number.MIN_VALUE : 2 ** (Math.floor(Math.log2(a)) - 52); };
+  const rand = rng(99);
+  let differ = 0;
+  for (let i = 0; i < 400; i++) {
+    const x = (rand() - 0.5) * 8, y = rand() - 0.5;
+    for (const [cr, nat] of [[CR.sin(x), Math.sin(x)], [CR.cos(x), Math.cos(x)], [CR.atan2(y, x), Math.atan2(y, x)]]) {
+      assert.ok(Math.abs(cr - nat) <= ulp(nat), `${cr} vs ${nat}`);
+      if (cr !== nat) differ++;
+    }
+  }
+  // How often this Node's native libm differs from correctly rounded is a property of the Node version, not of the
+  // code under test (a Node whose V8 matches Chrome makes the emulation moot, not wrong), so it is reported only.
+  t.diagnostic(`${differ} of 1200 native sin/cos/atan2 results differ from correctly rounded on Node ${process.version}`);
+  assert.equal(CR.atan2(1, 1), Math.PI / 4);
+  assert.equal(CR.atan2(1, -1), (3 * Math.PI) / 4);
+  assert.equal(CR.sin(Math.PI / 6), 0.49999999999999994);
+  assert.equal(CR.cos(Math.PI), -1);
+  assert.ok(Object.is(CR.sin(-0), -0) && Object.is(CR.atan2(-0, 1), -0) && CR.atan2(0, -1) === Math.PI);
+  assert.ok(Number.isNaN(CR.sin(NaN)) && Number.isNaN(CR.atan2(NaN, 1)));
+  // Known Chrome-vs-Node case (concave_offsets, first panel): atan2 of the 5-degree edge returns the angle itself.
+  const a = (5 * Math.PI) / 180;
+  const panelW = 500 * 0.001;
+  assert.equal(-CR.atan2(panelW * CR.sin(a), panelW * CR.cos(a)), -a);
+  t.diagnostic(`native rotY of that edge on Node ${process.version}: ${-Math.atan2(panelW * Math.sin(a), panelW * Math.cos(a))} ` +
+    `(Node 24.x fdlibm: -0.08726646259971646; Chrome 154: ${-a})`);
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// 2. Golden files (GOLDEN_DIR)
+// ---------------------------------------------------------------------------------------------------------------
+
+/** Asserts that `text` encodes (UTF-8) to exactly the bytes of `file`. */
+function assertSameBytes(text, file) {
+  const expected = fs.readFileSync(file);
+  const actual = Buffer.from(text, 'utf8');
+  if (!actual.equals(expected)) {
+    assert.fail(`${path.relative(REPO, file)} differs ${firstDifference(actual.toString('utf8'), expected.toString('utf8'))}`);
+  }
+}
+
+const goldenAvailable = fs.existsSync(GOLDEN_DIR);
+const goldenSkip = goldenAvailable ? false
+  : `GOLDEN_DIR ${GOLDEN_DIR} does not exist: capture the baseline (tests/regression/run.mjs on index.html@cd3fd3f) or set GOLDEN_DIR`;
+
+describe('golden files (byte-identical to the legacy downloads)', { skip: goldenSkip }, () => {
+  const scenarios = ['default', ...Object.keys(CONFIGS)];
+
+  for (const scenario of scenarios) {
+    const dir = path.join(GOLDEN_DIR, scenario);
+    const missing = fs.existsSync(dir) ? false : `scenario directory ${dir} is missing from GOLDEN_DIR`;
+
+    test(`${scenario}: JSON, OBJ, MTL and glTF in all mesh modes, ZIP entries and round trips`, { skip: missing }, (t) => withChromeMath(() => {
+      const file = (name) => path.join(dir, name);
+      const project = scenario === 'default' ? Project.createDefault() : projectFromConfig(CONFIGS[scenario]);
+      const sections = project.wall.sections;
+      let files = 0;
+      const same = (text, name) => {
+        assertSameBytes(text, file(name));
+        files++;
+      };
+
+      // Right after the import (initial mesh mode).
+      same(json2(serializer.write(project, { variant: 'file' })), 'initial__export-json__led-wall-config.json');
+
+      const consoleLog = JSON.parse(fs.readFileSync(file('console.json'), 'utf8'));
+      for (const mode of MODES) {
+        project.meshMode = mode;
+        const { objContent, mtlContent } = OBJ.write({ sections, meshMode: mode, layout: layoutProject(project) });
+        same(objContent, `${mode}__export-obj__led-wall-config.obj`);
+        same(mtlContent, `${mode}__export-obj__led-wall-config.mtl`);
+
+        const gltfName = `${mode}__export-gltf__led-wall-config.gltf`;
+        const gltf = run(() => GLTF.write({ sections, meshMode: mode, layout: layoutProject(project) }));
+        if (fs.existsSync(file(gltfName))) {
+          assert.ok(gltf.ok, `${gltfName}: threw ${gltf.ok || describeError(gltf.error)}`);
+          same(json2(gltf.value), gltfName);
+        } else {
+          // The baseline recorded no download but an uncaught RangeError for this step (B-H3).
+          const logged = consoleLog.find((e) => e.step === `${mode}__export-gltf`);
+          assert.ok(logged, `${gltfName} absent and no console entry for the step`);
+          assert.equal(logged.message, 'RangeError: Maximum call stack size exceeded');
+          assert.ok(!gltf.ok && gltf.error instanceof RangeError, `${mode} glTF must throw RangeError like the baseline`);
+          assert.equal(`RangeError: ${gltf.error.message}`, logged.message);
+          t.diagnostic(`${scenario} ${mode} glTF throws RangeError like the baseline`);
+        }
+      }
+
+      // Back in combined mode: Export JSON and the ZIP's JSON / OBJ / MTL / glTF entries.
+      project.meshMode = 'combined';
+      same(json2(serializer.write(project, { variant: 'file' })), 'final__export-json__led-wall-config.json');
+      const entries = 'final__export-zip__led-wall-export.zip.entries';
+      const layout = layoutProject(project);
+      same(json2(serializer.write(project, { variant: 'zip' })), `${entries}/led-wall-config.json`);
+      const zipObj = OBJ.write({ sections, meshMode: 'combined', layout });
+      same(zipObj.objContent, `${entries}/led-wall-config.obj`);
+      same(zipObj.mtlContent, `${entries}/led-wall-config.mtl`);
+      same(json2(GLTF.write({ sections, meshMode: 'combined', layout })), `${entries}/led-wall-config.gltf`);
+      // The ZIP's texture names (B-L14 naming) are the files the archive holds.
+      const textureDir = file(`${entries}/textures`);
+      const expectedNames = [...new Set(sections.map((s, i) => zipTextureFileName(s, i)))].sort();
+      assert.deepEqual(fs.readdirSync(textureDir).sort(), expectedNames);
+
+      // Round trip: re-import the golden Export JSON and export again.
+      const reimport = (name) => {
+        const parsed = serializer.read(JSON.parse(fs.readFileSync(file(name), 'utf8')));
+        const p = Project.createDefault();
+        p.wall.replaceAll(parsed.sections);
+        if (parsed.meshMode) p.meshMode = parsed.meshMode;
+        return p;
+      };
+      same(json2(serializer.write(reimport('final__export-json__led-wall-config.json'), { variant: 'file' })),
+        'roundtrip__export-json__led-wall-config.json');
+      if (fs.existsSync(file('zipjson_roundtrip__export-json__led-wall-config.json'))) {
+        same(json2(serializer.write(reimport(`${entries}/led-wall-config.json`), { variant: 'file' })),
+          'zipjson_roundtrip__export-json__led-wall-config.json');
+      }
+      t.diagnostic(`${scenario}: ${files} golden files byte-identical (correctly rounded Math, as Chrome)`);
+    }));
+  }
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// 3. ProjectSerializer.read edge cases and write variants
+// ---------------------------------------------------------------------------------------------------------------
+
+describe('ProjectSerializer', () => {
+  test('read(null) throws the TypeError the import alert shows; non-section documents give null', () => {
+    assert.throws(() => serializer.read(null), (e) => e instanceof TypeError && e.message === "Cannot read properties of null (reading 'sections')");
+    assert.throws(() => serializer.read(undefined), TypeError);
+    assert.equal(serializer.read({ foo: 1 }), null);
+    assert.equal(serializer.read({ sections: 'abc' }), null);
+    assert.equal(serializer.read({ sections: {} }), null);
+    assert.equal(serializer.read(42), null);
+    assert.deepEqual(serializer.read({ sections: [] }), { sections: [], meshMode: undefined });
+  });
+
+  test('read keeps string fields raw, falls back to the index id, defaults with ||, and returns the raw mesh_mode', () => {
+    const parsed = serializer.read({
+      version: '7',
+      sections: [
+        { name: 'S', panel: { columns: '10', rows: '0', width_mm: '500' }, led_resolution: { x: '64', y: 0 }, curvature: { angle_degrees: '5' } },
+        { id: 'abc', color: '#123456', curvature: { angle_degrees: 0, angle_offset_degrees: '15' } },
+        { id: 0, name: '' },
+      ],
+      mesh_mode: 'weird',
+    });
+    assert.equal(parsed.meshMode, 'weird');
+    const [a, b, c] = parsed.sections;
+    assert.ok(a instanceof WallSection && b instanceof WallSection);
+    assert.deepEqual({ ...a }, { id: 0, name: 'S', panelCols: '10', panelRows: '0', panelWidth: '500', panelHeight: 500,
+      ledX: '64', ledY: 32, curveIntensity: '5', angleOffset: 0, color: Palette.sectionColors[0] });
+    assert.deepEqual({ ...b }, { id: 'abc', name: 'Wall 2', panelCols: 5, panelRows: 3, panelWidth: 500, panelHeight: 500,
+      ledX: 32, ledY: 32, curveIntensity: 0, angleOffset: '15', color: '#123456' });
+    assert.equal(c.id, 0);
+    assert.equal(c.name, 'Wall 3');
+    assert.equal(c.color, Palette.sectionColors[2]);
+  });
+
+  test('the palette colour fallback wraps with i % length', () => {
+    const parsed = serializer.read({ sections: Array.from({ length: 10 }, () => ({})) });
+    assert.deepEqual(parsed.sections.map((s) => s.color), Array.from({ length: 10 }, (_, i) => Palette.sectionColors[i % 8]));
+  });
+
+  test('write: legacy key order; zip drops angle_offset_degrees and adds texture_file; numeric names throw in zip', () => {
+    const project = projectOf([new WallSection({ id: 4, name: 'A B', panelCols: 2, panelRows: 3, panelWidth: 500, panelHeight: 250,
+      ledX: 64, ledY: 32, curveIntensity: -3, angleOffset: 15, color: '#ff00aa' })], 'section');
+    const file = serializer.write(project);
+    assert.deepEqual(Object.keys(file), ['version', 'sections', 'mesh_mode', 'totals']);
+    assert.deepEqual(Object.keys(file.sections[0]), ['name', 'id', 'panel', 'led_resolution', 'curvature', 'color']);
+    assert.deepEqual(file.sections[0].curvature, { type: 'convex', angle_degrees: -3, angle_offset_degrees: 15 });
+    assert.deepEqual(file.totals, { sections: 1, total_panels: 6, total_pixels: 12288 });
+    const zip = serializer.write(project, { variant: 'zip' });
+    assert.deepEqual(Object.keys(zip.sections[0]), ['name', 'id', 'panel', 'led_resolution', 'curvature', 'color', 'texture_file']);
+    assert.deepEqual(zip.sections[0].curvature, { type: 'convex', angle_degrees: -3 });
+    assert.equal(zip.sections[0].texture_file, 'textures/A_B_PanelIDs.png');
+    project.wall.sections[0].name = 42;
+    assert.throws(() => serializer.write(project, { variant: 'zip' }), { name: 'TypeError', message: 'name.replace is not a function' });
+    assert.doesNotThrow(() => serializer.write(project, { variant: 'file' }));
+    assert.throws(() => serializer.write(project, { variant: 'csv' }), RangeError);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// 4. Strategy reads through the injected profile
+// ---------------------------------------------------------------------------------------------------------------
+
+describe('strategy reads (foreign profile values throw unsupportedStrategy)', () => {
+  const project = Project.createDefault();
+  const args = (mode) => ({ sections: project.wall.sections, meshMode: mode, layout: layoutProject(project) });
+  const expectError = (key, value) => (e) => e instanceof Error && e.message === unsupportedStrategy(key, value).message;
+
+  test('ObjExporter: stripNormals in combined and section mode only; combinedUV in combined mode only', () => {
+    const strip = makeObj({ ...Strategies.mesh.obj, stripNormals: 'per-vertex' });
+    assert.throws(() => strip.write(args('combined')), expectError('mesh.obj.stripNormals', 'per-vertex'));
+    assert.throws(() => strip.write(args('section')), expectError('mesh.obj.stripNormals', 'per-vertex'));
+    assert.doesNotThrow(() => strip.write(args('panel')));
+
+    const uv = makeObj({ ...Strategies.mesh.obj, combinedUV: 'atlas' });
+    assert.throws(() => uv.write(args('combined')), expectError('mesh.obj.combinedUV', 'atlas'));
+    assert.doesNotThrow(() => uv.write(args('section')));
+    assert.doesNotThrow(() => uv.write(args('panel')));
+  });
+
+  test('GltfExporter: attributes, indexType and doubleSided in every mode', () => {
+    for (const [key, value] of [['attributes', ['POSITION', 'NORMAL']], ['attributes', ['NORMAL']], ['indexType', 'uint32'], ['doubleSided', 'true']]) {
+      const exporter = makeGltf({ ...Strategies.mesh.gltf, [key]: value });
+      for (const mode of MODES) assert.throws(() => exporter.write(args(mode)), expectError(`mesh.gltf.${key}`, value), `${key} ${mode}`);
+    }
+  });
+
+  test('the Phase-1 profiles do not throw; the default glTF encoder is legacySpreadBase64 and an injected one is used', () => {
+    for (const mode of MODES) {
+      assert.doesNotThrow(() => OBJ.write(args(mode)));
+      assert.doesNotThrow(() => GLTF.write(args(mode)));
+    }
+    const large = projectFromConfig(CONFIGS.large_wall);
+    const largeArgs = { sections: large.wall.sections, meshMode: 'panel', layout: layoutProject(large) };
+    assert.throws(() => GLTF.write(largeArgs), RangeError);
+    const chunked = makeGltf(Strategies.mesh.gltf, (bytes) => Buffer.from(bytes).toString('base64'));
+    const gltf = chunked.write(largeArgs);
+    assert.ok(gltf.buffers[0].uri.startsWith('data:application/octet-stream;base64,'));
+    // Same text as the legacy encoder wherever the legacy encoder works.
+    const small = chunked.write(args('panel'));
+    assert.equal(json2(small), json2(GLTF.write(args('panel'))));
+    assert.equal(legacySpreadBase64(new Uint8Array([1, 2, 3])), 'AQID');
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// 5. ProjectIO, Downloader and ExportPanel sequences (fakes)
+// ---------------------------------------------------------------------------------------------------------------
+
+/** Temporarily replaces globals (URL methods, Blob, FileReader) for one test body. */
+async function withGlobals(overrides, body) {
+  const saved = [];
+  for (const [target, key, value] of overrides) {
+    saved.push([target, key, Object.getOwnPropertyDescriptor(target, key)]);
+    Object.defineProperty(target, key, { value, configurable: true, writable: true });
+  }
+  try {
+    return await body();
+  } finally {
+    for (const [target, key, descriptor] of saved.reverse()) {
+      if (descriptor) Object.defineProperty(target, key, descriptor); else delete target[key];
+    }
+  }
+}
+
+/** A ProjectIO over fakes that record every call into `log`. */
+function fakeIO(project, log, extra = {}) {
+  const downloader = {
+    saveText: (content, filename, mimeType) => log.push(['saveText', filename, mimeType, content]),
+    saveBlob: (blob, filename) => log.push(['saveBlob', filename, blob]),
+  };
+  const wallController = {
+    layout: () => { log.push(['layout']); return layoutProject(project); },
+    applyImport: (parsed) => log.push(['applyImport', parsed]),
+  };
+  const panelIds = {
+    atlasCanvas: (sections) => {
+      log.push(['atlasCanvas', sections]);
+      return { toBlob: (cb, type) => { log.push(['toBlob', type]); extra.toBlobCallback = cb; } };
+    },
+    sectionCanvas: (section, i, scale, startCol) => {
+      log.push(['sectionCanvas', i, scale, startCol]);
+      return { toDataURL: (type) => (log.push(['toDataURL', type]), extra.dataUrl ?? 'data:image/png;base64,QUJD') };
+    },
+  };
+  class FakeZip {
+    constructor() { log.push(['new JSZip']); }
+    file(name, data, options) { log.push(['zip.file', name, options, data]); return this; }
+    folder(name) {
+      log.push(['zip.folder', name]);
+      return { file: (n, data, options) => log.push(['folder.file', `${name}/${n}`, options, data]) };
+    }
+    async generateAsync(options) { log.push(['generateAsync', options]); return 'ZIP-BLOB'; }
+  }
+  const win = { setTimeout: (fn, ms) => { log.push(['setTimeout', ms]); extra.timer = fn; return 1; } };
+  const dialogs = { alert: (msg) => log.push(['alert', msg]) };
+  const safeDistance = { object3D: extra.group ?? null };
+  return new ProjectIO({ project, wallController, serializer, objExporter: OBJ, gltfExporter: GLTF, panelIds, safeDistance,
+    downloader, JSZip: FakeZip, dialogs, brand: Brand, win });
+}
+
+describe('ProjectIO use cases', () => {
+  test('exportJSON downloads the pretty-printed file document', () => {
+    const project = Project.createDefault();
+    const log = [];
+    fakeIO(project, log).exportJSON();
+    assert.deepEqual(log, [['saveText', 'led-wall-config.json', 'application/json', json2(serializer.write(project))]]);
+  });
+
+  test('exportOBJ: layout, OBJ now, MTL through win.setTimeout(Strategies.mtlDownloadDelayMs)', () => {
+    const project = Project.createDefault();
+    const log = [];
+    const extra = {};
+    fakeIO(project, log, extra).exportOBJ();
+    const { objContent, mtlContent } = OBJ.write({ sections: project.wall.sections, meshMode: 'combined', layout: layoutProject(project) });
+    assert.deepEqual(log, [['layout'], ['saveText', 'led-wall-config.obj', 'text/plain', objContent], ['setTimeout', 100]]);
+    assert.equal(Strategies.mtlDownloadDelayMs, 100);
+    extra.timer();
+    assert.deepEqual(log.at(-1), ['saveText', 'led-wall-config.mtl', 'text/plain', mtlContent]);
+  });
+
+  test('exportGLTF downloads the pretty-printed document; a large panel wall throws synchronously', () => {
+    const project = Project.createDefault();
+    const log = [];
+    fakeIO(project, log).exportGLTF();
+    assert.deepEqual(log.map((e) => e[0]), ['layout', 'saveText']);
+    assert.equal(log[1][1], 'led-wall-config.gltf');
+    assert.equal(log[1][3], json2(GLTF.write({ sections: project.wall.sections, meshMode: 'combined', layout: layoutProject(project) })));
+
+    const large = projectFromConfig(CONFIGS.large_wall);
+    large.meshMode = 'panel';
+    const log2 = [];
+    assert.throws(() => fakeIO(large, log2).exportGLTF(), RangeError);
+    assert.deepEqual(log2, [['layout']]);
+  });
+
+  test('exportPanelIds is async and downloads the toBlob blob as panel-ids.png', async () => {
+    const project = Project.createDefault();
+    const log = [];
+    const extra = {};
+    const io = fakeIO(project, log, extra);
+    assert.equal(ProjectIO.prototype.exportPanelIds.constructor.name, 'AsyncFunction');
+    const promise = io.exportPanelIds();
+    assert.ok(promise instanceof Promise);
+    await promise;
+    assert.deepEqual(log, [['atlasCanvas', project.wall.sections], ['toBlob', 'image/png']]);
+    extra.toBlobCallback('PNG-BLOB');
+    assert.deepEqual(log.at(-1), ['saveBlob', 'panel-ids.png', 'PNG-BLOB']);
+  });
+
+  test('exportZIP: legacy order (JSON zip variant, layout, OBJ, MTL, glTF, textures, generateAsync, download)', async () => {
+    const project = projectFromConfig(CONFIGS.box_corner);
+    const sections = project.wall.sections;
+    const log = [];
+    assert.equal(ProjectIO.prototype.exportZIP.constructor.name, 'AsyncFunction');
+    await fakeIO(project, log).exportZIP();
+    const layout = layoutProject(project);
+    const { objContent, mtlContent } = OBJ.write({ sections, meshMode: 'combined', layout });
+    const atlas = computeAtlas(sections);
+    const expected = [
+      ['new JSZip'],
+      ['zip.file', 'led-wall-config.json', undefined, json2(serializer.write(project, { variant: 'zip' }))],
+      ['layout'],
+      ['zip.file', 'led-wall-config.obj', undefined, objContent],
+      ['zip.file', 'led-wall-config.mtl', undefined, mtlContent],
+      ['zip.file', 'led-wall-config.gltf', undefined, json2(GLTF.write({ sections, meshMode: 'combined', layout }))],
+      ['zip.folder', 'textures'],
+      ...sections.flatMap((s, i) => [
+        ['sectionCanvas', i, null, atlas.entries[i].startCol],
+        ['toDataURL', 'image/png'],
+        ['folder.file', `textures/${zipTextureFileName(s, i)}`, { base64: true }, 'QUJD'],
+      ]),
+      ['generateAsync', { type: 'blob' }],
+      ['saveBlob', 'led-wall-export.zip', 'ZIP-BLOB'],
+    ];
+    assert.deepEqual(log, expected);
+    assert.deepEqual(sections.map((s, i) => atlas.entries[i].startCol), [0, 6, 10, 16]);
+  });
+
+  test('exportZIP rejects (no download) on the glTF RangeError and on numeric names; data:, gives an empty texture', async () => {
+    const large = projectFromConfig(CONFIGS.large_wall);
+    large.meshMode = 'panel';
+    const log = [];
+    await assert.rejects(fakeIO(large, log).exportZIP(), RangeError);
+    assert.ok(!log.some((e) => e[0] === 'saveBlob' || e[0] === 'generateAsync'));
+
+    const named = Project.createDefault();
+    named.wall.sections[0].name = 7;
+    const log2 = [];
+    await assert.rejects(fakeIO(named, log2).exportZIP(), { name: 'TypeError', message: 'name.replace is not a function' });
+    assert.deepEqual(log2, [['new JSZip']]);
+
+    const log3 = [];
+    await fakeIO(Project.createDefault(), log3, { dataUrl: 'data:,' }).exportZIP();
+    assert.deepEqual(log3.find((e) => e[0] === 'folder.file'), ['folder.file', 'textures/Wall_1_PanelIDs.png', { base64: true }, '']);
+  });
+
+  test('exportSafeDistanceOBJ: alert without a group; ReferenceError downloadBlob is not defined with one (B-M1)', async () => {
+    const log = [];
+    fakeIO(Project.createDefault(), log).exportSafeDistanceOBJ();
+    assert.deepEqual(log, [['alert', 'Enable Safe Distance 3D visualization first']]);
+
+    const group = { traverse: (cb) => cb({ isMesh: true, geometry: { attributes: { position: { count: 1, getX: () => 1, getY: () => 2, getZ: () => 3 } }, index: null } }) };
+    const blobs = [];
+    class FakeBlob { constructor(parts, options) { blobs.push([parts, options]); } }
+    await withGlobals([[globalThis, 'Blob', FakeBlob]], () => {
+      assert.throws(() => fakeIO(Project.createDefault(), [], { group }).exportSafeDistanceOBJ(),
+        (e) => e instanceof ReferenceError && e.message === 'downloadBlob is not defined');
+    });
+    assert.deepEqual(blobs, [[[OBJ.writeSafeDistance(group)], { type: 'text/plain' }]]);
+  });
+
+  test('importFromInputEvent: P-IMPORT (read, reset input synchronously; try/catch only around parse + read + apply)', async () => {
+    const readers = [];
+    class FakeFileReader {
+      constructor() { readers.push(this); }
+      readAsText(file) { this.file = file; this.onloadAtRead = typeof this.onload; }
+    }
+    await withGlobals([[globalThis, 'FileReader', FakeFileReader]], () => {
+      const log = [];
+      const io = fakeIO(Project.createDefault(), log);
+
+      const empty = { target: { files: [], value: 'C:\\fakepath\\none.json' } };
+      io.importFromInputEvent(empty);
+      assert.equal(readers.length, 0);
+      assert.equal(empty.target.value, 'C:\\fakepath\\none.json');
+
+      const load = (text) => {
+        const e = { target: { files: [{ name: 'wall.json' }], value: 'C:\\fakepath\\wall.json' } };
+        io.importFromInputEvent(e);
+        const reader = readers.at(-1);
+        assert.equal(reader.file, e.target.files[0]);
+        assert.equal(reader.onloadAtRead, 'function', 'onload is set before readAsText');
+        assert.equal(e.target.value, '', 'the input is reset synchronously');
+        log.length = 0;
+        reader.onload({ target: { result: text } });
+        return log.slice();
+      };
+
+      const ok = load(JSON.stringify(CONFIGS.flat3));
+      assert.equal(ok.length, 1);
+      assert.equal(ok[0][0], 'applyImport');
+      assert.equal(ok[0][1].meshMode, 'combined');
+      assert.deepEqual(ok[0][1].sections.map((s) => s.name), ['Left', 'Center', 'Right']);
+
+      assert.deepEqual(load('{"foo": 1}'), []);
+      assert.deepEqual(load('null'), [['alert', "Error parsing JSON file: Cannot read properties of null (reading 'sections')"]]);
+      const syntax = run(() => JSON.parse('{oops')).error.message;
+      assert.deepEqual(load('{oops'), [['alert', 'Error parsing JSON file: ' + syntax]]);
+      assert.deepEqual(load('{"sections": [null]}'), [['alert', "Error parsing JSON file: Cannot read properties of null (reading 'id')"]]);
+    });
+  });
+});
+
+describe('Downloader', () => {
+  test('saveBlob runs the legacy anchor sequence with URL looked up at call time; saveText makes the Blob first', async () => {
+    const log = [];
+    const doc = {
+      createElement: (tag) => {
+        log.push(['createElement', tag]);
+        const a = { click: () => log.push(['click', a.href, a.download]) };
+        return a;
+      },
+      body: { appendChild: (el) => log.push(['appendChild', el.download]), removeChild: (el) => log.push(['removeChild', el.download]) },
+    };
+    class FakeBlob { constructor(parts, options) { log.push(['Blob', parts, options]); } }
+    await withGlobals([
+      [URL, 'createObjectURL', (blob) => (log.push(['createObjectURL']), 'blob:fake/1')],
+      [URL, 'revokeObjectURL', (url) => log.push(['revokeObjectURL', url])],
+      [globalThis, 'Blob', FakeBlob],
+    ], () => {
+      const downloader = new Downloader({ doc });
+      assert.deepEqual(log, [], 'the constructor has no side effects');
+      downloader.saveText('hello', 'a.txt', 'text/plain');
+    });
+    assert.deepEqual(log, [
+      ['Blob', ['hello'], { type: 'text/plain' }],
+      ['createElement', 'a'],
+      ['createObjectURL'],
+      ['appendChild', 'a.txt'],
+      ['click', 'blob:fake/1', 'a.txt'],
+      ['removeChild', 'a.txt'],
+      ['revokeObjectURL', 'blob:fake/1'],
+    ]);
+  });
+});
+
+describe('ExportPanel', () => {
+  test('bind() registers the listeners in legacy order (4482-4488) and routes them to ProjectIO', async () => {
+    const order = [];
+    const calls = [];
+    const elements = {};
+    const doc = {
+      getElementById: (id) => (elements[id] ??= {
+        id,
+        listeners: {},
+        addEventListener(type, fn) { order.push(`${id}:${type}`); this.listeners[type] = fn; },
+        click() { calls.push(`${id}.click()`); },
+      }),
+    };
+    const projectIO = {
+      exportZIP: async () => calls.push('exportZIP'),
+      exportPanelIds: async () => calls.push('exportPanelIds'),
+      exportJSON: () => calls.push('exportJSON'),
+      exportOBJ: () => calls.push('exportOBJ'),
+      exportGLTF: () => calls.push('exportGLTF'),
+      importFromInputEvent: (e) => calls.push(['importFromInputEvent', e]),
+    };
+    const panel = new ExportPanel({ doc, projectIO });
+    assert.deepEqual(order, [], 'the constructor adds no listeners');
+    panel.bind();
+    assert.deepEqual(order, ['export-zip:click', 'export-panel-ids:click', 'export-json:click', 'export-obj:click',
+      'export-gltf:click', 'import-json:click', 'import-input:change']);
+
+    const zipResult = elements['export-zip'].listeners.click({});
+    assert.ok(zipResult instanceof Promise, 'the async export promise is returned (rejections stay unhandled)');
+    await zipResult;
+    await elements['export-panel-ids'].listeners.click({});
+    elements['export-json'].listeners.click({});
+    elements['export-obj'].listeners.click({});
+    elements['export-gltf'].listeners.click({});
+    elements['import-json'].listeners.click({});
+    const changeEvent = { target: elements['import-input'] };
+    elements['import-input'].listeners.change(changeEvent);
+    assert.deepEqual(calls, ['exportZIP', 'exportPanelIds', 'exportJSON', 'exportOBJ', 'exportGLTF', 'import-input.click()',
+      ['importFromInputEvent', changeEvent]]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// 6. Structural guarantees (R10, R13)
+// ---------------------------------------------------------------------------------------------------------------
+
+describe('structure', () => {
+  const source = (rel) => fs.readFileSync(path.join(REPO, rel), 'utf8');
+  const code = (rel) => source(rel).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+
+  test('io/ modules import only domain, geometry and legacy, and name no THREE / document / window', () => {
+    for (const rel of ['js/io/ProjectSerializer.js', 'js/io/ObjExporter.js', 'js/io/GltfExporter.js']) {
+      const text = code(rel);
+      for (const m of text.matchAll(/^\s*import\s[^;]*?from\s+'([^']+)'/gm)) {
+        assert.match(m[1], /^\.\.\/(domain|geometry|legacy)\/[A-Za-z]+\.js$/, `${rel} imports ${m[1]}`);
+      }
+      assert.doesNotMatch(text, /\b(THREE|document|window)\b/, rel);
+    }
+  });
+
+  test('no try/catch except the legacy import one; exportZIP and exportPanelIds stay async', () => {
+    for (const rel of ['js/io/ProjectSerializer.js', 'js/io/ObjExporter.js', 'js/io/GltfExporter.js', 'js/ui/ExportPanel.js']) {
+      assert.doesNotMatch(code(rel), /\btry\s*\{|\bcatch\s*[({]/, rel);
+    }
+    const io = code('js/app/ProjectIO.js');
+    assert.equal([...io.matchAll(/\btry\s*\{/g)].length, 1);
+    assert.equal([...io.matchAll(/\bcatch\s*\(/g)].length, 1);
+    const tryAt = io.indexOf('try {');
+    assert.ok(tryAt > io.indexOf('importFromInputEvent(e) {'), 'the try/catch is inside importFromInputEvent');
+    for (const name of ['exportZIP', 'exportPanelIds']) assert.equal(ProjectIO.prototype[name].constructor.name, 'AsyncFunction');
+    for (const name of ['exportJSON', 'exportOBJ', 'exportGLTF', 'exportSafeDistanceOBJ', 'importFromInputEvent']) {
+      assert.equal(ProjectIO.prototype[name].constructor.name, 'Function', name);
+    }
+  });
+});
+

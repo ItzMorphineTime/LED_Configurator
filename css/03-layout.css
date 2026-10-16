@@ -1,0 +1,16 @@
+/* 03-layout.css: index.html@cd3fd3f lines 33-46 (body, .app-container grid).
+   Contiguous slice of the original <style>; link order = file number. Do not reorder rules across files. */
+body {
+    font-family: 'Outfit', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow: hidden;
+}
+
+.app-container {
+    display: grid;
+    grid-template-columns: 400px 1fr;
+    grid-template-rows: 60px 1fr;
+    height: 100vh;
+}

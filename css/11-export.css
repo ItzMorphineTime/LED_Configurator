@@ -1,0 +1,49 @@
+/* 11-export.css: index.html@cd3fd3f lines 813-857 (export section and rows, SECOND .export-btn block, secondary export buttons, hidden import input).
+   The second .export-btn block (lines 824-843) overrides the first one (06-controls.css, lines
+   425-444) in every property except width: 100%, and adds flex: 1. Do not merge them.
+   Contiguous slice of the original <style>; link order = file number. Do not reorder rules across files. */
+.export-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.export-row {
+    display: flex;
+    gap: 8px;
+}
+
+.export-btn {
+    flex: 1;
+    padding: 12px;
+    background: linear-gradient(135deg, var(--accent-cyan), var(--accent-magenta));
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-family: 'Outfit', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.export-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 30px rgba(0, 240, 255, 0.3);
+}
+
+.export-btn.secondary {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+}
+
+.export-btn.secondary:hover {
+    border-color: var(--accent-cyan);
+    box-shadow: 0 5px 20px rgba(0, 240, 255, 0.2);
+}
+
+.import-input {
+    display: none;
+}
