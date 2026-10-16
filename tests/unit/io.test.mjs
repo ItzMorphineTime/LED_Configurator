@@ -589,6 +589,17 @@ function assertSameBytes(text, file) {
   }
 }
 
+/** Brand.files: every download name of the production brand (06 T6b: derived from Brand.filePrefix). */
+const FILES = Brand.files;
+/**
+ * The harness output name of a download (06 8.1, T6b): `<step>__export-<kind>__<file name>`, the file name from
+ * Brand.files, so the golden paths follow a rename of the exports.
+ * @param {string} step  e.g. 'initial', 'combined', 'final'
+ * @param {string} kind  e.g. 'json', 'obj', 'gltf', 'zip'
+ * @param {string} key   a Brand.files key
+ */
+const golden = (step, kind, key) => `${step}__export-${kind}__${FILES[key]}`;
+
 const goldenAvailable = fs.existsSync(GOLDEN_DIR);
 const goldenSkip = goldenAvailable ? false
   : `GOLDEN_DIR ${GOLDEN_DIR} does not exist: capture the baseline (tests/regression/run.mjs; tests/regression/README.md) or set GOLDEN_DIR`;
@@ -611,16 +622,16 @@ describe('golden files (byte-identical to the legacy downloads)', { skip: golden
       };
 
       // Right after the import (initial mesh mode).
-      same(json2(serializer.write(project, { variant: 'file' })), 'initial__export-json__led-wall-config.json');
+      same(json2(serializer.write(project, { variant: 'file' })), golden('initial', 'json', 'json'));
 
       const consoleLog = JSON.parse(fs.readFileSync(file('console.json'), 'utf8'));
       for (const mode of MODES) {
         project.meshMode = mode;
         const { objContent, mtlContent } = OBJ.write({ sections, meshMode: mode, layout: layoutProject(project) });
-        same(objContent, `${mode}__export-obj__led-wall-config.obj`);
-        same(mtlContent, `${mode}__export-obj__led-wall-config.mtl`);
+        same(objContent, golden(mode, 'obj', 'obj'));
+        same(mtlContent, golden(mode, 'obj', 'mtl'));
 
-        const gltfName = `${mode}__export-gltf__led-wall-config.gltf`;
+        const gltfName = golden(mode, 'gltf', 'gltf');
         const gltf = run(() => GLTF.write({ sections, meshMode: mode, layout: layoutProject(project) }));
         if (fs.existsSync(file(gltfName))) {
           assert.ok(gltf.ok, `${gltfName}: threw ${gltf.ok || describeError(gltf.error)}`);
@@ -635,14 +646,14 @@ describe('golden files (byte-identical to the legacy downloads)', { skip: golden
 
       // Back in combined mode: Export JSON and the ZIP's JSON / OBJ / MTL / glTF entries.
       project.meshMode = 'combined';
-      same(json2(serializer.write(project, { variant: 'file' })), 'final__export-json__led-wall-config.json');
-      const entries = 'final__export-zip__led-wall-export.zip.entries';
+      same(json2(serializer.write(project, { variant: 'file' })), golden('final', 'json', 'json'));
+      const entries = `${golden('final', 'zip', 'zip')}.entries`;
       const layout = layoutProject(project);
-      same(json2(serializer.write(project, { variant: 'zip' })), `${entries}/led-wall-config.json`);
+      same(json2(serializer.write(project, { variant: 'zip' })), `${entries}/${FILES.json}`);
       const zipObj = OBJ.write({ sections, meshMode: 'combined', layout });
-      same(zipObj.objContent, `${entries}/led-wall-config.obj`);
-      same(zipObj.mtlContent, `${entries}/led-wall-config.mtl`);
-      same(json2(GLTF.write({ sections, meshMode: 'combined', layout })), `${entries}/led-wall-config.gltf`);
+      same(zipObj.objContent, `${entries}/${FILES.obj}`);
+      same(zipObj.mtlContent, `${entries}/${FILES.mtl}`);
+      same(json2(GLTF.write({ sections, meshMode: 'combined', layout })), `${entries}/${FILES.gltf}`);
       // The ZIP's texture names (B-L14 naming) are the files the archive holds.
       const textureDir = file(`${entries}/textures`);
       const expectedNames = [...new Set(sections.map((s, i) => zipTextureFileName(s, i)))].sort();
@@ -656,11 +667,11 @@ describe('golden files (byte-identical to the legacy downloads)', { skip: golden
         if (parsed.meshMode) p.meshMode = parsed.meshMode;
         return p;
       };
-      same(json2(serializer.write(reimport('final__export-json__led-wall-config.json'), { variant: 'file' })),
-        'roundtrip__export-json__led-wall-config.json');
-      if (fs.existsSync(file('zipjson_roundtrip__export-json__led-wall-config.json'))) {
-        same(json2(serializer.write(reimport(`${entries}/led-wall-config.json`), { variant: 'file' })),
-          'zipjson_roundtrip__export-json__led-wall-config.json');
+      same(json2(serializer.write(reimport(golden('final', 'json', 'json')), { variant: 'file' })),
+        golden('roundtrip', 'json', 'json'));
+      if (fs.existsSync(file(golden('zipjson_roundtrip', 'json', 'json')))) {
+        same(json2(serializer.write(reimport(`${entries}/${FILES.json}`), { variant: 'file' })),
+          golden('zipjson_roundtrip', 'json', 'json'));
       }
       t.diagnostic(`${scenario}: ${files} golden files byte-identical (correctly rounded Math, as Chrome)`);
     }));
@@ -1003,7 +1014,7 @@ describe('ProjectIO use cases', () => {
     const project = Project.createDefault();
     const log = [];
     fakeIO(project, log).exportJSON();
-    assert.deepEqual(log, [['saveText', 'led-wall-config.json', 'application/json', json2(serializer.write(project))]]);
+    assert.deepEqual(log, [['saveText', FILES.json, 'application/json', json2(serializer.write(project))]]);
   });
 
   test('exportOBJ: layout, OBJ now, MTL through win.setTimeout(Strategies.mtlDownloadDelayMs)', () => {
@@ -1012,10 +1023,10 @@ describe('ProjectIO use cases', () => {
     const extra = {};
     fakeIO(project, log, extra).exportOBJ();
     const { objContent, mtlContent } = OBJ.write({ sections: project.wall.sections, meshMode: 'combined', layout: layoutProject(project) });
-    assert.deepEqual(log, [['layout'], ['saveText', 'led-wall-config.obj', 'text/plain', objContent], ['setTimeout', 100]]);
+    assert.deepEqual(log, [['layout'], ['saveText', FILES.obj, 'text/plain', objContent], ['setTimeout', 100]]);
     assert.equal(Strategies.mtlDownloadDelayMs, 100);
     extra.timer();
-    assert.deepEqual(log.at(-1), ['saveText', 'led-wall-config.mtl', 'text/plain', mtlContent]);
+    assert.deepEqual(log.at(-1), ['saveText', FILES.mtl, 'text/plain', mtlContent]);
   });
 
   test('exportGLTF downloads the pretty-printed document; a large panel wall downloads too (B-H3 fixed in 08 P2-1a)', () => {
@@ -1023,7 +1034,7 @@ describe('ProjectIO use cases', () => {
     const log = [];
     assert.equal(fakeIO(project, log).exportGLTF(), undefined);
     assert.deepEqual(log.map((e) => e[0]), ['layout', 'saveText']);
-    assert.equal(log[1][1], 'led-wall-config.gltf');
+    assert.equal(log[1][1], FILES.gltf);
     assert.equal(log[1][3], json2(GLTF.write({ sections: project.wall.sections, meshMode: 'combined', layout: layoutProject(project) })));
 
     const large = projectFromConfig(CONFIGS.large_wall);
@@ -1034,7 +1045,7 @@ describe('ProjectIO use cases', () => {
     assert.equal(log2[1][3], json2(GLTF.write({ sections: large.wall.sections, meshMode: 'panel', layout: layoutProject(large) })));
   });
 
-  test('exportPanelIds is async, awaits toBlob and downloads the blob as panel-ids.png', async () => {
+  test('exportPanelIds is async, awaits toBlob and downloads the blob as Brand.files.panelIdsPng', async () => {
     const project = Project.createDefault();
     const log = [];
     const extra = {};
@@ -1045,7 +1056,7 @@ describe('ProjectIO use cases', () => {
     assert.deepEqual(log, [['atlasCanvas', project.wall.sections], ['toBlob', 'image/png']]);
     extra.toBlobCallback('PNG-BLOB');
     assert.equal(await promise, undefined);
-    assert.deepEqual(log.at(-1), ['saveBlob', 'panel-ids.png', 'PNG-BLOB']);
+    assert.deepEqual(log.at(-1), ['saveBlob', FILES.panelIdsPng, 'PNG-BLOB']);
   });
 
   test('exportPanelIds: an atlas beyond CANVAS_HARD_LIMITS alerts M-EXP-2 and creates no canvas (B-L4, 08 P2-1c)', async () => {
@@ -1091,11 +1102,11 @@ describe('ProjectIO use cases', () => {
     const atlas = computeAtlas(sections);
     const expected = [
       ['new JSZip'],
-      ['zip.file', 'led-wall-config.json', undefined, json2(serializer.write(project, { variant: 'zip' }))],
+      ['zip.file', FILES.json, undefined, json2(serializer.write(project, { variant: 'zip' }))],
       ['layout'],
-      ['zip.file', 'led-wall-config.obj', undefined, objContent],
-      ['zip.file', 'led-wall-config.mtl', undefined, mtlContent],
-      ['zip.file', 'led-wall-config.gltf', undefined, json2(GLTF.write({ sections, meshMode: 'combined', layout }))],
+      ['zip.file', FILES.obj, undefined, objContent],
+      ['zip.file', FILES.mtl, undefined, mtlContent],
+      ['zip.file', FILES.gltf, undefined, json2(GLTF.write({ sections, meshMode: 'combined', layout }))],
       ['zip.folder', 'textures'],
       ...sections.flatMap((s, i) => [
         ['sectionCanvas', i, null, atlas.entries[i].startCol],
@@ -1103,7 +1114,7 @@ describe('ProjectIO use cases', () => {
         ['folder.file', `textures/${zipTextureFileName(s, i)}`, { base64: true }, 'QUJD'],
       ]),
       ['generateAsync', { type: 'blob' }],
-      ['saveBlob', 'led-wall-export.zip', 'ZIP-BLOB'],
+      ['saveBlob', FILES.zip, 'ZIP-BLOB'],
     ];
     assert.deepEqual(log, expected);
     assert.deepEqual(sections.map((s, i) => atlas.entries[i].startCol), [0, 6, 10, 16]);
@@ -1114,7 +1125,7 @@ describe('ProjectIO use cases', () => {
     large.meshMode = 'panel';
     const log = [];
     await fakeIO(large, log).exportZIP();
-    assert.deepEqual(log.at(-1), ['saveBlob', 'led-wall-export.zip', 'ZIP-BLOB']);
+    assert.deepEqual(log.at(-1), ['saveBlob', FILES.zip, 'ZIP-BLOB']);
     assert.ok(!log.some((e) => e[0] === 'alert'));
 
     const named = Project.createDefault();
@@ -1144,11 +1155,11 @@ describe('ProjectIO use cases', () => {
     const atlas = computeAtlas(sections);
     assert.deepEqual(log, [
       ['new JSZip'],
-      ['zip.file', 'led-wall-config.json', undefined, json],
+      ['zip.file', FILES.json, undefined, json],
       ['layout'],
-      ['zip.file', 'led-wall-config.obj', undefined, objContent],
-      ['zip.file', 'led-wall-config.mtl', undefined, mtlContent],
-      ['zip.file', 'led-wall-config.gltf', undefined, json2(GLTF.write({ sections, meshMode: 'section', layout }))],
+      ['zip.file', FILES.obj, undefined, objContent],
+      ['zip.file', FILES.mtl, undefined, mtlContent],
+      ['zip.file', FILES.gltf, undefined, json2(GLTF.write({ sections, meshMode: 'section', layout }))],
       ['zip.folder', 'textures'],
       ...[0, 2].flatMap((i) => [
         ['sectionCanvas', i, null, atlas.entries[i].startCol],
@@ -1156,7 +1167,7 @@ describe('ProjectIO use cases', () => {
         ['folder.file', `textures/${zipTextureFileName(sections[i], i)}`, { base64: true }, 'QUJD'],
       ]),
       ['generateAsync', { type: 'blob' }],
-      ['saveBlob', 'led-wall-export.zip', 'ZIP-BLOB'],
+      ['saveBlob', FILES.zip, 'ZIP-BLOB'],
       ['alert', mExp4(['textures/Center_PanelIDs.png'])],
     ]);
   });
@@ -1170,12 +1181,12 @@ describe('ProjectIO use cases', () => {
     const skipped = [false, false, true];
     const layout = layoutProject(project);
     const files = log.filter((e) => e[0] === 'zip.file' || e[0] === 'folder.file').map((e) => e[1]);
-    assert.deepEqual(files, ['led-wall-config.json', 'led-wall-config.obj', 'led-wall-config.mtl', 'led-wall-config.gltf',
-      'textures/Left_PanelIDs.png', 'textures/Center_PanelIDs.png', 'led-wall-config.json', 'led-wall-config.mtl']);
+    assert.deepEqual(files, [FILES.json, FILES.obj, FILES.mtl, FILES.gltf,
+      'textures/Left_PanelIDs.png', 'textures/Center_PanelIDs.png', FILES.json, FILES.mtl]);
     const rewrites = log.filter((e) => e[0] === 'zip.file').slice(-2);
     assert.equal(rewrites[0][3], json2(serializer.write(project, { variant: 'zip', skipped })));
     assert.equal(rewrites[1][3], OBJ.write({ sections, meshMode: 'section', layout, skipped }).mtlContent);
-    assert.deepEqual(log.slice(-2), [['saveBlob', 'led-wall-export.zip', 'ZIP-BLOB'], ['alert', mExp4(['textures/Right_PanelIDs.png'])]]);
+    assert.deepEqual(log.slice(-2), [['saveBlob', FILES.zip, 'ZIP-BLOB'], ['alert', mExp4(['textures/Right_PanelIDs.png'])]]);
     // No left-out texture: no alert at all.
     const log2 = [];
     await fakeIO(project, log2).exportZIP();
@@ -1196,7 +1207,7 @@ describe('ProjectIO use cases', () => {
     });
     assert.equal(blobs.length, 1);
     assert.deepEqual([blobs[0].parts, blobs[0].options], [[OBJ.writeSafeDistance(group)], { type: 'text/plain' }]);
-    assert.deepEqual(log2, [['saveBlob', 'safe-distance-floor.obj', blobs[0]]], 'one download, no alert');
+    assert.deepEqual(log2, [['saveBlob', FILES.safeDistanceObj, blobs[0]]], 'one download, no alert');
   });
 
   test('#runExport: every export reports a failure as M-EXP-1 with its label, then warns; nothing escapes', async () => {

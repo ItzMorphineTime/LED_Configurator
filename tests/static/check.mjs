@@ -45,6 +45,10 @@
  *      existing file of <root>/assets/brand/ with exactly that case (GitHub Pages is case-sensitive), and every file
  *      there except NOTICE.md is referenced at least once (only the brand files the app or the README uses are
  *      published, 06 5.8).
+ *  17  (06 R-B3b, since 06 T6b, the last of 06 T5 and T6b) no legacy product or file name in <root>/index.html, css/
+ *      and js/: no Outfit, LED Wall Configurator, led-wall-config or led-wall-export, and no whole file-name token
+ *      panel-ids.png, PanelIDs_Atlas.png or safe-distance-floor.obj (morph-led-wall-panel-ids.png does not match).
+ *      File names come from Brand.filePrefix / Brand.files. The whole text is scanned, comments included.
  *
  * "Identifier" means a token of code: comments and the text of string, template and regex literals
  * are blanked first (the code inside template `${...}` is kept), and a name after `.` or `?.` is a
@@ -97,6 +101,7 @@ const RULE_TITLES = Object.freeze({
     14: 'legacy identity (R-B3a)',
     15: 'primary CTA (R-B5)',
     16: 'brand asset (R-B4)',
+    17: 'legacy names (R-B3b)',
 });
 
 /**
@@ -162,6 +167,13 @@ const LEGACY_IDENTITY = Object.freeze([
     [/fivefold/gi, 'third-party logo name'],
     [/company-logo/g, 'third-party logo class'],
     [/rgba\(\s*0\s*,\s*240\s*,\s*255\b/g, 'legacy cyan'],
+].map(Object.freeze));
+/** Rule 17 (06 R-B3b): the legacy product and file names, each with what it is (file names as whole tokens). */
+const LEGACY_NAMES = Object.freeze([
+    [/\bOutfit\b/g, 'legacy font'],
+    [/LED Wall Configurator/g, 'legacy product name'],
+    [/led-wall-config|led-wall-export/g, 'legacy file name'],
+    [/(?<![A-Za-z0-9_.-])(?:panel-ids\.png|PanelIDs_Atlas\.png|safe-distance-floor\.obj)(?![A-Za-z0-9_-])/g, 'legacy file name'],
 ].map(Object.freeze));
 /** Rule 15 (06 R-B5): the primary CTA class and its one token. */
 const PRIMARY_CTA_CLASS = 'export-btn--primary';
@@ -918,15 +930,34 @@ function checkCssColourLiterals(ctx, sheets) {
  * index.html, the stylesheets and the modules, comments included.
  */
 function checkLegacyIdentity(ctx, sheets) {
+    for (const { rel, raw } of brandScope(ctx, sheets)) {
+        for (const [re, what] of LEGACY_IDENTITY) {
+            for (const m of raw.matchAll(re)) {
+                ctx.report(rel, lineAt(raw, m.index), 14, `${what} "${m[0]}": the legacy identity was replaced by the Morph role tokens and brand (06 R-B3a)`);
+            }
+        }
+    }
+}
+
+/** The texts rules 14 and 17 scan: index.html (if present), every stylesheet and every module. */
+function brandScope(ctx, sheets) {
     const files = [];
     const html = path.join(ctx.root, 'index.html');
     if (fs.existsSync(html)) files.push({ rel: 'index.html', raw: fs.readFileSync(html, 'utf8') });
     files.push(...sheets.map(({ rel, raw }) => ({ rel, raw })));
     files.push(...ctx.modules.map(({ rel, src }) => ({ rel, raw: src })));
-    for (const { rel, raw } of files) {
-        for (const [re, what] of LEGACY_IDENTITY) {
+    return files;
+}
+
+/**
+ * Rule 17 (06 R-B3b): no legacy product or file name in index.html, the stylesheets and the modules, comments
+ * included: the download names come from Brand.filePrefix / Brand.files (06 T6b), the canvas fonts from the tokens.
+ */
+function checkLegacyNames(ctx, sheets) {
+    for (const { rel, raw } of brandScope(ctx, sheets)) {
+        for (const [re, what] of LEGACY_NAMES) {
             for (const m of raw.matchAll(re)) {
-                ctx.report(rel, lineAt(raw, m.index), 14, `${what} "${m[0]}": the legacy identity was replaced by the Morph role tokens and brand (06 R-B3a)`);
+                ctx.report(rel, lineAt(raw, m.index), 17, `${what} "${m[0]}": the product is "Morph LED Configurator" and file names derive from Brand.filePrefix (06 R-B3b)`);
             }
         }
     }
@@ -1039,6 +1070,7 @@ export async function runChecks(rootDir) {
     const sheets = readStylesheets(ctx);
     checkCssColourLiterals(ctx, sheets);
     checkLegacyIdentity(ctx, sheets);
+    checkLegacyNames(ctx, sheets);
     checkPrimaryCta(ctx, sheets);
     checkBrandAssets(ctx, sheets);
 
@@ -1131,6 +1163,11 @@ const EXPECTED_BAD = Object.freeze([
     ['index.html', 16, 'assets/brand/Morph-Mark.svg differs in case from the file on disk (morph-mark.svg)'],
     ['css/07-viewport.css', 16, 'assets/brand/missing.svg does not exist'],
     ['assets/brand/unused.png', 16, 'assets/brand/unused.png is never referenced'],
+    ['js/ui/PanelB.js', 17, 'legacy file name "led-wall-config"'],
+    ['js/ui/PanelB.js', 17, 'legacy file name "led-wall-export"'],
+    ['js/ui/PanelB.js', 17, 'legacy file name "panel-ids.png"'],
+    ['js/ui/PanelB.js', 17, 'legacy product name "LED Wall Configurator"'],
+    ['css/07-viewport.css', 17, 'legacy font "Outfit"'],
 ]);
 
 async function selfTest() {

@@ -1,0 +1,42 @@
+{
+  "commit": "F6-T6b",
+  "bugs": [],
+  "expect": [
+    {
+      "output": "**/*__{led-wall-config.json,led-wall-config.obj,led-wall-config.mtl,led-wall-config.gltf,led-wall-export.zip,panel-ids.png,safe-distance-floor.obj}",
+      "change": "removed",
+      "each": true,
+      "reason": "06 8.4 T6b: every download under a Phase-1 file name is gone (Brand.files now derives from Brand.filePrefix = 'morph-led-wall'); compare --rename maps each to its new name and finds it identical"
+    },
+    {
+      "output": "**/*__{morph-led-wall.json,morph-led-wall.obj,morph-led-wall.mtl,morph-led-wall.gltf,morph-led-wall-export.zip,morph-led-wall-panel-ids.png,morph-led-wall-safe-distance.obj}",
+      "change": "added",
+      "reason": "06 8.4 T6b: the same downloads under the Brand.files names (ZIP entries morph-led-wall.{json,obj,mtl,gltf}; the OBJ mtllib line names morph-led-wall.mtl)"
+    },
+    {
+      "output": "{box_corner,camera,concave_offsets,convex,default,flat3,import_edge,large_wall,logos,mixed,name_with_panel_ids,p2_curved_safe_distance,p2_oversize_canvas,p2_project_v2,p2_xss_names,p2_zero_inputs,p2_zip_section_mode,ui_sections}/downloads.json",
+      "change": "modified",
+      "each": true,
+      "reason": "06 8.4 T6b: the file names each export step produced (the 18 scenarios that download; the other 10 record no download)"
+    },
+    {
+      "output": "p2_project_v2/stored_svg_08_hostile.json",
+      "change": "modified",
+      "each": true,
+      "reason": "the 08 P2-0 probe records the name of the archive it reads (zip: morph-led-wall-export.zip); not in 06 8.4's list, found by grepping the baseline (08 8.2 R10)"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, 9 px at (401..418, 901..906), one pixel above the allowlist bound of 8 (06 T4b, T4c and T6a runs); T6b changes no pixel"
+    },
+    {
+      "output": "p2_curved_safe_distance/*.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas on the preview footer label row (1 level, 1 px on box_corner in the 06 T6a run; concave30 and convex are allowlisted); T6b changes no pixel"
+    }
+  ],
+  "notes": "06 T6b (8.4): file names only. Brand.filePrefix = 'morph-led-wall' and every Brand.files name derived from it (json, obj, mtl, gltf, -export.zip, -panel-ids.png, -safe-distance.obj, -hdri-pixel-map.png for spec 05). Review check (8.4): compare --rename led-wall-config.json=morph-led-wall.json,led-wall-config.obj=morph-led-wall.obj,led-wall-config.mtl=morph-led-wall.mtl,led-wall-config.gltf=morph-led-wall.gltf,led-wall-export.zip=morph-led-wall-export.zip,panel-ids.png=morph-led-wall-panel-ids.png,safe-distance-floor.obj=morph-led-wall-safe-distance.obj must report every output and every ZIP entry IDENTICAL (ZIPs: PASS, the container bytes are never compared), the OBJ mtllib line and downloads.json included. No screenshot, state, export content or console message may change otherwise."
+}

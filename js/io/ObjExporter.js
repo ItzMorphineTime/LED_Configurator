@@ -132,7 +132,7 @@ export class ObjExporter {
     switch (profile.combinedUV) {
       case 'per-section-overlap':
         // LEGACY(B-M6): every section's `vt` run spans 0..1 on its own, so the sections overlap in UV space and
-        // match neither the viewport atlas nor panel-ids.png.
+        // match neither the viewport atlas nor the combined panel-ID PNG (Brand.files.panelIdsPng).
         uv = 'unit';
         break;
       default:

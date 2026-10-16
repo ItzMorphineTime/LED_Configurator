@@ -1,6 +1,7 @@
 # Golden-master regression harness
 
-A black-box, zero-dependency harness that drives the LED Wall Configurator in headless Chrome,
+A black-box, zero-dependency harness that drives the Morph LED Configurator (the LED Wall Configurator until
+Feature 6 renamed it, 06 T6a) in headless Chrome,
 captures every export and observable UI state, and compares a candidate build against a
 baseline. In Phase 1 the baseline was captured from the original single-file app; from Phase 2 on
 it is the output of the parent commit, and every intended change is declared in an
@@ -47,6 +48,7 @@ Useful options:
 | `--verbose` | compare | Print every output, including identical ones. |
 | `--diff-bbox` | compare | Add the bounding box of the differing pixels (and of those outside an entry's `rects`) to every differing image. See [Rect allowances](#rect-allowances---diff-bbox-and-the-palette-hook-01-t2). |
 | `--ignore-keys a,b` | compare | Drop these object keys, at any depth, from both sides of every JSON and state comparison (ZIP JSON entries included). A file that then compares equal is reported as equivalent (`PASS`), never as a difference. A review cross-check, not a gate: Feature 6 T1 runs it with `classes,class` to show that only the recorded class keys changed (`docs/improvements/06-morph-branding.md` 8.4), and T5 with `statusColor`. |
+| `--rename old=new[,old=new]` | compare | Map the baseline's download file names to the candidate's before comparing: the file name in each output key (after the last `__`), each ZIP entry's last path segment, and every whole file-name token in the baseline's text outputs and text ZIP entries (`downloads.json`, the OBJ `mtllib` line, MTL `map_Kd`, glTF `images[].uri`, JSON texture paths, dialogs, console). `panel-ids.png` maps `textures/panel-ids.png` but not `morph-led-wall-panel-ids.png`. A review check of a rename commit (Feature 6 T6b: the mapped compare must be identical); its gate still declares the renamed outputs as removed and added. |
 
 `run` only deletes an `--out` directory that is empty or holds a previous harness `manifest.json`.
 
@@ -420,7 +422,7 @@ it. The wall is made wider than 65,535 px so that the unfixed Export Panel IDs (
 
 ```
 <out>/manifest.json                      { meta, scenarios: { name: { description, durationMs, outputs } } }
-<out>/<scenario>/<step>__<filename>      every downloaded file, byte-for-byte
+<out>/<scenario>/<step>__<filename>      every downloaded file, byte-for-byte (file names from Brand.files, see below)
 <out>/<scenario>/<name>.json             recorded DOM state (stats, snapshots, camera texts, class lists ...)
 <out>/<scenario>/<name>.screenshot.png   viewport screenshot clipped to #three-canvas
 <out>/ui_visual/NN_<state>.styles.json   computed styles + rects of the probed UI elements
@@ -432,6 +434,13 @@ it. The wall is made wider than 65,535 px so that the unfixed Export Panel IDs (
 <out>/<scenario>/console.json            exceptions, console.error calls, failed network requests, harness errors
 <out>/p2_project_v2/network.json         the opt-in request log (only scenarios with recordRequests: true)
 ```
+
+The download file names are the app's `Brand.files`, all derived from `Brand.filePrefix = 'morph-led-wall'` since
+Feature 6 T6b: `morph-led-wall.json`, `.obj`, `.mtl`, `.gltf`, `morph-led-wall-export.zip`,
+`morph-led-wall-panel-ids.png` and `morph-led-wall-safe-distance.obj` (before: `led-wall-config.*`,
+`led-wall-export.zip`, `panel-ids.png`, `safe-distance-floor.obj`). The ZIP's section textures keep their
+`textures/<section>_PanelIDs.png` names (user data). Manifest patterns stay filename-agnostic
+(`**/*__export-obj__*.obj`), so they survive the rename.
 
 Each output entry in the manifest is `{ file, sha256, kind, bytes, ... }`, where `kind` is one of
 `obj | mtl | gltf | json | png | zip | state | screenshot | console`. ZIP outputs also list
@@ -461,6 +470,8 @@ Byte-identical files report `IDENTICAL`. Otherwise:
   show up only as a screenshot WARN. The exact style and text snapshots of the same state are the
   check that fails it.
 - **ZIP:** archives are compared by entry list and by each entry's content, using the rules above.
+- **`--rename`** (Feature 6 T6b) maps the baseline's download file names first (output keys, ZIP entry names and
+  the file-name tokens inside text outputs), so a pure rename compares identical.
 - **Console:** compared as a multiset of `(kind, normalised message)`. URLs, ports, line and column
   numbers, and stack traces are stripped. New errors are a FAIL. Errors that disappear are a WARN,
   because that usually means a fix.
@@ -501,7 +512,7 @@ Byte-identical files report `IDENTICAL`. Otherwise:
   within its bounds: jitter on any other output, or above the bounds (one run of the 06 T4b build showed
   9 px on `toggles/15_car_moved`), fails them, and the gate run is repeated.
 - **Export PNG pixels in `large_wall`'s ZIP.** The 3840 × 1920 section textures of
-  `large_wall/final__export-zip__led-wall-export.zip` show single bistable pixels that flip by
+  `large_wall/final__export-zip__morph-led-wall-export.zip` (`led-wall-export.zip` before 06 T6b) show single bistable pixels that flip by
   1 level between runs of the same build: `textures/L2_PanelIDs.png` (1995, 948),
   `L3_PanelIDs.png` (1970, 1003) and `L4_PanelIDs.png` (2026, 858), first seen in the P2-0b gate and
   in almost every run since. The allowlist covers screenshots only, so compare reports them as a WARN

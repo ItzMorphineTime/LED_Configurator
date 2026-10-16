@@ -1,5 +1,5 @@
-/* Static-check fixture (rules 13-16): colour literals in declaration values, legacy residue, two CTA references, a
-   reference to a brand file that does not exist (and the brand folder holds a PNG nothing references). */
+/* Static-check fixture (rules 13-17): colour literals in declaration values, legacy residue, two CTA references, a
+   reference to a brand file that does not exist (and the brand folder holds a PNG nothing references), the legacy font. */
 .company-logo {
     fill: #b85618;
     background: rgba(0, 240, 255, 0.05);
@@ -10,6 +10,7 @@
     color: rgb(1, 2, 3);
     border-color: hsl(0 0% 0%);
     outline: 1px solid var(--border-color);
+    font-family: 'Outfit', sans-serif;
 }
 
 .export-btn--primary { background: var(--cta-background); }

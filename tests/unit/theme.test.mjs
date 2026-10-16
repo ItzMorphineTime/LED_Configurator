@@ -4,7 +4,7 @@
 // function or non-colour), U11 the UNBRANDED conventions against tests/unit/fixtures/legacy-theme.mjs (06 T3); U6 gold
 // exclusivity and legacy identity of the :root tokens, layers 1-3 (06 T4a), layer 4 and the Theme colour leaves (06 T5;
 // the palette joins in 06 T7). Since 06 T5 BIND_FONTS_DEFAULT is true, so U4 also compares the font leaves. U9 the
-// brand strings (06 T6a).
+// brand strings (06 T6a) and the file names derived from Brand.filePrefix (06 T6b).
 // Run: node --test tests/unit/theme.test.mjs   (zero dependencies)
 
 import { test, describe } from 'node:test';
@@ -14,6 +14,11 @@ import { Theme } from '../../js/theme/Theme.js';
 import { LEGACY_UNBRANDED, FACE_ORIENTATION } from './fixtures/legacy-theme.mjs';
 import { rootDeclarations, resolveVar, readTokens } from './fixtures/css-tokens.mjs';
 import { parseColour, composite, deltaE00 } from './fixtures/colour-math.mjs';
+import { Project } from '../../js/domain/Project.js';
+import { Strategies } from '../../js/legacy/LegacyCompat.js';
+import { layoutProject } from '../../js/geometry/WallLayout.js';
+import { WallMeshBuilder } from '../../js/geometry/WallMeshBuilder.js';
+import { ObjExporter } from '../../js/io/ObjExporter.js';
 import {
   COLOR_BINDINGS, FONT_BINDINGS, UNBRANDED, BIND_FONTS_DEFAULT, parseHexColor, parseCssColor, buildTheme,
 } from '../../js/theme/ThemeBridge.js';
@@ -559,5 +564,37 @@ describe('U9 Brand strings (06 T6a; the file names join in 06 T6b)', () => {
     assert.equal(b.shortName, 'LED Configurator');
     assert.equal(b.company, 'Morph');
     assert.match(b.homepage, /^https:\/\/[a-z0-9.-]+\/[A-Za-z_]+\/$/);
+  });
+});
+
+describe('U9 Brand file names (06 T6b): every download name derives from Brand.filePrefix', () => {
+  const FILE_KEYS = ['json', 'obj', 'mtl', 'gltf', 'zip', 'panelIdsPng', 'safeDistanceObj', 'hdriPixelMap'];
+
+  test('filePrefix is a lowercase slug; every Brand.files value is filePrefix + an optional -suffix + an extension', () => {
+    const { filePrefix, files } = Theme.brand;
+    assert.equal(filePrefix, 'morph-led-wall');
+    assert.match(filePrefix, /^[a-z0-9-]+$/);
+    assert.ok(Object.isFrozen(files));
+    for (const key of FILE_KEYS) assert.ok(Object.hasOwn(files, key), `Brand.files.${key} (specs 05, 07, 08, 09)`);
+    for (const [key, name] of Object.entries(files)) {
+      assert.ok(name.startsWith(filePrefix), `${key}: ${name}`);
+      assert.match(name.slice(filePrefix.length), /^(-[a-z0-9-]+)?\.[a-z]+$/, `${key}: ${name}`);
+    }
+    assert.equal(new Set(Object.values(files)).size, Object.keys(files).length, 'no two downloads share a name');
+  });
+
+  test('files.json is filePrefix + ".json", so spec 09\'s brandFilePrefix(brand) returns filePrefix', () => {
+    assert.equal(Theme.brand.files.json, `${Theme.brand.filePrefix}.json`);
+    const brandFilePrefix = (brand) => brand.files.json.replace(/\.json$/, '');   // spec 09's derivation
+    assert.equal(brandFilePrefix(Theme.brand), Theme.brand.filePrefix);
+  });
+
+  test('the OBJ writer names Brand.files.mtl in its mtllib line, in every mesh mode', () => {
+    const project = Project.createDefault();
+    const obj = new ObjExporter({ brand: Theme.brand, colorToRgb: () => ({ r: 1, g: 1, b: 1 }), builder: new WallMeshBuilder(Strategies.mesh.obj) });
+    for (const meshMode of ['combined', 'section', 'panel']) {
+      const { objContent } = obj.write({ sections: project.wall.sections, meshMode, layout: layoutProject(project) });
+      assert.ok(objContent.includes(`\nmtllib ${Theme.brand.files.mtl}\n`), meshMode);
+    }
   });
 });

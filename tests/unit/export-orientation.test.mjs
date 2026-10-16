@@ -34,14 +34,15 @@ const MODES = ['combined', 'section', 'panel'];
 
 /**
  * Golden objects that still fail for a defect owned by a later spec 08 commit (01 header: hard prerequisites).
- * `pattern` is tested against '<path relative to GOLDEN_DIR, with forward slashes>[!<zip entry>] :: <object name>'.
+ * `pattern` is tested against '<path relative to GOLDEN_DIR, with forward slashes>[!<zip entry>] :: <object name>'; the
+ * download file name is matched by any name (06 T6b renamed the exports), so the patterns follow Brand.files.
  */
 const OPEN_DEFECTS = Object.freeze([
-  { pattern: /(^|\/|__)export-safe-distance__safe-distance-floor\.obj :: /, bug: 'B-L29', fixedBy: '08 P2-5b',
+  { pattern: /(^|\/|__)export-safe-distance__[^/ ]+\.obj :: /, bug: 'B-L29', fixedBy: '08 P2-5b',
     why: 'the safe-distance floor OBJ has no vn lines (and its triangles face -Y)' },
-  { pattern: /^import_edge\/ii_(combined|section)__export-(obj|gltf)__led-wall-config\.(obj|gltf) :: /, bug: 'B-L8', fixedBy: '08 P2-3b',
+  { pattern: /^import_edge\/ii_(combined|section)__export-(obj|gltf)__[^/ ]+\.(obj|gltf) :: /, bug: 'B-L8', fixedBy: '08 P2-3b',
     why: 'counts imported as strings give a vertsPerRow of "101", so indices run past the vertex count' },
-  { pattern: /^p2_zero_inputs\/combined__export-obj__led-wall-config\.obj :: /, bug: 'B-L15', fixedBy: '08 P2-8a',
+  { pattern: /^p2_zero_inputs\/combined__export-obj__[^/ ]+\.obj :: /, bug: 'B-L15', fixedBy: '08 P2-8a',
     why: 'a fractional column count (2.5) gives fractional and out-of-range indices' },
 ]);
 

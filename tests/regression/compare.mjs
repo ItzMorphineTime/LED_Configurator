@@ -2,13 +2,22 @@
 // Golden-master comparator.
 //   node tests/regression/compare.mjs <baselineDir> <candidateDir> [--expect a.json[,b.json]] [--tolerance 1e-5]
 //        [--png-threshold 0] [--png-max-percent 0.01] [--shot-threshold 8] [--shot-max-percent 0.5]
-//        [--only scenarioA,scenarioB] [--ignore-keys keyA,keyB] [--diff-bbox] [--verbose]
+//        [--only scenarioA,scenarioB] [--ignore-keys keyA,keyB] [--rename old=new[,old=new]] [--diff-bbox] [--verbose]
 // Exit code: 0 = no FAIL, 1 = at least one FAIL, 2 = usage error.
 //
 // --ignore-keys (docs/improvements/06-morph-branding.md 8.3, T1) drops the named object keys, at any depth, from both
 // sides of every JSON and state comparison (ZIP JSON entries included) before comparing: a file that then compares
 // equal is reported as equivalent (PASS), never as a difference. It is a review cross-check, not a gate: 06 T1 runs
 // it with `classes,class` to prove that only the recorded class keys changed, 06 T5 with `statusColor`.
+//
+// --rename (docs/improvements/06-morph-branding.md 8.3, T6b) maps download file names of the baseline to the
+// candidate's before comparing, so a commit that only renames the exports can be checked for byte identity: an output
+// key's file name (the part after the last '__', or the whole name), a ZIP entry's last path segment (the textures/
+// atlas entry included), and every exact file-name token inside the baseline's text outputs and text ZIP entries
+// (downloads.json, the OBJ mtllib line, the MTL map_Kd lines, glTF images[].uri, the JSON texture paths, dialogs and
+// console messages). A token matches only as a whole file name: 'panel-ids.png' maps 'textures/panel-ids.png' but
+// not 'morph-led-wall-panel-ids.png'. Images are compared as they are. Like --ignore-keys it is a review check of the
+// rename commit; its gate still declares the renamed outputs (removed and added) in the --expect manifest.
 //
 // --expect (docs/improvements/08-bugfix-roadmap.md, sections 8.1 and 8.2) gates a re-baselining commit: every difference
 // must be declared in an expected-change manifest (tests/regression/expected/<commit-id>.json), and every declared
@@ -60,6 +69,7 @@ function parseArgs(argv) {
             a.ignoreKeys = str().split(',').map((s) => s.trim()).filter(Boolean);
             if (!a.ignoreKeys.length) throw new Error('No keys for --ignore-keys');
         }
+        else if (k === '--rename') a.rename = parseRenameMap(str());
         else if (k === '--expect') a.expect.push(...str().split(',').map((s) => s.trim()).filter(Boolean));
         else if (k === '--verbose' || k === '-v') a.verbose = true;
         else if (k === '--diff-bbox') a.diffBbox = true;
@@ -175,6 +185,60 @@ function hasAnyKey(v, keys) {
     if (Array.isArray(v)) return v.some((x) => hasAnyKey(x, keys));
     if (v === null || typeof v !== 'object') return false;
     return Object.entries(v).some(([k, x]) => keys.has(k) || hasAnyKey(x, keys));
+}
+
+// ---- --rename (06 T6b) ---------------------------------------------------------------------------
+
+/**
+ * Parses an --rename value 'old=new[,old=new...]' into a Map. Every pair needs a non-empty old and new file name
+ * without '/' or '='; an old name may appear once.
+ * @param {string} spec
+ * @returns {Map<string, string>}
+ * @throws {Error} for a malformed or empty list
+ */
+export function parseRenameMap(spec) {
+    const map = new Map();
+    for (const pair of String(spec).split(',').map((x) => x.trim()).filter(Boolean)) {
+        const m = /^([^=/]+)=([^=/]+)$/.exec(pair);
+        if (!m) throw new Error(`--rename: "${pair}" is not old=new (file names without '/' or '=')`);
+        const [from, to] = [m[1].trim(), m[2].trim()];
+        if (map.has(from)) throw new Error(`--rename: "${from}" is mapped twice`);
+        map.set(from, to);
+    }
+    if (!map.size) throw new Error('No pairs for --rename');
+    return map;
+}
+
+const escapeRegExp = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** The comparison kinds whose bytes are text, renamed token by token. */
+const TEXT_KINDS = new Set(['obj', 'mtl', 'text', 'gltf', 'json', 'state', 'console']);
+
+/** The file name of an output key or a path renamed by `map` (the part after the last '__' or '/', else the whole). */
+export function renameFileName(name, map, sep = '__') {
+    const i = name.lastIndexOf(sep);
+    const head = i >= 0 ? name.slice(0, i + sep.length) : '';
+    const file = i >= 0 ? name.slice(i + sep.length) : name;
+    return map.has(file) ? head + map.get(file) : name;
+}
+
+/**
+ * Every exact file-name token of `map` in a text, replaced (a token is not part of a longer name: no letter, digit,
+ * '_', '-' or '.' before it, none of those after it except a '.' that does not continue the name).
+ */
+export function renameText(text, map) {
+    let out = text;
+    for (const [from, to] of map) {
+        out = out.replace(new RegExp(`(?<![A-Za-z0-9_.-])${escapeRegExp(from)}(?![A-Za-z0-9_-]|\\.[A-Za-z0-9])`, 'g'), to);
+    }
+    return out;
+}
+
+/** A baseline buffer of `kind` with the file-name tokens renamed (text kinds only). */
+function renameBuffer(kind, buf, map) {
+    if (!map || !TEXT_KINDS.has(kind)) return buf;
+    const text = buf.toString('utf8');
+    const renamed = renameText(text, map);
+    return renamed === text ? buf : Buffer.from(renamed, 'utf8');
 }
 
 function compareJSON(aBuf, bBuf, tol, ignoreKeys = null) {
@@ -315,6 +379,10 @@ function compareConsole(aBuf, bBuf) {
 function compareZip(aBuf, bBuf, opts) {
     let ea, eb;
     try { ea = readZip(aBuf); eb = readZip(bBuf); } catch (e) { return result('FAIL', 'ZIP read: ' + e.message); }
+    if (opts.rename) {
+        // --rename (06 T6b): the baseline's entry names (last path segment) and its text entries.
+        ea = ea.map((e) => ({ ...e, name: renameFileName(e.name, opts.rename, '/'), data: renameBuffer(kindForFilename(e.name), e.data, opts.rename) }));
+    }
     const na = ea.map((e) => e.name), nb = eb.map((e) => e.name);
     const missing = na.filter((x) => !nb.includes(x)), extra = nb.filter((x) => !na.includes(x));
     if (missing.length || extra.length) return result('FAIL', `entries missing: [${missing.join(', ')}] extra: [${extra.join(', ')}]`);
@@ -382,8 +450,20 @@ export function compareTrees(baseDir, candDir, opts = DEFAULT_OPTIONS, only = nu
     let scenarios = [...new Set([...Object.keys(A.scenarios || {}), ...Object.keys(B.scenarios || {})])];
     if (only) scenarios = scenarios.filter((s) => only.includes(s));
     const out = [];
+    const rename = opts.rename || null;
     for (const s of scenarios) {
-        const sa = A.scenarios[s], sb = B.scenarios[s];
+        const sb = B.scenarios[s];
+        let sa = A.scenarios[s];
+        if (sa && rename) {
+            // --rename (06 T6b): the baseline's outputs under their candidate names.
+            const renamed = {};
+            for (const [o, v] of Object.entries(sa.outputs || {})) {
+                const to = renameFileName(o, rename);
+                if (renamed[to]) throw new UsageError(`--rename maps two outputs of ${s} to ${to}`);
+                renamed[to] = to === o ? v : { ...v, renamedFrom: o };
+            }
+            sa = { ...sa, outputs: renamed };
+        }
         const outputs = [];
         const outs = [...new Set([...Object.keys(sa?.outputs || {}), ...Object.keys(sb?.outputs || {})])];
         for (const o of outs) {
@@ -400,9 +480,10 @@ export function compareTrees(baseDir, candDir, opts = DEFAULT_OPTIONS, only = nu
                 r = result('FAIL', `kind ${oa.kind} vs ${ob.kind}`);
             } else {
                 try {
-                    const ba = fs.readFileSync(path.join(baseDir, oa.file));
+                    const ba = renameBuffer(oa.kind, fs.readFileSync(path.join(baseDir, oa.file)), rename);
                     const bb = fs.readFileSync(path.join(candDir, ob.file));
                     r = compareContent(oa.kind, ba, bb, opts, o);
+                    if (oa.renamedFrom) r = { ...r, detail: [r.detail, `baseline ${oa.renamedFrom} (--rename)`].filter(Boolean).join('; ') };
                 } catch (e) {
                     r = result('FAIL', 'read error: ' + e.message);
                 }
@@ -737,6 +818,7 @@ export function runCompare({ baseDir, candDir, expectFiles = [], allowlistFile =
     log(`Candidate: ${candDir}\n           ${B.meta?.browser || '?'} captured ${B.meta?.capturedAt || '?'} from ${B.meta?.root || '?'}`);
     log(`Tolerance ${opts.tolerance}; export PNG: >${opts.pngThreshold} on >${opts.pngMaxPercent}% px = FAIL; screenshots: >${opts.shotThreshold} on >${opts.shotMaxPercent}% px = FAIL`);
     if (opts.ignoreKeys && opts.ignoreKeys.length) log(`Ignored JSON keys (--ignore-keys): ${opts.ignoreKeys.join(', ')}`);
+    if (opts.rename && opts.rename.size) log(`Renamed baseline file names (--rename): ${[...opts.rename].map(([a, b]) => `${a} -> ${b}`).join(', ')}`);
     if (expectMode) {
         log(`Expected-change manifests: ${manifests.map((m) => `${m.commit} (${m.file})`).join(', ')}`);
         log(`Nondeterminism allowlist: ${allowlistFile} (${allowlist.length} entries)`);
@@ -807,7 +889,7 @@ function addDiffBoxes(outputs) {
     }
 }
 
-const USAGE = 'Usage: node tests/regression/compare.mjs <baselineDir> <candidateDir> [--expect a.json[,b.json]] [--tolerance 1e-5] [--png-threshold 0] [--png-max-percent 0.01] [--shot-threshold 8] [--shot-max-percent 0.5] [--only a,b] [--ignore-keys a,b] [--diff-bbox] [--verbose]';
+const USAGE = 'Usage: node tests/regression/compare.mjs <baselineDir> <candidateDir> [--expect a.json[,b.json]] [--tolerance 1e-5] [--png-threshold 0] [--png-max-percent 0.01] [--shot-threshold 8] [--shot-max-percent 0.5] [--only a,b] [--ignore-keys a,b] [--rename old=new[,old=new]] [--diff-bbox] [--verbose]';
 
 export function main(argv = process.argv) {
     let args;

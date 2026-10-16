@@ -3,7 +3,8 @@
 // (tests/regression/expected/_nondeterminism.json), on synthetic baseline / candidate output trees; and the rect
 // allowances of docs/improvements/01-normals.md 8.4 (T2): `rects` / `size` / `exclude` on manifest entries (the
 // per-pixel rule, the allowlisted jitter tolerated outside the rects (F1-0c) and the frame-size check) and
-// --diff-bbox, on synthetic PNG pairs; and --ignore-keys (docs/improvements/06-morph-branding.md 8.3, T1).
+// --diff-bbox, on synthetic PNG pairs; and --ignore-keys (docs/improvements/06-morph-branding.md 8.3, T1) and --rename
+// (06 8.3, T6b: output keys, ZIP entries and file-name tokens of the baseline under a rename map).
 // Run: node --test tests/unit/compare.test.mjs   (zero dependencies)
 
 import { test, describe, after } from 'node:test';
@@ -15,7 +16,9 @@ import zlib from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-import { runCompare, globToRegExp, parseExpectManifest, parseAllowlist, NONDETERMINISM_FILE, DEFAULT_OPTIONS } from '../regression/compare.mjs';
+import {
+  runCompare, globToRegExp, parseExpectManifest, parseAllowlist, NONDETERMINISM_FILE, DEFAULT_OPTIONS, parseRenameMap, renameText, renameFileName,
+} from '../regression/compare.mjs';
 import { encodePNG, sha256 } from '../regression/lib/formats.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -496,5 +499,107 @@ describe('--ignore-keys (06 T1: classes,class; 06 T5: statusColor)', () => {
     assert.equal(ok.status, 0, ok.stdout + ok.stderr);
     assert.match(ok.stdout, /PASS +x\.styles\.json +-- equivalent with the keys classes, class ignored/);
     assert.equal(cli(base, cand, '--ignore-keys', ',').status, 2);
+  });
+});
+
+describe('--rename (06 T6b: the export file names under a rename map)', () => {
+  /** A stored (uncompressed) ZIP of [name, content] entries. */
+  function storedZip(entries) {
+    const locals = [];
+    const centrals = [];
+    let offset = 0;
+    for (const [name, content] of entries) {
+      const nameBuf = Buffer.from(name, 'utf8');
+      const data = Buffer.from(content);
+      const crc = zlib.crc32(data) >>> 0;
+      const local = Buffer.alloc(30);
+      local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4);
+      local.writeUInt32LE(crc, 14); local.writeUInt32LE(data.length, 18); local.writeUInt32LE(data.length, 22);
+      local.writeUInt16LE(nameBuf.length, 26);
+      const central = Buffer.alloc(46);
+      central.writeUInt32LE(0x02014b50, 0); central.writeUInt16LE(20, 4); central.writeUInt16LE(20, 6);
+      central.writeUInt32LE(crc, 16); central.writeUInt32LE(data.length, 20); central.writeUInt32LE(data.length, 24);
+      central.writeUInt16LE(nameBuf.length, 28); central.writeUInt32LE(offset, 42);
+      locals.push(local, nameBuf, data);
+      centrals.push(central, nameBuf);
+      offset += 30 + nameBuf.length + data.length;
+    }
+    const cd = Buffer.concat(centrals);
+    const end = Buffer.alloc(22);
+    end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(entries.length, 8); end.writeUInt16LE(entries.length, 10);
+    end.writeUInt32LE(cd.length, 12); end.writeUInt32LE(offset, 16);
+    return Buffer.concat([...locals, cd, end]);
+  }
+  const MAP = 'led-wall-config.json=morph-led-wall.json,led-wall-config.obj=morph-led-wall.obj,led-wall-config.mtl=morph-led-wall.mtl,'
+    + 'led-wall-export.zip=morph-led-wall-export.zip,panel-ids.png=morph-led-wall-panel-ids.png';
+  /** One scenario tree whose exports use the names of `n` (old or new). */
+  const exportsTree = (n, { objExtra = '', zipJson = '{"a": 1}' } = {}) => tree({
+    s: {
+      [`final__export-json__${n.json}`]: { kind: 'json', data: json({ sections: [{ texture_file: 'textures/A_PanelIDs.png' }] }) },
+      [`final__export-obj__${n.obj}`]: { kind: 'obj', data: Buffer.from(`# header\nmtllib ${n.mtl}\n\nv 0 0 0${objExtra}\n`) },
+      [`final__export-obj__${n.mtl}`]: { kind: 'mtl', data: Buffer.from('newmtl a\nmap_Kd textures/A_PanelIDs.png\n') },
+      [`final__export-panel-ids__${n.png}`]: { kind: 'png', data: png() },
+      [`final__export-zip__${n.zip}`]: { kind: 'zip', data: storedZip([[n.json, zipJson], [n.obj, `mtllib ${n.mtl}\n`], [`textures/${n.png}`, 'PNG'], ['textures/A_PanelIDs.png', 'X']]) },
+      'downloads.json': state([{ step: 'final__export-zip', files: [n.zip] }, { step: 'final__export-panel-ids', files: [n.png] }]),
+    },
+  });
+  const OLD = { json: 'led-wall-config.json', obj: 'led-wall-config.obj', mtl: 'led-wall-config.mtl', zip: 'led-wall-export.zip', png: 'panel-ids.png' };
+  const NEW = { json: 'morph-led-wall.json', obj: 'morph-led-wall.obj', mtl: 'morph-led-wall.mtl', zip: 'morph-led-wall-export.zip', png: 'morph-led-wall-panel-ids.png' };
+  const base = exportsTree(OLD);
+  const run = (cand, rename = null) => {
+    const lines = [];
+    const opts = rename ? { ...DEFAULT_OPTIONS, rename: parseRenameMap(rename) } : DEFAULT_OPTIONS;
+    const r = runCompare({ baseDir: base, candDir: cand, opts, verbose: true, log: (l) => lines.push(l) });
+    return { ...r, byKey: Object.fromEntries(r.outputs.map((o) => [o.key, o])), text: lines.join('\n') };
+  };
+
+  test('without the map the renamed outputs are removed + added and downloads.json differs; with it everything is identical', () => {
+    const cand = exportsTree(NEW);
+    const plain = run(cand);
+    assert.equal(plain.exitCode, 1);
+    assert.equal(plain.byKey['s/final__export-zip__led-wall-export.zip'].change, 'removed');
+    assert.equal(plain.byKey['s/final__export-zip__morph-led-wall-export.zip'].change, 'added');
+    assert.equal(plain.byKey['s/downloads.json'].status, 'FAIL');
+    const mapped = run(cand, MAP);
+    assert.equal(mapped.exitCode, 0, mapped.text);
+    for (const o of mapped.outputs) {
+      if (o.kind === 'zip') assert.equal(o.status, 'PASS', `${o.key}: ${o.detail}`);   // container bytes are never compared
+      else assert.equal(o.status, 'IDENTICAL', `${o.key}: ${o.detail}`);
+    }
+    assert.equal(mapped.outputs.length, 6, 'each output once, under its candidate name');
+    assert.match(mapped.byKey['s/final__export-zip__morph-led-wall-export.zip'].detail, /4 entries; container bytes ignored \(timestamps\); baseline final__export-zip__led-wall-export\.zip \(--rename\)$/);
+    assert.match(mapped.text, /Renamed baseline file names \(--rename\): led-wall-config\.json -> morph-led-wall\.json, /);
+  });
+
+  test('a difference other than the names still fails under the map, in a file and inside the ZIP', () => {
+    const r = run(exportsTree(NEW, { objExtra: '\nv 1 1 1' }), MAP);
+    assert.equal(r.exitCode, 1);
+    assert.equal(r.byKey['s/final__export-obj__morph-led-wall.obj'].status, 'FAIL');
+    const z = run(exportsTree(NEW, { zipJson: '{"a": 2}' }), MAP).byKey['s/final__export-zip__morph-led-wall-export.zip'];
+    assert.equal(z.status, 'FAIL');
+    assert.match(z.detail, /morph-led-wall.json: FAIL/);
+  });
+
+  test('tokens are whole file names: textures/panel-ids.png is mapped, morph-led-wall-panel-ids.png and panel-ids.png.bak are not', () => {
+    const map = parseRenameMap('panel-ids.png=morph-led-wall-panel-ids.png');
+    assert.equal(renameText('textures/panel-ids.png "panel-ids.png". morph-led-wall-panel-ids.png panel-ids.png.bak xpanel-ids.png', map),
+      'textures/morph-led-wall-panel-ids.png "morph-led-wall-panel-ids.png". morph-led-wall-panel-ids.png panel-ids.png.bak xpanel-ids.png');
+    assert.equal(renameFileName('final__export-panel-ids__panel-ids.png', map), 'final__export-panel-ids__morph-led-wall-panel-ids.png');
+    assert.equal(renameFileName('panel-ids.png', map), 'morph-led-wall-panel-ids.png');
+    assert.equal(renameFileName('textures/panel-ids.png', map, '/'), 'textures/morph-led-wall-panel-ids.png');
+    assert.equal(renameFileName('final__export-panel-ids__other.png', map), 'final__export-panel-ids__other.png');
+  });
+
+  test('parseRenameMap and the command line: malformed, empty or repeated pairs are usage errors (exit 2)', () => {
+    assert.deepEqual([...parseRenameMap(' a.json = b.json ,c.zip=d.zip')], [['a.json', 'b.json'], ['c.zip', 'd.zip']]);
+    for (const bad of ['', ',', 'a.json', 'a.json=', '=b.json', 'a=b=c', 'x/a.json=b.json', 'a.json=b.json,a.json=c.json']) {
+      assert.throws(() => parseRenameMap(bad), /--rename|No pairs/, bad);
+    }
+    const cli = (...args) => spawnSync(process.execPath, [COMPARE, ...args], { encoding: 'utf8' });
+    const cand = exportsTree(NEW);
+    assert.equal(cli(base, cand).status, 1);
+    const ok = cli(base, cand, '--rename', MAP);
+    assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+    assert.equal(cli(base, cand, '--rename', 'a.json').status, 2);
   });
 });
