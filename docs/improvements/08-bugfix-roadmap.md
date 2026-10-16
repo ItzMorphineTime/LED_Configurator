@@ -400,7 +400,7 @@ The status comes from `WallController` in the `WALL_REBUILT` payload (§5.2, §5
 | `mesh.gltf.normals` | `'none'` | `'averaged'` | P2-2d | keep |
 | `mesh.gltf.panelNormal` | – (absent) | `'facing'` | P2-2d | **new leaf**, so the glTF builder can emit panel normals |
 | `mesh.gltf.attributes` | `['POSITION']` | `['POSITION','NORMAL']` (P2-2d), then `['POSITION','NORMAL','TEXCOORD_0']` (P2-7c) | P2-2d, P2-7c | keep. Read rule (04 §5.5): iterate, `switch` each element over `'POSITION' \| 'NORMAL' \| 'TEXCOORD_0'`, throw `unsupportedStrategy` in `default` |
-| `mesh.gltf.combinedUV` | – (absent: legacy glTF had no UVs) | `'atlas-pixel-accurate'` | P2-7c | **new leaf** (04 §2.3, requested by 04 task UV-0), read only inside the `TEXCOORD_0` case of the combined writer. 04 UV-8b later adds `'plan'` and makes it the value. `LegacyProfiles.mesh.gltf` has no such leaf, because its attribute list has no `TEXCOORD_0` and the leaf is never read |
+| `mesh.gltf.combinedUV` | – (absent: legacy glTF had no UVs) | `'atlas-pixel-accurate'` | P2-7c | **new leaf** (04 §2.3 row 08-3), read only inside the `TEXCOORD_0` case of the combined writer. 04 UV-8b later adds `'plan'` and makes it the value. `LegacyProfiles.mesh.gltf` has no such leaf, because its attribute list has no `TEXCOORD_0` and the leaf is never read |
 | `mesh.gltf.indexType` | `'uint16'` | `'auto'` | P2-1b | keep |
 | `mesh.gltf.doubleSided` | `'omit'` | `'omit'` | – | keep. P2-2d adds the `'true'` case (writes `doubleSided: true`) for a later export option (Q2) |
 | `gltfBase64` | `'spread'` | – | P2-1a | **retire** (chunked encoder only) |
