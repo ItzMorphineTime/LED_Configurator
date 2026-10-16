@@ -11,7 +11,21 @@
 import THREE from '../vendor/three.js';
 import { Strategies } from '../legacy/LegacyCompat.js';
 import { computeAtlas } from '../geometry/TextureAtlas.js';
+import { maxIndexOf, indexWidth } from '../geometry/WallMeshBuilder.js';
 import { ResourceTracker } from './ResourceTracker.js';
+
+/**
+ * The argument of geometry.setIndex for a combined or section grid (08 P2-1e; the viewport side of B-L5, 08 6.2): a
+ * THREE.Uint32BufferAttribute when the largest index reaches 65,535, else the plain array as before (r128's setIndex
+ * stores it as Uint16, unchanged). r128 alone switches to Uint32 only above 65,535, so a largest index of exactly 65,535
+ * would be stored as Uint16, where WebGL2 reads it as the primitive-restart value and drops a triangle.
+ * Side effects: may allocate one BufferAttribute (no THREE id).
+ * @param {number[]} indices
+ * @returns {number[]|THREE.Uint32BufferAttribute}
+ */
+function indexAttribute(indices) {
+  return indexWidth(maxIndexOf(indices)) === 'uint32' ? new THREE.Uint32BufferAttribute(indices, 1) : indices;
+}
 
 /**
  * @typedef {object} SectionNode
@@ -140,7 +154,7 @@ export class LEDWallView {
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(g.positions, 3));
     geometry.setAttribute('normal', new THREE.Float32BufferAttribute(g.normals, 3));
     geometry.setAttribute('uv', new THREE.Float32BufferAttribute(g.uvs, 2));
-    geometry.setIndex(g.indices);
+    geometry.setIndex(indexAttribute(g.indices));
 
     // For combined mesh, use vertex colors to support multiple section colors
     geometry.setAttribute('color', new THREE.Float32BufferAttribute(this.#vertexColors(layout), 3));
@@ -186,7 +200,7 @@ export class LEDWallView {
       geometry.setAttribute('position', new THREE.Float32BufferAttribute(grid.positions, 3));
       geometry.setAttribute('normal', new THREE.Float32BufferAttribute(grid.normals, 3));
       geometry.setAttribute('uv', new THREE.Float32BufferAttribute(grid.uvs, 2));
-      geometry.setIndex(grid.indices);
+      geometry.setIndex(indexAttribute(grid.indices));
 
       const material = this.#materials.section(sl.section, sl.sectionIndex, atlas.entries[i].startCol);
 

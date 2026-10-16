@@ -292,7 +292,8 @@ tests/
     compare.test.mjs                       08 P2-0  compare.mjs --expect semantics and JITTER on synthetic output trees
     tools.test.mjs                         08 P2-0  tools/check-orientation.mjs and tools/check-gltf.mjs on hand-built files
     materials.test.mjs                     08 P2-1d  PanelIdRenderer sizes and null canvases, LEDMaterialFactory's colour
-                                                 fallback and its warning (fake THREE installed as window.THREE)
+                                                 fallback and its warning, LEDWallView's index attribute (08 P2-1e)
+                                                 (fake THREE installed as window.THREE)
 tools/
   serve.mjs                                WP1   zero-dependency static server for local development (correct .js MIME type)
   check-orientation.mjs                    08 P2-0  OBJ/glTF face orientation against the vertex normals (01 8.1, 08 8.2)
@@ -1029,12 +1030,14 @@ export class LEDWallView {
 }
 ```
 Builders (private, allocation order = legacy statement order, R5):
-- `#buildCombined(layout, sections, atlas)` (1579-1678; `sections` is the array step 3 already mapped): `g = builder.combinedGrid(layout, atlas)`; `geometry = new THREE.BufferGeometry()`; `setAttribute('position', new THREE.Float32BufferAttribute(g.positions, 3))`, then `'normal'` (3), `'uv'` (2), `setIndex(g.indices)`; colours: per section `const color = new THREE.Color(section.color)` and for `row <= panelRows`, `col <= panelCols` push `color.r, color.g, color.b`; `setAttribute('color', ...)`; `material = materials.combined(sections, atlas)`; `mesh = new THREE.Mesh(geometry, material)`; `mesh.userData = { kind: 'led-wall', mode: 'combined', sectionRanges: g.sectionRanges }`; `wallGroup.add(mesh)`.
-- `#buildSections(layout, atlas)` (1710-1774): per `sl` (index `i`): `grid = builder.sectionGrid(sl, { uv: 'unit' })`; `new THREE.BufferGeometry()` + position/normal/uv attributes + `setIndex`; `material = materials.section(sl.section, sl.sectionIndex, atlas.entries[i].startCol)`; mesh; `userData = { kind: 'led-wall', mode: 'section', sectionId: sl.sectionId, sectionIndex: i }`; add.
+- `#buildCombined(layout, sections, atlas)` (1579-1678; `sections` is the array step 3 already mapped): `g = builder.combinedGrid(layout, atlas)`; `geometry = new THREE.BufferGeometry()`; `setAttribute('position', new THREE.Float32BufferAttribute(g.positions, 3))`, then `'normal'` (3), `'uv'` (2), `setIndex(indexAttribute(g.indices))`; colours: per section `const color = new THREE.Color(section.color)` and for `row <= panelRows`, `col <= panelCols` push `color.r, color.g, color.b`; `setAttribute('color', ...)`; `material = materials.combined(sections, atlas)`; `mesh = new THREE.Mesh(geometry, material)`; `mesh.userData = { kind: 'led-wall', mode: 'combined', sectionRanges: g.sectionRanges }`; `wallGroup.add(mesh)`.
+- `#buildSections(layout, atlas)` (1710-1774): per `sl` (index `i`): `grid = builder.sectionGrid(sl, { uv: 'unit' })`; `new THREE.BufferGeometry()` + position/normal/uv attributes + `setIndex(indexAttribute(grid.indices))`; `material = materials.section(sl.section, sl.sectionIndex, atlas.entries[i].startCol)`; mesh; `userData = { kind: 'led-wall', mode: 'section', sectionId: sl.sectionId, sectionIndex: i }`; add.
 - `#buildPanels(layout, atlas)` (1776-1802): per `sl`, per `panel` of `sl.panels`: `geometry = new THREE.PlaneGeometry(sl.panelW, sl.panelH)`; `material = materials.panel(sl.section, sl.sectionIndex, atlas.entries[i].startCol + panel.col, panel.row)` (raw `+`, B-L8); mesh; `position.set(panel.x, panel.y, panel.z)`; `rotation.y = panel.rotY`; `userData = { kind: 'led-wall', mode: 'panel', sectionId, sectionIndex, col: panel.col, row: panel.row }`; add.
 - `#buildFrames(layout)` (1560-1568): per panel: `new THREE.EdgesGeometry(new THREE.BoxGeometry(sl.panelW, sl.panelH, 0.02))`, `new THREE.LineSegments(frameGeometry, new THREE.LineBasicMaterial({ color: theme.scene.frame }))`, position, `rotation.y`, `frameGroup.add`. (The inner BoxGeometry is not tracked, as legacy never disposed it.)
 
 `userData` tags are non-observable (the wall is never raycast in Phase 1).
+
+`indexAttribute(indices)` (module-private, 08 P2-1e; the viewport side of B-L5, 08 6.2): `indexWidth(maxIndexOf(indices)) === 'uint32' ? new THREE.Uint32BufferAttribute(indices, 1) : indices`. Below a largest index of 65,535 the plain array is passed as before, and r128's `setIndex` stores it as Uint16 (no output changes); r128 alone switches to Uint32 only above 65,535, so a combined mesh of exactly 65,536 vertices would have stored the primitive-restart value 65,535 in a Uint16 index and lost a triangle. Panel mode uses `PlaneGeometry` (4 vertices) and is unaffected.
 
 #### `js/render/LEDMaterialFactory.js`
 ```js
@@ -2475,7 +2478,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `mesh.gltf.winding = 'legacy-cw'` | B-H2 | glTF strip indices and panel `[0, 3, 2, 0, 2, 1]` | glTF `WallMeshBuilder`: `sectionGrid` and `panelQuadIndices` pass `this.profile.winding` to `quadIndices` | switch in `quadIndices` | flip (Feature 1) |
 | `mesh.gltf.normals = 'none'` | B-M7 | glTF grids carry no normals | `WallMeshBuilder.sectionGrid` (glTF builder): `this.profile.normals` | switch | NORMAL attribute (with `attributes`) |
 | `mesh.gltf.attributes = ['POSITION']` | B-M7 | No NORMAL, no TEXCOORD_0 | `GltfExporter.#addMesh`: `profile.attributes` | array: equal to `['POSITION']` or throw | add NORMAL / TEXCOORD_0 |
-| `mesh.gltf.indexType = 'auto'` (08 P2-1b; Phase-1 value `'uint16'`, kept as a case for `LegacyProfiles`) | B-L5 (fixed) | Landed: Uint32 (5125) as soon as the largest index reaches 65,535 (`indexWidth`, 08 6.2); `'uint16'` always wrote 5123 and wrapped above 65,535 vertices | `GltfExporter.#addMesh`: `profile.indexType` | switch | landed in 08 P2-1b (invariance gate: every harness glTF is unchanged); the viewport index attribute follows in 08 P2-1e |
+| `mesh.gltf.indexType = 'auto'` (08 P2-1b; Phase-1 value `'uint16'`, kept as a case for `LegacyProfiles`) | B-L5 (fixed) | Landed: Uint32 (5125) as soon as the largest index reaches 65,535 (`indexWidth`, 08 6.2); `'uint16'` always wrote 5123 and wrapped above 65,535 vertices | `GltfExporter.#addMesh`: `profile.indexType` | switch | landed in 08 P2-1b (invariance gate: every harness glTF is unchanged); the viewport index attribute (untagged) landed in 08 P2-1e |
 | `mesh.gltf.doubleSided = 'omit'` | B-H2 | The material object has **no** `doubleSided` key | `GltfExporter.#addMesh`: `profile.doubleSided` | switch | `'true'` writes `doubleSided: true` |
 | `exportCombinedColor = 'first-section'` | B-L6 | Combined MTL Kd and glTF baseColor from `sections[0]` (TypeError on an empty wall) | `ObjExporter.write` (first statement of the combined branch) and `GltfExporter.write` (after the combined loop): `Strategies.exportCombinedColor`, each at its legacy colour point | switch | per-section materials or COLOR_0 |
 | `mtlTextureNaming = 'index'` | B-M2 | `map_Kd textures/Wall_<i>_PanelIDs.png` | `PanelNaming.mtlTextureFile`: `Strategies.mtlTextureNaming` | switch | use `zipTextureFileName` |
@@ -2526,7 +2529,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | B-L2 | Flat bounds for target/reset/D (H-3, J-1, J-9) | `Strategies.framingBounds` | true bounds / pivot |
 | B-L3 | Right-panel normals | `Strategies.mesh.viewport.normals` | `'averaged'` |
 | B-L4 | No canvas-size guard (`toBlob` null throws, ZIP `data:,`) | `ProjectIO.exportPanelIds/exportZIP`, `PanelIdRenderer` + `LEDMaterialFactory` (fixed) | Landed in 08 P2-1c (export size guards: `canvasFits`, M-EXP-2/3/4, ZIP pre-check and late skip) and 08 P2-1d (viewport: a null panel-ID canvas falls back to the section colour with a console warning); no tag site |
-| B-L5 | Uint16 glTF indices | `Strategies.mesh.gltf.indexType` (fixed) | Landed in 08 P2-1b (glTF `mesh.gltf.indexType = 'auto'`, `indexWidth`; no tag site); the viewport index attribute: 08 P2-1e |
+| B-L5 | Uint16 glTF indices | `Strategies.mesh.gltf.indexType`, `LEDWallView` index attribute (fixed) | Landed in 08 P2-1b (glTF `mesh.gltf.indexType = 'auto'`, `indexWidth`) and 08 P2-1e (viewport: Uint32 index attribute from a largest index of 65,535); no tag site |
 | B-L6 | Combined exports use section 0's colour | `Strategies.exportCombinedColor` | per-section |
 | B-L7 | MTL second download, textures missing | `Strategies.mtlDownloadDelayMs` | bundle |
 | B-L8 | No import validation; unknown mode renders as panels; raw coercion | `Strategies.importValidation` + `LEDWallView.rebuild` dispatch `else` (tag) + `WallSection` constructor (tag) | validator |
@@ -2768,3 +2771,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 **08 P2-1d, B-L4 landed for the viewport** (manifest `tests/regression/expected/P2-1d.json`; the viewport half had no tag):
 - 3.7: `PanelIdRenderer.atlasCanvas/sectionCanvas/panelCanvas` return `null` and create no canvas when the canvas would exceed `CANVAS_HARD_LIMITS`; `LEDMaterialFactory` (new dependency `win`, new `beginRebuild()`) then gives that mesh its colour material and warns once per section and rebuild; `LEDWallView.rebuild` step 3 calls `materials.beginRebuild()`. 7: `App` passes `win`.
 - 8.2: the B-L4 row is closed (`Landed` in P2-1c and P2-1d). 2.3: `tests/unit/materials.test.mjs` (fake THREE) checks the sizes, the null canvases, the fallback and the warning spy.
+
+**08 P2-1e, B-L5 landed for the viewport** (manifest `tests/regression/expected/P2-1e.json`, an invariance gate: empty `expect`; the viewport index width had no tag, 08 2.2 observation):
+- 3.7: `LEDWallView`'s combined and section builders pass `indexAttribute(indices)`, a `THREE.Uint32BufferAttribute` once the largest index reaches 65,535 (`indexWidth`, `maxIndexOf`), else the plain array as before; no harness wall reaches it, so every output is unchanged. 2.3: `materials.test.mjs` covers 65,535 and 65,536 vertices in both modes.
+- 8.1, 8.2: the B-L5 row records both landings (P2-1b glTF, P2-1e viewport). With P2-1e the P2-1 batch (B-H3, B-L5, B-L4) is complete.
