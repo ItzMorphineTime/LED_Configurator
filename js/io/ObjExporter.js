@@ -77,7 +77,8 @@ export class ObjExporter {
    * anything else is written as panels. Strip normals (#stripNormalLines): 'per-vertex' (08 P2-2c) writes one `vn`
    * per vertex from the builder normals and faces `f a/a/a`; 'constant-z' (Phase 1) one `vn 0 0 1` per object.
    *   combined: one object `LED_Wall_Combined` with one material per section, `Wall_<i+1>` with that section's colour
-   *     (08 P2-7d, B-L6 fixed: legacy coloured the whole wall with section 0's `LED_Wall_Combined` material); all `v`
+   *     (08 P2-7d, B-L6 fixed: legacy coloured the whole wall with section 0's `LED_Wall_Combined` material), each
+   *     with `map_Kd ${atlasFile}` when the caller ships the atlas (08 P2-7f: both archives in combined mode); all `v`
    *     lines of all sections, then all `vt` lines (since 08 P2-7b the pixel-accurate atlas UVs of the viewport, B-M6
    *     fixed; 'per-section-overlap', 0..1 per section, for LegacyProfiles), then the normals, then per section
    *     `usemtl Wall_<i+1>` followed by that section's faces;
@@ -93,12 +94,14 @@ export class ObjExporter {
    *          layout: import('../geometry/WallLayout.js').WallLayout, textureNames?: (string|null)[]|null}} args
    *   layout = layoutProject(project) of the same sections; textureNames (08 P2-6c; passed by Export All (ZIP) and, in
    *   section mode, by Export OBJ (ZIP), 08 P2-6e): the shipped texture file name of each section
-   *   (PanelNaming.textureFileNames), null for a texture left out; absent or null: no map_Kd at all
+   *   (PanelNaming.textureFileNames), null for a texture left out; absent or null: no map_Kd at all. atlasFile (08 P2-7f):
+   *   the archive path of the combined atlas the caller ships (PanelNaming.atlasTexturePath), read in combined mode only;
+   *   null (left out, or a caller that ships no atlas): no map_Kd
    * @returns {{objContent: string, mtlContent: string}}
    * @throws {Error} unsupportedStrategy for a foreign profile value (an empty wall no longer throws in combined mode:
    *   B-L6's `sections[0].color` read is gone since 08 P2-7d, and the validator never lets an empty wall in, 08 P2-3b)
    */
-  write({ sections, meshMode, layout, textureNames = null }) {
+  write({ sections, meshMode, layout, textureNames = null, atlasFile = null }) {
     const brand = this.#brand;
     let objContent = brand.objHeader;
     objContent += `# Mesh Mode: ${meshMode}\n`;
@@ -110,7 +113,7 @@ export class ObjExporter {
     // The three mesh modes (B-L8 fixed in 08 P2-3b: the validator maps an unknown imported mode to 'combined', so the
     // throw is unreachable from the app; legacy wrote any unknown mode as panels).
     if (meshMode === 'combined') {
-      this.#writeCombined(text, sections, layout);
+      this.#writeCombined(text, sections, layout, atlasFile);
     } else if (meshMode === 'section') {
       this.#writeSections(text, sections, layout, textureNames);
     } else if (meshMode === 'panel') {
@@ -127,12 +130,14 @@ export class ObjExporter {
    * per section `newmtl Wall_<i+1>` (Kd from the section colour, toFixed(4), then Ka/Ks/Ns/d exactly as the section
    * materials); the object `LED_Wall_Combined` with all `v`, all `vt`, all normals, then per section
    * `usemtl Wall_<i+1>` and its faces. Legacy (`Strategies.exportCombinedColor = 'first-section'`, retired) wrote one
-   * `LED_Wall_Combined` material coloured by section 0 for the whole wall.
+   * `LED_Wall_Combined` material coloured by section 0 for the whole wall. With atlasFile (08 P2-7f) every material
+   * maps the combined atlas the archive ships (the combined UVs are atlas-placed, 08 6.7).
    * @param {{objContent: string, mtlContent: string}} text  appended to
    * @param {import('../domain/WallSection.js').WallSection[]} sections
    * @param {import('../geometry/WallLayout.js').WallLayout} layout
+   * @param {string|null} atlasFile  the shipped atlas path, or null: no map_Kd
    */
-  #writeCombined(text, sections, layout) {
+  #writeCombined(text, sections, layout, atlasFile) {
     const profile = this.#builder.profile;
     let uvFor;
     switch (profile.combinedUV) {
@@ -160,7 +165,9 @@ export class ObjExporter {
       const color = this.#colorToRgb(section.color);
       text.mtlContent += `newmtl ${exportSectionName(i)}\n`;
       text.mtlContent += `Kd ${color.r.toFixed(4)} ${color.g.toFixed(4)} ${color.b.toFixed(4)}\n`;
-      text.mtlContent += `Ka 0.1 0.1 0.1\nKs 0.5 0.5 0.5\nNs 100\nd 1.0\n\n`;
+      text.mtlContent += `Ka 0.1 0.1 0.1\nKs 0.5 0.5 0.5\nNs 100\nd 1.0\n`;
+      // 08 P2-7f: the atlas, when the archive ships it, as in the section materials' map_Kd lines.
+      text.mtlContent += atlasFile != null ? `map_Kd ${atlasFile}\n\n` : '\n';
     });
 
     text.objContent += `mtllib ${this.#brand.files.mtl}\n\n`;

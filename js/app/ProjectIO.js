@@ -1,6 +1,7 @@
 /**
  * @module app/ProjectIO
- * The export and import use cases (JSON, the OBJ ZIP (OBJ + MTL + the textures the MTL references), glTF, panel-ID
+ * The export and import use cases (JSON, the OBJ ZIP (OBJ + MTL + the textures the MTL references: section textures in
+ * section mode, the combined atlas in combined mode since 08 P2-7f), glTF, panel-ID
  * PNG, ZIP bundle, safe-distance OBJ, JSON import) and the Downloader, the single owner of the legacy anchor-download
  * sequence. Every export reads the live project and a fresh layout (WallController.layout()); only the safe-distance
  * OBJ reads a scene group. Sync/async shape is legacy (R13): exportZIP and exportPanelIds stay async; exportOBJ is
@@ -16,7 +17,7 @@
  */
 
 import { computeAtlas, canvasFits, CANVAS_HARD_LIMITS } from '../geometry/TextureAtlas.js';
-import { textureFileNames } from '../geometry/PanelNaming.js';
+import { textureFileNames, atlasTexturePath } from '../geometry/PanelNaming.js';
 import { MAX_IMPORT_BYTES } from '../domain/rules.js';
 
 /**
@@ -191,15 +192,16 @@ export class ProjectIO {
    * Export OBJ (ZIP): one download, brand.files.objZip, holding brand.files.obj, brand.files.mtl (named by the OBJ's
    * `mtllib` line) and every texture the MTL references, at the referenced path (08 P2-6e, the owner's decision of
    * 2026-10-17, which replaces 08 Q7's two downloads: legacy fired the MTL as a second download 100 ms later, which a
-   * browser may block, so an importer such as Blender found no materials; B-L7 fixed). Order: JSZip -> layout -> in
-   * section mode the texture plan (the names and the pre-check of Export All, 08 6.3 and 6.6) -> OBJ + MTL (map_Kd only
-   * for a shipped texture) -> in section mode the textures folder (a `data:,` PNG is left out late and the MTL entry is
-   * written again) -> generateAsync -> download -> M-EXP-4 if textures were left out. Combined and panel mode reference
-   * no texture, so their archive holds the OBJ and the MTL only. The body is the private #writeObjZip().
+   * browser may block, so an importer such as Blender found no materials; B-L7 fixed). Order: JSZip -> layout -> the
+   * texture plan (the names and the pre-check of Export All, 08 6.3 and 6.6): the section textures in section mode, the
+   * combined atlas in combined mode (08 P2-7f: its MTL maps it) -> OBJ + MTL (map_Kd only for a shipped texture) -> the
+   * textures (a `data:,` PNG is left out late and the MTL entry is written again) -> generateAsync -> download ->
+   * M-EXP-4 if textures were left out. Panel mode references no texture, so its archive holds the OBJ and the MTL only.
+   * The body is the private #writeObjZip().
    * Ports: index.html@cd3fd3f lines 4911-4917 (the OBJ and MTL text), 4534-4543 (the texture loop, as in Export All).
-   * Side effects: draws one canvas per shipped section texture (section mode); one download (brand.files.objZip) after
-   * the archive is generated, then the M-EXP-4 alert if textures were left out; or the M-EXP-1 alert (#runExport; for
-   * example the TypeError of combined mode on an empty wall).
+   * Side effects: draws one canvas per shipped section texture (section mode) or the atlas canvas (combined mode); one
+   * download (brand.files.objZip) after the archive is generated, then the M-EXP-4 alert if textures were left out; or
+   * the M-EXP-1 alert (#runExport).
    * @returns {Promise<void>} never rejects
    */
   async exportOBJ() {
@@ -218,19 +220,24 @@ export class ProjectIO {
     const layout = this.#wallController.layout();
     const objArgs = { sections, meshMode: project.meshMode, layout };
 
-    // Only section mode references textures (one per section, ObjExporter); the other modes ship the OBJ and the MTL.
+    // The archive ships exactly what the MTL references (08 P2-6e): one texture per section in section mode, the combined
+    // atlas in combined mode (08 P2-7f; every material maps it), nothing in panel mode.
     const plan = project.meshMode === 'section' ? this.#planSectionTextures(sections) : null;
-    const { objContent, mtlContent } = this.#objExporter.write({ ...objArgs, textureNames: plan && plan.textureNames });
+    const atlasPlan = project.meshMode === 'combined' ? this.#planAtlas(sections) : null;
+    const writeObj = () => this.#objExporter.write({
+      ...objArgs, textureNames: plan && plan.textureNames, atlasFile: atlasPlan && atlasPlan.file,
+    });
+    const { objContent, mtlContent } = writeObj();
     zip.file(brand.files.obj, objContent);
     zip.file(brand.files.mtl, mtlContent);
 
-    if (plan && this.#addSectionTextures(zip.folder('textures'), sections, plan)) {
-      zip.file(brand.files.mtl, this.#objExporter.write({ ...objArgs, textureNames: plan.textureNames }).mtlContent);
-    }
+    const lateSections = plan !== null && this.#addSectionTextures(zip.folder('textures'), sections, plan);
+    const lateAtlas = atlasPlan !== null && this.#addAtlasTexture(zip, sections, atlasPlan);
+    if (lateSections || lateAtlas) zip.file(brand.files.mtl, writeObj().mtlContent);
 
     const content = await zip.generateAsync({ type: 'blob' });
     this.#downloader.saveBlob(content, brand.files.objZip);
-    if (plan) this.#reportLeftOut(plan);
+    this.#reportLeftOut(plan, atlasPlan);
   }
 
   /**
@@ -279,11 +286,12 @@ export class ProjectIO {
 
   /**
    * Export All (ZIP), in the legacy order: JSON ('zip' variant) -> layout -> OBJ + MTL -> glTF -> textures
-   * folder -> one panel-ID PNG per section -> generateAsync -> download. The start columns come from
-   * computeAtlas before the texture loop (PR7c). Size guard (08 6.3, B-L4 fixed in 08 P2-1c): a section whose
-   * texture exceeds CANVAS_HARD_LIMITS is skipped up front (no canvas; JSON texture_file null; no MTL map_Kd), one
-   * whose PNG still comes back as `data:,` is skipped late (the JSON and MTL entries are re-written), and after the
-   * download M-EXP-4 names every left-out entry.
+   * folder -> one panel-ID PNG per section -> (08 P2-7f) the combined atlas -> generateAsync -> download. The start
+   * columns come from computeAtlas before the texture loop (PR7c). Size guard (08 6.3, B-L4 fixed in 08 P2-1c): a
+   * section texture or the atlas that exceeds CANVAS_HARD_LIMITS is skipped up front (no canvas; JSON texture_file null;
+   * no MTL map_Kd), one whose PNG still comes back as `data:,` is skipped late (the JSON and MTL entries are re-written),
+   * and after the download M-EXP-4 names every left-out entry. The atlas (08 P2-7f, Q5; 04 7.5) ships in every mesh mode
+   * at PanelNaming.atlasTexturePath(brand.files); only the combined MTL references it (its UVs are atlas-placed).
    * Ports: index.html@cd3fd3f lines 4491-4554.
    * Side effects: draws one canvas per shipped section; one download (brand.files.zip) after the archive is
    * generated, then the M-EXP-4 alert if textures were left out; or the M-EXP-1 alert (#runExport; for example
@@ -308,6 +316,7 @@ export class ProjectIO {
     // Step 1: the texture names and the pre-check (#planSectionTextures). A left-out texture's textureNames entry is
     // null: JSON texture_file null and no MTL map_Kd.
     const plan = this.#planSectionTextures(sections);
+    const atlasPlan = this.#planAtlas(sections);
     const jsonText = () => JSON.stringify(this.#serializer.write(project, { variant: 'zip', textureNames: plan.textureNames }),
       null, 2);
 
@@ -316,25 +325,29 @@ export class ProjectIO {
 
     const layout = this.#wallController.layout();
     const objArgs = { sections, meshMode: project.meshMode, layout };
-    const { objContent, mtlContent } = this.#objExporter.write({ ...objArgs, textureNames: plan.textureNames });
+    // The MTL references the atlas only while the UVs are atlas-placed: combined mode (08 6.3 step 1, P2-7f).
+    const writeObj = () => this.#objExporter.write({
+      ...objArgs, textureNames: plan.textureNames, atlasFile: project.meshMode === 'combined' ? atlasPlan.file : null,
+    });
+    const { objContent, mtlContent } = writeObj();
     zip.file(brand.files.obj, objContent);
     zip.file(brand.files.mtl, mtlContent);
 
     const gltfContent = this.#gltfExporter.write(objArgs);
     zip.file(brand.files.gltf, JSON.stringify(gltfContent, null, 2));
 
-    // Steps 3-4: the textures that fit; when one is left out late, re-write the JSON and MTL entries without it (JSZip
-    // keeps an entry's position).
-    if (this.#addSectionTextures(zip.folder('textures'), sections, plan)) {
-      zip.file(brand.files.json, jsonText());
-      zip.file(brand.files.mtl, this.#objExporter.write({ ...objArgs, textureNames: plan.textureNames }).mtlContent);
-    }
+    // Steps 3-4: the textures that fit, then the atlas; when one is left out late, re-write the entries that name it
+    // without it (JSZip keeps an entry's position): the JSON and the MTL for a section texture, the MTL for the atlas.
+    const lateSections = this.#addSectionTextures(zip.folder('textures'), sections, plan);
+    const lateAtlas = this.#addAtlasTexture(zip, sections, atlasPlan);
+    if (lateSections) zip.file(brand.files.json, jsonText());
+    if (lateSections || lateAtlas) zip.file(brand.files.mtl, writeObj().mtlContent);
 
     const content = await zip.generateAsync({ type: 'blob' });
     this.#downloader.saveBlob(content, brand.files.zip);
 
     // Step 5: name every left-out entry.
-    this.#reportLeftOut(plan);
+    this.#reportLeftOut(plan, atlasPlan);
   }
 
   /**
@@ -390,12 +403,51 @@ export class ProjectIO {
   }
 
   /**
-   * 08 6.3 step 5: after the download, M-EXP-4 names every left-out texture entry (`textures/<name>`, in section order).
-   * Side effects: at most one alert.
-   * @param {{names: string[], skipped: boolean[]}} plan
+   * The combined atlas of an archive (08 6.3 step 1, P2-7f; Q5): its entry path PanelNaming.atlasTexturePath(brand.files)
+   * and the pre-check (pure arithmetic, before anything is written): skipped = the atlasSize canvas exceeds
+   * CANVAS_HARD_LIMITS; file = the path, or null when skipped (no map_Kd).
+   * Side effects: none.
+   * @param {import('../domain/WallSection.js').WallSection[]} sections
+   * @returns {{path: string, skipped: boolean, file: string|null}} a fresh plan (updated by #addAtlasTexture)
    */
-  #reportLeftOut(plan) {
-    const leftOut = plan.names.filter((name, i) => plan.skipped[i]).map((name) => `textures/${name}`);
+  #planAtlas(sections) {
+    const path = atlasTexturePath(this.#brand.files);
+    const { width, height } = this.#panelIds.atlasSize(sections, computeAtlas(sections));
+    const skipped = !canvasFits(width, height);
+    return { path, skipped, file: skipped ? null : path };
+  }
+
+  /**
+   * 08 6.3 step 3 for the atlas (P2-7f): draws the atlas canvas (the image of Export Panel IDs) and adds it to the
+   * archive at plan.path; a `data:,` result is left out late (plan.skipped true, plan.file null).
+   * Side effects: draws the atlas canvas (none when skipped up front); adds the PNG entry; updates the plan.
+   * @param {{file(name: string, data: string, options: object): *}} zip
+   * @param {import('../domain/WallSection.js').WallSection[]} sections
+   * @param {{path: string, skipped: boolean, file: string|null}} plan
+   * @returns {boolean} true when the atlas was left out late (the caller re-writes the MTL)
+   */
+  #addAtlasTexture(zip, sections, plan) {
+    if (plan.skipped) return false;
+    const dataUrl = this.#panelIds.atlasCanvas(sections, computeAtlas(sections)).toDataURL('image/png');
+    if (dataUrl === 'data:,') {
+      plan.skipped = true;
+      plan.file = null;
+      return true;
+    }
+    zip.file(plan.path, dataUrl.split(',')[1], { base64: true });
+    return false;
+  }
+
+  /**
+   * 08 6.3 step 5: after the download, M-EXP-4 names every left-out texture entry: the section textures
+   * (`textures/<name>`, in section order), then the atlas (08 P2-7f).
+   * Side effects: at most one alert.
+   * @param {{names: string[], skipped: boolean[]}|null} plan  the section textures, or null when none are planned
+   * @param {{path: string, skipped: boolean}|null} [atlasPlan]  the atlas, or null when it is not planned
+   */
+  #reportLeftOut(plan, atlasPlan = null) {
+    const leftOut = plan ? plan.names.filter((name, i) => plan.skipped[i]).map((name) => `textures/${name}`) : [];
+    if (atlasPlan && atlasPlan.skipped) leftOut.push(atlasPlan.path);
     if (leftOut.length) this.#dialogs.alert(ExportMessages.zipTexturesLeftOut(leftOut));
   }
 

@@ -183,7 +183,7 @@ Release note: columns, rows and LED counts used to accept fractions such as 2.5,
 ## 📤 Export Options
 
 Every download is named after the product: `morph-led-wall.json`, `morph-led-wall-obj.zip` (holding
-`morph-led-wall.obj` with `morph-led-wall.mtl`), `morph-led-wall.gltf`, `morph-led-wall-export.zip`,
+`morph-led-wall.obj` with `morph-led-wall.mtl` and the textures the MTL uses), `morph-led-wall.gltf`, `morph-led-wall-export.zip`,
 `morph-led-wall-panel-ids.png` and `morph-led-wall-safe-distance.obj`. OBJ, MTL and glTF files name "Morph LED Configurator" as their generator.
 
 ### JSON Configuration
@@ -217,9 +217,10 @@ Industry-standard 3D mesh format compatible with:
 - Unreal Engine
 - Unity
 
-**Export OBJ (ZIP)** downloads one archive, `morph-led-wall-obj.zip`: the OBJ, its MTL and, in section mode, the
-panel-ID textures the MTL uses (`textures/<section>_PanelIDs.png`). Unzip it and import the OBJ; the importer finds
-the MTL and the textures next to it.
+**Export OBJ (ZIP)** downloads one archive, `morph-led-wall-obj.zip`: the OBJ, its MTL and the panel-ID textures the
+MTL uses: in section mode one per section (`textures/<section>_PanelIDs.png`), in combined mode the whole-wall image
+(`textures/morph-led-wall-panel-ids.png`, the same image as Export Panel IDs). Unzip it and import the OBJ; the
+importer finds the MTL and the textures next to it.
 
 Release note: Export OBJ used to download the OBJ and then, a moment later, the MTL as a second file. Browsers can
 block that second download, and in section mode the MTL pointed at textures that were never downloaded, so Blender
@@ -255,6 +256,11 @@ Complete export bundle containing:
 Release note: in section mode the ZIP's MTL now points each section's material at that section's own texture file
 (the name the ZIP stores); it used to use a numbered name, so a renamed section, or every section after a deleted
 one, opened in Blender or Unreal without its texture.
+
+Release note: the ZIP now also holds the whole-wall panel-ID image, `textures/morph-led-wall-panel-ids.png` (the same
+image as Export Panel IDs). In Combined mode every section material of the MTL uses it, so the combined OBJ opens
+textured in Blender or Unreal; in Section and Panel mode it ships for reference only. A wall too large for the browser
+leaves it out with a message, like an oversize section texture.
 
 Release note: sections with the same name, or with names that only differ in spaces, punctuation or upper and lower
 case, now each get their own texture in the ZIP (`Dup_PanelIDs.png`, `Dup_2_PanelIDs.png`, ...); they used to overwrite

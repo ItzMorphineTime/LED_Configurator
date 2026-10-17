@@ -30,7 +30,7 @@ import { WallMeshBuilder, maxIndexOf } from '../../js/geometry/WallMeshBuilder.j
 import { checkGltfDocument } from '../../tools/check-gltf.mjs';
 import { checkObjText, checkGltfOrientation } from '../../tools/check-orientation.mjs';
 import { computeAtlas } from '../../js/geometry/TextureAtlas.js';
-import { textureFileNames } from '../../js/geometry/PanelNaming.js';
+import { textureFileNames, atlasTexturePath } from '../../js/geometry/PanelNaming.js';
 import { ProjectSerializer } from '../../js/io/ProjectSerializer.js';
 import { sectionsFromProject } from '../../js/io/ProjectSchema.js';
 import { validateProject } from '../../js/io/ProjectValidator.js';
@@ -750,12 +750,15 @@ describe('golden files (byte-identical to the legacy downloads)', { skip: golden
         // Export OBJ downloads one ZIP since 08 P2-6e: the OBJ, the MTL (map_Kd for the section textures it ships) and
         // in section mode those textures, at the referenced paths.
         const objEntries = `${golden(mode, 'obj', 'objZip')}.entries`;
+        // Since 08 P2-7f the combined MTL maps the atlas, which the archive ships (every harness atlas fits).
         const shipped = mode === 'section' ? textureFileNames(sections) : null;
-        const { objContent, mtlContent } = OBJ.write({ sections, meshMode: mode, layout: layoutProject(project), textureNames: shipped });
+        const atlasFile = mode === 'combined' ? atlasTexturePath(FILES) : null;
+        const { objContent, mtlContent } = OBJ.write({ sections, meshMode: mode, layout: layoutProject(project), textureNames: shipped, atlasFile });
         same(objContent, `${objEntries}/${FILES.obj}`);
         same(mtlContent, `${objEntries}/${FILES.mtl}`);
         const objZipTextures = file(`${objEntries}/textures`);
-        assert.deepEqual(fs.existsSync(objZipTextures) ? fs.readdirSync(objZipTextures).sort() : [], (shipped ?? []).slice().sort(),
+        const referenced = [...(shipped ?? []), ...(atlasFile ? [FILES.panelIdsPng] : [])];
+        assert.deepEqual(fs.existsSync(objZipTextures) ? fs.readdirSync(objZipTextures).sort() : [], referenced.slice().sort(),
           `${mode}: the OBJ ZIP holds exactly the textures its MTL references`);
 
         const gltfName = golden(mode, 'gltf', 'gltf');
@@ -777,13 +780,14 @@ describe('golden files (byte-identical to the legacy downloads)', { skip: golden
       const entries = `${golden('final', 'zip', 'zip')}.entries`;
       const layout = layoutProject(project);
       same(json2(serializer.write(project, { variant: 'zip', textureNames: textureFileNames(sections) })), `${entries}/${FILES.json}`);
-      const zipObj = OBJ.write({ sections, meshMode: 'combined', layout });
+      const zipObj = OBJ.write({ sections, meshMode: 'combined', layout, atlasFile: atlasTexturePath(FILES) });
       same(zipObj.objContent, `${entries}/${FILES.obj}`);
       same(zipObj.mtlContent, `${entries}/${FILES.mtl}`);
       same(json2(GLTF.write({ sections, meshMode: 'combined', layout })), `${entries}/${FILES.gltf}`);
-      // The ZIP's texture names (textureFileNames, unique since 08 P2-6b) are the files the archive holds.
+      // The ZIP's texture names (textureFileNames, unique since 08 P2-6b) and, since 08 P2-7f, the atlas are the files
+      // the archive holds.
       const textureDir = file(`${entries}/textures`);
-      const expectedNames = textureFileNames(sections).slice().sort();
+      const expectedNames = [...textureFileNames(sections), FILES.panelIdsPng].sort();
       assert.deepEqual(fs.readdirSync(textureDir).sort(), expectedNames);
 
       // Round trip: re-import the golden Export JSON and export again.
@@ -1186,7 +1190,10 @@ function fakeIO(project, log, extra = {}) {
     sectionSize: (section) => (extra.sectionSize ? extra.sectionSize(section) : { width: 640, height: 384 }),
     atlasCanvas: (sections) => {
       log.push(['atlasCanvas', sections]);
-      return { toBlob: (cb, type) => { log.push(['toBlob', type]); extra.toBlobCallback = cb; } };
+      return {
+        toBlob: (cb, type) => { log.push(['toBlob', type]); extra.toBlobCallback = cb; },
+        toDataURL: (type) => (log.push(['toDataURL', type]), extra.atlasDataUrl ?? 'data:image/png;base64,QVRM'),
+      };
     },
     sectionCanvas: (section, i, scale, startCol) => {
       log.push(['sectionCanvas', i, scale, startCol]);
@@ -1219,6 +1226,10 @@ const mExp2 = (w, h) => `The Panel ID image would be ${w}×${h} px, larger than 
   'Reduce Pixels X/Y or the number of columns, or use Export All (ZIP), which writes one image per section.';
 const mExp3 = (w, h) => `This browser could not create the ${w}×${h} px Panel ID image. Reduce Pixels X/Y or the number of columns.`;
 const mExp4 = (names) => `The ZIP was created, but ${names.length} texture(s) were too large for this browser and were left out: ${names.join(', ')}.`;
+/** The archive path of the combined atlas (08 P2-7f). */
+const ATLAS = atlasTexturePath(Brand.files);
+/** The log entries of the atlas rendered into an archive (fakeIO: the atlas canvas returns 'QVRM'). */
+const atlasEntries = (sections) => [['atlasCanvas', sections], ['toDataURL', 'image/png'], ['zip.file', ATLAS, { base64: true }, 'QVRM']];
 
 describe('ProjectIO use cases', () => {
   test('exportJSON downloads the pretty-printed file document', () => {
@@ -1232,22 +1243,54 @@ describe('ProjectIO use cases', () => {
     assert.equal(ProjectIO.prototype.exportOBJ.constructor.name, 'AsyncFunction');
     assert.equal(FILES.objZip, `${Brand.filePrefix}-obj.zip`);
     const project = Project.createDefault();
-    for (const meshMode of ['combined', 'panel']) {
-      project.meshMode = meshMode;
-      const log = [];
-      assert.equal(await fakeIO(project, log).exportOBJ(), undefined);
-      const { objContent, mtlContent } = OBJ.write({ sections: project.wall.sections, meshMode, layout: layoutProject(project) });
-      assert.ok(objContent.includes(`\nmtllib ${FILES.mtl}\n`), 'the OBJ names the MTL entry');
-      assert.ok(!mtlContent.includes('map_Kd'), `${meshMode}: no texture referenced, none shipped`);
-      assert.deepEqual(log, [
-        ['new JSZip'],
-        ['layout'],
-        ['zip.file', FILES.obj, undefined, objContent],
-        ['zip.file', FILES.mtl, undefined, mtlContent],
-        ['generateAsync', { type: 'blob' }],
-        ['saveBlob', FILES.objZip, 'ZIP-BLOB'],
-      ], meshMode);
-    }
+    project.meshMode = 'panel';
+    const log = [];
+    assert.equal(await fakeIO(project, log).exportOBJ(), undefined);
+    const { objContent, mtlContent } = OBJ.write({ sections: project.wall.sections, meshMode: 'panel', layout: layoutProject(project) });
+    assert.ok(objContent.includes(`\nmtllib ${FILES.mtl}\n`), 'the OBJ names the MTL entry');
+    assert.ok(!mtlContent.includes('map_Kd'), 'panel mode: no texture referenced, none shipped');
+    assert.deepEqual(log, [
+      ['new JSZip'],
+      ['layout'],
+      ['zip.file', FILES.obj, undefined, objContent],
+      ['zip.file', FILES.mtl, undefined, mtlContent],
+      ['generateAsync', { type: 'blob' }],
+      ['saveBlob', FILES.objZip, 'ZIP-BLOB'],
+    ]);
+  });
+
+  test('exportOBJ in combined mode (08 P2-7f): every Wall_<i+1> material maps the atlas, which the ZIP ships at that path', async () => {
+    const project = projectFromConfig(CONFIGS.mixed);
+    const sections = project.wall.sections;
+    const log = [];
+    await fakeIO(project, log).exportOBJ();
+    const { objContent, mtlContent } = OBJ.write({ sections, meshMode: 'combined', layout: layoutProject(project), atlasFile: ATLAS });
+    assert.deepEqual(log, [
+      ['new JSZip'],
+      ['layout'],
+      ['zip.file', FILES.obj, undefined, objContent],
+      ['zip.file', FILES.mtl, undefined, mtlContent],
+      ...atlasEntries(sections),
+      ['generateAsync', { type: 'blob' }],
+      ['saveBlob', FILES.objZip, 'ZIP-BLOB'],
+    ]);
+    assert.equal(ATLAS, `textures/${FILES.panelIdsPng}`);
+    assert.deepEqual([...mtlContent.matchAll(/^map_Kd (.+)$/gm)].map((m) => m[1]), sections.map(() => ATLAS));
+    // An atlas beyond CANVAS_HARD_LIMITS: no canvas, no entry, no map_Kd, and M-EXP-4 names it.
+    const log2 = [];
+    await fakeIO(project, log2, { atlasSize: { width: 70000, height: 128 } }).exportOBJ();
+    assert.ok(!log2.some((e) => e[0] === 'atlasCanvas'));
+    assert.equal(log2.find((e) => e[0] === 'zip.file' && e[1] === FILES.mtl)[3],
+      OBJ.write({ sections, meshMode: 'combined', layout: layoutProject(project) }).mtlContent);
+    assert.deepEqual(log2.at(-1), ['alert', mExp4([ATLAS])]);
+    // A data:, atlas (a device limit): left out late, the MTL entry is written again without map_Kd.
+    const log3 = [];
+    await fakeIO(project, log3, { atlasDataUrl: 'data:,' }).exportOBJ();
+    const mtls = log3.filter((e) => e[0] === 'zip.file' && e[1] === FILES.mtl);
+    assert.equal(mtls.length, 2);
+    assert.ok(!mtls[1][3].includes('map_Kd'));
+    assert.ok(!log3.some((e) => e[0] === 'zip.file' && e[1] === ATLAS));
+    assert.deepEqual(log3.at(-1), ['alert', mExp4([ATLAS])]);
   });
 
   test('exportOBJ in section mode (08 P2-6e): the textures the MTL references ship at their map_Kd paths, as in Export All', async () => {
@@ -1370,7 +1413,7 @@ describe('ProjectIO use cases', () => {
     assert.equal(ProjectIO.prototype.exportZIP.constructor.name, 'AsyncFunction');
     await fakeIO(project, log).exportZIP();
     const layout = layoutProject(project);
-    const { objContent, mtlContent } = OBJ.write({ sections, meshMode: 'combined', layout });
+    const { objContent, mtlContent } = OBJ.write({ sections, meshMode: 'combined', layout, atlasFile: ATLAS });
     const atlas = computeAtlas(sections);
     const expected = [
       ['new JSZip'],
@@ -1385,10 +1428,12 @@ describe('ProjectIO use cases', () => {
         ['toDataURL', 'image/png'],
         ['folder.file', `textures/${textureFileNames(sections)[i]}`, { base64: true }, 'QUJD'],
       ]),
+      ...atlasEntries(sections),
       ['generateAsync', { type: 'blob' }],
       ['saveBlob', FILES.zip, 'ZIP-BLOB'],
     ];
     assert.deepEqual(log, expected);
+    assert.deepEqual([...mtlContent.matchAll(/^map_Kd (.+)$/gm)].map((m) => m[1]), sections.map(() => ATLAS), 'combined: every material maps the atlas (08 P2-7f)');
     assert.deepEqual(sections.map((s, i) => atlas.entries[i].startCol), [0, 6, 10, 16]);
   });
 
@@ -1425,6 +1470,7 @@ describe('ProjectIO use cases', () => {
       textureNames: textureFileNames(sections).map((n, i) => (skipped[i] ? null : n)) });
     assert.ok(!mtlContent.includes('map_Kd textures/Center_PanelIDs.png'));
     assert.ok(mtlContent.includes('map_Kd textures/Left_PanelIDs.png') && mtlContent.includes('map_Kd textures/Right_PanelIDs.png'));
+    assert.ok(!mtlContent.includes(ATLAS), 'section mode: the atlas ships but no material maps it (08 P2-7f)');
     const atlas = computeAtlas(sections);
     assert.deepEqual(log, [
       ['new JSZip'],
@@ -1439,6 +1485,7 @@ describe('ProjectIO use cases', () => {
         ['toDataURL', 'image/png'],
         ['folder.file', `textures/${textureFileNames(sections)[i]}`, { base64: true }, 'QUJD'],
       ]),
+      ...atlasEntries(sections),
       ['generateAsync', { type: 'blob' }],
       ['saveBlob', FILES.zip, 'ZIP-BLOB'],
       ['alert', mExp4(['textures/Center_PanelIDs.png'])],
@@ -1451,7 +1498,8 @@ describe('ProjectIO use cases', () => {
       panelHeight: 500, ledX: 32, ledY: 32, curveIntensity: 0, angleOffset: 0, color: '#00f0ff' })), 'section');
     const log = [];
     await fakeIO(project, log).exportZIP();
-    const entries = new Set(log.filter((e) => e[0] === 'folder.file').map((e) => e[1]));
+    const entries = new Set(log.filter((e) => e[0] === 'folder.file' || (e[0] === 'zip.file' && e[1].startsWith('textures/'))).map((e) => e[1]));
+    assert.ok(entries.has(ATLAS), 'the atlas ships in every mode (08 P2-7f)');
     const mtl = log.find((e) => e[0] === 'zip.file' && e[1] === FILES.mtl)[3];
     const maps = [...mtl.matchAll(/^map_Kd (.+)$/gm)].map((m) => m[1]);
     assert.equal(maps.length, names.length);
@@ -1472,7 +1520,7 @@ describe('ProjectIO use cases', () => {
     const layout = layoutProject(project);
     const files = log.filter((e) => e[0] === 'zip.file' || e[0] === 'folder.file').map((e) => e[1]);
     assert.deepEqual(files, [FILES.json, FILES.obj, FILES.mtl, FILES.gltf,
-      'textures/Left_PanelIDs.png', 'textures/Center_PanelIDs.png', FILES.json, FILES.mtl]);
+      'textures/Left_PanelIDs.png', 'textures/Center_PanelIDs.png', ATLAS, FILES.json, FILES.mtl]);
     const rewrites = log.filter((e) => e[0] === 'zip.file').slice(-2);
     assert.equal(rewrites[0][3], json2(serializer.write(project, { variant: 'zip', textureNames: textureFileNames(sections).map((n, i) => (skipped[i] ? null : n)) })));
     assert.equal(rewrites[1][3], OBJ.write({ sections, meshMode: 'section', layout,
@@ -1482,6 +1530,29 @@ describe('ProjectIO use cases', () => {
     const log2 = [];
     await fakeIO(project, log2).exportZIP();
     assert.ok(!log2.some((e) => e[0] === 'alert'));
+  });
+
+  test('exportZIP atlas (08 P2-7f, 6.3): skipped up front when it does not fit (no canvas, no map_Kd), late on data:, (MTL re-written); M-EXP-4 lists it after the sections', async () => {
+    const project = projectFromConfig(CONFIGS.flat3);
+    const sections = project.wall.sections;
+    const layout = layoutProject(project);
+    for (const meshMode of ['combined', 'section', 'panel']) {
+      project.meshMode = meshMode;
+      const log = [];
+      await fakeIO(project, log, { atlasSize: { width: 70000, height: 128 } }).exportZIP();
+      assert.ok(!log.some((e) => e[0] === 'atlasCanvas'), meshMode);
+      assert.ok(!log.some((e) => e[0] === 'zip.file' && e[1] === ATLAS));
+      assert.ok(!log.find((e) => e[0] === 'zip.file' && e[1] === FILES.mtl)[3].includes(ATLAS));
+      assert.deepEqual(log.at(-1), ['alert', mExp4([ATLAS])], meshMode);
+    }
+    project.meshMode = 'combined';
+    const log = [];
+    await fakeIO(project, log, { atlasDataUrl: 'data:,', dataUrlFor: (i) => (i === 0 ? 'data:,' : undefined) }).exportZIP();
+    const writes = log.filter((e) => e[0] === 'zip.file').map((e) => e[1]);
+    assert.deepEqual(writes, [FILES.json, FILES.obj, FILES.mtl, FILES.gltf, FILES.json, FILES.mtl], 'no atlas entry; JSON and MTL re-written');
+    const finalMtl = log.filter((e) => e[0] === 'zip.file' && e[1] === FILES.mtl).at(-1)[3];
+    assert.equal(finalMtl, OBJ.write({ sections, meshMode: 'combined', layout }).mtlContent);
+    assert.deepEqual(log.at(-1), ['alert', mExp4([`textures/${textureFileNames(sections)[0]}`, ATLAS])]);
   });
 
   test('exportSafeDistanceOBJ: alert without a group; with one, the OBJ Blob is downloaded (B-M1 fixed in 08 P2-5a)', async () => {
@@ -2193,6 +2264,21 @@ describe('combined exports: one material per section (B-L6, 08 P2-7d, 08 6.8; cr
         for (const attribute of ['POSITION', 'NORMAL']) assert.equal(bytes(combined, prim.attributes[attribute]), bytes(section, other.attributes[attribute]), `${key} ${i} ${attribute}`);
         assert.equal(bytes(combined, prim.indices), bytes(section, other.indices), `${key} ${i} indices`);
       });
+    }
+  });
+});
+
+describe('the combined atlas in the archives (08 P2-7f, Q5; 04 7.1, 7.5)', () => {
+  test('ObjExporter: atlasFile adds map_Kd to every combined material; section and panel mode ignore it', () => {
+    const project = projectFromConfig(CONFIGS.mixed);
+    const sections = project.wall.sections;
+    const layout = layoutProject(project);
+    const plain = OBJ.write({ sections, meshMode: 'combined', layout });
+    const mapped = OBJ.write({ sections, meshMode: 'combined', layout, atlasFile: ATLAS });
+    assert.equal(mapped.objContent, plain.objContent);
+    assert.equal(mapped.mtlContent, plain.mtlContent.replace(/d 1\.0\n\n/g, `d 1.0\nmap_Kd ${ATLAS}\n\n`));
+    for (const meshMode of ['section', 'panel']) {
+      assert.deepEqual(OBJ.write({ sections, meshMode, layout, atlasFile: ATLAS }), OBJ.write({ sections, meshMode, layout }), meshMode);
     }
   });
 });

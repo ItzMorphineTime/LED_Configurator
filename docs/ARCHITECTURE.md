@@ -1316,6 +1316,10 @@ export function textureFileNames(sections)
  *  texture and the JSON texture_file name the same file (08 P2-6d, B-M2 fixed: legacy wrote textures/Wall_<i>_PanelIDs.png
  *  by index; Strategies.mtlTextureNaming is retired). */
 export function mtlTextureFile(fileName)
+/** 08 P2-7f (08 6.3, 6.8; 04 2.3 rows 08-7, 08-8): `textures/${files.panelIdsPng}`, the archive path of the combined atlas
+ *  (the image of Export Panel IDs) and the combined MTL map_Kd; built from the injected Theme.brand.files, never a literal
+ *  (06 R-B3b). */
+export function atlasTexturePath(files)
 ```
 
 
@@ -2076,12 +2080,14 @@ export class ObjExporter {
    *  return ''; default: throw unsupportedStrategy('mesh.obj.winding', ...) }.
    *  Dispatch: 'combined' / 'section' / 'panel', else throw Error('Unknown mesh mode "<mode>"') (08 P2-3b, B-L8 fixed;
    *  legacy wrote any other mode as panels).
-   *  combined (08 P2-7d, 08 6.8: B-L6 fixed; `Strategies.exportCombinedColor` retired, legacy coloured the whole wall with
+   *  combined (atlasFile: 08 P2-7f, the archive path of the combined atlas the caller ships, else null)
+   *    (08 P2-7d, 08 6.8: B-L6 fixed; `Strategies.exportCombinedColor` retired, legacy coloured the whole wall with
    *    section 0's `LED_Wall_Combined` material and threw a TypeError on an empty wall): uvFor = switch (profile.combinedUV) { case 'atlas-pixel-accurate'
    *    (08 P2-7b, B-M6 fixed; 08 6.7): atlas = computeAtlas(sections), uvFor(i) = atlasUvRect(atlas.entries[i]) (the viewport's
    *    combined UVs); case 'per-section-overlap' (the Phase-1 case, kept for LegacyProfiles): uvFor(i) = 'unit'; default: throw
    *    unsupportedStrategy('mesh.obj.combinedUV', ...) };
-   *    mtl per section `newmtl Wall_${i+1}\nKd r g b (toFixed(4), the section colour)\nKa 0.1 0.1 0.1\nKs 0.5 0.5 0.5\nNs 100\nd 1.0\n\n`;
+   *    mtl per section `newmtl Wall_${i+1}\nKd r g b (toFixed(4), the section colour)\nKa 0.1 0.1 0.1\nKs 0.5 0.5 0.5\nNs 100\nd 1.0\n`
+   *    + (atlasFile ? `map_Kd ${atlasFile}\n\n` : '\n') (08 P2-7f: both archives in combined mode pass the atlas they ship);
    *    obj `mtllib ${brand.files.mtl}\n\n`, `o LED_Wall_Combined\n`;
    *    grids: builder.sectionGrid(sl, {indexBase: vertexOffset, uv: uvFor(i)}) per section with vertexOffset starting at 1
    *    (+= vertexAdvance); then ALL `v x y z` (toFixed(6)) lines of all sections, then ALL `vt u v` (toFixed(6))
@@ -2107,7 +2113,7 @@ export class ObjExporter {
    *    faces from builder.panelQuadIndices(vertexOffset) and (texCoordOffset) with /${normalOffset} ('ccw': v, v+1, v+2 / v, v+2, v+3);
    *    offsets += 4, normalOffset += 1; '\n'.
    *  @returns {{objContent: string, mtlContent: string}} */
-  write({ sections, meshMode, layout, textureNames = null })
+  write({ sections, meshMode, layout, textureNames = null, atlasFile = null })
   /** 2792-2823 (08 P2-5b: B-L29 fixed): brand.safeDistanceObjHeader, with `# Clamped: ${n} of ${total} offset vertices are
    *  closer than D = ${D.toFixed(2)} m (concave features)` inserted before its blank line when band.clampedVertices > 0;
    *  group.traverse(child => child.isMesh && child.geometry): `v` lines from position.getX/Y/Z(i).toFixed(6), `vn` lines from
@@ -2334,14 +2340,15 @@ export class ProjectIO {
   exportJSON()
   /** 08 P2-6e (the owner's decision of 2026-10-17; replaces 08 Q7's two downloads, B-L7 fixed): async, one download.
    *  #writeObjZip(): zip = new JSZip(); layout = wallController.layout(); plan = meshMode === 'section' ?
-   *  #planSectionTextures(sections) : null; {objContent, mtlContent} = objExporter.write({sections, meshMode, layout,
-   *  textureNames: plan?.textureNames}); zip.file(brand.files.obj, objContent); zip.file(brand.files.mtl, mtlContent);
-   *  if (plan && #addSectionTextures(zip.folder('textures'), sections, plan)) the MTL entry is written again (a late
-   *  `data:,` texture loses its map_Kd); content = await zip.generateAsync({type: 'blob'}); downloader.saveBlob(content,
-   *  brand.files.objZip); if (plan) #reportLeftOut(plan) (M-EXP-4). The OBJ's mtllib names brand.files.mtl, and every map_Kd
-   *  names a file of the archive at that path; combined and panel mode reference no texture (until 08 P2-7f's atlas, which
-   *  this archive must then ship too). Legacy (4911-4917) downloaded the OBJ and, 100 ms later, the MTL, which a browser
-   *  could block, so importers found no materials. */
+   *  #planSectionTextures(sections) : null; atlasPlan = meshMode === 'combined' ? #planAtlas(sections) : null (08 P2-7f);
+   *  {objContent, mtlContent} = objExporter.write({sections, meshMode, layout, textureNames: plan?.textureNames,
+   *  atlasFile: atlasPlan?.file}); zip.file(brand.files.obj, objContent); zip.file(brand.files.mtl, mtlContent);
+   *  section textures (#addSectionTextures into zip.folder('textures')) and the atlas (#addAtlasTexture); if one was left
+   *  out late (`data:,`) the MTL entry is written again without its map_Kd; content = await zip.generateAsync({type:
+   *  'blob'}); downloader.saveBlob(content, brand.files.objZip); #reportLeftOut(plan, atlasPlan) (M-EXP-4). The OBJ's
+   *  mtllib names brand.files.mtl, and every map_Kd names a file of the archive at that path: the section textures in
+   *  section mode, the atlas in combined mode (since 08 P2-7f), nothing in panel mode. Legacy (4911-4917) downloaded the
+   *  OBJ and, 100 ms later, the MTL, which a browser could block, so importers found no materials. */
   async exportOBJ()
   /** 4919-4924: saveText(JSON.stringify(gltfExporter.write({...}), null, 2), brand.files.gltf, 'application/json') */
   exportGLTF()
@@ -2354,25 +2361,33 @@ export class ProjectIO {
   /** 4491-4554, same order, with the 08 6.3 size guard (B-L4 fixed in 08 P2-1c): zip = new JSZip();
    *  0. names = textureFileNames(sections)  (unique, 08 P2-6b: B-L14 fixed);
    *  1. skipped[i] = !canvasFits(panelIds.sectionSize(sections[i], null))  (pure arithmetic, before anything is written);
-   *     textureNames[i] = skipped[i] ? null : names[i];
+   *     textureNames[i] = skipped[i] ? null : names[i]; atlasPlan = #planAtlas(sections) (08 P2-7f, every mesh mode:
+   *     path = atlasTexturePath(brand.files), skipped = !canvasFits(panelIds.atlasSize(sections, atlas)));
    *  2. zip.file(brand.files.json, JSON.stringify(serializer.write(project, {variant: 'zip', textureNames}), null, 2));
-   *     layout = wallController.layout(); OBJ + MTL files (objExporter.write({..., textureNames}), 08 P2-6c); glTF file;
+   *     layout = wallController.layout(); OBJ + MTL files (objExporter.write({..., textureNames, atlasFile: combined mode ?
+   *     atlasPlan.file : null}), 08 P2-6c, P2-7f: only the combined MTL maps the atlas, its UVs are atlas-placed); glTF file;
    *  3. folder = zip.folder('textures'); atlas = computeAtlas(sections); for i not skipped: canvas = panelIds.sectionCanvas(
    *     sections[i], i, null, atlas.entries[i].startCol); dataUrl = canvas.toDataURL('image/png'); `data:,` (a device limit
    *     below the hard limit) -> late.push(i); else folder.file(names[i], base64, {base64: true});
-   *  4. if late: skipped[i] = true and textureNames[i] = null for each, then the JSON and MTL entries are written again
-   *     (JSZip keeps their position);
+   *     then (08 P2-7f, Q5) #addAtlasTexture(zip, sections, atlasPlan): unless skipped, panelIds.atlasCanvas(sections,
+   *     atlas).toDataURL('image/png') -> zip.file(atlasPlan.path, base64, {base64: true}), or a late skip on `data:,`;
+   *  4. if a section texture was late: skipped[i] = true and textureNames[i] = null for each, then the JSON entry is
+   *     written again; if a section texture or the atlas was late, the MTL entry is written again (JSZip keeps their
+   *     position);
    *  content = await zip.generateAsync({type: 'blob'}); downloader.saveBlob(content, brand.files.zip);
-   *  5. if any skipped: dialogs.alert(M-EXP-4) with every left-out entry name `textures/${names[i]}`.
-   *  Before 08 P2-7f the ZIP holds no atlas, so only section textures are guarded. The body is the private #writeZip(),
-   *  run by #runExport (08 P2-1a: a failure is the M-EXP-1 alert instead of an unhandled rejection). */
+   *  5. if any skipped: dialogs.alert(M-EXP-4) with every left-out entry name: `textures/${names[i]}` in section order,
+   *     then the atlas path. The body is the private #writeZip(), run by #runExport (08 P2-1a: a failure is the M-EXP-1
+   *     alert instead of an unhandled rejection). */
   async exportZIP()
   /** Shared by exportZIP and exportOBJ (08 P2-6e): #planSectionTextures(sections) -> {names: textureFileNames(sections),
    *  skipped: !canvasFits(panelIds.sectionSize(s, null)) per section, textureNames: names with null where skipped} (step 1);
    *  #addSectionTextures(folder, sections, plan) draws each planned texture (start columns from computeAtlas) into folder as
    *  names[i], a `data:,` PNG skipped late (plan updated), and returns whether one was (steps 3-4); #reportLeftOut(plan)
-   *  alerts M-EXP-4 with `textures/${names[i]}` for every skipped texture (step 5). */
-  #planSectionTextures(sections); #addSectionTextures(folder, sections, plan); #reportLeftOut(plan)
+   *  alerts M-EXP-4 with `textures/${names[i]}` for every skipped texture (step 5), then the atlas path when atlasPlan was
+   *  skipped. 08 P2-7f: #planAtlas(sections) -> {path: atlasTexturePath(brand.files), skipped, file: skipped ? null : path};
+   *  #addAtlasTexture(zip, sections, atlasPlan) draws the atlas canvas and adds it at atlasPlan.path, or skips it late. */
+  #planSectionTextures(sections); #addSectionTextures(folder, sections, plan); #reportLeftOut(plan, atlasPlan)
+  #planAtlas(sections); #addAtlasTexture(zip, sections, atlasPlan)
   /** 2786-2827: group = safeDistance.object3D; if (!group) { dialogs.alert('Enable Safe Distance 3D visualization first'); return }
    *  text = objExporter.writeSafeDistance(group, safeDistance.lastBand); blob = new Blob([text], {type: 'text/plain'});
    *  downloader.saveBlob(blob, brand.files.safeDistanceObj)   (B-M1 fixed in 08 P2-5a: legacy called the undefined
@@ -3043,7 +3058,7 @@ e.target.value = ''                                // synchronous reset (5009)
 
 ### 6.13 Exports
 
-All exports read the live project and a fresh `layoutProject(project)`; none reads the scene except the safe-distance OBJ (its group). See `ProjectIO` (section 3.10) for the exact sequences of `exportJSON`, `exportOBJ` (async since 08 P2-6e: one ZIP, `brand.files.objZip`, with the OBJ, the MTL and the section textures its `map_Kd` lines reference; legacy: the OBJ, then the MTL after 100 ms), `exportGLTF`, `exportPanelIds` (async, `toBlob`), `exportZIP` (async; JSON -> OBJ -> MTL -> glTF -> textures -> `generateAsync` -> download) and `exportSafeDistanceOBJ` (alert or download; 08 P2-5a). Export Panel IDs and Export All (ZIP) check every canvas against `CANVAS_HARD_LIMITS` before drawing it (08 P2-1c): an oversize atlas alerts M-EXP-2 and a null `toBlob` result M-EXP-3, with no download; the ZIP leaves oversize (or `data:,`) section textures out, writes `texture_file: null` and no `map_Kd` for them, and alerts M-EXP-4 after the download. Every export runs inside `ProjectIO.#runExport` (08 P2-1a): an export that throws or rejects shows the M-EXP-1 alert `<label> failed: <message>. No file was downloaded.` and warns in the console instead of raising an uncaught exception or an unhandled rejection (for example the empty-wall combined OBJ/glTF TypeError of `import_edge`). Console and dialog behaviour must match the baseline of the parent commit.
+All exports read the live project and a fresh `layoutProject(project)`; none reads the scene except the safe-distance OBJ (its group). See `ProjectIO` (section 3.10) for the exact sequences of `exportJSON`, `exportOBJ` (async since 08 P2-6e: one ZIP, `brand.files.objZip`, with the OBJ, the MTL and the textures its `map_Kd` lines reference: the section textures in section mode, the combined atlas in combined mode since 08 P2-7f; legacy: the OBJ, then the MTL after 100 ms), `exportGLTF`, `exportPanelIds` (async, `toBlob`), `exportZIP` (async; JSON -> OBJ -> MTL -> glTF -> textures -> the combined atlas (08 P2-7f, every mode; only the combined MTL maps it) -> `generateAsync` -> download) and `exportSafeDistanceOBJ` (alert or download; 08 P2-5a). Export Panel IDs and Export All (ZIP) check every canvas against `CANVAS_HARD_LIMITS` before drawing it (08 P2-1c): an oversize atlas alerts M-EXP-2 and a null `toBlob` result M-EXP-3, with no download; the ZIP leaves oversize (or `data:,`) section textures and atlas out, writes `texture_file: null` and no `map_Kd` for them, and alerts M-EXP-4 after the download. Every export runs inside `ProjectIO.#runExport` (08 P2-1a): an export that throws or rejects shows the M-EXP-1 alert `<label> failed: <message>. No file was downloaded.` and warns in the console instead of raising an uncaught exception or an unhandled rejection (legacy's empty-wall combined OBJ/glTF TypeError of `import_edge`, which the validator removed in 08 P2-3b and 08 P2-7d made impossible). Console and dialog behaviour must match the baseline of the parent commit.
 
 ---
 
@@ -3694,3 +3709,8 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 3.3, 8.1: `Strategies.combinedLedSimColor` is retired (its row deleted). 8.2: B-L18 `Landed`; 8.3: the row `LEDMaterialFactory.js#combined` is deleted, `LEDPixelTextureFactory.js#tile` keeps B-L20.
 - 3.7: `LEDMaterialFactory.combined`'s LED-sim branch is `MeshBasicMaterial({map: white tile, vertexColors: true, side, wireframe})`; `LEDPixelTextureFactory.tile` keys its cache by `new THREE.Color(color).getHexString()` and the layout.
 - 2.3: `materials.test.mjs` (the material, the white tile and its repeat, the normalised key), `core.test.mjs`.
+
+**08 P2-7f, the combined atlas in every ZIP** (Q5; no bug id; manifest `tests/regression/expected/P2-7f.json`: every ZIP whose atlas fits gains the atlas entry, every combined MTL entry its `map_Kd`, and `p2_oversize_canvas/dialogs.json` lists the skipped atlas):
+- 3.6: `PanelNaming.atlasTexturePath(files)` = `textures/${files.panelIdsPng}` (never a literal, 06 R-B3b). 3.9: `ObjExporter.write({..., atlasFile = null})`: in combined mode every `newmtl Wall_<i+1>` gains `map_Kd ${atlasFile}`.
+- 3.10, 6.13: `exportZIP` ships the atlas (the Export Panel IDs image) in every mesh mode when `canvasFits` passes (`#planAtlas`, `#addAtlasTexture`; skipped up front or late like a section texture; M-EXP-4 lists it after the sections); only the combined MTL references it. `exportOBJ`'s ZIP ships it in combined mode, whose MTL now references it (P2-6e's rule: every file the MTL names is in the archive).
+- 2.3: `io.test.mjs` (the use cases in every mode, the up-front and late skips, the golden ZIP and OBJ ZIP texture listings), `geometry.test.mjs` (`atlasTexturePath`).

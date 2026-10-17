@@ -25,6 +25,7 @@ import {
 } from '../../js/geometry/TextureBudget.js';
 import {
   columnLabel, panelLabel, exportSectionName, exportPanelName, sanitizeFilename, textureFileNames, mtlTextureFile,
+  atlasTexturePath,
 } from '../../js/geometry/PanelNaming.js';
 import * as L from './oracle/legacy-geometry.mjs';
 import { CONFIGS } from '../regression/configs.mjs';
@@ -681,6 +682,11 @@ describe('PanelNaming', () => {
     assert.throws(() => textureFileNames([section({ name: 7 })]), { name: 'TypeError', message: 'name.replace is not a function' });
     assert.equal(textureFileNames([section({ name: 'a' }), section({ name: 'b' }), section({ name: 0 })])[2], 'Wall_3_PanelIDs.png');
     assert.equal(textureFileNames([section({ name: '' })])[0], 'Wall_1_PanelIDs.png');
+  });
+
+  test('atlasTexturePath (08 P2-7f): textures/ + the brand files\' panelIdsPng, never a literal (06 R-B3b)', () => {
+    assert.equal(atlasTexturePath({ panelIdsPng: 'x-panel-ids.png' }), 'textures/x-panel-ids.png');
+    assert.equal(atlasTexturePath({ panelIdsPng: 'morph-led-wall-panel-ids.png' }), 'textures/morph-led-wall-panel-ids.png');
   });
 
   test('names: exportSectionName, exportPanelName, mtlTextureFile (B-M2 fixed in 08 P2-6d: the texture file name)', () => {

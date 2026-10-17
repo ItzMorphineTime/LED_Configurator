@@ -114,3 +114,16 @@ export function textureFileNames(sections) {
 export function mtlTextureFile(fileName) {
   return `textures/${fileName}`;
 }
+
+/**
+ * The archive path of the combined panel-ID atlas (08 P2-7f, 08 6.3, 6.8; 04 2.3 rows 08-7 and 08-8): the atlas image
+ * of Export Panel IDs (Brand.files.panelIdsPng) in the archives' `textures/` folder, the one name of the ZIP entry and of
+ * the combined MTL `map_Kd`. Built from the injected brand files, never from a literal (06 R-B3b), so a rename of
+ * Brand.files.panelIdsPng renames the entry.
+ * Side effects: none.
+ * @param {{panelIdsPng: string}} files  Theme.brand.files
+ * @returns {string} `textures/${files.panelIdsPng}`
+ */
+export function atlasTexturePath(files) {
+  return `textures/${files.panelIdsPng}`;
+}

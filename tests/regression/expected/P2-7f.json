@@ -1,0 +1,69 @@
+{
+  "commit": "P2-7f",
+  "bugs": [],
+  "expect": [
+    {
+      "output": "{default,flat3,concave_offsets,convex,mixed,box_corner,large_wall}/final__export-zip__*.zip",
+      "change": "modified",
+      "each": true,
+      "reason": "08 P2-7f (Q5): the ZIP gains the atlas entry textures/morph-led-wall-panel-ids.png (PanelNaming.atlasTexturePath(Brand.files), the Export Panel IDs image) and, in combined mode, every newmtl Wall_<i+1> of the MTL entry gains map_Kd to it"
+    },
+    {
+      "output": "logos/*__export-zip__*.zip",
+      "change": "modified",
+      "each": true,
+      "reason": "the same atlas entry and combined map_Kd lines in the logos scenario ZIPs"
+    },
+    {
+      "output": "{p2_xss_names,p2_zip_section_mode,p2_project_v2}/*__export-zip__*.zip",
+      "change": "modified",
+      "each": true,
+      "reason": "the atlas entry in every mode (section-mode ZIPs ship it unreferenced; the combined ZIP of p2_project_v2 also maps it)"
+    },
+    {
+      "output": "**/*combined__export-obj__*.zip",
+      "change": "modified",
+      "each": true,
+      "reason": "since 08 P2-6e the Export OBJ ZIP ships every file its MTL names: the combined MTL now maps the atlas, so the archive gains textures/morph-led-wall-panel-ids.png"
+    },
+    {
+      "output": "import_edge/{i,iii_weird}__export-obj__*.zip",
+      "change": "modified",
+      "each": true,
+      "reason": "the same atlas in the combined Export OBJ ZIPs of import_edge cases (i) and (iii) (combined walls whose names lack the combined__ prefix)"
+    },
+    {
+      "output": "ui_sections/edited__export-obj__*.zip",
+      "change": "modified",
+      "reason": "the same atlas in the combined Export OBJ ZIP of ui_sections"
+    },
+    {
+      "output": "p2_oversize_canvas/dialogs.json",
+      "change": "modified",
+      "reason": "M-EXP-4 now also lists textures/morph-led-wall-panel-ids.png: the 50,000 px atlas is skipped up front (its ZIP is unchanged)"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-08 P2-7e runs); this commit changes no pixel of it"
+    },
+    {
+      "output": "p2_curved_safe_distance/box_corner.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas on the preview footer label row (1 level, 1 px, seen in the 06 T6a-08 P2-7e runs); this commit changes no pixel of it"
+    },
+    {
+      "output": "p2_shortcut_filters/pilot_view_front.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas (1 level, 2 px, seen in the 06 T6b-08 P2-7e runs); this commit changes no pixel of it"
+    },
+    {
+      "output": "ui_visual/00_initial.sidebar.screenshot.png",
+      "change": "modified",
+      "reason": "added after the first gate run: one sidebar pixel differed by 7 levels (DOM text antialiasing of a DOM-only capture); this commit changes no markup, style or sidebar text (LED-sim material and tile cache key only)"
+    }
+  ],
+  "notes": "08 P2-7f (Q5, no bug id): Export All ships the atlas in every mesh mode when canvasFits passes (#planAtlas, #addAtlasTexture: up-front and late skips, M-EXP-4); only the combined MTL references it. Export OBJ ships it in combined mode (its MTL references it). No glTF images (04 UV-8b), no JSON key, no screenshot change."
+}
