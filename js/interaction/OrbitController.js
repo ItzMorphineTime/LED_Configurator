@@ -70,7 +70,9 @@ export class OrbitController {
   /**
    * Registers the orbit listeners on the main canvas, in legacy order: mousedown, mousemove, mouseup,
    * mouseleave, wheel (no options object, as legacy). Drag is ignored while dragging the gizmo or in pilot
-   * mode; the wheel is ignored in pilot mode. Registered in the init phase, before ViewportInput's.
+   * mode, and (03 T5, 5.4) while a cancelled gizmo drag's button is still held (interaction.gestureCancelled: without it
+   * the first move after Escape would orbit by the whole drag distance); the wheel is ignored in pilot mode.
+   * Registered in the init phase, before ViewportInput's.
    * Ports: index.html@cd3fd3f lines 3820-3840.
    * Side effects: adds 5 canvas listeners; the handlers write angle/distance and move the main camera.
    */
@@ -83,7 +85,7 @@ export class OrbitController {
       this.#prevMouse = { x: e.clientX, y: e.clientY };
     });
     canvas.addEventListener('mousemove', (e) => {
-      if (!this.#dragging || interaction.isDraggingGizmo || interaction.pilotMode) return;
+      if (!this.#dragging || interaction.isDraggingGizmo || interaction.gestureCancelled || interaction.pilotMode) return;
       this.angle.theta -= (e.clientX - this.#prevMouse.x) * 0.01;
       this.angle.phi = Math.max(0.1, Math.min(Math.PI - 0.1, this.angle.phi - (e.clientY - this.#prevMouse.y) * 0.01));
       this.#prevMouse = { x: e.clientX, y: e.clientY };

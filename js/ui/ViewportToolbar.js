@@ -4,6 +4,8 @@
  * mirrors of the selection badge, gizmo buttons and pilot banner (events up).
  * Owns #view-front, #view-side, #view-top, #view-reset, #toggle-grid, #gizmo-translate, #gizmo-rotate,
  * #gizmo-space, #gizmo-pilot, #selection-indicator (and its .selected-name) and #pilot-info.
+ * 03 T5 (3.3, 5.4): the badge suffix " (translate only)" while a target that supports no rotate mode (the pivot) is
+ * selected in rotate mode, from the cached SELECTION_CHANGED.modes (never gizmo.target).
  * Legacy source: index.html@cd3fd3f 3155-3167 (updateSelectionIndicator), 3176-3177 / 4428-4429 (mode
  * buttons), 3184-3188 (space button), 3484-3485 (pilot button and banner), 4394-4407 (button listeners).
  * Layer: ui (may import core, legacy, domain static rule tables and ui/dom.js).
@@ -38,11 +40,17 @@ export class ViewportToolbar {
   /** @type {HTMLElement} */ #gizmoPilot;
   /** @type {HTMLElement} */ #selectionIndicator;
   /** @type {HTMLElement} */ #pilotInfo;
+  /** @type {{id: string|null, label: string|null, modes: string[]}} the last SELECTION_CHANGED payload (03 T5) */
+  #selection = { id: null, label: null, modes: [] };
+  /** @type {'translate'|'rotate'|null} the last GIZMO_MODE_CHANGED mode (03 T5) */
+  #mode = null;
 
   /**
    * Stores the collaborators, looks up the owned elements and subscribes the four mirrors:
-   *  SELECTION_CHANGED({id, label}): id ? (add 'visible'; .selected-name = label || 'Unknown') : (remove 'visible'; 'None')  (3155-3167)
-   *  GIZMO_MODE_CHANGED({mode}): #gizmo-translate.classList.toggle('active', mode === 'translate'); #gizmo-rotate likewise (3176-3177, 4428-4429)
+   *  SELECTION_CHANGED({id, label, modes}): id ? (add 'visible'; .selected-name = label || 'Unknown') : (remove 'visible'; 'None')
+   *    (3155-3167); 03 T5: + ' (translate only)' while the gizmo mode is rotate and modes lacks 'rotate'
+   *  GIZMO_MODE_CHANGED({mode}): #gizmo-translate.classList.toggle('active', mode === 'translate'); #gizmo-rotate likewise (3176-3177, 4428-4429);
+   *    03 T5: the badge suffix is re-evaluated for a selected target whose modes lack 'rotate'
    *  GIZMO_SPACE_CHANGED({space}): text 'W' | 'L'; toggle 'world' / 'local'; title 'World Space (L to toggle)' | 'Local Space (L to toggle)' (3184-3188)
    *  PILOT_CHANGED({active}): #gizmo-pilot toggle 'active'; #pilot-info toggle 'visible' (3484-3485)
    * Side effects: DOM lookups (no mutation); four bus subscriptions.
@@ -102,17 +110,18 @@ export class ViewportToolbar {
   }
 
   /**
-   * SELECTION_CHANGED mirror: the selection badge.
+   * SELECTION_CHANGED mirror: the selection badge (03 T5: with the translate-only suffix, see #badgeName).
    * Ports: index.html@cd3fd3f lines 3155-3167.
-   * @param {{id: string|null, label: string|null}} payload
+   * @param {{id: string|null, label: string|null, modes?: string[]}} payload
    */
-  #mirrorSelection({ id, label }) {
+  #mirrorSelection({ id, label, modes = ['translate', 'rotate'] }) {
+    this.#selection = { id, label, modes };
     const indicator = this.#selectionIndicator;
     const nameSpan = indicator.querySelector('.selected-name');
 
     if (id) {
       indicator.classList.add('visible');
-      nameSpan.textContent = label || 'Unknown';
+      nameSpan.textContent = this.#badgeName();
     } else {
       indicator.classList.remove('visible');
       nameSpan.textContent = 'None';
@@ -120,13 +129,29 @@ export class ViewportToolbar {
   }
 
   /**
-   * GIZMO_MODE_CHANGED mirror: the translate/rotate buttons.
+   * GIZMO_MODE_CHANGED mirror: the translate/rotate buttons; 03 T5: the badge name of a selected target that supports no
+   * rotate mode (a legacy target's badge is never rewritten here).
    * Ports: index.html@cd3fd3f lines 3176-3177 (and 4428-4429 for mode null).
    * @param {{mode: 'translate'|'rotate'|null}} payload
    */
   #mirrorMode({ mode }) {
+    this.#mode = mode;
     this.#gizmoTranslate.classList.toggle('active', mode === 'translate');
     this.#gizmoRotate.classList.toggle('active', mode === 'rotate');
+    if (this.#selection.id && !this.#selection.modes.includes('rotate')) {
+      this.#selectionIndicator.querySelector('.selected-name').textContent = this.#badgeName();
+    }
+  }
+
+  /**
+   * The badge name: label || 'Unknown', plus ' (translate only)' while the gizmo is in rotate mode and the selected target
+   * does not support it (03 3.3: "Selected: Pivot (translate only)").
+   * @returns {string}
+   */
+  #badgeName() {
+    const { label, modes } = this.#selection;
+    const name = label || 'Unknown';
+    return this.#mode === 'rotate' && !modes.includes('rotate') ? `${name} (translate only)` : name;
   }
 
   /**

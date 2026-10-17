@@ -1,0 +1,23 @@
+{
+  "commit": "F3-T5",
+  "bugs": [],
+  "expect": [],
+  "mayChange": [
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-03 T3 runs); this commit changes no rendered byte"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen again in the 03 T2 gate and the 03 T3 review run, textures/L2_PanelIDs.png); this commit changes no texture"
+    },
+    {
+      "output": "ui_visual/00_initial.sidebar.screenshot.png",
+      "change": "modified",
+      "reason": "one sidebar pixel of this DOM-only capture differed by 7 levels in the P2-7e runs (DOM text antialiasing); this commit changes no markup, style or sidebar text"
+    }
+  ],
+  "notes": "03 T5 (docs/improvements/03-pivot.md 3.3, 3.4, 5.3, 5.4, 5.8, 10), step A's fifth commit, invariance (8.4 step A: zero diffs at the identity pivot). render/PivotMarkerView is allocated as the last bootstrap step (after the reset view), so every legacy THREE id and the r128 draw order are unchanged; it stays hidden (DisplaySettings.DEFAULT_SHOW_PIVOT_MARKER = false, the pivot never selected: no scenario presses O) and its pick proxy is not pickable while hidden; its updateScale pre-render hook (SceneManager.addPreRender) is a no-op while hidden. PivotController is wired (registered last, kind pivot). The shared path-B gizmo hooks change nothing for the camera and props (no hooks, ctx ignored, allowedAxes absent: every handle), the pick rule is the nearest hit without wall hits, gestureCancelled is never set without a cancel, the raycaster testing every layer changes no explicit pick list, SELECTION_CHANGED gains modes (both for every legacy target, so the badge text is unchanged), and the router and orbit only add a guard on a flag that stays false. Every output must stay identical."
+}

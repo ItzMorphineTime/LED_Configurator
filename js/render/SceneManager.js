@@ -2,7 +2,8 @@
  * @module render/SceneManager
  * Owns the main three.js scene, the main (orbit) camera, the WebGL renderer, the two lights, the floor grid and
  * the axes helper (all created by an explicit init(), never by the constructor), plus the helper registry,
- * the grid toggle, window resizing and the render loop.
+ * the grid toggle, window resizing and the render loop, and (03 T5; 07 C46) the pre-render hooks that run before every
+ * main render (the pivot marker's minimum screen size).
  * Legacy source: index.html@cd3fd3f 1426-1449 (init body), 1453 (resize listener), 1454 + 3884-3890 (animate),
  * 2578-2583 (toggleGrid), 3877-3882 (onResize).
  * Layer: render (may import vendor/three, core, legacy, domain, geometry). The theme is injected.
@@ -44,6 +45,8 @@ export class SceneManager {
   #axes = null;
   /** @type {Set<THREE.Object3D>} objects added through addHelper (bookkeeping only) */
   #helpers = new Set();
+  /** @type {Array<(camera: THREE.PerspectiveCamera) => void>} pre-render hooks, in registration order (07 C46) */
+  #preRender = [];
 
   /**
    * Stores the dependencies only (R4): no THREE allocation, no DOM access, no listener.
@@ -249,12 +252,25 @@ export class SceneManager {
   }
 
   /**
-   * Renders the scene with the main camera.
+   * Registers a hook that runs on every main render, after the camera update and before the draw (07 C46; 07 R3 moves it
+   * onto the frame graph). 03 T5 registers the pivot marker's updateScale (its minimum on-screen size).
+   * Side effects: none besides the registration.
+   * @param {(camera: THREE.PerspectiveCamera) => void} hook  receives the main camera
+   * @returns {void}
+   */
+  addPreRender(hook) {
+    this.#preRender.push(hook);
+  }
+
+  /**
+   * Runs the pre-render hooks (registration order), then renders the scene with the main camera.
    * Ports: index.html@cd3fd3f line 3888.
-   * Side effects: draws into the main canvas.
+   * Side effects: whatever the hooks write (03 T5: the marker's scale; a no-op while it is hidden); draws into the main
+   *   canvas.
    * @returns {void}
    */
   render() {
+    for (const hook of this.#preRender) hook(this.#camera);
     this.#renderer.render(this.#scene, this.#camera);
   }
 }

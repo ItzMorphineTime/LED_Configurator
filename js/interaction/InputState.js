@@ -12,14 +12,27 @@ import THREE from '../vendor/three.js';
 
 /**
  * Shared, tiny interaction flags (breaks the orbit / gizmo / pilot cycles). Single writers:
- * pilotMode <- PilotController.toggle only; isDraggingGizmo <- TransformGizmo only.
+ * pilotMode <- PilotController.toggle only; isDraggingGizmo, gestureCancelled and snap <- TransformGizmo only (snap
+ * through setSnapIncrements, a merge; 03 5.4).
  * Ports: index.html@cd3fd3f lines 1363 (isDraggingGizmo), 1370 (pilotMode).
  */
 export class InteractionState {
   /** legacy `pilotMode`; written only by PilotController.toggle */
   pilotMode = false;
-  /** legacy `isDraggingGizmo`; written only by TransformGizmo.onMouseDown/onMouseUp */
+  /** legacy `isDraggingGizmo`; written only by TransformGizmo (onMouseDown/onMouseUp, cancelDrag since 03 T5) */
   isDraggingGizmo = false;
+  /**
+   * 03 T5 (5.4): a gizmo drag was cancelled (Escape) while the mouse button is still held, so the rest of that gesture is
+   * swallowed (no orbit, no gizmo move or hover). Set only by TransformGizmo.cancelDrag; cleared by onMouseUp (canvas and
+   * window) and, defensively, at the start of the next onMouseDown.
+   */
+  gestureCancelled = false;
+  /**
+   * 03 T5 (5.4, D9): the Ctrl/Cmd-drag snap increments (one shared model): the pivot's step in metres (the
+   * "Ctrl-drag snap" select, 10 cm by default); spec 02 adds translateMm and rotateDeg. Session-only. Written only by
+   * TransformGizmo.setSnapIncrements (a merge).
+   */
+  snap = { pivotM: 0.1 };
 }
 
 /**
@@ -110,13 +123,17 @@ export class PointerRay {
   #ndc = new THREE.Vector2();
 
   /**
-   * Creates the one shared THREE.Raycaster and THREE.Vector2 (neither carries an id, R4).
+   * Creates the one shared THREE.Raycaster and THREE.Vector2 (neither carries an id, R4); the ray tests every layer
+   * (03 T5).
    * The renderer and camera are read from the SceneManager at use time.
    * Side effects: none.
    * @param {{sceneManager: import('../render/SceneManager.js').SceneManager}} deps
    */
   constructor({ sceneManager }) {
     this.#sceneManager = sceneManager;
+    // 03 T5 (3.3): the ray tests every layer, so the pivot marker's pick proxy (on LAYERS.HELPERS) is pickable. Picking
+    // and gizmo hover raycast only their explicit mesh lists, all on layer 0 before, so no other pick changes.
+    this.#raycaster.layers.enableAll();
   }
 
   /** Side effects: none. @returns {THREE.Raycaster} the shared raycaster (legacy `raycaster`) */

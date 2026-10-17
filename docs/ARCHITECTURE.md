@@ -249,7 +249,7 @@ js/
   render/
     ResourceTracker.js                     WP6   disposeObject3D(root, {maps}) + ResourceTracker
     SceneManager.js                        WP6   Scene, main camera, renderer, lights, grid, axes (explicit init()), helper registry,
-                                                 LAYERS, grid toggle, resize, render loop
+                                                 LAYERS, grid toggle, resize, render loop; 03 T5: addPreRender (07 C46)
     LEDWallView.js                         WP6   Wall + frame groups from a WallLayout; mode dispatch; mesh tagging; section nodes;
                                                  debug-shading override and withContentMaterials (01 F1-1); 06 T5: each
                                                  section's frames in its adaptive frame colour
@@ -267,14 +267,20 @@ js/
     SafeDistanceView.js                    WP7   Safe-distance floor band, outline, "Max" sprite; exposes its group for OBJ export
     PreviewWindow.js                       WP7   Second WebGLRenderer, preview camera, preview labels, resize handle
     PropViews.js                           WP7   PropView base, PersonPropView, CarPropView (procedural meshes)
+    PivotMarkerView.js                     03 T5  The pivot marker: two-tone glyph (dashed cross, octahedron core), pick proxy,
+                                                 drop line, anchor ghost and link; stage frame, LAYERS.HELPERS, 996; min size
   interaction/
     InputState.js                          WP8   InteractionState, KeyboardState, PointerRay (one shared Raycaster), target guards
-                                                 (the shortcut guard re-exports core/typingTarget.js since 08 P2-9b)
+                                                 (the shortcut guard re-exports core/typingTarget.js since 08 P2-9b); 03 T5:
+                                                 gestureCancelled, snap, the ray tests every layer
     OrbitController.js                     WP8   Custom spherical orbit: drag, wheel, WASD/QE offset, presets, retarget, snapshot
-    SelectionManager.js                    WP8   Selectable registry, selection state, raycast picking; Selectable typedef
-    TransformGizmo.js                      WP8   Hand-written translate/rotate gizmo bound to the selected Selectable
+    SelectionManager.js                    WP8   Selectable registry, selection state, raycast picking; Selectable typedef;
+                                                 03 T5: the path-B hook set, kind, the pick priority rule, SELECTION_CHANGED.modes
+    TransformGizmo.js                      WP8   Hand-written translate/rotate gizmo bound to the selected Selectable; 03 T5: the
+                                                 shared hook lifecycle, cancelDrag, allowedAxes, snap, the pivot re-anchor
     PilotController.js                     WP8   PilotCameraDriver (drives the main camera) + PilotController (toggle, look, fly, speed)
-    ViewportInput.js                       WP8   Shortcut keys (G/R/L/P/Esc) + canvas pointer routing (pilot | gizmo | pick)
+    ViewportInput.js                       WP8   Shortcut keys (G/R/L/P/Esc; 03 T5: O, the Escape cancel) + canvas pointer routing
+                                                 (pilot | gizmo | pick; 03 T5: the swallowed gesture)
   io/
     ProjectSerializer.js                   WP5   Project JSON v1 write ('file' | 'zip' variants) and read; version dispatch seam;
                                                  08 P2-3b: read = detectVersion -> migrateV1toV2 -> validateProject
@@ -407,6 +413,17 @@ tests/
                                                  stageShift, the frames of layoutProject, translated(), the export frame of
                                                  the grids and panel corners, 'flat-pivot', the composition contract with
                                                  spec 02 (a stub offset builder; spec 02's E17); test 9 skipped (B-L1 kept)
+    pivot-marker.test.mjs                  03 T5  PivotMarkerView (test 15's marker part): no allocation before init, the
+                                                 stage-frame glyph / ghost / drop / link, visibility and selected colour, the
+                                                 preview, the minimum screen size, null resolution, order, layers, two-tone
+                                                 dashes, dispose; SceneManager.addPreRender and App's registration
+    gizmo.test.mjs                         03 T5  The shared path-B gizmo lifecycle (hooks, ctx, cancelDrag, detach, allowedAxes,
+                                                 setSnapIncrements), test 19 (gesture swallowing with a real orbit and router)
+                                                 and test 20 (the WALL_REBUILT re-anchor with real WallController/PivotController)
+    selection.test.mjs                     03 T5  test 18: kind required, the pick rule (priority only against wall hits), modes
+    viewport-input.test.mjs                03 T5  test 16: the O key and its guards, the Escape order, the router's swallowing
+    fixtures/fake-three.mjs                03 T5  a small, mathematically real three.js stand-in (vectors, plane, ray, layers,
+                                                 objects, materials, buffer geometry) for those tests
     pivot-controller.test.mjs              03 T4  PivotController (03 8.1 tests 10-15): P-PIVOT's order and re-expression,
                                                  keep off, Y-only offsets, the toggles and snap step, toggleSelect, the
                                                  Selectable hooks, relative drag snapping and cancel, the wall-centre add,
@@ -1519,11 +1536,13 @@ export class SceneManager {
   /** Legacy animate 3884-3890: const frame = () => { win.requestAnimationFrame(frame); tick(); }; frame();
    *  The first frame runs synchronously, before setupUI, exactly like legacy. */
   startLoop(tick)
-  /** renderer.render(scene, camera) */
+  /** 03 T5 (07 C46; 07 R3 moves it onto the frame graph): registers a hook run before every main render with the main camera */
+  addPreRender(hook)
+  /** for (hook of #preRender) hook(camera); renderer.render(scene, camera)   (03 T5: the pivot marker's updateScale) */
   render()
 }
 ```
-State: `#scene`, `#camera`, `#renderer`, `#grid`, `#axes`, `#helpers: Set`. The main camera is shared by reference with `OrbitController`, `PilotCameraDriver`, `PilotController` and `PointerRay` (they read `sceneManager.camera` at use time).
+State: `#scene`, `#camera`, `#renderer`, `#grid`, `#axes`, `#helpers: Set`, `#preRender` (03 T5). The main camera is shared by reference with `OrbitController`, `PilotCameraDriver`, `PilotController` and `PointerRay` (they read `sceneManager.camera` at use time).
 
 #### `js/render/LEDWallView.js`
 ```js
@@ -1865,13 +1884,49 @@ export class CarPropView    extends PropView { buildMesh() /* verbatim 2914-2968
 ```
 
 
+#### `js/render/PivotMarkerView.js` (03 T5; docs/improvements/03-pivot.md 3.3, 5.3)
+```js
+export class PivotMarkerView {
+  /** R4: no allocation. Mirrors (its own objects only): WALL_REBUILT({layout}) -> #place(layout.pivot.resolution) (ignored
+   *  until init); WALL_PIVOT_CHANGED({resolution}) -> #place(resolution) + visibility; SELECTION_CHANGED({id}) -> the
+   *  selected colour + visibility.  @param {{sceneManager, bus, display: DisplaySettings, theme: {scene: SceneTheme}}} deps */
+  constructor({ sceneManager, bus, display, theme })
+  /** Once, the LAST bootstrap step (5.8): the root group (renderOrder RENDER_ORDER.PIVOT_MARKER on every group: r128's group
+   *  order), the glyph (a dashed cross of +-glyphHalfSize and an octahedron core of coreRadius, each a light core over a
+   *  Morph Black halo, 06 5.12; the octahedron halo is the same shape x 1.35, drawn first; the invisible pick proxy
+   *  SphereGeometry(pickRadius, 12, 8) with MeshBasicMaterial({visible: false})), the anchor ghost (a dashed cross of
+   *  +-0.12 m in anchorColor), the dashed link and drop segments; every material transparent, opacity 0.9, depthTest and
+   *  depthWrite off; every object on LAYERS.HELPERS (the preview camera never sees it; the main camera does); halos at
+   *  renderOrder 0, cores at 1 inside the group order; sceneManager.addHelper(group); #place(resolution). */
+  init(resolution)
+  get exists(); get visible(); get hasResolution(); get group()
+  pickMeshes()            // [the pick proxy] ([] before init)
+  /** stage frame: resolution ? (preview.x, P.y + preview.y, preview.z) : the preview alone (never reads null) */
+  glyphPosition(out)
+  setPreview(dx, dy, dz)  // the glyph, the drop and the link follow; the ghost stays (no allocation: positions written in place)
+  clearPreview()
+  /** s = max(1, minScreenHalfSizePx * (2 d tan(degToRad(fov) / 2) / heightPx) / glyphHalfSize) on the glyph and the ghost;
+   *  d = the camera's distance to the glyph. No-op before init, while hidden or for heightPx <= 0. A pre-render hook. */
+  updateScale(camera, heightPx)
+  dispose()               // removeHelper + the tracker (maps: false)
+}
+```
+Placement (`#place`): glyph at `(0, P.y, 0)` plus the preview; ghost at `A - O = (-offset.x, A.y, -offset.z)`, shown (with the link
+from it to the glyph) while the effective offset (offset plus preview) is non-zero; the drop line from `(gx, 0, gz)` to the glyph
+while `|gy| > 1e-6`. Visibility: `hasResolution && (display.showPivotMarker || the pivot is selected)`. A null resolution hides
+the marker and skips every geometry update. The cross and octahedron cores are `selectedColor` while the pivot is selected.
+
 ### 3.8 Interaction
 
 #### `js/interaction/InputState.js`
 ```js
 /** Shared, tiny interaction flags (breaks the orbit / gizmo / pilot cycles). Single writers:
- *  pilotMode <- PilotController.toggle only; isDraggingGizmo <- TransformGizmo only. */
-export class InteractionState { pilotMode = false; isDraggingGizmo = false; }
+ *  pilotMode <- PilotController.toggle only; isDraggingGizmo, gestureCancelled and snap <- TransformGizmo only (03 T5). */
+export class InteractionState {
+  pilotMode = false; isDraggingGizmo = false;
+  gestureCancelled = false;   // 03 T5 (5.4): set by cancelDrag; cleared by onMouseUp and at the start of onMouseDown
+  snap = { pivotM: 0.1 };     // 03 T5 (D9): the Ctrl/Cmd-drag increments; written only through setSnapIncrements (a merge)
+}
 
 export const isKeyStateIgnoredTarget = (t) => t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA';  // 3845
 /** The shortcut guard is the one typing guard (08 P2-9b fixed B-L11): re-exported, never redefined (01 CR-9);
@@ -1888,7 +1943,9 @@ export class KeyboardState {     // legacy keysPressed (3753)
 }
 
 export class PointerRay {        // legacy shared `raycaster` + `mouse` (1368-1369): ONE instance shared by gizmo and picking
-  /** @param {{sceneManager: SceneManager}} deps   (creates one THREE.Raycaster and one THREE.Vector2: no ids) */
+  /** @param {{sceneManager: SceneManager}} deps   (creates one THREE.Raycaster and one THREE.Vector2: no ids);
+   *  03 T5: raycaster.layers.enableAll(), so the pivot marker's pick proxy on LAYERS.HELPERS is pickable (picking and
+   *  hover raycast only their explicit lists, all on layer 0 before, so no other pick changes) */
   constructor({ sceneManager })
   get raycaster(); get ndc()
   /** canvas = sceneManager.renderer.domElement; rect = canvas.getBoundingClientRect();
@@ -1910,7 +1967,8 @@ export class OrbitController {
   distance = 8;                                                 // legacy cameraDistance
   target;  offset;                                              // THREE.Vector3 (legacy targetPosition / targetOffset)
   /** Verbatim 3820-3840 on canvas = sceneManager.renderer.domElement, registered in this order: mousedown (ignored while
-   *  interaction.isDraggingGizmo || interaction.pilotMode), mousemove (0.01 rad/px, phi clamped [0.1, PI - 0.1]),
+   *  interaction.isDraggingGizmo || interaction.pilotMode), mousemove (also ignored while interaction.gestureCancelled, 03 T5:
+   *  the swallowed gesture of a cancelled gizmo drag; 0.01 rad/px, phi clamped [0.1, PI - 0.1]),
    *  mouseup, mouseleave, wheel (if pilot: return; preventDefault; distance clamped [2, 30] by deltaY * 0.01).
    *  Then calls updateCameraPosition() where legacy did. Registered in the init phase (before ViewportInput). */
   attach()
@@ -1933,38 +1991,57 @@ export class OrbitController {
 
 #### `js/interaction/SelectionManager.js`
 ```js
-/** @typedef {object} Selectable   implemented by CameraController ('camera') and PropController ('person', 'car');
- *  Feature 2 adds WallSectionSelectable, Feature 3 a pivot Selectable, Feature 5 a projection-point Selectable.
- * @property {string} id                       'camera' | 'person' | 'car'
- * @property {string} label                    badge text: 'Camera' | 'Person' | 'Car' (legacy names map 3161)
+/** @typedef {object} Selectable   implemented by CameraController ('camera'), PropController ('person', 'car') and, since
+ *  03 T5, PivotController ('pivot'); Feature 2 adds the section Selectables, Feature 5 a projection-point Selectable.
+ *  The optional members are the path-B hook set of 03 5.4 (07 C33, one-to-one with 07's Selectable v2; spec 02 reuses it);
+ *  legacy targets implement none of them and behave exactly as in Phase 1.
+ * @property {string} id                       'camera' | 'person' | 'car' | 'pivot' | ...
+ * @property {string} label                    badge text: 'Camera' | 'Person' | 'Car' (legacy names map 3161) | 'Pivot'
+ * @property {'camera'|'prop'|'pivot'|'projector'|'section'} [kind]   REQUIRED for every Selectable added after Phase 1
+ *                                             (register throws); inferred only for 'camera' -> 'camera', 'person'/'car' -> 'prop'
+ * @property {number} [pickPriority]           default 0; outranks wall (section) hits only. Pivot 10, HDRI point 9.
+ * @property {(mode) => {x, y, z: boolean} | null} [allowedAxes]   default all axes in both modes; null = mode unsupported
+ *                                             (no handles; left out of SELECTION_CHANGED.modes); a false axis: no handle
  * @property {() => boolean} isPickable        legacy pick gating (3441, 3446, 3455)
  * @property {() => import('three').Object3D[]} pickMeshes   meshes to raycast, in legacy push order (3442-3461)
  * @property {() => boolean} hasGizmoTarget    legacy updateGizmoPosition gating (previewCameraGroup / personMesh / carMesh, 3126-3134)
  * @property {(out: import('three').Vector3) => import('three').Vector3} gizmoAnchor   sets and returns `out`
- * @property {(rotation: import('three').Euler) => void} orientGizmo   local-space orientation (3107-3118)
- * @property {(movement: import('three').Vector3) => void} applyGizmoTranslate   domain write + pose event + refresh
- * @property {(axis: 'x'|'y'|'z', deltaDeg: number) => void} applyGizmoRotate      deltaDeg already signed (Strategies.gizmoRotateSign)
+ * @property {(rotation: import('three').Euler, mode) => void} orientGizmo   local-space orientation (3107-3118); the mode is
+ *                                             the gizmo mode (legacy targets ignore it)
+ * @property {() => void} [beginGizmoDrag]     TransformGizmo.onMouseDown, on a handle hit
+ * @property {(opts: {cancel: boolean}) => void} [endGizmoDrag]   the ONLY end hook: {cancel: false} on the mouse-up that ends a
+ *                                             drag; {cancel: true} from cancelDrag() (Escape) and detach() during a drag
+ * @property {(movement, ctx) => void} applyGizmoTranslate   domain write + pose event + refresh; ctx = {space, axisWorld,
+ *                                             snap} (axisWorld the unit drag axis in world space; snap = interaction.snap iff
+ *                                             Ctrl/Cmd is held, else null); legacy targets ignore ctx
+ * @property {(axis: 'x'|'y'|'z', deltaDeg: number, ctx) => void} applyGizmoRotate      deltaDeg already signed (Strategies.gizmoRotateSign)
  */
 export class SelectionManager {
   /** @param {{bus, gizmo: TransformGizmo, pointerRay: PointerRay, interaction: InteractionState}} deps */
   constructor({ bus, gizmo, pointerRay, interaction })
-  /** Registration order is the raycast tie order: App registers camera, person, car. */
+  /** Registration order is the raycast tie order: App registers camera, person, car, then the pivot (03 5.8).
+   *  03 T5: throws for a Selectable without kind unless its id is a legacy one (the kind is then inferred). */
   register(selectable)
+  kindOf(selectable)               // 03 T5: the declared or inferred kind; null when not registered
   get selectedId()                 // legacy selectedObject: 'camera' | 'person' | 'car' | null
   get selected()                   // the registered Selectable or null
   isSelected(id)                   // selectedId === id
   find(id)
-  /** 3139-3143: selectedId = id; selected = find(id); bus.emit(SELECTION_CHANGED, {id, label: selected?.label}); gizmo.attach(selected)
+  /** 3139-3143: selectedId = id; selected = find(id); bus.emit(SELECTION_CHANGED, {id, label: selected?.label, modes}); gizmo.attach(selected)
+   *  (03 T5: modes = ['translate', 'rotate'].filter(m => !selected?.allowedAxes || selected.allowedAxes(m) !== null), emitted before attach)
    *  (`?.`: an unregistered id, unreachable because pickAt only selects registered ids, shows the toolbar's 'Unknown'
    *  fallback like legacy `names[selectedObject] || 'Unknown'` instead of throwing) */
   select(id)
-  /** 3145-3153: selectedId = null; selected = null; bus.emit(SELECTION_CHANGED, {id: null, label: null}); gizmo.detach() */
+  /** 3145-3153: selectedId = null; selected = null; bus.emit(SELECTION_CHANGED, {id: null, label: null, modes: []}); gizmo.detach() */
   deselect()
   /** Legacy handleViewportClick 3427-3474, LEGACY(B-M14) (called on mousedown):
    *  if (interaction.isDraggingGizmo || interaction.pilotMode) return; if (!gizmo.mode) return;
    *  raycaster = pointerRay.fromEvent(event); list = []; for each registered s with s.isPickable(): for each m of s.pickMeshes():
    *  { m.userData.selectType = s.id; list.push(m) }; hits = raycaster.intersectObjects(list, false);
-   *  hit -> { const t = hits[0].object.userData.selectType; if (t && t !== selectedId) select(t) }  miss -> deselect() */
+   *  hit -> { const t = choose(hits).object.userData.selectType; if (t && t !== selectedId) select(t) }  miss -> deselect()
+   *  03 T5 (5.4) choose(hits): the nearest hit wins unless it is a wall (kind 'section') hit; then the hit with the highest
+   *  positive pickPriority (strictly higher, so the nearer of equals) wins, else the wall hit. Before spec 02 no wall is
+   *  pickable, so this is the legacy hits[0] bit for bit. */
   pickAt(event)
 }
 ```
@@ -1972,7 +2049,9 @@ export class SelectionManager {
 #### `js/interaction/TransformGizmo.js`
 ```js
 export class TransformGizmo {
-  /** Subscribes to SELECTABLE_MOVED in the constructor: ({id}) => { if (target && target.id === id) this.updatePosition() }.
+  /** Subscribes to SELECTABLE_MOVED in the constructor: ({id}) => { if (target && target.id === id) this.updatePosition() };
+   *  03 T5 (5.4): and to WALL_REBUILT: () => { if (target?.kind === 'pivot') updatePosition() } (the anchor is read from
+   *  WallController's cache, set before the event, so the subscriber order does not matter; spec 02 extends it to sections).
    *  The axis colours (handle materials and userData.color) and the idle / hover / dimmed opacities (0.35 / 1.0 / 0.15)
    *  quoted below are read from the injected theme.scene.gizmo (x, y, z, idleOpacity, hoverOpacity, dimmedOpacity).
    *  @param {{sceneManager, pointerRay: PointerRay, interaction: InteractionState, bus, theme: {scene: SceneTheme}}} deps */
@@ -1982,7 +2061,8 @@ export class TransformGizmo {
   get group(); get target(); get activeAxis(); get hoveredAxis()
   /** target = selectable; rebuild()   (the createGizmo call inside selectObject, 3142) */
   attach(target)
-  /** 3146-3152: target = null; hoveredAxis = null; if (group) { sceneManager.removeHelper(group);
+  /** 03 T5: if (interaction.isDraggingGizmo && target?.endGizmoDrag) cancelDrag(); then
+   *  3146-3152: target = null; hoveredAxis = null; if (group) { sceneManager.removeHelper(group);
    *  disposeObject3D(group) (the B-L12 fix of Phase 1C H2; 08 P2-12a retired its switch); group = null } */
   detach()
   /** 3169-3180: mode = (mode === requested) ? null : requested; bus.emit(GIZMO_MODE_CHANGED, {mode}); rebuild() */
@@ -1992,14 +2072,16 @@ export class TransformGizmo {
   /** 3182-3193: space = space === 'world' ? 'local' : 'world'; bus.emit(GIZMO_SPACE_CHANGED, {space}); if (group) updateOrientation() */
   toggleSpace()
   /** Verbatim createGizmo 2997-3099: if (group) { sceneManager.removeHelper(group); disposeObject3D(group); group = null }
-   *  if (!target || !mode) return; group = new THREE.Group(); group.renderOrder = RENDER_ORDER.GIZMO (999, core/renderOrder.js); handles = {};
+   *  if (!target || !mode) return; 03 T5: axes = target.allowedAxes?.(mode); if (axes === null) return (no group, no handles);
+   *  group = new THREE.Group(); group.renderOrder = RENDER_ORDER.GIZMO (999, core/renderOrder.js); handles = {};
+   *  (03 T5: an axis with axes[k] === false gets no arrow or ring; legacy targets have no allowedAxes);
    *  translate arrows / rotate tori built in the exact legacy allocation order (material per axis via the private
    *  material(color) factory: MeshBasicMaterial{color, transparent: true, opacity: idleOpacity, depthTest: false, depthWrite: false});
    *  updateOrientation(); updatePosition(); sceneManager.addHelper(group).
    *  MUST NOT reset hoveredAxis (legacy keeps a stale hover across rebuilds). LEGACY(B-L22): every handle is built for props too.
    *  LEGACY(B-L26): pilot mode does not hide the gizmo. */
   rebuild()
-  /** 3101-3120: if (!group || !target) return; group.rotation.set(0, 0, 0); if (space === 'local') target.orientGizmo(group.rotation) */
+  /** 3101-3120: if (!group || !target) return; group.rotation.set(0, 0, 0); if (space === 'local') target.orientGizmo(group.rotation, mode) */
   updateOrientation()
   /** 3122-3137: if (!group || !target) return; if (!target.hasGizmoTarget()) return; group.position.copy(target.gizmoAnchor(new THREE.Vector3())).
    *  LEGACY(B-L23): position-only follow; orientation is not refreshed outside drags. */
@@ -2007,23 +2089,35 @@ export class TransformGizmo {
   /** Verbatim 3195-3230: if (!group || interaction.isDraggingGizmo || interaction.pilotMode) return; ray via pointerRay.fromEvent;
    *  collect handle meshes (child.userData = {...handle.userData}); newHovered; if changed: opacity hover 1.0 / idle 0.35. */
   onHover(event)
-  /** Verbatim 3232-3307: if (!group || !target || interaction.pilotMode) return false; ... on hit: activeAxis,
+  /** 03 T5: interaction.gestureCancelled = false (defensively, every press);
+   *  verbatim 3232-3307: if (!group || !target || interaction.pilotMode) return false; ... on hit: activeAxis,
    *  interaction.isDraggingGizmo = true, opacities 1.0 / 0.15, drag plane (translate: camera-facing plane containing the axis,
-   *  local axes via group.quaternion; rotate: plane normal = axis), raycaster.ray.intersectPlane(dragPlane, dragStart); return true.
-   *  miss: return false. */
+   *  local axes via group.quaternion; rotate: plane normal = axis), raycaster.ray.intersectPlane(dragPlane, dragStart);
+   *  03 T5: target.beginGizmoDrag?.(); return true.  miss: return false. */
   onMouseDown(event)
   /** Verbatim 3309-3409: if (!interaction.isDraggingGizmo || !activeAxis || !group) return; ray; currentPoint (return if no hit);
-   *  translate: movement = axisDir * (delta . axisDir) -> target.applyGizmoTranslate(movement);
+   *  translate: movement = axisDir * (delta . axisDir) -> target.applyGizmoTranslate(movement, ctx);
    *  rotate: angle = atan2((startDir x currentDir) . dragPlane.normal, startDir . currentDir) * (180 / Math.PI);
-   *          target.applyGizmoRotate(activeAxis, Strategies.gizmoRotateSign * angle)   LEGACY(B-M12);
+   *          target.applyGizmoRotate(activeAxis, Strategies.gizmoRotateSign * angle, ctx)   LEGACY(B-M12);
+   *  (03 T5: ctx = {space, axisWorld: axisDir or the rotate plane normal, snap: (ctrlKey || metaKey) ? interaction.snap : null});
    *          if (space === 'local') updateOrientation();
    *  then dragStart.copy(currentPoint); updatePosition(). */
   onMouseMove(event)
-  /** Verbatim 3411-3425: interaction.isDraggingGizmo = false; activeAxis = null; if (group) opacities by hoveredAxis. */
+  /** Verbatim 3411-3425: wasDragging = interaction.isDraggingGizmo; interaction.isDraggingGizmo = false; activeAxis = null;
+   *  if (group) opacities by hoveredAxis; 03 T5: interaction.gestureCancelled = false;
+   *  if (wasDragging && target) target.endGizmoDrag?.({cancel: false}) (once: only the first of the canvas and window calls) */
   onMouseUp()
+  /** 03 T5 (Escape): if (!interaction.isDraggingGizmo || !target?.endGizmoDrag) return false;
+   *  target.endGizmoDrag({cancel: true}); isDraggingGizmo = false; gestureCancelled = true; activeAxis = null;
+   *  opacities by hoveredAxis; updateOrientation(); updatePosition(); return true */
+  cancelDrag()
+  setSnapIncrements(partial)       // 03 T5: Object.assign(interaction.snap, partial) (the only writer of snap)
 }
 ```
-State: `#mode`, `#space = 'world'`, `#target`, `#group`, `#handles`, `#activeAxis`, `#hoveredAxis`, `#dragStart` (Vector3), `#dragPlane` (Plane). `interaction/` may import `render/ResourceTracker.js` (a leaf utility) for the Phase 1C disposal flip; it imports nothing else from `render/`.
+State: `#mode`, `#space = 'world'`, `#target`, `#group`, `#handles`, `#activeAxis`, `#hoveredAxis`, `#dragStart` (Vector3), `#dragPlane` (Plane).
+**Gesture swallowing (03 5.4).** The orbit's canvas `mousedown` runs before the router's, so when a gizmo drag is cancelled with the
+button held the orbit is armed with the press point; `interaction.gestureCancelled` keeps its `mousemove` (and the router's move and
+hover) silent until the release, so the view never jumps by the dragged distance. When nothing is cancelled the flag is never set. `interaction/` may import `render/ResourceTracker.js` (a leaf utility) for the Phase 1C disposal flip; it imports nothing else from `render/`.
 
 #### `js/interaction/PilotController.js`
 ```js
@@ -2075,18 +2169,22 @@ export class PilotController {
 #### `js/interaction/ViewportInput.js`
 ```js
 export class ViewportInput {
-  /** @param {{doc, win, sceneManager, interaction, gizmo: TransformGizmo, selection: SelectionManager, pilot: PilotController}} deps */
-  constructor({ doc, win, sceneManager, interaction, gizmo, selection, pilot })
+  /** @param {{doc, win, sceneManager, interaction, gizmo: TransformGizmo, selection: SelectionManager, pilot: PilotController,
+   *           onPivotShortcut: () => void}} deps   onPivotShortcut: 03 T5, App passes () => pivotController.toggleSelect() */
+  constructor({ doc, win, sceneManager, interaction, gizmo, selection, pilot, onPivotShortcut })
   /** 4410-4434 (doc keydown, registered AFTER KeyboardState's), with the 08 P2-9b filters (B-L11 fixed, 08 6.11):
    *  if (isTypingTarget(e.target) || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;   (Shift is allowed)
    *  e.key.toLowerCase() 'g' -> gizmo.setMode('translate'); 'r' -> gizmo.setMode('rotate'); 'l' -> gizmo.toggleSpace();
-   *  'p' -> pilot.toggle(); e.key === 'Escape' -> interaction.pilotMode ? pilot.toggle()
-   *  : (selection.deselect(), gizmo.mode && gizmo.clearMode()).  isTypingTarget comes through InputState's re-export. */
+   *  'p' -> pilot.toggle(); 'o' (03 T5, 3.4) -> unless pilotMode || isDraggingGizmo || gestureCancelled: onPivotShortcut();
+   *  e.key === 'Escape' -> (03 T5) isDraggingGizmo && gizmo.target?.endGizmoDrag ? gizmo.cancelDrag() (selection and mode kept)
+   *  : interaction.pilotMode ? pilot.toggle() : (selection.deselect(), gizmo.mode && gizmo.clearMode()).
+   *  isTypingTarget comes through InputState's re-export. */
   attachShortcuts()
   /** Verbatim 4437-4479 on canvas = sceneManager.renderer.domElement (registered AFTER the orbit listeners):
    *  mousedown: pilot ? pilot.onMouseDown(e) : (handled = gizmo.onMouseDown(e); if (!handled && gizmo.mode) selection.pickAt(e))
    *             LEGACY(B-M14): selection on mousedown, misses (orbit starts, right clicks) deselect;
-   *  mousemove: pilot ? pilot.onMouseMove(e) : (interaction.isDraggingGizmo ? gizmo.onMouseMove(e) : gizmo.onHover(e));
+   *  mousemove: pilot ? pilot.onMouseMove(e) : interaction.gestureCancelled ? nothing (03 T5)
+   *             : (interaction.isDraggingGizmo ? gizmo.onMouseMove(e) : gizmo.onHover(e));
    *  mouseup:   pilot ? pilot.onMouseUp() : gizmo.onMouseUp();
    *  win mouseup: gizmo.onMouseUp(); pilot.onMouseUp();
    *  wheel {passive: false}: if (pilot) pilot.onWheel(e).   ("pilot" = interaction.pilotMode) */
@@ -2799,7 +2897,9 @@ export class PropControls {            // new PropControls({doc, prefix: 'person
 export class ViewportToolbar {
   /** Owns #view-front/side/top/reset, #toggle-grid, #gizmo-translate, #gizmo-rotate, #gizmo-space, #gizmo-pilot,
    *  #selection-indicator, #pilot-info. Subscribes:
-   *   SELECTION_CHANGED({id, label}): id ? (add 'visible'; .selected-name = label || 'Unknown') : (remove 'visible'; 'None')  (3155-3167)
+   *   SELECTION_CHANGED({id, label, modes}): id ? (add 'visible'; .selected-name = label || 'Unknown') : (remove 'visible'; 'None')  (3155-3167);
+   *     03 T5: + ' (translate only)' while the gizmo mode is 'rotate' and the cached modes lack 'rotate' (re-evaluated on
+   *     GIZMO_MODE_CHANGED for such a selection only; a legacy target's badge is never rewritten there)
    *   GIZMO_MODE_CHANGED({mode}): #gizmo-translate.classList.toggle('active', mode === 'translate'); #gizmo-rotate likewise (3176-3177, 4428-4429)
    *   GIZMO_SPACE_CHANGED({space}): text 'W' | 'L'; toggle 'world' / 'local'; title 'World Space (L to toggle)' | 'Local Space (L to toggle)' (3184-3188)
    *   PILOT_CHANGED({active}): #gizmo-pilot toggle 'active'; #pilot-info toggle 'visible' (3484-3485)
@@ -2975,6 +3075,8 @@ Writers listed here are the only allowed writers (checked by `tests/static/check
 | (01 F1-1, not legacy) the debug-shading override | `LEDWallView` private `#shading`, `#override` (`MaterialOverride` stash) and the wall meshes' `.material` | `LEDWallView.setDebugShading/rebuild/withContentMaterials` (through `MaterialOverride`) |
 | (01 F1-1, not legacy) the normal lines | `NormalsDebugView.object3D` (its `LineSegments` and buffers), `#last` | `NormalsDebugView` (its `WALL_REBUILT` handler, `sync`, `dispose`) |
 | (03 T1, not legacy) the wall pivot | `Project.wall.pivot` (`WallPivot`: `mode`, `offset`, `keepStageLayout`; session-only until project file v2, the owner's decision of 2026-10-17) | `WallPivot` methods only (`setMode`, `setOffsetAxis`, `setOffset`, `resetOffset`, `setKeepStageLayout`), called from `PivotController` (03 T4); the field `Project.wall.pivot` itself is assigned only by `WallController.applyImport` (03 4.4) |
+| (03 T5, not legacy) the cancelled-gesture flag and the snap increments | `InteractionState.gestureCancelled` (set by `cancelDrag`, cleared by `onMouseUp` and the next `onMouseDown`), `InteractionState.snap` (`{pivotM: 0.1}`; spec 02 adds its keys; session-only) | `TransformGizmo` only (`snap` through `setSnapIncrements`, a merge) |
+| (03 T5, not legacy) the pivot marker | `PivotMarkerView` private `#group` (its glyph, ghost, drop and link objects), `#resolution`, `#preview`, `#selected` | `PivotMarkerView` (`init`, its three mirrors, `setPreview` / `clearPreview` from `PivotController`, `updateScale` from the pre-render hook) |
 | (03 T1, not legacy) the pivot-marker flag | `Project.display.showPivotMarker` (initially `DisplaySettings.DEFAULT_SHOW_PIVOT_MARKER`, `false` until 03 step C) | `PivotController.setMarkerVisible` (03 T4) |
 
 `InteractionState` is a shared read surface; its writers are listed above. `Project` and its parts are read by many modules but written only through the methods listed.
@@ -3001,7 +3103,7 @@ Writers listed here are the only allowed writers (checked by `tests/static/check
 | `wall:sectionsChanged` (`WALL_SECTIONS_CHANGED`) | `{reason: 'add'\|'delete'\|'import', addedId?}` | `WallController.addSection/deleteSection` right after the model change (legacy re-render point 4105 / 4134); `applyImport` (4998) | `SectionListPanel` (snapshot, render, restore; or render + expandFirst for import), `SectionLogosPanel` (render iff panel IDs are on, for every reason; the import since 08 P2-3d, B-L21) |
 | `wall:sectionRenamed` (`WALL_SECTION_RENAMED`) | `{}` | `WallController.commitRename()` only when panel IDs are on (4020) | `SectionLogosPanel` (render) |
 | `wall:meshModeChanged` (`WALL_MESH_MODE_CHANGED`) | `{mode}` | `WallController.setMeshMode` (after the model write, 4160) and `applyImport` iff `meshMode` is truthy (4992-4995) | `WallDisplayPanel` (label `.active` by equality; idempotent after a click) |
-| `wall:rebuilt` (`WALL_REBUILT`) | `{layout: WallLayout, meshMode, view: LEDWallView, cause: 'init'\|'pivot'\|'import'\|'edit', stageShift: {x, z}}` (`cause` and `stageShift` since 03 T3, additive: the stage-origin change against the resolution cached before this rebuild; `layout.pivot` holds `{resolution, frame: 'stage', translation}`) | `WallController.rebuild()` last step (after the hub) | `NormalsDebugView` (01 F1-1: caches `{layout, view}`, re-syncs the lines while they are on); seam for Features 2, 4, 5 |
+| `wall:rebuilt` (`WALL_REBUILT`) | `{layout: WallLayout, meshMode, view: LEDWallView, cause: 'init'\|'pivot'\|'import'\|'edit', stageShift: {x, z}}` (`cause` and `stageShift` since 03 T3, additive: the stage-origin change against the resolution cached before this rebuild; `layout.pivot` holds `{resolution, frame: 'stage', translation}`) | `WallController.rebuild()` last step (after the hub) | `NormalsDebugView` (01 F1-1: caches `{layout, view}`, re-syncs the lines while they are on); `CameraPanel` (03 T4: the `#camera-pos-z` `min`); `PivotMarkerView` (03 T5: placement) and `TransformGizmo` (03 T5: re-anchors a pivot target); seam for Features 2, 4, 5 |
 | `display:contentChanged` (`DISPLAY_CONTENT_CHANGED`) | `{toggled: 'ledSim'\|'panelIds', on: boolean, forcedOff: boolean}` | `WallController.setLedSim/setPanelIds` after the model update, before cache clear and rebuild (4170-4176, 4190-4197) | `WallDisplayPanel` (option blocks, forced-off toggle), `SectionLogosPanel` (render iff `toggled === 'panelIds' && on`) |
 | `camera:previewChanged` (`CAMERA_PREVIEW_CHANGED`) | `{enabled}` | `CameraController.setPreviewEnabled` after `cine.enabled = on` (4233) | `CameraPanel` (`#camera-preview-options` display) |
 | `camera:filmbackChanged` (`CAMERA_FILMBACK_CHANGED`) | `{key}` | `CameraController.setFilmback` after `cine.applyPreset` (4254-4262) | `CameraPanel` (`#custom-filmback`, size inputs) |
@@ -3011,12 +3113,12 @@ Writers listed here are the only allowed writers (checked by `tests/static/check
 | `camera:safeDistanceToggled` (`CAMERA_SAFE_DISTANCE_TOGGLED`) | `{enabled}` | `CameraController.setSafeDistanceEnabled` (4325) | `CameraPanel` (`#export-safe-distance` display) |
 | `prop:visibilityChanged` (`PROP_VISIBILITY_CHANGED`) | `{id, visible}` | `PropController.setVisible` after the model write (4335 / 4366) | `PropControls` with that prefix (`#<id>-options`) |
 | `prop:poseChanged` (`PROP_POSE_CHANGED`) | `{id, source: 'gizmo-translate'\|'gizmo-rotate'\|'pivot'}` (`'pivot'` since 03 T3; its mirror since 03 T4) | `PropController.applyGizmoTranslate/Rotate` (3351, 3358, 3391, 3397), `PropController.translateStage` (03 T3) | `PropControls` with that prefix |
-| `selection:changed` (`SELECTION_CHANGED`) | `{id, label}` (`null`s on deselect) | `SelectionManager.select` (before `gizmo.attach`), `deselect` (before `gizmo.detach`) (3141, 3148) | `ViewportToolbar` (badge) |
-| `selectable:moved` (`SELECTABLE_MOVED`) | `{id}` | `CameraHub.refresh` last step (2466-2468), `PropController.applyTransform` (2889, 2980) | `TransformGizmo` (`updatePosition()` iff its target has that id) |
+| `selection:changed` (`SELECTION_CHANGED`) | `{id, label, modes}` (`null`s and `modes: []` on deselect; `modes` since 03 T5: the gizmo modes whose `allowedAxes` is not `null`) | `SelectionManager.select` (before `gizmo.attach`), `deselect` (before `gizmo.detach`) (3141, 3148) | `ViewportToolbar` (badge; the translate-only suffix since 03 T5), `PivotMarkerView` (03 T5: colour, visibility) |
+| `selectable:moved` (`SELECTABLE_MOVED`) | `{id}` | `CameraHub.refresh` last step (2466-2468), `PropController.applyTransform` (2889, 2980), `PivotController` (03 T4: the drag preview, the end of a drag or cancel, the end of P-PIVOT) | `TransformGizmo` (`updatePosition()` iff its target has that id) |
 | `gizmo:modeChanged` (`GIZMO_MODE_CHANGED`) | `{mode}` | `TransformGizmo.setMode/clearMode` before `rebuild` (3176-3177, 4428-4429) | `ViewportToolbar` |
 | `gizmo:spaceChanged` (`GIZMO_SPACE_CHANGED`) | `{space}` | `TransformGizmo.toggleSpace` before re-orientation (3184-3188) | `ViewportToolbar` |
 | `pilot:changed` (`PILOT_CHANGED`) | `{active}` | `PilotController.toggle` right after the flip (3484-3485) | `ViewportToolbar` (button + banner) |
-| `wall:pivotChanged` (`WALL_PIVOT_CHANGED`) | `{source: 'mode'\|'offset'\|'reset-offset'\|'gizmo'\|'import'\|'keep-stage'\|'marker', pivot: {mode, offset, keepStageLayout} (a copy), resolution: PivotResolution\|null, stageShift: {x, z}, reexpressed, rebuilds}`; a visual event (07 C47), 03 T4 | `PivotController.#commit` after the model write and the re-expression, before `wallController.commitPivot`; `setKeepStageLayout` / `setMarkerVisible` (`rebuilds: false`, the cached resolution); `WallController.applyImport` after the pivot assignment, before every other import event and the rebuild (`rebuilds: true`, `resolvePivotNow()`) | `CameraPanel` (`#camera-pos-z` `min`; 03 T4); `PivotMarkerView` and `PivotPanel` land with 03 T5 and T6 |
+| `wall:pivotChanged` (`WALL_PIVOT_CHANGED`) | `{source: 'mode'\|'offset'\|'reset-offset'\|'gizmo'\|'import'\|'keep-stage'\|'marker', pivot: {mode, offset, keepStageLayout} (a copy), resolution: PivotResolution\|null, stageShift: {x, z}, reexpressed, rebuilds}`; a visual event (07 C47), 03 T4 | `PivotController.#commit` after the model write and the re-expression, before `wallController.commitPivot`; `setKeepStageLayout` / `setMarkerVisible` (`rebuilds: false`, the cached resolution); `WallController.applyImport` after the pivot assignment, before every other import event and the rebuild (`rebuilds: true`, `resolvePivotNow()`) | `CameraPanel` (`#camera-pos-z` `min`; 03 T4); `PivotMarkerView` (placement, visibility; 03 T5); `PivotPanel` lands with 03 T6 |
 | `debug:viewChanged` (`DEBUG_VIEW_CHANGED`) | `{shading, normals: {enabled, vertex, face, lengthScale, onTop}}` (a frozen `DebugViewSettings.snapshot()`); a visual event (07 C47) | `DebugViewController` after every settings write, before its render call (01 F1-2) | `DebugViewControls` (buttons, inputs, legend, announcer); added in the same step as the emitter (5.1 rule 7) |
 
 Ordering guarantees per multi-subscriber event: `WALL_SECTIONS_CHANGED` runs `SectionListPanel` then `SectionLogosPanel` (construction order); `DISPLAY_CONTENT_CHANGED` runs `WallDisplayPanel` then `SectionLogosPanel`. Their targets are disjoint, so the order is not observable.
@@ -3207,8 +3309,10 @@ Upload: `FileReader.onload` -> `Image.onload` -> `logos.setImage(parseInt(id), i
 - **Pick** (canvas mousedown, 4439-4448; LEGACY(B-M14)): pilot -> `pilot.onMouseDown`; else `handled = gizmo.onMouseDown(e)`; `if (!handled && gizmo.mode) selection.pickAt(e)`: hit with a new id -> `select(id)`: emit `SELECTION_CHANGED` -> `gizmo.attach(selectable)` (rebuild); miss -> `deselect()`: emit `SELECTION_CHANGED{null}` -> `gizmo.detach()`.
 - **Hover** (canvas mousemove without drag): `gizmo.onHover(e)`.
 - **Drag** (mousemove while dragging, 3309-3409): translate -> `target.applyGizmoTranslate(movement)`: camera: `cine.translateBy` -> emit `CAMERA_POSE_CHANGED{gizmo-translate}` -> `if (enabled) hub.refresh()` (whose last step moves the gizmo); prop: `prop.translateBy` -> emit `PROP_POSE_CHANGED` -> `applyTransform()` (emits `SELECTABLE_MOVED`). Rotate -> `target.applyGizmoRotate(axis, -angleDeg)`, then `updateOrientation()` iff local. Then `dragStart.copy(current)`; `updatePosition()`.
-- **Release** (canvas and window mouseup): `gizmo.onMouseUp()` (both fire; idempotent).
-- **Escape** (4421-4432): pilot ? `pilot.toggle()` : `selection.deselect()` then `if (gizmo.mode) gizmo.clearMode()` (emit `GIZMO_MODE_CHANGED{null}` -> rebuild, which only removes).
+- **Release** (canvas and window mouseup): `gizmo.onMouseUp()` (both fire; idempotent; 03 T5: the first one after a drag calls `target.endGizmoDrag?.({cancel: false})`, and every one clears `gestureCancelled`).
+- **Escape** (4421-4432): 03 T5: a drag whose target implements `endGizmoDrag` -> `gizmo.cancelDrag()` only (`endGizmoDrag({cancel: true})`, selection and mode kept, the rest of the gesture swallowed); else pilot ? `pilot.toggle()` : `selection.deselect()` then `if (gizmo.mode) gizmo.clearMode()` (emit `GIZMO_MODE_CHANGED{null}` -> rebuild, which only removes).
+- **O** (03 T5, 3.4; not in pilot, not during a (cancelled) drag): `pivotController.toggleSelect()`: selected ? `deselect()` : `select('pivot')` then `gizmo.setMode('translate')` unless already translate.
+- **Pivot drag** (03 T5, rows F3-4): `beginGizmoDrag` on the handle hit; each move `applyGizmoTranslate(movement, ctx)` previews the marker only (`SELECTABLE_MOVED{pivot}`, no rebuild); the release commits P-PIVOT once; a rebuild of any cause re-anchors a selected pivot (`WALL_REBUILT`).
 - **Prop hide / preview off**: conditional `deselect()` (6.5, 6.8).
 
 ### 6.10 Pilot mode and import
@@ -3283,6 +3387,7 @@ preview = new PreviewWindow({ doc, win, cine, elements: { windowEl: #camera-prev
                               resizeHandle: #camera-preview-resize, info: #camera-preview-info, fov: #camera-preview-fov,
                               res: #camera-preview-res } })
 personView = new PersonPropView({ sceneManager, theme }); carView = new CarPropView({ sceneManager, theme })
+pivotMarker = new PivotMarkerView({ sceneManager, bus, display, theme })     // 03 T5: subscriptions only (allocated last)
 headerStats = new HeaderStats({ doc, bus })                                   // subscribed before the bootstrap rebuild
 orbit = new OrbitController({ sceneManager, keyboard, interaction, frameBounds })
 gizmo = new TransformGizmo({ sceneManager, pointerRay, interaction, bus, theme })
@@ -3295,6 +3400,9 @@ personController = new PropController({ prop: person, view: personView, selectio
 carController = new PropController({ prop: car, view: carView, selection, bus })
 selection.register(cameraController); selection.register(personController); selection.register(carController)   // pick tie order
 wallController = new WallController({ project, view: wallView, ledTiles, orbit, hub, bus, palette: theme.palette, dialogs })
+pivotController = new PivotController({ project, wallController, markerView: pivotMarker,          // 03 T5 (5.8)
+  stageAnchored: [cameraController, personController, carController], selection, gizmo, interaction, bus })
+selection.register(pivotController)       // 03 T5: last in the pick tie order (its priority counts against walls only)
 serializer = new ProjectSerializer({ palette: theme.palette })
 objExporter = new ObjExporter({ brand, colorToRgb, builder: new WallMeshBuilder(Strategies.mesh.obj) })
 gltfExporter = new GltfExporter({ brand, colorToRgb, builder: new WallMeshBuilder(Strategies.mesh.gltf) })
@@ -3307,13 +3415,15 @@ cameraPanel = new CameraPanel({ doc, project, cameraController, projectIO, bus, 
 personControls = new PropControls({ doc, prefix: 'person', controller: personController, prop: person, bus })
 carControls = new PropControls({ doc, prefix: 'car', controller: carController, prop: car, bus })
 toolbar = new ViewportToolbar({ doc, orbit, sceneManager, gizmo, pilot, bus })
-viewportInput = new ViewportInput({ doc, win, sceneManager, interaction, gizmo, selection, pilot })
+viewportInput = new ViewportInput({ doc, win, sceneManager, interaction, gizmo, selection, pilot,
+                                   onPivotShortcut: () => pivotController.toggleSelect() })   // 03 T5: the O key
 exportPanel = new ExportPanel({ doc, projectIO })
 debugControls = new DebugViewControls({ doc, win, controller: debugController, bus, theme })   // subscribes DEBUG_VIEW_CHANGED
 tick = () => { orbit.tickKeyboard(); pilot.tickKeyboard(); sceneManager.render(); preview.render(sceneManager.scene, sceneManager.helpers) }
 
 // ---- legacy init() (1426-1455) ----
 sceneManager.init()                       // 1427-1449: scene, camera, renderer, lights, grid, axes
+sceneManager.addPreRender((camera) => pivotMarker.updateScale(camera, sceneManager.canvas.clientHeight))   // 03 T5, 07 C46
 wallController.rebuild({ cause: 'init' })   // 1451: P1 (stats via HeaderStats, orbit target; hub skipped); cause since 03 T3
 orbit.attach()                            // 1452 setupControls: canvas mousedown, mousemove, mouseup, mouseleave, wheel
 keyboard.attach()                         // 1452 setupControls: doc keydown, doc keyup, win blur
@@ -3333,6 +3443,9 @@ debugControls.bind(); debugControls.bindShortcuts()   // 01 F1-2: after every le
 
 // ---- legacy setView('reset') (5095) ----
 orbit.setView('reset')
+
+// ---- 03 T5 (5.8): the pivot marker is allocated LAST (every legacy THREE id and the r128 draw order unchanged) ----
+pivotMarker.init(wallController.pivotResolution)
 
 // ---- 06 T5 (06 5.6): the font gate, fire-and-forget (6.2 row F6-1; it rebuilds at most once, never in the harness) ----
 runFontGate({ fonts: doc.fonts, preloadFonts: theme.canvas.preloadFonts, panelIds, wallController,
@@ -3945,3 +4058,10 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 6.2: rows F3-1 to F3-5 and the amended row 24 (also in `WallController`'s module header); `PivotController` never calls `rebuild()`.
 - 4: the pivot rows already name the writers (`WallPivot` methods via `PivotController`; `PivotController.setMarkerVisible`). 10 (static rule 10): `showPivotMarker` joins the domain fields, `PivotController` (receiver `display`) is its one allowed writer.
 - 2.3: `pivot-controller.test.mjs` (new: 03 8.1 tests 10-15, test 15's marker part lands with `PivotMarkerView` in 03 T5), `wall-controller.test.mjs` (the import's `WALL_PIVOT_CHANGED`), `core.test.mjs` (the catalogue).
+
+**03 T5, the pivot marker and the shared path-B gizmo hook set** (Feature 3 step A, fifth and last commit; docs/improvements/03-pivot.md 3.3, 3.4, 5.3, 5.4, 5.8, 10; 07 C33, C46; manifest `tests/regression/expected/F3-T5.json`, an invariance commit: the marker is allocated last and stays hidden, and every hook is optional, so no output changes):
+- 2.2, 3.7: `render/PivotMarkerView.js` (new: the two-tone glyph, pick proxy, drop line, anchor ghost and link in the stage frame, on `LAYERS.HELPERS`, every group at `RENDER_ORDER.PIVOT_MARKER`; visibility, selected colour, preview, minimum screen size). `SceneManager.addPreRender` (07 C46): hooks run in `render()` before the draw.
+- 3.8 `InputState`: `InteractionState.gestureCancelled` and `.snap` (writer: `TransformGizmo` only); `PointerRay`'s ray tests every layer. `OrbitController`: the pointer `mousemove` guard gains `gestureCancelled`. `SelectionManager`: the Selectable typedef becomes the path-B hook set; `register` requires `kind` (inferred for camera, person, car), `kindOf`; `pickAt` chooses by the 03 5.4 rule (priority only against wall hits; the legacy nearest hit without them); `SELECTION_CHANGED.modes`. `TransformGizmo`: `beginGizmoDrag` on a hit, `ctx = {space, axisWorld, snap}`, `endGizmoDrag({cancel: false})` on the ending mouse-up, `cancelDrag()`, the detach cancel, `allowedAxes` (null: no group; false: no handle), `orientGizmo(rotation, mode)`, `setSnapIncrements`, the `WALL_REBUILT` re-anchor of a pivot target. `ViewportInput`: the `O` key (`onPivotShortcut`) with its guards, the Escape cancel branch, the router's swallowed gesture. 3.8 also documents the gesture swallowing.
+- 3.11 `ViewportToolbar`: the badge suffix " (translate only)" from the cached `modes` (moved here from 03 T6, with the payload field it reads). 3.12, 7: `pivotMarker` (after `carView`), `pivotController` and its registration (after `wallController`), `onPivotShortcut`, the `addPreRender` registration and `pivotMarker.init(wallController.pivotResolution)` after the reset view. 4: the cancelled-gesture flag, the snap increments and the marker. 5.2: the `selection:changed`, `selectable:moved`, `wall:rebuilt` and `wall:pivotChanged` rows. 6.9: Release, Escape, O and the pivot drag.
+- Deviations from 03 10's T5 row, recorded there: `PivotMarkerView` imports `render/SceneManager.js` for `LAYERS` (as `NormalsDebugView` does; 03 8.2 listed only `vendor/three.js`, `core`, `geometry` and `ResourceTracker`); every marker line is a dashed light core over a Morph Black halo (06 5.12, the spec of record, over 03 3.3's solid white cross); the ghost and the link follow the effective offset (offset plus drag preview), so a drag from a zero offset shows the anchor; 03 5.4's `modes` expression is corrected (`(sel.allowedAxes?.(m) ?? {}) !== null` turned `null` into `{}`).
+- 2.3: `gizmo.test.mjs`, `selection.test.mjs`, `viewport-input.test.mjs`, `pivot-marker.test.mjs` and `fixtures/fake-three.mjs` (new; 03 8.1 tests 16, 18, 19, 20, test 15's marker part and the shared gizmo tests).

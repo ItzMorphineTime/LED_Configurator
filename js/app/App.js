@@ -33,6 +33,7 @@ import { CameraRigView } from '../render/CameraRigView.js';
 import { SafeDistanceView } from '../render/SafeDistanceView.js';
 import { PreviewWindow } from '../render/PreviewWindow.js';
 import { PersonPropView, CarPropView } from '../render/PropViews.js';
+import { PivotMarkerView } from '../render/PivotMarkerView.js';
 import { DebugMaterials } from '../render/DebugMaterials.js';
 import { NormalsDebugView } from '../render/NormalsDebugView.js';
 import { InteractionState, KeyboardState, PointerRay } from '../interaction/InputState.js';
@@ -48,6 +49,7 @@ import { GltfExporter } from '../io/GltfExporter.js';
 import { WallController } from './WallController.js';
 import { CameraHub, CameraController } from './CameraController.js';
 import { PropController } from './PropController.js';
+import { PivotController } from './PivotController.js';
 import { Downloader, ProjectIO } from './ProjectIO.js';
 import { DebugViewController } from './DebugViewController.js';
 import { runFontGate } from './fontGate.js';
@@ -153,6 +155,8 @@ export class App {
     });
     const personView = new PersonPropView({ sceneManager, theme });
     const carView = new CarPropView({ sceneManager, theme });
+    // 03 T5 (5.8): the pivot marker (subscribes WALL_REBUILT, WALL_PIVOT_CHANGED, SELECTION_CHANGED; allocated last).
+    const pivotMarker = new PivotMarkerView({ sceneManager, bus, display, theme });
     // Subscribed before the bootstrap rebuild, so the first WALL_STATS_CHANGED reaches the header.
     const headerStats = new HeaderStats({ doc, bus });
     const orbit = new OrbitController({ sceneManager, keyboard, interaction, frameBounds });
@@ -173,6 +177,13 @@ export class App {
     const wallController = new WallController({
       project, view: wallView, ledTiles, orbit, hub, bus, palette: theme.palette, dialogs,
     });
+    // 03 T5 (5.8): the pivot use cases; the stage-anchored participants in re-expression order. Registered after the
+    // camera, person and car, so the pivot is last in the raycast tie order (its pickPriority counts against walls only).
+    const pivotController = new PivotController({
+      project, wallController, markerView: pivotMarker, stageAnchored: [cameraController, personController, carController],
+      selection, gizmo, interaction, bus,
+    });
+    selection.register(pivotController);
     const serializer = new ProjectSerializer({ palette: theme.palette });
     const objExporter = new ObjExporter({ brand, colorToRgb, builder: new WallMeshBuilder(Strategies.mesh.obj) });
     const gltfExporter = new GltfExporter({ brand, colorToRgb, builder: new WallMeshBuilder(Strategies.mesh.gltf) });
@@ -200,7 +211,9 @@ export class App {
     const personControls = new PropControls({ doc, prefix: 'person', controller: personController, prop: person, bus });
     const carControls = new PropControls({ doc, prefix: 'car', controller: carController, prop: car, bus });
     const toolbar = new ViewportToolbar({ doc, orbit, sceneManager, gizmo, pilot, bus });
-    const viewportInput = new ViewportInput({ doc, win, sceneManager, interaction, gizmo, selection, pilot });
+    const viewportInput = new ViewportInput({
+      doc, win, sceneManager, interaction, gizmo, selection, pilot, onPivotShortcut: () => pivotController.toggleSelect(),
+    });
     const exportPanel = new ExportPanel({ doc, projectIO });
     // Subscribes DEBUG_VIEW_CHANGED (its only subscriber, 01 F1-2).
     const debugControls = new DebugViewControls({ doc, win, controller: debugController, bus, theme });
@@ -214,6 +227,8 @@ export class App {
 
     // ---- legacy init() (1426-1455) ----
     sceneManager.init();                       // 1427-1449: scene, camera, renderer, lights, grid, axes
+    // 03 T5 (5.8, 07 C46): the marker's minimum screen size before every main render (a no-op until init and while hidden)
+    sceneManager.addPreRender((camera) => pivotMarker.updateScale(camera, sceneManager.canvas.clientHeight));
     wallController.rebuild({ cause: 'init' });   // 1451: P1 (stats via HeaderStats, orbit target; hub skipped)
     orbit.attach();                            // 1452 setupControls: canvas mousedown, mousemove, mouseup, mouseleave, wheel
     keyboard.attach();                         // 1452 setupControls: doc keydown, doc keyup, win blur
@@ -239,6 +254,9 @@ export class App {
 
     // ---- legacy setView('reset') (5095) ----
     orbit.setView('reset');
+
+    // ---- 03 T5 (5.8): the pivot marker is allocated last, so every legacy THREE id (and the r128 draw order) is kept ----
+    pivotMarker.init(wallController.pivotResolution);
 
     // ---- 06 T5 (5.6): the font gate, fire-and-forget (ARCHITECTURE 6.2 row F6-1). It rebuilds at most once, and only
     // if a panel-ID canvas was drawn before its web font arrived while panel IDs are on; never in the harness. ----

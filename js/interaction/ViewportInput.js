@@ -1,7 +1,10 @@
 /**
  * @module interaction/ViewportInput
- * Viewport input routing: the G/R/L/P/Escape shortcut keys and the canvas pointer routing
+ * Viewport input routing: the G/R/L/P/O/Escape shortcut keys and the canvas pointer routing
  * (pilot | gizmo drag/hover | pick), registered in the legacy setupUI phase and order.
+ * 03 T5 (docs/improvements/03-pivot.md 3.4, 5.4): the O key (pivot selection), the Escape order (a hooked gizmo drag is
+ * cancelled first) and the gesture swallowing of a cancelled drag (the router's mousemove does nothing while
+ * interaction.gestureCancelled).
  * Legacy source: index.html@cd3fd3f 4409-4479.
  * Layer: interaction (may import vendor/three, core, legacy, interaction, and render/ResourceTracker only).
  */
@@ -29,6 +32,8 @@ export class ViewportInput {
   #selection;
   /** @type {import('./PilotController.js').PilotController} */
   #pilot;
+  /** @type {() => void} the O key's use case (PivotController.toggleSelect, 03 3.4) */
+  #onPivotShortcut;
 
   /**
    * Stores the collaborators (no listeners here: see attachShortcuts() and attachPointer()).
@@ -37,9 +42,10 @@ export class ViewportInput {
    *          interaction: import('./InputState.js').InteractionState,
    *          gizmo: import('./TransformGizmo.js').TransformGizmo,
    *          selection: import('./SelectionManager.js').SelectionManager,
-   *          pilot: import('./PilotController.js').PilotController}} deps
+   *          pilot: import('./PilotController.js').PilotController, onPivotShortcut: () => void}} deps
+   *   onPivotShortcut: the O key (03 3.4; App passes () => pivotController.toggleSelect())
    */
-  constructor({ doc, win, sceneManager, interaction, gizmo, selection, pilot }) {
+  constructor({ doc, win, sceneManager, interaction, gizmo, selection, pilot, onPivotShortcut }) {
     this.#doc = doc;
     this.#win = win;
     this.#sceneManager = sceneManager;
@@ -47,6 +53,7 @@ export class ViewportInput {
     this.#gizmo = gizmo;
     this.#selection = selection;
     this.#pilot = pilot;
+    this.#onPivotShortcut = onPivotShortcut;
   }
 
   /**
@@ -56,6 +63,11 @@ export class ViewportInput {
    * 07 3.8: text-like INPUT, SELECT, TEXTAREA, contenteditable, inside an open dialog), when Ctrl, Meta or
    * Alt is held (Ctrl+P is the print dialog, not pilot mode), or when it is an auto-repeat (holding P no longer
    * flips pilot mode). Shift is allowed (Shift+G still means G).
+   * 03 T5 (3.4): O toggles the pivot selection (onPivotShortcut), not in pilot mode and not while a gizmo drag is active or
+   * a cancelled drag's button is still held (Ctrl+O, the browser's open-file key, is already filtered with every
+   * modifier). Escape first cancels a drag whose target implements endGizmoDrag (gizmo.cancelDrag(): the selection and
+   * the mode are kept and the rest of the gesture is swallowed); otherwise pilot mode is left, else the selection and the
+   * mode are cleared (legacy; legacy targets have no hook, so a mid-drag Escape on them is unchanged).
    * Ports: index.html@cd3fd3f lines 4409-4434.
    * Side effects: adds 1 document keydown listener; the handler calls the gizmo, selection and pilot.
    */
@@ -73,8 +85,14 @@ export class ViewportInput {
         gizmo.toggleSpace();
       } else if (e.key.toLowerCase() === 'p') {
         pilot.toggle();
+      } else if (e.key.toLowerCase() === 'o') {
+        const interaction = this.#interaction;
+        if (interaction.pilotMode || interaction.isDraggingGizmo || interaction.gestureCancelled) return;
+        this.#onPivotShortcut();
       } else if (e.key === 'Escape') {
-        if (this.#interaction.pilotMode) {
+        if (this.#interaction.isDraggingGizmo && gizmo.target?.endGizmoDrag) {
+          gizmo.cancelDrag();
+        } else if (this.#interaction.pilotMode) {
           pilot.toggle();
         } else {
           this.#selection.deselect();
@@ -88,7 +106,9 @@ export class ViewportInput {
 
   /**
    * The canvas pointer routing (registered after the orbit listeners on the same canvas), the window
-   * mouseup that always ends gizmo drags and pilot looks, and the pilot wheel ({passive: false}).
+   * mouseup that always ends gizmo drags and pilot looks, and the pilot wheel ({passive: false}). 03 T5 (5.4): while a
+   * cancelled drag's button is still held (interaction.gestureCancelled), mousemove calls neither gizmo.onMouseMove nor
+   * gizmo.onHover, so nothing moves and no handle lights up.
    * Ports: index.html@cd3fd3f lines 4436-4479.
    * Side effects: adds 4 canvas listeners and 1 window listener; the handlers call the pilot, gizmo and
    * selection.
@@ -117,6 +137,7 @@ export class ViewportInput {
         pilot.onMouseMove(e);
         return;
       }
+      if (interaction.gestureCancelled) return;
       if (interaction.isDraggingGizmo) {
         gizmo.onMouseMove(e);
       } else {

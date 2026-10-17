@@ -3,6 +3,12 @@
  * The hand-written translate/rotate gizmo bound to the selected Selectable: build (exact legacy allocation
  * order), world/local orientation, position follow, hover highlight, drag start/move/end. The domain writes of
  * a drag go through the Selectable (applyGizmoTranslate / applyGizmoRotate).
+ * 03 T5 (docs/improvements/03-pivot.md 5.4; 07 C33): the shared path-B hook lifecycle that spec 02 reuses: beginGizmoDrag
+ * on a handle hit, ctx = {space, axisWorld, snap} on every drag step (snap = interaction.snap iff Ctrl/Cmd is held),
+ * endGizmoDrag({cancel: false}) on the mouse-up that ends a drag, cancelDrag() (Escape) -> endGizmoDrag({cancel: true}) and
+ * the gesture swallowing flag interaction.gestureCancelled, the detach cancel, allowedAxes(mode) (null: no handles at
+ * all; false: no handle for that axis), setSnapIncrements (a merge) and the WALL_REBUILT re-anchor of a pivot target.
+ * Legacy targets (camera, props) implement none of the optional hooks and behave exactly as before.
  * Legacy source: index.html@cd3fd3f 1358-1367 (gizmo state), 2997-3099 (createGizmo), 3101-3137 (orientation
  * and position, generic parts), 3146-3152 (deselect part), 3169-3193 (mode, space), 3195-3230 (hover),
  * 3232-3425 (mouse down/move/up), 4426-4431 (Escape mode reset).
@@ -19,10 +25,11 @@ import { RENDER_ORDER } from '../core/renderOrder.js';
 /**
  * The translate/rotate gizmo of the selected Selectable, registered with SceneManager as a helper. Owns the
  * legacy globals `gizmoMode`, `gizmoSpace`, `gizmoGroup`, `gizmoHandles`, `activeGizmoAxis`, `hoveredGizmoAxis`,
- * `dragStartPoint` and `dragPlane`, and is the only writer of InteractionState.isDraggingGizmo.
+ * `dragStartPoint` and `dragPlane`, and is the only writer of InteractionState.isDraggingGizmo, .gestureCancelled and
+ * (through setSnapIncrements) .snap (03 5.4).
  * Wiring (App): SelectionManager attaches and detaches the target; ViewportInput routes the canvas pointer events
  * and the G/R/L/Escape keys here, ViewportToolbar its mode and space buttons; the constructor subscribes to
- * SELECTABLE_MOVED so the gizmo follows its target.
+ * SELECTABLE_MOVED so the gizmo follows its target, and to WALL_REBUILT so a pivot target is re-anchored (03 5.4).
  */
 export class TransformGizmo {
   /** @type {import('../render/SceneManager.js').SceneManager} */
@@ -56,9 +63,12 @@ export class TransformGizmo {
 
   /**
    * Stores the collaborators and subscribes to SELECTABLE_MOVED: when the moved Selectable is the gizmo's
-   * target, the gizmo follows it (position only, B-L23, tagged at updatePosition).
+   * target, the gizmo follows it (position only, B-L23, tagged at updatePosition); and (03 T5, 5.4) to WALL_REBUILT: a
+   * rebuild can move the pivot (a section edit or an import that changes the anchor), and mirrors may not emit, so a pivot
+   * target is re-anchored here. Its anchor comes from WallController's cache, set before the event, so the subscriber
+   * order does not matter.
    * Allocates no THREE Object3D/Material/Geometry (R4).
-   * Side effects: one bus subscription.
+   * Side effects: two bus subscriptions.
    * @param {{sceneManager: import('../render/SceneManager.js').SceneManager,
    *          pointerRay: import('./InputState.js').PointerRay,
    *          interaction: import('./InputState.js').InteractionState,
@@ -73,6 +83,9 @@ export class TransformGizmo {
     this.#colors = theme.scene.gizmo;
     bus.on(Events.SELECTABLE_MOVED, ({ id }) => {
       if (this.#target && this.#target.id === id) this.updatePosition();
+    });
+    bus.on(Events.WALL_REBUILT, () => {
+      if (this.#target?.kind === 'pivot') this.updatePosition();
     });
   }
 
@@ -120,10 +133,12 @@ export class TransformGizmo {
   /**
    * Unbinds the gizmo and removes its group from the scene (the gizmo part of deselectObject).
    * Ports: index.html@cd3fd3f lines 3146-3152.
-   * Side effects: resets hoveredAxis; removes the group helper from the scene and disposes its geometries and
-   *   materials.
+   * A drag of a target with the end hook is cancelled first (03 5.4: endGizmoDrag({cancel: true}), gestureCancelled).
+   * Side effects: maybe cancelDrag(); resets hoveredAxis; removes the group helper from the scene and disposes its
+   *   geometries and materials.
    */
   detach() {
+    if (this.#interaction.isDraggingGizmo && this.#target?.endGizmoDrag) this.cancelDrag();
     this.#target = null;
     this.#hoveredAxis = null;
     if (this.#group) {
@@ -195,6 +210,10 @@ export class TransformGizmo {
     }
 
     if (!this.#target || !this.#mode) return;
+    // 03 5.4 (07 C33): a mode the target does not support (allowedAxes(mode) === null) gets no handles and no group
+    // (the pivot in rotate mode); legacy targets have no allowedAxes and keep every handle.
+    const axes = this.#target.allowedAxes?.(this.#mode);
+    if (axes === null) return;
 
     // LEGACY(B-L26): pilot mode does not hide or skip the gizmo; it is built and rendered as usual.
     const gizmoGroup = new THREE.Group();
@@ -206,10 +225,11 @@ export class TransformGizmo {
 
     // LEGACY(B-L22): every handle is built whatever the target, so props show a Y arrow and X/Z rings
     // that do nothing (Prop.translateBy ignores dy, Prop.rotateBy ignores x and z).
+    const allowed = (axis) => axes?.[axis] !== false;
     if (this.#mode === 'translate') {
-      this.#buildTranslateHandles(gizmoGroup, scale);
+      this.#buildTranslateHandles(gizmoGroup, scale, allowed);
     } else if (this.#mode === 'rotate') {
-      this.#buildRotateHandles(gizmoGroup, scale);
+      this.#buildRotateHandles(gizmoGroup, scale, allowed);
     }
 
     this.updateOrientation();
@@ -228,7 +248,7 @@ export class TransformGizmo {
     this.#group.rotation.set(0, 0, 0);
 
     if (this.#space === 'local') {
-      this.#target.orientGizmo(this.#group.rotation);
+      this.#target.orientGizmo(this.#group.rotation, this.#mode);
     }
   }
 
@@ -270,12 +290,16 @@ export class TransformGizmo {
   /**
    * Starts a drag when a handle is hit: active axis, drag flag, highlight, drag plane, drag start point.
    * Ports: index.html@cd3fd3f lines 3232-3307.
-   * Side effects: writes the shared pick ray, handle mesh userData; on a hit also activeAxis,
-   * interaction.isDraggingGizmo, handle opacities, the drag plane and the drag start point.
+   * 03 5.4: a new press always ends a swallowed gesture (gestureCancelled = false, defensively; mouse-up clears it too),
+   * and a handle hit calls the target's beginGizmoDrag hook after the drag state is set.
+   * Side effects: clears interaction.gestureCancelled; writes the shared pick ray, handle mesh userData; on a hit also
+   * activeAxis, interaction.isDraggingGizmo, handle opacities, the drag plane, the drag start point and
+   * target.beginGizmoDrag?.().
    * @param {MouseEvent} event
    * @returns {boolean} true iff a handle was hit (the event is then not used for picking)
    */
   onMouseDown(event) {
+    this.#interaction.gestureCancelled = false;
     if (!this.#group || !this.#target || this.#interaction.pilotMode) return false;
 
     const raycaster = this.#pointerRay.fromEvent(event);
@@ -308,6 +332,7 @@ export class TransformGizmo {
       }
 
       raycaster.ray.intersectPlane(this.#dragPlane, this.#dragStart);
+      this.#target.beginGizmoDrag?.();
       return true;
     }
 
@@ -319,6 +344,8 @@ export class TransformGizmo {
    * axis) or the signed rotation angle (degrees) to the target, then follows it.
    * Ports: index.html@cd3fd3f lines 3309-3409 (the per-object branches 3337-3361 and 3375-3400 are
    * Selectable.applyGizmoTranslate / applyGizmoRotate).
+   * 03 5.4: each step also passes ctx = {space, axisWorld, snap}: the unit drag axis in world space (the translate axis or
+   * the rotate plane normal) and interaction.snap iff Ctrl/Cmd is held, else null. Legacy targets ignore ctx.
    * Side effects: writes the shared pick ray and the drag start point; the target writes the domain, emits
    * its pose events and refreshes; may write the group rotation and position.
    * @param {MouseEvent} event
@@ -339,7 +366,7 @@ export class TransformGizmo {
       const axisDelta = delta.dot(axisDir);
       const movement = axisDir.clone().multiplyScalar(axisDelta);
 
-      this.#target.applyGizmoTranslate(movement);
+      this.#target.applyGizmoTranslate(movement, this.#dragContext(event, axisDir));
     } else if (this.#mode === 'rotate') {
       const gizmoPos = this.#group.position.clone();
       const startDir = this.#dragStart.clone().sub(gizmoPos).normalize();
@@ -354,7 +381,8 @@ export class TransformGizmo {
 
       // LEGACY(B-M12): the angle is applied with Strategies.gizmoRotateSign (-1), so the target turns opposite
       // to the drag; `value + (-1 * angle)` is bit-identical to the legacy `value - angle`.
-      this.#target.applyGizmoRotate(this.#activeAxis, Strategies.gizmoRotateSign * angle);
+      this.#target.applyGizmoRotate(this.#activeAxis, Strategies.gizmoRotateSign * angle,
+        this.#dragContext(event, this.#dragPlane.normal.clone()));
 
       if (this.#space === 'local') {
         this.updateOrientation();
@@ -366,17 +394,71 @@ export class TransformGizmo {
   }
 
   /**
-   * Ends a drag (canvas and window mouseup both call it; idempotent) and restores the hover highlight.
+   * Ends a drag (canvas and window mouseup both call it; idempotent) and restores the hover highlight. 03 5.4: the
+   * swallowed gesture of a cancelled drag ends here (gestureCancelled = false), and the mouse-up that ends a drag calls
+   * the target's endGizmoDrag({cancel: false}) hook (the commit) exactly once: only the first of the two calls sees the
+   * drag flag, and a cancelled drag left no drag to end.
    * Ports: index.html@cd3fd3f lines 3411-3425.
-   * Side effects: writes interaction.isDraggingGizmo, activeAxis and handle opacities.
+   * Side effects: writes interaction.isDraggingGizmo, interaction.gestureCancelled, activeAxis and handle opacities;
+   *   maybe target.endGizmoDrag({cancel: false}).
    */
   onMouseUp() {
+    const wasDragging = this.#interaction.isDraggingGizmo;
     this.#interaction.isDraggingGizmo = false;
     this.#activeAxis = null;
 
     if (this.#group) {
       this.#paintHandles(this.#hoveredAxis, this.#colors.hoverOpacity, this.#colors.idleOpacity);
     }
+    this.#interaction.gestureCancelled = false;
+    if (wasDragging && this.#target) this.#target.endGizmoDrag?.({ cancel: false });
+  }
+
+  /**
+   * Escape during a drag (03 5.4, 07 C33): cancels the drag of a target that implements the end hook. The target restores
+   * itself (endGizmoDrag({cancel: true})), the drag ends without a commit, and the rest of the mouse gesture is
+   * swallowed until the button is released (gestureCancelled: no orbit, no move, no hover). The selection is kept.
+   * Side effects (only when it cancels): target.endGizmoDrag({cancel: true}); writes interaction.isDraggingGizmo = false,
+   *   interaction.gestureCancelled = true, activeAxis and handle opacities; re-orients and re-positions the group.
+   * @returns {boolean} whether a drag was cancelled (false, changing nothing, without a drag or for a target without the
+   *   hook: Escape then keeps its legacy behaviour)
+   */
+  cancelDrag() {
+    if (!this.#interaction.isDraggingGizmo || !this.#target?.endGizmoDrag) return false;
+    this.#target.endGizmoDrag({ cancel: true });
+    this.#interaction.isDraggingGizmo = false;
+    this.#interaction.gestureCancelled = true;
+    this.#activeAxis = null;
+    if (this.#group) {
+      this.#paintHandles(this.#hoveredAxis, this.#colors.hoverOpacity, this.#colors.idleOpacity);
+    }
+    this.updateOrientation();
+    this.updatePosition();
+    return true;
+  }
+
+  /**
+   * The snapping increments of Ctrl/Cmd-held drags (the shared model, 03 D9): a merge, so each spec passes only its own
+   * keys (the pivot's pivotM; spec 02's translateMm and rotateDeg). The only writer of interaction.snap.
+   * Side effects: Object.assign(interaction.snap, partial).
+   * @param {{pivotM?: number, translateMm?: number, rotateDeg?: number}} partial
+   */
+  setSnapIncrements(partial) {
+    Object.assign(this.#interaction.snap, partial);
+  }
+
+  /**
+   * The drag context of one step (03 5.4): {space, axisWorld, snap}; snap is interaction.snap iff Ctrl or Cmd is held.
+   * @param {{ctrlKey?: boolean, metaKey?: boolean}} event
+   * @param {THREE.Vector3} axisWorld  the unit drag axis in world space
+   * @returns {{space: 'world'|'local', axisWorld: {x: number, y: number, z: number}, snap: object|null}}
+   */
+  #dragContext(event, axisWorld) {
+    return {
+      space: this.#space,
+      axisWorld: { x: axisWorld.x, y: axisWorld.y, z: axisWorld.z },
+      snap: (event.ctrlKey || event.metaKey) ? this.#interaction.snap : null,
+    };
   }
 
   /**
@@ -396,12 +478,14 @@ export class TransformGizmo {
   }
 
   /**
-   * The three translate arrows (X red, Y green, Z blue), in the exact legacy allocation order.
+   * The three translate arrows (X red, Y green, Z blue), in the exact legacy allocation order; an axis the target's
+   * allowedAxes sets to false gets no arrow (03 5.4; legacy targets allow every axis).
    * Ports: index.html@cd3fd3f lines 3023-3066.
    * @param {THREE.Group} gizmoGroup
    * @param {number} scale
+   * @param {(axis: 'x'|'y'|'z') => boolean} allowed
    */
-  #buildTranslateHandles(gizmoGroup, scale) {
+  #buildTranslateHandles(gizmoGroup, scale, allowed) {
     const colors = this.#colors;
     const gizmoHandles = this.#handles;
     const arrowLength = 1.2 * scale;
@@ -410,80 +494,94 @@ export class TransformGizmo {
     const shaftRadius = 0.04 * scale;
 
     // X axis (red)
-    const xMat = this.#material(colors.x);
-    const xShaft = new THREE.Mesh(new THREE.CylinderGeometry(shaftRadius, shaftRadius, arrowLength - arrowHeadLength, 12), xMat);
-    xShaft.rotation.z = -Math.PI / 2;
-    xShaft.position.x = (arrowLength - arrowHeadLength) / 2;
-    const xHead = new THREE.Mesh(new THREE.ConeGeometry(arrowHeadRadius, arrowHeadLength, 16), xMat);
-    xHead.rotation.z = -Math.PI / 2;
-    xHead.position.x = arrowLength - arrowHeadLength / 2;
-    const xArrow = new THREE.Group();
-    xArrow.add(xShaft, xHead);
-    xArrow.userData = { axis: 'x', type: 'translate', material: xMat, color: colors.x };
-    gizmoHandles.x = xArrow;
-    gizmoGroup.add(xArrow);
+    if (allowed('x')) {
+      const xMat = this.#material(colors.x);
+      const xShaft = new THREE.Mesh(new THREE.CylinderGeometry(shaftRadius, shaftRadius, arrowLength - arrowHeadLength, 12), xMat);
+      xShaft.rotation.z = -Math.PI / 2;
+      xShaft.position.x = (arrowLength - arrowHeadLength) / 2;
+      const xHead = new THREE.Mesh(new THREE.ConeGeometry(arrowHeadRadius, arrowHeadLength, 16), xMat);
+      xHead.rotation.z = -Math.PI / 2;
+      xHead.position.x = arrowLength - arrowHeadLength / 2;
+      const xArrow = new THREE.Group();
+      xArrow.add(xShaft, xHead);
+      xArrow.userData = { axis: 'x', type: 'translate', material: xMat, color: colors.x };
+      gizmoHandles.x = xArrow;
+      gizmoGroup.add(xArrow);
+    }
 
     // Y axis (green)
-    const yMat = this.#material(colors.y);
-    const yShaft = new THREE.Mesh(new THREE.CylinderGeometry(shaftRadius, shaftRadius, arrowLength - arrowHeadLength, 12), yMat);
-    yShaft.position.y = (arrowLength - arrowHeadLength) / 2;
-    const yHead = new THREE.Mesh(new THREE.ConeGeometry(arrowHeadRadius, arrowHeadLength, 16), yMat);
-    yHead.position.y = arrowLength - arrowHeadLength / 2;
-    const yArrow = new THREE.Group();
-    yArrow.add(yShaft, yHead);
-    yArrow.userData = { axis: 'y', type: 'translate', material: yMat, color: colors.y };
-    gizmoHandles.y = yArrow;
-    gizmoGroup.add(yArrow);
+    if (allowed('y')) {
+      const yMat = this.#material(colors.y);
+      const yShaft = new THREE.Mesh(new THREE.CylinderGeometry(shaftRadius, shaftRadius, arrowLength - arrowHeadLength, 12), yMat);
+      yShaft.position.y = (arrowLength - arrowHeadLength) / 2;
+      const yHead = new THREE.Mesh(new THREE.ConeGeometry(arrowHeadRadius, arrowHeadLength, 16), yMat);
+      yHead.position.y = arrowLength - arrowHeadLength / 2;
+      const yArrow = new THREE.Group();
+      yArrow.add(yShaft, yHead);
+      yArrow.userData = { axis: 'y', type: 'translate', material: yMat, color: colors.y };
+      gizmoHandles.y = yArrow;
+      gizmoGroup.add(yArrow);
+    }
 
     // Z axis (blue)
-    const zMat = this.#material(colors.z);
-    const zShaft = new THREE.Mesh(new THREE.CylinderGeometry(shaftRadius, shaftRadius, arrowLength - arrowHeadLength, 12), zMat);
-    zShaft.rotation.x = Math.PI / 2;
-    zShaft.position.z = (arrowLength - arrowHeadLength) / 2;
-    const zHead = new THREE.Mesh(new THREE.ConeGeometry(arrowHeadRadius, arrowHeadLength, 16), zMat);
-    zHead.rotation.x = Math.PI / 2;
-    zHead.position.z = arrowLength - arrowHeadLength / 2;
-    const zArrow = new THREE.Group();
-    zArrow.add(zShaft, zHead);
-    zArrow.userData = { axis: 'z', type: 'translate', material: zMat, color: colors.z };
-    gizmoHandles.z = zArrow;
-    gizmoGroup.add(zArrow);
+    if (allowed('z')) {
+      const zMat = this.#material(colors.z);
+      const zShaft = new THREE.Mesh(new THREE.CylinderGeometry(shaftRadius, shaftRadius, arrowLength - arrowHeadLength, 12), zMat);
+      zShaft.rotation.x = Math.PI / 2;
+      zShaft.position.z = (arrowLength - arrowHeadLength) / 2;
+      const zHead = new THREE.Mesh(new THREE.ConeGeometry(arrowHeadRadius, arrowHeadLength, 16), zMat);
+      zHead.rotation.x = Math.PI / 2;
+      zHead.position.z = arrowLength - arrowHeadLength / 2;
+      const zArrow = new THREE.Group();
+      zArrow.add(zShaft, zHead);
+      zArrow.userData = { axis: 'z', type: 'translate', material: zMat, color: colors.z };
+      gizmoHandles.z = zArrow;
+      gizmoGroup.add(zArrow);
+    }
   }
 
   /**
-   * The three rotate rings (X red, Y green, Z blue), in the exact legacy allocation order.
+   * The three rotate rings (X red, Y green, Z blue), in the exact legacy allocation order; an axis the target's
+   * allowedAxes sets to false gets no ring (03 5.4; legacy targets allow every axis).
    * Ports: index.html@cd3fd3f lines 3069-3093.
    * @param {THREE.Group} gizmoGroup
    * @param {number} scale
+   * @param {(axis: 'x'|'y'|'z') => boolean} allowed
    */
-  #buildRotateHandles(gizmoGroup, scale) {
+  #buildRotateHandles(gizmoGroup, scale, allowed) {
     const colors = this.#colors;
     const gizmoHandles = this.#handles;
     const ringRadius = 0.65 * scale;
     const tubeRadius = 0.04 * scale;
 
     // X rotation ring (red)
-    const xMat = this.#material(colors.x);
-    const xRing = new THREE.Mesh(new THREE.TorusGeometry(ringRadius, tubeRadius, 12, 48), xMat);
-    xRing.rotation.y = Math.PI / 2;
-    xRing.userData = { axis: 'x', type: 'rotate', material: xMat, color: colors.x };
-    gizmoHandles.rx = xRing;
-    gizmoGroup.add(xRing);
+    if (allowed('x')) {
+      const xMat = this.#material(colors.x);
+      const xRing = new THREE.Mesh(new THREE.TorusGeometry(ringRadius, tubeRadius, 12, 48), xMat);
+      xRing.rotation.y = Math.PI / 2;
+      xRing.userData = { axis: 'x', type: 'rotate', material: xMat, color: colors.x };
+      gizmoHandles.rx = xRing;
+      gizmoGroup.add(xRing);
+    }
 
     // Y rotation ring (green)
-    const yMat = this.#material(colors.y);
-    const yRing = new THREE.Mesh(new THREE.TorusGeometry(ringRadius, tubeRadius, 12, 48), yMat);
-    yRing.rotation.x = Math.PI / 2;
-    yRing.userData = { axis: 'y', type: 'rotate', material: yMat, color: colors.y };
-    gizmoHandles.ry = yRing;
-    gizmoGroup.add(yRing);
+    if (allowed('y')) {
+      const yMat = this.#material(colors.y);
+      const yRing = new THREE.Mesh(new THREE.TorusGeometry(ringRadius, tubeRadius, 12, 48), yMat);
+      yRing.rotation.x = Math.PI / 2;
+      yRing.userData = { axis: 'y', type: 'rotate', material: yMat, color: colors.y };
+      gizmoHandles.ry = yRing;
+      gizmoGroup.add(yRing);
+    }
 
     // Z rotation ring (blue)
-    const zMat = this.#material(colors.z);
-    const zRing = new THREE.Mesh(new THREE.TorusGeometry(ringRadius, tubeRadius, 12, 48), zMat);
-    zRing.userData = { axis: 'z', type: 'rotate', material: zMat, color: colors.z };
-    gizmoHandles.rz = zRing;
-    gizmoGroup.add(zRing);
+    if (allowed('z')) {
+      const zMat = this.#material(colors.z);
+      const zRing = new THREE.Mesh(new THREE.TorusGeometry(ringRadius, tubeRadius, 12, 48), zMat);
+      zRing.userData = { axis: 'z', type: 'rotate', material: zMat, color: colors.z };
+      gizmoHandles.rz = zRing;
+      gizmoGroup.add(zRing);
+    }
   }
 
   /**
