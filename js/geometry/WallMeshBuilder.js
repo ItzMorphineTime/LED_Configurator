@@ -264,7 +264,9 @@ export class WallMeshBuilder {
 
   /**
    * One section's vertex grid, pushed into `out` (appended with loops, never spread).
-   * For row = 0..panelRows (<=), y = row * sl.panelH; for col = 0..panelCols (<=), edge = sl.edges[col]:
+   * For row = 0..panelRows (<=), y = sl.baseY === 0 ? row * sl.panelH : sl.baseY + row * sl.panelH (03 6.4: the
+   * identity branch is the verbatim legacy expression, so even -0 bytes are unchanged; baseY is -P.y in the export
+   * frame); for col = 0..panelCols (<=), edge = sl.edges[col]:
    *   positions.push(edge.x, y, edge.z);
    *   normals mode = opts.normals ?? this.profile.normals: 'averaged' (08 6.4 with 01 CR-1) -> a flat section
    *     (sl.isFlat) pushes the 'right-panel' normals verbatim, a curved one the panel normal at its end columns and
@@ -338,10 +340,11 @@ export class WallMeshBuilder {
    * @param {{positions: number[], normals: number[], uvs: number[]}} out
    */
   #pushVertices(sl, writeNormal, writeUv, out) {
-    const { section, edges: edgePositions, panelH } = sl;
+    const { section, edges: edgePositions, panelH, baseY } = sl;
     const { positions, normals, uvs } = out;
     for (let row = 0; row <= section.panelRows; row++) {
-      const y = row * panelH;
+      // 03 6.4: the bottom of the columns is baseY (0 in the layout and stage frames, -P.y in the export frame)
+      const y = baseY === 0 ? row * panelH : baseY + row * panelH;
       for (let col = 0; col <= section.panelCols; col++) {
         const edge = edgePositions[col];
         positions.push(edge.x, y, edge.z);

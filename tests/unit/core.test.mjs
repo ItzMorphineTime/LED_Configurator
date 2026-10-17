@@ -203,7 +203,7 @@ describe('Strategies', () => {
         gltf: { winding: 'ccw', normals: 'averaged', panelNormal: 'facing', attributes: ['POSITION', 'NORMAL', 'TEXCOORD_0'],
                 combinedUV: 'atlas-pixel-accurate', indexType: 'auto', doubleSided: 'omit' },
       },
-      framingBounds: 'flat',
+      framingBounds: 'flat-pivot',   // 03 T2 (Phase-1 'flat')
       curveBeforeFirstPanel: true,
       frustumDepthM: 15,
       previewRendererSize: [320, 180],

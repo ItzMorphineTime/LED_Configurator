@@ -318,13 +318,25 @@ describe('computeWallLayout vs the legacy walks', () => {
     });
   });
 
-  test('layoutProject(project) == computeWallLayout(project.wall.sections)', (t) => {
-    overAllWalls(t, ({ sections }, mm, label) => {
-      const project = Project.createDefault();
-      project.wall.replaceAll(sections);
-      const a = layoutProject(project), b = computeWallLayout(sections);
-      compareDeep(a.sections.map(asWalkEntry), b.sections.map(asWalkEntry), label, mm);
-    });
+  test('layoutProject(project) == computeWallLayout(project.wall.sections) at the identity pivot, in every frame (03 8.1 test 3)', (t) => {
+    const translated = WallLayout.prototype.translated;
+    WallLayout.prototype.translated = () => { throw new Error('the identity pivot must not translate (03 6.3)'); };
+    try {
+      overAllWalls(t, ({ sections }, mm, label) => {
+        const project = Project.createDefault();
+        project.wall.replaceAll(sections);
+        const b = computeWallLayout(sections);
+        for (const frame of ['stage', 'export', 'layout']) {
+          const a = layoutProject(project, { frame });
+          compareDeep(a.sections.map(asWalkEntry), b.sections.map(asWalkEntry), `${label} ${frame}`, mm);
+          compareDeep(a.sections.map((sl) => [sl.baseY, sl.postTransform]), b.sections.map(() => [0, null]), `${label} ${frame} baseY`, mm);
+          compareDeep([a.pivot.frame, a.pivot.translation.x === 0 && a.pivot.translation.y === 0 && a.pivot.translation.z === 0],
+            [frame, true], `${label} ${frame} pivot`, mm);
+        }
+      });
+    } finally {
+      WallLayout.prototype.translated = translated;
+    }
   });
 
   test('postTransforms seam: stored per section, never fed back into the cursor', () => {
@@ -888,11 +900,11 @@ describe('index width (B-L5, 08 6.2)', () => {
 });
 
 describe('framingBounds and the Feature 3 seams', () => {
-  test('framingBounds(project) == project.wall.flatBounds() (the legacy flat loops)', (t) => {
+  test("framingBounds(project) 'flat-pivot' at the identity pivot == project.wall.flatBounds() plus minX = wallZ = +0 (03 6.6)", (t) => {
     overAllWalls(t, ({ sections }, mm, label) => {
       const project = Project.createDefault();
       project.wall.replaceAll(sections);
-      compareDeep(framingBounds(project), project.wall.flatBounds(), `${label}.framingBounds`, mm);
+      compareDeep(framingBounds(project), { ...project.wall.flatBounds(), minX: 0, wallZ: 0 }, `${label}.framingBounds`, mm);
     });
   });
 
@@ -964,7 +976,7 @@ describe('framingBounds and the Feature 3 seams', () => {
     project.wall.replaceAll([]);
     assert.ok(project.wall instanceof Wall);
     assert.deepEqual(layoutProject(project).flatEdges(), []);
-    assert.deepEqual(framingBounds(project), { totalWidth: 0, maxHeight: 0 });
+    assert.deepEqual(framingBounds(project), { totalWidth: 0, maxHeight: 0, minX: 0, wallZ: 0 });
   });
 });
 

@@ -1,0 +1,23 @@
+{
+  "commit": "F3-T2",
+  "bugs": [],
+  "expect": [],
+  "mayChange": [
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-03 T1 runs); this commit changes no pixel of it"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b); this commit changes no export"
+    },
+    {
+      "output": "ui_visual/00_initial.sidebar.screenshot.png",
+      "change": "modified",
+      "reason": "one sidebar pixel of this DOM-only capture differed by 7 levels in the P2-7e runs (DOM text antialiasing); this commit changes no markup, style or sidebar text"
+    }
+  ],
+  "notes": "03 T2 (docs/improvements/03-pivot.md 6.1-6.4, 6.6, 10), step A's second commit, invariance (8.4 step A: zero diffs at the identity pivot). The pivot geometry: SectionLayout.baseY (0 in the walk) and translated, WallLayout.pivot, generativeBounds (bounds delegates), pivotPoint with the floor modes at sections[0].baseY, translated(), resolvePivot, stageShift, layoutProject(project, {frame}) (at the identity pivot every frame returns the walk itself, so the viewport, safe-distance and export layouts hold the same values as before), framingBounds 'flat-pivot' (Strategies flip; {totalWidth, maxHeight} unchanged plus minX = wallZ = +0, which no consumer reads before 03 T3), and the builder's baseY branch (baseY === 0: the verbatim legacy y). Every output must stay identical."
+}

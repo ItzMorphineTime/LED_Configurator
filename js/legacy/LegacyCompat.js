@@ -58,7 +58,7 @@ export const Strategies = deepFreeze({
                                                    // since 08 P2-7b (B-M6), Phase-1 'per-section-overlap';
                                                    // gltf.attributes + 'TEXCOORD_0' and the new leaf gltf.combinedUV since
                                                    // 08 P2-7c (B-M7)
-  framingBounds: 'flat',                           // B-L2, B-M10
+  framingBounds: 'flat-pivot',                     // B-L2, B-M10; Phase-1 'flat' (03 T2: translated by the stage origin)
   curveBeforeFirstPanel: true,                     // B-L1
   frustumDepthM: 15,                               // B-L33
   previewRendererSize: [320, 180],                 // B-M9

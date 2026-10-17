@@ -91,12 +91,12 @@ Direction of communication:
 - Y is up; the wall stands on the floor `y = 0`; sections are bottom-aligned.
 - The wall front faces **+Z** (default orbit camera, film camera, safe-distance floor all on +Z).
 - **Front faces (08 6.4):** triangles are wound counter-clockwise seen from the front (+Z for a flat wall), and normals point to the stage. The viewport strips follow this since 08 P2-2a (`mesh.viewport.winding = 'ccw'`; panel mode's `PlaneGeometry` always did); the OBJ writer since 08 P2-2c (`mesh.obj.winding = 'ccw'`, one averaged `vn` per vertex, and the orientation header line of 01 CR-3); the glTF writer since 08 P2-2d (`mesh.gltf.winding = 'ccw'` and a `NORMAL` attribute with the same normals). The normals are never negated: the safe zone, coverage and camera code depend on +Z being the front.
-- The world origin is the first section's first bottom edge vertex (implicit pivot `bottom-left`; the layout frame L below, which is also the stage and export frame while the pivot is the default). `ledWallGroup` keeps an identity transform; vertices are baked in world space.
+- The layout frame L (below) is the legacy world: its origin is the first section's first bottom edge vertex (the `bottom-left` pivot). Since 03 T2 `layoutProject` produces the stage frame S (the viewport, picking, the safe zone, framing and every pose; its origin is the pivot projected onto the floor, which stays y = 0) and, for the exports from 03 T3, the export frame E (its origin is the pivot). At the default pivot (bottom-left, zero offset) L = S = E, and `layoutProject` returns the walk itself. `ledWallGroup` keeps an identity transform; vertices are baked in the stage frame (there is never a wall root transform, 07 C32).
 - Angles: section fields are degrees; the layout walk works in radians with the legacy association `(deg * Math.PI) / 180`.
 - Euler order for the film camera, preview camera and local gizmo: `'YXZ'` with (tilt = rotX, pan = rotY, roll = rotZ).
 - **Curve convention (B-L1, decided 2026-10-16: kept).** The walk starts with heading 0 along +X, and each section applies its curve step `c` **before** each panel's move. For a section with heading-in `H`, angle offset `a` and `N` panel columns, panel k (0-based) has heading `H + a + (k+1)·c` and the section exits with heading `H + a + N·c`, which is the next section's `H`. Adjacent panels are always exactly `c` apart, so multi-section curves stay continuous; a curved first section starts rotated by `c` against +X (a one-column section with a 10° curve is one panel at 10°). The owner kept this convention at Phase 2 kickoff (08 Q10, recorded in 08 §5.6; 07 C6), so it is documented behaviour and not a defect to fix. `Strategies.curveBeforeFirstPanel` (8.1) stays until 08 P2-13f retires it; the legacy convention is then the only code path, and no output changes. Project files carry no convention key (v2.0). If the convention ever changes, an additive revision adds a top-level `curvature_convention` key (absent means this convention) and `computeWallLayout` reads `layoutOptions.curveConvention` (07 C6).
 
-**Coordinate frames and the frame of each consumer** (07 C60, 03 §5.1). Three frames are named. Until Feature 3 (spec 03, the pivot) lands, the pivot is the identity and all three coincide with the legacy world above, so Phase 1 and Phase 2 code never needs to distinguish them. Every consumer added later reads the frame listed for it here. The pivot API that the table and the pipeline below name (`resolvePivot`, `translated()` and the `frame` option of `layoutProject`) is added by Feature 3 with its section 3.6 amendment (03 §5.9 #3), not by this table: until then `layoutProject(project)` returns `computeWallLayout(project.wall.sections)` (3.6), which is the layout, stage and export frame at once.
+**Coordinate frames and the frame of each consumer** (07 C60, 03 §5.1). Three frames are named. Phase 1 and Phase 2 code never needed to distinguish them, because the pivot was the identity and all three coincided with the legacy world above. Every consumer reads the frame listed for it here. The pivot API that the table and the pipeline below name (`resolvePivot`, `translated()` and the `frame` option of `layoutProject`) landed with 03 T2 (3.6); the pivot stays the identity, and the three frames coincide, until 03 T4 and T6 let the user change it (session-only until project file v2, the owner's decision of 2026-10-17).
 
 | Frame | Origin | Produced by | Consumers |
 |---|---|---|---|
@@ -230,7 +230,9 @@ js/
                                                  preferences; not persisted)
   geometry/
     WallLayout.js                          WP4   The single cursor walk: computeWallLayout, layoutProject, framingBounds,
-                                                 SectionLayout, WallLayout (flatEdges, firstEdge/lastEdge, bounds, pivotPoint)
+                                                 SectionLayout, WallLayout (flatEdges, firstEdge/lastEdge, bounds, pivotPoint);
+                                                 03 T2: baseY, generativeBounds, translated, resolvePivot, stageShift, the
+                                                 frames of layoutProject, framingBounds 'flat-pivot'
     WallMeshBuilder.js                     WP4   quadIndices + WallMeshBuilder: the one owner of winding, normals, UVs, panel quads;
                                                  maxIndexOf, indexWidth (index component width, 08 P2-1b)
     TextureAtlas.js                        WP4   computeAtlas (LED totals, px/LED, start columns, x offsets, UV offsets),
@@ -398,6 +400,10 @@ tests/
     core.test.mjs                          WP3   EventBus semantics, LegacyCompat helpers, LEGACY_SITES shape
     domain.test.mjs                        WP3   rule tables vs legacy expressions, Wall/CineCamera/Prop/LogoLibrary semantics
     oracle/legacy-geometry.mjs             WP4   verbatim THREE-free copies of the legacy layout walks and grid builders
+    pivot.test.mjs                         03 T2  Feature 3's geometry (03 8.1 tests 1-9): the 6.8 anchors, resolvePivot,
+                                                 stageShift, the frames of layoutProject, translated(), the export frame of
+                                                 the grids and panel corners, 'flat-pivot', the composition contract with
+                                                 spec 02 (a stub offset builder; spec 02's E17); test 9 skipped (B-L1 kept)
     geometry.test.mjs                      WP4   Object.is equality vs the oracle over fuzzed sections (strings, fractions, NaN ids);
                                                  since 08 P2-0 the oracle builders are injected with LegacyProfiles.mesh.*;
                                                  08 P2-12d: panelUvs, TextureBudget and the wall-wide panelPxPerLed (07 6.12);
@@ -651,7 +657,7 @@ export const Strategies = deepFreeze({
                                                    // since 08 P2-7b (B-M6), Phase-1 'per-section-overlap';
                                                    // gltf.attributes + 'TEXCOORD_0' and the new leaf gltf.combinedUV since
                                                    // 08 P2-7c (B-M7)
-  framingBounds: 'flat',                           // B-L2, B-M10
+  framingBounds: 'flat-pivot',                     // B-L2, B-M10; Phase-1 'flat' (03 T2: translated by the stage origin)
   curveBeforeFirstPanel: true,                     // B-L1
   frustumDepthM: 15,                               // B-L33
   previewRendererSize: [320, 180],                 // B-M9
@@ -1147,29 +1153,51 @@ Replaces the three identical walks at 1482-1549 (viewport), 2614-2647 (safe dist
  *  @returns {WallLayout} */
 export function computeWallLayout(sections, { postTransforms = null } = {})
 
-/** THE single entry point used by every consumer (LEDWallView via WallController, SafeDistanceView via CameraHub,
- *  exporters via ProjectIO): computeWallLayout(project.wall.sections). Features 2 and 3 add options here only. */
-export function layoutProject(project)
+/** 03 T2 (6.2): a = layoutL.pivotPoint(pivot.mode) ?? {x: 0, y: 0, z: 0} (empty wall: the layout origin);
+ *  P = a + pivot.offset; P not finite -> null (a non-finite layout: the identity fallback);
+ *  else {mode, offset: {...offset}, anchor: a, point: P, stageOrigin: {x: P.x, y: 0, z: P.z}} (layout frame).
+ *  Generative quantities only: a section offset never moves the pivot (03 5.10 #1). */
+export function resolvePivot(layoutL, pivot)          // PivotResolution | null
+/** 03 T2: {x: so(b).x - so(a).x, z: so(b).z - so(a).z}, so(null) = (0, 0, 0)   (the stage-origin change, layout frame) */
+export function stageShift(a, b)
 
-/** The single switch for the four flat-bounds consumers (orbit target, camera reset, coverage status, safe-D):
- *  switch (Strategies.framingBounds) { case 'flat': return project.wall.flatBounds();   // LEGACY(B-L2, B-M10)
- *  default: throw unsupportedStrategy(...) }   @returns {{totalWidth, maxHeight}} */
-export function framingBounds(project)
+/** THE single entry point used by every consumer (LEDWallView via WallController, SafeDistanceView via CameraHub,
+ *  exporters via ProjectIO with {frame: 'export'}, 03 T3). 03 T2 (6.3, 1.4): raw = computeWallLayout(sections) (every
+ *  postTransform null); resolution = resolvePivot(raw, project.wall.pivot); t = frame === 'layout' || !resolution ? 0
+ *  : frame === 'export' ? -P : -(P.x, 0, P.z) ('stage', the default); out = t is all zero (-0 included) ? raw (the
+ *  same object, bit-identical) : raw.translated(t); spec 02 inserts applySectionOffsets(out) here (07 C32);
+ *  out.pivot = {resolution, frame, translation: t}. Any other frame throws RangeError. */
+export function layoutProject(project, { frame = 'stage' } = {})
+
+/** The single switch for the four flat-bounds consumers (orbit target, camera reset, coverage status, safe-D), injected
+ *  as `frameBounds` (from 03 T3 App passes WallController's cached resolution):
+ *  switch (Strategies.framingBounds) { case 'flat-pivot':   // LEGACY(B-L2, B-M10): flat bounds, translated by the stage origin
+ *    b = project.wall.flatBounds(); so = resolution ? resolution.stageOrigin : {x: 0, z: 0};
+ *    return {totalWidth: b.totalWidth, maxHeight: b.maxHeight, minX: 0 - so.x, wallZ: 0 - so.z};   (+0 at the identity)
+ *  default: throw unsupportedStrategy(...) }   ('flat' deleted in 03 T2; step F, 08 P2-11c, adds 'layout') */
+export function framingBounds(project, resolution = resolvePivot(computeWallLayout(project.wall.sections), project.wall.pivot))
 
 export class SectionLayout {
-  /** One options object (built only by computeWallLayout): postTransform is stored as given (`postTransforms[i] ?? null`). */
-  constructor({ section, sectionIndex, panelW, panelH, isFlat, edges, panels, postTransform = null })
+  /** One options object (built only by computeWallLayout and translated): postTransform is stored as given
+   *  (`postTransforms[i] ?? null`); baseY defaults to 0 (03 T2). */
+  constructor({ section, sectionIndex, panelW, panelH, isFlat, edges, panels, postTransform = null, baseY = 0 })
   section; sectionIndex; sectionId;     // sectionId === section.id
   panelW; panelH; isFlat;
   edges;            // [{x, z, angle}] (legacy edgePositions), length panelCols + 1 for integer counts
   panels;           // [{x, y, z, rotY, col, row, sectionIndex}] (legacy panelData), row-major
   postTransform;    // Feature 2 hook: column-major 4x4 array or null. ALWAYS null in Phase 1, never read, never fed
                     // back into the cursor.
+  baseY;            // 03 T2 (6.1, 6.4): the bottom of every column; 0 in the walk and the stage frame, -P.y in the
+                    // export frame; the same for every section of one layout
+  /** 03 T2: a new SectionLayout with every field copied, edges {x + dx, z + dz, angle}, panels {x + dx, y + dy, z + dz,
+   *  rotY, col, row, sectionIndex}, baseY + dy, postTransform null (called by WallLayout.translated) */
+  translated(dx, dy, dz)
 }
 
 export class WallLayout {
-  constructor({ sections })   // built only by computeWallLayout
+  constructor({ sections })   // built only by computeWallLayout and translated()
   sections;         // SectionLayout[]
+  pivot = null;     // 03 T2: {resolution, frame, translation}, set by layoutProject only
   /** Legacy safe-distance `allEdges` (2619-2647): [] when there are no sections; otherwise sections[0].edges[0]
    *  followed by every section's edges.slice(1), in order. MUST return [] (not throw) for an empty wall:
    *  legacy imports of `sections: []` with preview + safe distance on add an empty group and do not throw. The one
@@ -1177,15 +1205,24 @@ export class WallLayout {
   flatEdges()
   get firstEdge()   // sections[0].edges[0] or null when empty            (Feature 3)
   get lastEdge()    // last section's last edge or null when empty         (Feature 3)
-  /** True axis-aligned box of every grid vertex (loops row <= panelRows, col <= panelCols over edges, y = row * panelH),
-   *  {min:{x,y,z}, max:{x,y,z}} or null when empty. Computed on demand (a fresh object per call) with plain < / >
-   *  comparisons: NaN coordinates are skipped, 0 and -0 are not distinguished, and a wall whose sections have no grid
-   *  vertex gives {min: +Infinity x3, max: -Infinity x3}. Unused in Phase 1; unit-tested. */
-  bounds()
-  /** 'bottom-left': {x: firstEdge.x, y: 0, z: firstEdge.z}; 'wall-center': midpoint of firstEdge and lastEdge, y 0
-   *  (the owner's "middle of entire wall"); 'mesh-center': centre of bounds() (y policy decided in Feature 3).
-   *  null when empty; an unknown mode throws RangeError. Unused in Phase 1; unit-tested. */
+  /** 03 T2: the generative box (FramingPolicy's generativeBox, 07 C34): the axis-aligned box of every grid vertex before
+   *  spec 02's offsets (loops row <= panelRows, col <= panelCols over edges, y = baseY === 0 ? row * panelH
+   *  : baseY + row * panelH), {min:{x,y,z}, max:{x,y,z}} or null when empty; frames excluded; spec 02 T3 makes it
+   *  attached-only. Computed on demand (a fresh object per call) with plain < / > comparisons: NaN coordinates are
+   *  skipped, 0 and -0 are not distinguished, and a wall whose sections have no grid vertex gives
+   *  {min: +Infinity x3, max: -Infinity x3}. */
+  generativeBounds()
+  bounds()          // generativeBounds() until spec 02 makes bounds() the transformed box (07 C34's wallBox)
+  /** 03 T2 (6.1, the y policy settled, B5): with y0 = sections[0].baseY (0 in the layout frame, so the floor modes
+   *  return the Phase-1 values bit for bit): 'bottom-left': {x: firstEdge.x, y: y0, z: firstEdge.z}; 'wall-center':
+   *  the midpoint of firstEdge and lastEdge at y0 (the owner's "middle of entire wall"); 'mesh-center': the centre of
+   *  generativeBounds(), y included (half the tallest section for a bottom-aligned wall). null when empty; an unknown
+   *  mode throws RangeError. On a translated copy every mode follows the translation. */
   pivotPoint(mode)
+  /** 03 T2 (6.4): throws Error('translated() expects the raw walk: apply section offsets after the pivot translation')
+   *  if any section has a postTransform (the one composition rule, 03 5.10 #2, 07 C32); else a new WallLayout of
+   *  sl.translated(dx, dy, dz) per section, with no pivot block. Pure. */
+  translated(dx, dy, dz)
 }
 ```
 
@@ -1224,7 +1261,8 @@ export class WallMeshBuilder {
   get profile()
 
   /** One section's vertex grid, verbatim 1598-1640 / 1716-1751 / 5041-5048, pushing into `out` (append with loops,
-   *  never spread). For row = 0..panelRows (<=), y = row * sl.panelH; for col = 0..panelCols (<=), edge = sl.edges[col]:
+   *  never spread). For row = 0..panelRows (<=), y = sl.baseY === 0 ? row * sl.panelH : sl.baseY + row * sl.panelH
+   *  (03 T2, 6.4: the identity branch is the verbatim legacy expression); for col = 0..panelCols (<=), edge = sl.edges[col]:
    *    positions.push(edge.x, y, edge.z)
    *    normals = opts.normals ?? this.profile.normals, read with
    *      switch (normals) { case 'averaged': ...; case 'right-panel': ...; case 'none': ...; default: throw unsupportedStrategy('mesh.normals', normals) }:
@@ -3220,7 +3258,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `mesh.gltf.combinedUV = 'atlas-pixel-accurate'` (new leaf in 08 P2-7c; absent from `LegacyProfiles`, whose attributes have no `TEXCOORD_0`) | B-M7 | The combined `TEXCOORD_0`: the viewport's pixel-accurate atlas UVs (`atlasUvRect`, 08 6.7) | `GltfExporter.#combinedUvOption()`, only when the attributes list `TEXCOORD_0`: `profile.combinedUV` | switch | 04 UV-8b later adds `'plan'` and selects it |
 | `mesh.gltf.indexType = 'auto'` (08 P2-1b; Phase-1 value `'uint16'`, kept as a case for `LegacyProfiles`) | B-L5 (fixed) | Landed: Uint32 (5125) as soon as the largest index reaches 65,535 (`indexWidth`, 08 6.2); `'uint16'` always wrote 5123 and wrapped above 65,535 vertices | `GltfExporter.#addMesh`: `profile.indexType` | switch | landed in 08 P2-1b (invariance gate: every harness glTF is unchanged); the viewport index attribute (untagged) landed in 08 P2-1e |
 | `mesh.gltf.doubleSided = 'omit'` | – (correct since 08 P2-2d) | The material object has **no** `doubleSided` key: single-sided, which shows the `'ccw'` wall from the stage and keeps a wrongly facing wall visible as an error (08 Q2) | `GltfExporter.#doubleSided()` (called first by `#addMesh`): `profile.doubleSided` | switch | `case 'true'` (08 P2-2d) writes `doubleSided: true`, for a later export option; no profile uses it |
-| `framingBounds = 'flat'` | B-L2, B-M10 | Orbit target, camera reset, coverage status and safe-distance D use flat bounds | `WallLayout.framingBounds`: `Strategies.framingBounds` (the 4 consumers get it injected as `frameBounds`) | switch | true bounds or the pivot (Feature 3) |
+| `framingBounds = 'flat-pivot'` (03 T2; Phase-1 value `'flat'`, whose case is deleted: the key has one read site) | B-L2, B-M10 | Orbit target, camera reset, coverage status and safe-distance D use the flat bounds (the arc width sum x the tallest section), translated by the stage origin: `{totalWidth, maxHeight, minX: 0 - so.x, wallZ: 0 - so.z}` (03 6.6; identity-exact at the default pivot, +0 offsets) | `WallLayout.framingBounds`: `Strategies.framingBounds` (the 4 consumers get it injected as `frameBounds`) | switch | step F = 08 P2-11c: `'layout'` (true bounds of the stage layout, `FramingPolicy`'s named boxes) |
 | `curveBeforeFirstPanel = true` | B-L1 | Curve step applied before the first panel's move | `WallLayout.computeWallLayout` (first statement): `Strategies.curveBeforeFirstPanel` | switch (`case true`) | owner decision: **kept** (2026-10-16, 1.4); 08 P2-13f retires the switch with no output change |
 | `frustumDepthM = 15` | B-L33 | Frustum drawn to 15 m | `CameraRigView.rebuildFrustum`: `frustumDepth = Strategies.frustumDepthM` | value | clip at the wall |
 | `previewRendererSize = [320, 180]` | B-M9 | Fixed 320x180 outer size, filmback-aspect stretch | `PreviewWindow.init`: `renderer.setSize(...Strategies.previewRendererSize)` | value | size from the client box, refit per lens |
@@ -3358,7 +3396,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 |---|---|---|
 | **1. Normals flipped by default + normals debug view** | One winding function (`quadIndices`) and per-consumer profiles in `Strategies.mesh` used by the viewport, OBJ and glTF; `side` in the viewport profile; `LEDWallView.meshes()`; `WALL_REBUILT`; `SceneManager.addHelper` + `LAYERS`; `ResourceTracker`; the toolbar button pattern. | The flips are Phase-2 commits 08 P2-2a–d, one consumer per commit (`docs/improvements/08-bugfix-roadmap.md`): `'ccw'` winding and `'averaged'` normals in `WallMeshBuilder`, OBJ per-vertex `vn` and the glTF `NORMAL` attribute. Feature 1 adds the debug view and options only: `render/NormalsDebugView.js` (LineSegments from attributes x `matrixWorld`, subscribes to `WALL_REBUILT`, registered as a helper, disposed with a tracker); a `#toggle-normals` view button and a `.view-btn.active` rule (B-L24). Landed so far (docs/improvements/01-normals.md 8.4): F1-0a, F1-0b and F1-0c (tooling), F1-1 (the debug core without UI: `NormalLines`, `NormalsDebugView`, `DebugMaterials`, `MaterialOverride`, `LEDWallView.setDebugShading` / `withContentMaterials`, `DebugViewSettings`, `DebugViewController`, `core/renderOrder.js`), F1-2 (the debug UI: `#toggle-normals`, `#debug-view-btn` and its popover, the legend in `#viewport-top-stack`, the announcer, N / Shift+N, `DEBUG_VIEW_CHANGED`, `css/features/debug-view.css` with `.view-btn.active`, the help-badge token ` N=normals`), F1-3 (the `normals_debug` harness scenario), F1-2b and F1-2c (review follow-ups of F1-2: legend legibility, the `DebugViewControls` import-boundary test). |
 | **2. Section selection, property editing, per-section offsets** | `WallSection` with stable ids; `SectionLayout.postTransform` hook (null, never fed back into the cursor); mesh tags `userData.{kind, mode, sectionId, sectionIndex, col, row}` and combined `sectionRanges`; `LEDWallView.sectionNodes()`; the `Selectable` registry and generic gizmo; field rule tables; `WallController` as the single writer of section state; mirror events to cards; `ProjectSerializer.read` version-dispatch point. | `WallSection.offset {position, rotation}` + rules; `layoutProject` builds per-section `postTransforms`; the builder applies them to positions/normals; `LEDWallView` adds per-section groups (section/panel) or bakes (combined) and a transform-only update path; `WallSectionSelectable` (pick by `userData` / `faceIndex` -> `sectionRanges`); select-on-click (B-M14 fix); a `section:changed` event emitted by `WallController` so cards, an inspector and the UV viewer update reactively; safe distance per floor run: `floorRuns()`, each run through 08 P2-5b's `buildSafeDistanceBand` (02 6.12, CR-08-a); schema v2. Exporters follow automatically through the layout. |
-| **3. Configurable pivot + offset** | `WallPivot`/`PivotMode` in `Wall` (identity); `WallLayout.firstEdge/lastEdge/bounds()/pivotPoint(mode)` including "middle of entire wall" = midpoint of the first section's first edge and the last section's last edge on the floor; the single `framingBounds` switch for the four flat-bounds consumers; the single `layoutProject()` entry. | A baked translation in `layoutProject`: stage frame `−(P.x, 0, P.z)`, export frame `−P`, P = anchor + offset (1.4). The raw walk is translated first, and spec 02's `applySectionOffsets(out)` builds its section matrices from the translated layout (07 C32). **No wall root transform, ever:** the identity `wallGroup` transform is a unit-tested invariant (03 §5.1, §5.9 #2). `ui/PivotPanel`; a pivot Selectable + marker view; switch `framingBounds` to pivot/bounds (fixes B-L2); optional re-expression of camera/prop poses; schema v2. |
+| **3. Configurable pivot + offset** | `WallPivot`/`PivotMode` in `Wall` (identity); `WallLayout.firstEdge/lastEdge/bounds()/pivotPoint(mode)` including "middle of entire wall" = midpoint of the first section's first edge and the last section's last edge on the floor; the single `framingBounds` switch for the four flat-bounds consumers; the single `layoutProject()` entry. | A baked translation in `layoutProject`: stage frame `−(P.x, 0, P.z)`, export frame `−P`, P = anchor + offset (1.4). The raw walk is translated first, and spec 02's `applySectionOffsets(out)` builds its section matrices from the translated layout (07 C32). **No wall root transform, ever:** the identity `wallGroup` transform is a unit-tested invariant (03 §5.1, §5.9 #2). `ui/PivotPanel`; a pivot Selectable + marker view; switch `framingBounds` to pivot/bounds (fixes B-L2); optional re-expression of camera/prop poses; schema v2. Landed so far (docs/improvements/03-pivot.md 10; session-only, the owner's decision of 2026-10-17): T13 (the sign-off of 5.10.1), T1 (the domain: the `WallPivot` API, the pose `LIMITS` and `translateStage`, the `posZ` context, `SceneTheme.pivot`), T2 (the geometry: `baseY`, `generativeBounds`, `translated`, `resolvePivot`, `stageShift`, the frames of `layoutProject`, `framingBounds` `'flat-pivot'`). |
 | **4. Clean 0..1 UVs + UV viewer/editor** | UV strategies in one builder function per consumer; `TextureAtlas` as the single source of offsets, widths and start columns (yields per-section `uvRects`); `PanelIdRenderer.sectionCanvas()` for the viewer background; mesh tags; the selection registry; `PreviewWindow`'s resize handle as the floating-panel pattern. | `'per-section'` / `'atlas-pixel-accurate'` strategies (fix B-M5/B-M6) and a baked per-section `uvTransform`; glTF TEXCOORD_0. The `'atlas-pixel-accurate'` strategies (the viewport one landed in 08 P2-7a, the OBJ one in 08 P2-7b, the new `mesh.gltf.combinedUV` leaf with glTF `TEXCOORD_0` in 08 P2-7c) and the per-section combined materials and glTF primitives (08 P2-7d), the combined vertex ranges and `sectionRangeForFace` (08 P2-7a) are Phase 2's; Feature 4 adds `'plan'`; the viewport panel-ID path of panel mode (one section canvas per section, `WallMeshBuilder.panelUvs`, `LEDMaterialFactory.sectionShared`, `geometry/TextureBudget.js`) is 08 P2-12d, and 04 UV-9 adds the panel-mode export UVs and the `uv.panel_uvs` option; `ui/UVViewer.js` (2D canvas; subscribes to `SELECTION_CHANGED` and `WALL_REBUILT`); `ui/FloatingPanel.js` extracted from `PreviewWindow`. |
 | **5. HDRI projection (+ reflective car)** | `DisplaySettings.content` enum (`'color' \| 'ledSim' \| 'panelIds'`, ready for `'hdri'`); `LEDMaterialFactory` as the only wall-material constructor; `ResourceTracker` for HDR/PMREM disposal; `SceneManager` owns the main renderer and the helper registry; the second renderer is encapsulated in `PreviewWindow`; `PropView` base with `buildMesh()`; `CineCamera` lens math for the default projection point. | `ContentMode.HDRI` + `render/HdriProjectionMaterial.js` (wall and dome); `ui/HdriPanel.js` + the projection-point Selectable (`'hdri-point'`, kind `'projector'`, 07 C36); the second renderer is replaced by spec 07's `PreviewPass` (scissor rendering, R1/R2; `SceneManager` keeps only `setEnvironment` and `setPunctualLightScale`), which excludes `LAYERS.HELPERS` (B-M9/B-M11, first fixed by 08 P2-10 or 07 R1/R2, 07 C31); the backdrop dome on `LAYERS.ENVIRONMENT`; `GltfCarPropView extends CarPropView`; colour management in `render/ColorManagement.js` as per-material patches (Option L on r128; Option G after 07 U3b); loaders from 07's `vendor/three-addons.js` factories (spec 05 §5.11 #17). |
 | **6. Morph branding** | `css/02-tokens.css` holds every `:root` token; `Theme.js` holds every scene/canvas colour, font, palette and export string, and every consumer receives it by injection from `App`; header and watermark markup in one place in `index.html`. | Role-based tokens; `theme/ThemeBridge.js` reading CSS variables into an object of `Theme`'s shape (one line in `App`); new `Brand` strings and filenames (+ a JSON `generator` field in v2); Morph logo SVG, favicon, valid author meta; inline styles -> classes; card swatches from `Palette`; re-baseline `ui_visual` and exports separately. Gizmo axis colours stay XYZ = RGB. Landed so far (docs/improvements/06-morph-branding.md 8.4): T1 (the static inline styles of `index.html` and the two panel templates became the classes of `css/99-utilities.css`, linked last; dead CSS removed; `css-slices.mjs --report-only`; static rule 12; `compare.mjs --ignore-keys`), T2 (`theme/ThemeBridge.js`, pure and not wired, with U1-U3), T3 (layer-4 tokens with the legacy values and spec 01's four debug tokens, ThemeBridge wired in `App`, `.status-*` on `--status-*`, U4/U10/U11), T4a (the ungated Morph chrome: token layers 1-3 with the brand values and every stylesheet on role tokens, static rules 13-15; the text-only `<h1>` header in the three-column grid; the third-party logo deleted; the head metas and Montserrat; the component states of 06 3.5, including the opaque selection badge at `bottom: 64px`, B-L24; U5 in `contrast.test.mjs`, U6), T4b (the owner-approved brand artwork: the six app files in `assets/brand/` with `NOTICE.md`, the favicons, the apple-touch icon and `og:image`, the wordmark lockup with the monogram at <= 520 px, the viewport watermark hidden in pilot mode, static rule 16), T4c (British English in the visible labels and tooltips: "Colour", "Centre", and "Panel Angle (°)" for the one label that wrapped), T5 (the Morph scene and canvas: layer-4 brand values with `--scene-frame-on-light` and `--scene-overlay-halo`, adaptive panel frames, the outlined opaque camera body, the two-tone dashed frustum, JetBrains Mono 700 and Montserrat on the canvases with `BIND_FONTS_DEFAULT` true, the font gate of row F6-1), T6a (the Morph export headers and generator strings, `Brand.jsonGenerator`, `shortName`, `company`, `homepage`; the oracle tests keep the Phase-1 strings through `LEGACY_BRAND`), T6b (every download name derived from `Brand.filePrefix = 'morph-led-wall'`, `Brand.files.hdriPixelMap`, `compare.mjs --rename`, static rule 17), T7 (the 8-colour Morph palette with Studio Grey `#d9d9d6` as the injected default, the card swatches from the palette, the v1 colour fill from `Palette.legacySectionColors`, U5 scene rows, U7, U8), T9 (the README with the Morph lockups via `<picture>`, the product name, the brand badge colours and the Brand and licence section; the two README lockups complete the 8 files of 06 5.8). |
@@ -3771,3 +3809,9 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 4: state rows for `Project.wall.pivot` and `display.showPivotMarker` (their writers land in 03 T3 and T4).
 - Deviations from 03 10's T1 row, recorded there: `CineCamera.resetTo` / `coverage` read `minX` / `wallZ` from 03 T3 (the `'flat-pivot'` bounds arrive in T2), and `Events.WALL_PIVOT_CHANGED` lands with its first emitter and subscriber (static rule 7).
 - 2.3: `domain.test.mjs` (the `WallPivot` API and `parseOffset` (03 8.1 test 7), the `posZ` context at ±0 bit-identical to legacy and at `wallZ = -2.3397`, `LIMITS`, both `translateStage`), `core.test.mjs`, `contrast.test.mjs`.
+
+**03 T2, the pivot geometry** (Feature 3 step A, second commit; 03 6.1-6.4, 6.6, 10; manifest `tests/regression/expected/F3-T2.json`, an invariance commit: at the default pivot `layoutProject` returns the walk itself and `'flat-pivot'` adds +0 fields the consumers do not read yet, so no output changes):
+- 1.4: the world bullet and the frames paragraph say that `layoutProject` produces the frames since 03 T2.
+- 2.2, 3.6 `WallLayout`: `SectionLayout.baseY` and `translated`; `WallLayout.pivot`, `generativeBounds()` (the Phase-1 `bounds()` box with `baseY`; `bounds()` delegates to it until spec 02), `pivotPoint` with the floor modes at `sections[0].baseY` and `mesh-center` on `generativeBounds()` (the y policy settled: half the tallest section, B5), `translated(dx, dy, dz)` on the raw walk only; `resolvePivot`, `stageShift`; `layoutProject(project, {frame = 'stage'})` (identity: the walk itself); `framingBounds(project, resolution)` with `'flat-pivot'`. 3.6 `WallMeshBuilder`: `sectionGrid`'s `y = baseY === 0 ? row * panelH : baseY + row * panelH`.
+- 3.3, 8.1: `Strategies.framingBounds = 'flat-pivot'`; 8.3 keeps the `WallLayout.js#framingBounds` row (B-L2, B-M10), whose tag now says "flat bounds, translated by the stage origin".
+- 2.3: `pivot.test.mjs` (new: 03 8.1 tests 1-6 and 8, test 9 skipped), `geometry.test.mjs` (`'flat-pivot'` at the identity, and `layoutProject` at the identity pivot is the walk itself in every frame over the fuzzed walls, 03 test 3), `core.test.mjs`.
