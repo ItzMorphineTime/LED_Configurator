@@ -27,7 +27,7 @@ export class CameraHub {
   #project;
   /** @type {import('../render/CameraRigView.js').CameraRigView} */
   #rig;
-  /** @type {import('../render/PreviewWindow.js').PreviewWindow} */
+  /** @type {import('../render/PreviewPass.js').PreviewPass} the preview pass (07 R2: its camera and labels) */
   #preview;
   /** @type {import('../render/SafeDistanceView.js').SafeDistanceView} */
   #safeDistance;
@@ -43,7 +43,7 @@ export class CameraHub {
    * Side effects: none.
    * @param {{project: import('../domain/Project.js').Project,
    *          rig: import('../render/CameraRigView.js').CameraRigView,
-   *          preview: import('../render/PreviewWindow.js').PreviewWindow,
+   *          preview: import('../render/PreviewPass.js').PreviewPass,
    *          safeDistance: import('../render/SafeDistanceView.js').SafeDistanceView,
    *          pilotDriver: import('../interaction/PilotController.js').PilotCameraDriver,
    *          frameBounds: () => {totalWidth: number, maxHeight: number, minX: number, wallZ: number},

@@ -81,18 +81,26 @@
 .status-pending { color: var(--status-off-center); }
 .status-ok { color: var(--status-within); }
 
-/* Camera preview window: the static parts only (display, width and height stay inline: PreviewWindow owns them;
-   #camera-preview-canvas keeps its inline size, which renderer.setSize overwrites) */
+/* Camera preview window: the static parts only (display, width and height stay inline: PreviewWindow owns them).
+   07 R2 (07 3.6): the main renderer draws the preview into the main canvas by scissor, so the window's body is
+   transparent and its corners square (the scissor rectangle is square); the border and the outline stay. */
 .preview-window {
     position: absolute;
     bottom: 20px;
     right: 20px;
-    background: var(--color-bg-app);
+    background: transparent;
     border: 1px solid var(--color-accent);
     outline: 1px solid var(--color-bg-app);
-    border-radius: 8px;
+    border-radius: 0;
     overflow: hidden;
     box-shadow: var(--shadow-overlay);
+}
+
+/* 07 R2: #camera-preview-canvas is a layout placeholder with no WebGL context (no width/height attributes): its client
+   rect (the window's inner box, from its inline 100% size) is the preview rectangle the main canvas draws at. */
+#camera-preview-canvas {
+    display: block;
+    visibility: hidden;
 }
 
 .preview-window__resize {

@@ -207,7 +207,6 @@ describe('Strategies', () => {
       framingBounds: 'flat-pivot',   // 03 T2 (Phase-1 'flat')
       curveBeforeFirstPanel: true,
       frustumDepthM: 15,
-      previewRendererSize: [320, 180],
       gizmoRotateSign: -1,
       pilotForwardYSign: -1,
     });
@@ -350,8 +349,9 @@ describe('LEGACY_SITES', () => {
   // their 8.2 fix cell names.
   const PHASE1C_LANDED = { 'B-H5': 'Phase 1C H1', 'B-L12': 'Phase 1C H2' };
   // The quirks a Phase 3 feature step fixed (its spec and step, as its 8.2 fix cell names them): B-L24's badge overlap in
-  // 06 T4a (its .view-btn.active half had landed in 01 F1-2; its two CSS documentation entries are gone).
-  const PHASE3_LANDED = { 'B-L24': '06 T4a' };
+  // 06 T4a (its .view-btn.active half had landed in 01 F1-2; its two CSS documentation entries are gone); B-M9 and B-L32 in
+  // 07 R2 (the scissor preview of the single renderer took over 08 P2-10b, 07 C31).
+  const PHASE3_LANDED = { 'B-L24': '06 T4a', 'B-M9': '07 R2', 'B-L32': '07 R2' };
 
   test('ids cover every bug id B-H1..B-H5, B-M1..B-M16, B-L1..B-L36 except the landed fixes, and nothing else', () => {
     const expected = new Set();

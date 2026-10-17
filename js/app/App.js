@@ -32,6 +32,7 @@ import { PanelIdRenderer } from '../render/textures/PanelIdRenderer.js';
 import { CameraRigView } from '../render/CameraRigView.js';
 import { SafeDistanceView } from '../render/SafeDistanceView.js';
 import { PreviewWindow } from '../render/PreviewWindow.js';
+import { PreviewPass } from '../render/PreviewPass.js';
 import { PersonPropView, CarPropView } from '../render/PropViews.js';
 import { PivotMarkerView } from '../render/PivotMarkerView.js';
 import { DebugMaterials } from '../render/DebugMaterials.js';
@@ -143,7 +144,6 @@ export class App {
     const safeDistance = new SafeDistanceView({ sceneManager, doc, theme });
     const preview = new PreviewWindow({
       doc,
-      win,
       cine,
       elements: {
         windowEl: byId(doc, 'camera-preview-window'),
@@ -154,6 +154,10 @@ export class App {
         res: byId(doc, 'camera-preview-res'),
       },
     });
+    // 07 R2: the camera preview is a scissor pass of the main renderer (one WebGL context), drawn at the place of the
+    // window's placeholder; SceneManager runs it after every main render.
+    const previewPass = new PreviewPass({ sceneManager, cine, previewWindow: preview });
+    sceneManager.setPasses([previewPass]);
     const personView = new PersonPropView({ sceneManager, theme });
     const carView = new CarPropView({ sceneManager, theme });
     // 03 T5 (5.8): the pivot marker (subscribes WALL_REBUILT, WALL_PIVOT_CHANGED, SELECTION_CHANGED; allocated last).
@@ -164,7 +168,7 @@ export class App {
     const gizmo = new TransformGizmo({ sceneManager, pointerRay, interaction, bus, theme });
     const selection = new SelectionManager({ bus, gizmo, pointerRay, interaction });
     const pilotDriver = new PilotCameraDriver({ sceneManager, cine, rig, interaction });
-    const hub = new CameraHub({ project, rig, preview, safeDistance, pilotDriver, frameBounds, bus });
+    const hub = new CameraHub({ project, rig, preview: previewPass, safeDistance, pilotDriver, frameBounds, bus });
     const pilot = new PilotController({
       sceneManager, cine, driver: pilotDriver, orbit, keyboard, interaction, hub, bus, dialogs,
     });
@@ -220,13 +224,11 @@ export class App {
     const exportPanel = new ExportPanel({ doc, projectIO });
     // Subscribes DEBUG_VIEW_CHANGED (its only subscriber, 01 F1-2).
     const debugControls = new DebugViewControls({ doc, win, controller: debugController, bus, theme });
-    // Legacy animate body (3886-3889).
+    // Legacy animate body (3886-3889). 07 R2: one frame of the main renderer, its main pass then the preview pass.
     const tick = () => {
       orbit.tickKeyboard();
       pilot.tickKeyboard();
-      sceneManager.render();
-      // 07 R1: the preview camera's layer mask leaves out the HELPERS and DEBUG layers; withPassHidden hides the gizmo
-      sceneManager.withPassHidden(() => preview.render(sceneManager.scene));
+      sceneManager.renderFrame();
     };
 
     // ---- legacy init() (1426-1455) ----

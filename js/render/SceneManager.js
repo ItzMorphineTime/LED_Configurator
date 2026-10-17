@@ -66,6 +66,8 @@ export class SceneManager {
   #framesRendered = 0;
   /** @type {Array<(camera: THREE.PerspectiveCamera) => void>} pre-render hooks, in registration order (07 C46) */
   #preRender = [];
+  /** @type {Array<{render(scene: THREE.Scene): void}>} the passes drawn after the main pass (07 R2: [previewPass]) */
+  #passes = [];
 
   /**
    * Stores the dependencies only (R4): no THREE allocation, no DOM access, no listener.
@@ -355,17 +357,40 @@ export class SceneManager {
   }
 
   /**
-   * Re-tags the helper layers (07 6.2), runs the pre-render hooks (registration order), then renders the scene with the
-   * main camera.
-   * Ports: index.html@cd3fd3f line 3888.
-   * Side effects: the layers of the registered helper subtrees (under ?debug=1, every 120th frame, the helper audit);
-   *   whatever the hooks write (03 T5: the marker's scale; a no-op while it is hidden); draws into the main canvas.
+   * Sets the passes drawn after the main pass of every frame, in order (07 5.2.2; App injects [previewPass], which
+   * avoids an import cycle: PreviewPass receives SceneManager).
+   * Side effects: none besides the registration.
+   * @param {Array<{render(scene: THREE.Scene): void}>} passes
    * @returns {void}
    */
-  render() {
+  setPasses(passes) {
+    this.#passes = [...passes];
+  }
+
+  /**
+   * One rendered frame (07 5.2.1): re-tags the helper layers (07 6.2), runs the pre-render hooks (registration order),
+   * renders the scene with the main camera, then each injected pass (07 R2: the camera preview, drawn by this renderer
+   * into the same canvas by scissor).
+   * Ports: index.html@cd3fd3f lines 3888-3889 (the main render, then the preview render).
+   * Side effects: the layers of the registered helper subtrees (under ?debug=1, every 120th frame, the helper audit);
+   *   whatever the hooks write (03 T5: the marker's scale; a no-op while it is hidden); draws into the main canvas;
+   *   whatever the passes do.
+   * @returns {void}
+   */
+  renderFrame() {
     this.#enforceHelperLayers();
     if (this.#audit && ++this.#framesRendered % 120 === 0) this.#auditHelpers();
     for (const hook of this.#preRender) hook(this.#camera);
     this.#renderer.render(this.#scene, this.#camera);
+    for (const pass of this.#passes) pass.render(this.#scene);
+  }
+
+  /**
+   * Alias of renderFrame() (07 5.2.1: render() stays).
+   * Side effects: see renderFrame().
+   * @returns {void}
+   */
+  render() {
+    this.renderFrame();
   }
 }

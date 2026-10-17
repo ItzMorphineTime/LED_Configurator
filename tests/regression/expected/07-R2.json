@@ -1,0 +1,128 @@
+{
+  "commit": "07-R2",
+  "bugs": [
+    "B-M9",
+    "B-L32"
+  ],
+  "expect": [
+    {
+      "output": "camera/{01_camera_enabled,08_camera_moved,13_safe_distance}.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "07 R2 (B-M9): the preview is drawn by the main renderer into the main canvas at the placeholder's rect (318 x 178 inside the 1 px border, no longer a 320 x 180 canvas clipped by it), letterboxed to the filmback aspect with black bars (Full Frame: 267 x 178 instead of the 18% stretch), square corners"
+    },
+    {
+      "output": "gizmo_drag/camera_0{1_translated,2_rotated}.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same: the preview window is shown"
+    },
+    {
+      "output": "pilot_look/look_0{1_after_drag,2_after_wheel,3_pilot_off}.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same"
+    },
+    {
+      "output": "preview_off_in_pilot/pilot_0{0_on,5_exited}.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same (pilot_01_preview_off has no preview window)"
+    },
+    {
+      "output": "preview_resize/resize_0{1_dragged,3_blow_out}.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same; resize_03 also B-L32: the 100 x 10 mm drag gives a 520 x 120 window instead of the 1200 x 120 blow-out"
+    },
+    {
+      "output": "preview_resize/resize_0{0_initial,1_dragged,2_custom_100x10,3_blow_out}.json",
+      "change": "modified",
+      "each": true,
+      "reason": "#camera-preview-canvas is a layout placeholder: no width/height attributes (they were 320/180, 420/280, ..., written by the second renderer's setSize) and its inline 100% size kept; resize_03's window is 520 x 120 (B-L32, 08 6.14's figure)"
+    },
+    {
+      "output": "keyboard/{pilot_view,final_view}.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same: the preview window is shown"
+    },
+    {
+      "output": "import_edge/i_empty.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same: preview and Safe Distance on"
+    },
+    {
+      "output": "p2_curved_safe_distance/*.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same: the four walls with the preview on"
+    },
+    {
+      "output": "p2_shortcut_filters/pilot_view_front.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same"
+    },
+    {
+      "output": "normals_debug/b10_preview_lines_on.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the capture of #camera-preview-canvas's rect: 318 x 178 (the placeholder's inner box) instead of 320 x 180, letterboxed; its preview_isolation state (lines on vs off) must still pass"
+    },
+    {
+      "output": "pivot_stage/*.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same: 03's pivot_stage runs with the preview on"
+    },
+    {
+      "output": "preview_compositing/0{0_preview_on,1_enlarged,2_orbit,3_orbit}.json",
+      "change": "modified",
+      "each": true,
+      "reason": "07 AC 1: window.__glCanvases() lists one WebGL canvas (three-canvas) instead of two; the window is transparent (rgba(0, 0, 0, 0)) with a 0px corner radius; the placeholder is visibility: hidden with no width/height attributes and the window's inner box as its rect"
+    },
+    {
+      "output": "preview_compositing/0{2,3}_orbit.page.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the enlarged preview (598 x 398 inner box) drawn by the main renderer, letterboxed, square corners; the mirrored rectangle still has no black pixel"
+    },
+    {
+      "output": "preview_clean/0{0_full_frame,1_red_v_raptor,2_custom_100x10_widest}.*",
+      "change": "modified",
+      "each": true,
+      "reason": "07 8.3 preview_clean: the preview letterboxed (Full Frame: bars left and right; RED V-RAPTOR; 100 x 10 mm: bars top and bottom), square corners, one WebGL canvas, the window 800 x 120 after the widest drag (B-L32; 1200 x 120 before), no gizmo pixel in the preview (B-M11 kept)"
+    },
+    {
+      "output": "ui_visual/{00_initial,04_options_ledsim_camera_props,06_options_panelids_logo,07_two_sections,08_collapsed_and_4k_warning,09_narrow_800}.styles.json",
+      "change": "modified",
+      "each": true,
+      "reason": "the camera-window probes of every state that records them (05_gizmo_pilot records the overlay only and is unchanged; 00_initial and 09_narrow_800 record the hidden window's computed styles too): #camera-preview-window border-radius 0 and background transparent; #camera-preview-canvas display block and visibility hidden, and, while shown, the inner box's 318 x 178 instead of the 320 x 180 the second renderer wrote. Corrected after the first gate run: the first draft followed 07 8.4's {04..08} and missed that 05 records no camera-window probe while 00 and 09 do"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "ui_visual/{04_options_ledsim_camera_props,05_gizmo_pilot,06_options_panelids_logo,07_two_sections,08_collapsed_and_4k_warning,09_narrow_800}.viewport.screenshot.png",
+      "change": "modified",
+      "reason": "canvas-masked page captures: the transparent window now shows the viewport's own background (the same --color-bg-app) and its corners are square; the difference is a few corner pixels, which may stay under the screenshot tolerance"
+    },
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-03 T3 runs); the preview is off there"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; textures/L2_PanelIDs.png); this commit changes no texture"
+    },
+    {
+      "output": "ui_visual/{00_initial,07_two_sections}.sidebar.screenshot.png",
+      "change": "modified",
+      "reason": "one sidebar pixel of these DOM-only captures has differed by up to 7 levels between runs (DOM text antialiasing; P2-7e and F3-T8b runs); this commit changes no sidebar markup or style"
+    }
+  ],
+  "notes": "07 R2 (the camera preview drawn by the main renderer, before 08 P2-10; 07 8.4 row 'R2 single renderer, before 08 P2-10', taking over 08 P2-10b, 07 C31). render/PreviewPass.js (new): the scissor pass of 07 6.1 in integer device pixels (geometry/PreviewFit.js, new: clampPreviewSize, letterboxRect, previewDeviceRects, cssForDevicePx), the preview camera (DEFAULT | ENVIRONMENT) and the labels (moved from PreviewWindow; their texts unchanged: B-L34 is 08 P2-10c's). SceneManager.setPasses / renderFrame; App's tick renders one frame. PreviewWindow: no renderer, the per-axis clamps (B-L32), contentRect, setLabels, visible. CSS: the window transparent with square corners; #camera-preview-canvas display block, visibility hidden. Strategies.previewRendererSize retired; the LEGACY_SITES rows PreviewWindow.js#init (B-M9) and #setupResize (B-L32) deleted, #updateCamera (B-L34) relocated to PreviewPass.js#updateCamera. Exports, labels and every screenshot without the preview window must stay identical."
+}

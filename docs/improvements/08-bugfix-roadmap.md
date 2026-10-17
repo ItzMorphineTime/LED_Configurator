@@ -1923,6 +1923,8 @@ P2-9a–d merge in the feature-gate block; P2-9e–j in the remainder (§1).
 
 If 07 R1/R2 have landed first, P2-10a/b are dropped (R1/R2 retire the same keys) and P2-10c moves into `PreviewPass` (§5.6).
 
+**As built (2026-10-17):** P2-10a landed first (B-M11); 07 R1 then replaced its visibility loop by the preview camera's layer mask, and 07 R2 landed before P2-10b and took it over (B-M9, B-L32 fixed; `Strategies.previewRendererSize` and the `PreviewWindow.js#init` / `#setupResize` rows retired; the window's inner box is 318 x 178 with the 1 px Morph border, so the default Full Frame image is 267 x 178). P2-10c (B-L34) is still open and lands in `PreviewPass.updateCamera`.
+
 | Commit | Switch / site | Rows removed | Expected manifest |
 |---|---|---|---|
 | P2-10a B-M11 | `Strategies.previewRendersHelpers` retired; helpers hidden during the preview render | `PreviewWindow.js#render`, `SceneManager.js#addHelper` | PREVIEW_SHOTS (each; the preview image loses the grid, rig and the orange frustum tint). As built (R10, re-checked against the P2-7f baseline): `p2_project_v2/06_restored` is left out, because it is captured after a v1 restore, which restores no camera (B-L31), so the preview is off there and the screenshot is unchanged (it joins a later manifest with project v2); `normals_debug/b10_preview_lines_on` (01 F1-3's capture of the preview canvas, added after this list was derived) is expected |

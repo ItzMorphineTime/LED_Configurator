@@ -618,7 +618,8 @@ describe('WP7 module imports follow the layer table', () => {
     'js/render/CameraRigView.js': ['../vendor/three.js', '../core/EventBus.js', '../legacy/LegacyCompat.js', './ResourceTracker.js',
       '../core/renderOrder.js'],
     'js/render/SafeDistanceView.js': ['../vendor/three.js', '../geometry/SafeDistanceBand.js', './ResourceTracker.js'],
-    'js/render/PreviewWindow.js': ['../vendor/three.js', '../legacy/LegacyCompat.js', './SceneManager.js'],
+    'js/render/PreviewWindow.js': ['../geometry/PreviewFit.js'],
+    'js/render/PreviewPass.js': ['../vendor/three.js', '../geometry/PreviewFit.js', './SceneManager.js'],
     'js/render/PropViews.js': ['../vendor/three.js', './ResourceTracker.js'],
   };
   for (const [rel, expected] of Object.entries(cases)) {

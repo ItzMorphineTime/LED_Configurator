@@ -73,6 +73,13 @@ Release note: the live camera view window now shows only what the film camera se
 camera's own frustum (which tinted the whole image orange), the safe-distance floor and the gizmo no longer appear in
 it; the main viewport still shows them.
 
+Release note: the live camera view is now drawn by the main 3D view itself, so the page uses a single WebGL canvas. This
+removes the cause of a rectangle of the 3D view that could stop updating (black or frozen) after the camera view window
+was enlarged: two overlapping WebGL canvases.
+The image keeps the filmback's proportions, with black bars instead of a stretched picture, the window has square
+corners, and dragging its resize handle with an extreme custom filmback no longer blows the window up beyond
+800 x 600 px.
+
 Release note: pilot mode is now a clean camera view: the floor grid, the axes, the camera's own frustum (whose fill tinted
 the whole pilot view) and the safe-distance floor are hidden while piloting and come back when you leave it. The
 normal lines of the debug view stay visible in pilot mode.

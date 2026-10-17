@@ -224,9 +224,8 @@ describe('the wiring of the layers (07 5.2.1 layer table)', () => {
     assert.match(read('js/render/PivotMarkerView.js'), /addHelper\(group\);/);
   });
 
-  test('App runs the camera preview inside withPassHidden; nothing reads a helper set any more', () => {
-    const app = read('js/app/App.js');
-    assert.match(app, /sceneManager\.withPassHidden\(\(\) => preview\.render\(sceneManager\.scene\)\)/);
-    assert.doesNotMatch(app, /sceneManager\.helpers/);
+  test('the camera preview pass draws inside withPassHidden (07 R2); nothing reads a helper set any more', () => {
+    assert.match(read('js/render/PreviewPass.js'), /sceneManager\.withPassHidden\(\(\) => renderer\.render\(scene, camera\)\)/);
+    assert.doesNotMatch(read('js/app/App.js'), /sceneManager\.helpers/);
   });
 });

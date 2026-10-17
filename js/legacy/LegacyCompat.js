@@ -61,14 +61,14 @@ export const Strategies = deepFreeze({
   framingBounds: 'flat-pivot',                     // B-L2, B-M10; Phase-1 'flat' (03 T2: translated by the stage origin)
   curveBeforeFirstPanel: true,                     // B-L1
   frustumDepthM: 15,                               // B-L33
-  previewRendererSize: [320, 180],                 // B-M9
   gizmoRotateSign: -1,                             // B-M12
   pilotForwardYSign: -1,                           // B-M13
 });                                                // dispose.wallTextures / dispose.gizmo (B-H5, B-L12: true since
                                                    // Phase 1C H1 / H2) retired by 08 P2-12a: always dispose;
                                                    // exportCombinedColor (B-L6) retired by 08 P2-7d: per-section materials;
                                                    // combinedLedSimColor (B-L18) retired by 08 P2-7e: white tile x vertex colours;
-                                                   // previewRendersHelpers (B-M11) retired by 08 P2-10a: the preview hides helpers
+                                                   // previewRendersHelpers (B-M11) retired by 08 P2-10a: the preview hides helpers;
+                                                   // previewRendererSize (B-M9) retired by 07 R2: one renderer, a scissor pass
 
 /**
  * The exact Phase-1 mesh profiles (docs/improvements/08-bugfix-roadmap.md 4.2). Production code never reads these;
@@ -145,7 +145,7 @@ const QUIRKS = deepFreeze({
   'B-M8': ['Safe-distance group survives preview off (K-2)',
     'Landed in 08 P2-4b (`CameraController.setPreviewEnabled(false)` calls `hub.syncSafeDistance()` after `rig.remove()`, which removes the floor; the next enable rebuilds it; no tag site)'],
   'B-M9': ['Preview 320x180 stretch (L-1)',
-    'client-box sizing'],
+    'Landed in 07 R2 (the second renderer is deleted: the main renderer draws the preview into the main canvas by scissor at the client rect of the placeholder `#camera-preview-canvas`, letterboxed to the filmback aspect with black bars, `PreviewPass` and `PreviewFit.letterboxRect`; no window refit; `Strategies.previewRendererSize` retired; no tag site)'],
   'B-M10': ['Coverage from posZ against a flat rectangle (J-7, J-8)',
     'layout-aware analyser'],
   'B-M11': ['Preview renders helpers and tint (L-4)',
@@ -223,7 +223,7 @@ const QUIRKS = deepFreeze({
   'B-L31': ['JSON v1 saves only sections + mesh_mode (Q-3)',
     'v2 writer'],
   'B-L32': ['Preview resize clamp blow-out',
-    'clamp both axes'],
+    'Landed in 07 R2 (the resize drag keeps the legacy width clamp and aspect, then clamps each axis on its own to 200-800 x 120-600 with `PreviewFit.clampPreviewSize`; no tag site)'],
   'B-L33': ['Frustum fixed 15 m',
     'clip at wall'],
   'B-L34': ['Preview header first word; fake resolution (L-3)',
@@ -257,9 +257,7 @@ const TAG_SITES = deepFreeze([
   ['js/render/textures/PanelIdRenderer.js#panelCanvas', ['B-L19']],
   ['js/render/textures/PanelIdRenderer.js#sectionCanvas', ['B-L35']],
   ['js/render/CameraRigView.js#rebuildFrustum', ['B-L33']],
-  ['js/render/PreviewWindow.js#init', ['B-M9']],
-  ['js/render/PreviewWindow.js#updateCamera', ['B-L34']],
-  ['js/render/PreviewWindow.js#setupResize', ['B-L32']],
+  ['js/render/PreviewPass.js#updateCamera', ['B-L34']],
   ['js/interaction/OrbitController.js#updateTargetPosition', ['B-L2']],
   ['js/interaction/OrbitController.js#tickKeyboard', ['B-L27']],
   ['js/interaction/OrbitController.js#setView', ['B-L25']],
