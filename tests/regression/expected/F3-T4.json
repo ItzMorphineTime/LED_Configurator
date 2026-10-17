@@ -1,0 +1,23 @@
+{
+  "commit": "F3-T4",
+  "bugs": [],
+  "expect": [],
+  "mayChange": [
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-03 T3 runs); this commit changes no rendered byte"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen again in the 03 T2 gate and the 03 T3 review run, textures/L2_PanelIDs.png); this commit changes no texture"
+    },
+    {
+      "output": "ui_visual/00_initial.sidebar.screenshot.png",
+      "change": "modified",
+      "reason": "one sidebar pixel of this DOM-only capture differed by 7 levels in the P2-7e runs (DOM text antialiasing); this commit changes no markup, style or sidebar text"
+    }
+  ],
+  "notes": "03 T4 (docs/improvements/03-pivot.md 5.3, 5.5, 5.6, 6.5, 6.7, 10), step A's fourth commit, invariance (8.4 step A: zero diffs at the identity pivot). app/PivotController (P-PIVOT, the use cases of rows F3-1 to F3-5, relative drag snapping, the Selectable 'pivot') is not wired into App before 03 T5. Events.WALL_PIVOT_CHANGED is emitted by WallController.applyImport (every import, before the other import events) and mirrored by CameraPanel, which sets #camera-pos-z's min attribute to cameraZMinAttribute(0 - stageOrigin.z): '0.1', the markup value, at the identity pivot, also on every WALL_REBUILT. The 'pivot' pose mirrors of CameraPanel and PropControls have no emitter reachable before 03 T5. Every output must stay identical."
+}

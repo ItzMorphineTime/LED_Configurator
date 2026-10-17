@@ -35,7 +35,7 @@ export class PropControls {
    * whose id is not this prefix:
    *  PROP_VISIBILITY_CHANGED({id, visible}): #<prefix>-options display (4335 / 4366)
    *  PROP_POSE_CHANGED({id, source}): 'gizmo-translate' -> pos-x, pos-z toFixed(2) (3351-3352 / 3358-3359);
-   *    'gizmo-rotate' -> rot-y toFixed(1) (3391 / 3397)
+   *    'gizmo-rotate' -> rot-y toFixed(1) (3391 / 3397); 'pivot' (03 T4) -> pos-x, pos-z toFixed(2)
    * Side effects: DOM lookups (no mutation); two bus subscriptions.
    * @param {{doc: Document, prefix: 'person'|'car',
    *          controller: import('../app/PropController.js').PropController,
@@ -106,14 +106,15 @@ export class PropControls {
   }
 
   /**
-   * PROP_POSE_CHANGED mirror: the gizmo write-backs of this prop.
+   * PROP_POSE_CHANGED mirror: the gizmo write-backs of this prop, and (03 T4, 5.5) the re-expression after a pivot edit
+   * moved the stage origin ('pivot': pos-x, pos-z toFixed(2), as the translate write-back).
    * Ports: index.html@cd3fd3f lines 3351-3352 / 3358-3359 (translate), 3391 / 3397 (rotate).
-   * @param {{id: string, source: 'gizmo-translate'|'gizmo-rotate'}} payload
+   * @param {{id: string, source: 'gizmo-translate'|'gizmo-rotate'|'pivot'}} payload
    */
   #mirrorPose({ id, source }) {
     if (id !== this.#prefix) return;
     const prop = this.#prop;
-    if (source === 'gizmo-translate') {
+    if (source === 'gizmo-translate' || source === 'pivot') {
       this.#posX.value = prop.posX.toFixed(2);
       this.#posZ.value = prop.posZ.toFixed(2);
     } else if (source === 'gizmo-rotate') {

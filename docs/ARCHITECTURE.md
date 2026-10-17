@@ -290,6 +290,9 @@ js/
     CameraController.js                    WP7   CameraHub (legacy updateCameraFrustum + updateSafeDistance) and CameraController
                                                  (preview/lens/pose use cases, Selectable 'camera')
     PropController.js                      WP7   Prop use cases (show/hide, fields, transform, Selectable 'person'/'car')
+    PivotController.js                     03 T4  Wall-pivot use cases through P-PIVOT (mode, offset, reset, keep-stage and
+                                                 marker toggles, Ctrl-drag snap step, O-key selection toggle) and the
+                                                 Selectable 'pivot' (the path-B hook set, relative drag snapping)
     ProjectIO.js                           WP5   Downloader + export/import use cases (JSON, OBJ, glTF, PNG, ZIP, safe-distance OBJ)
     DebugViewController.js                 01 F1-1  Debug-view use cases: settings write, DEBUG_VIEW_CHANGED (the bus since 01 F1-2),
                                                  then the render call
@@ -404,6 +407,10 @@ tests/
                                                  stageShift, the frames of layoutProject, translated(), the export frame of
                                                  the grids and panel corners, 'flat-pivot', the composition contract with
                                                  spec 02 (a stub offset builder; spec 02's E17); test 9 skipped (B-L1 kept)
+    pivot-controller.test.mjs              03 T4  PivotController (03 8.1 tests 10-15): P-PIVOT's order and re-expression,
+                                                 keep off, Y-only offsets, the toggles and snap step, toggleSelect, the
+                                                 Selectable hooks, relative drag snapping and cancel, the wall-centre add,
+                                                 a null resolution; CameraPanel's #camera-pos-z min and the 'pivot' pose mirrors
     geometry.test.mjs                      WP4   Object.is equality vs the oracle over fuzzed sections (strings, fractions, NaN ids);
                                                  since 08 P2-0 the oracle builders are injected with LegacyProfiles.mesh.*;
                                                  08 P2-12d: panelUvs, TextureBudget and the wall-wide panelPxPerLed (07 6.12);
@@ -598,6 +605,7 @@ export const Events = Object.freeze({
   PILOT_CHANGED:                'pilot:changed',
   // Feature events, each classified visual or non-visual (07 C47).
   DEBUG_VIEW_CHANGED:           'debug:viewChanged',   // visual (01 F1-2): DebugViewController -> DebugViewControls
+  WALL_PIVOT_CHANGED:           'wall:pivotChanged',   // visual (03 T4): PivotController, WallController.applyImport -> CameraPanel
 });
 
 export class EventBus {
@@ -2342,6 +2350,8 @@ export class WallController {
    *  (08 P2-3d, B-L21 fixed; a v1 import passes logos: null); wall.replaceAll(sections); if (meshMode) { project.meshMode =
    *  meshMode; bus.emit(WALL_MESH_MODE_CHANGED, {mode: meshMode}) } bus.emit(WALL_SECTIONS_CHANGED, {reason: 'import'});
    *  rebuild({cause: 'import'}). With panel IDs on, SectionLogosPanel re-renders the logo list on that event.
+   *  03 T4 (5.5): right after the pivot assignment, bus.emit(WALL_PIVOT_CHANGED, {source: 'import', pivot: clone,
+   *  resolution: resolvePivotNow(), stageShift: stageShift(cache, resolution), reexpressed: false, rebuilds: true}).
    *  03 T3 (4.4, Q14): project.wall.pivot = pivot ?? new WallPivot() right after replaceAll (the identity for every file
    *  until project file v2; no re-expression: an import is a load). */
   applyImport({ sections, meshMode, logos = null, pivot = null })
@@ -2427,6 +2437,54 @@ export class PropController {          // one instance per prop; Selectable prop
   applyGizmoRotate(axis, deltaDeg)
 }
 ```
+
+#### `js/app/PivotController.js` (03 T4; docs/improvements/03-pivot.md 5.3, 5.6, 6.5, 6.7)
+```js
+export const PIVOT_SNAP_STEPS_M = [0.001, 0.01, 0.1, 0.5, 1]   // the #pivot-snap option values (frozen)
+/** 03 6.7: per axis d = step > 0 ? roundMm(Math.round(pending / step) * step) : roundMm(pending);
+ *  target = d === 0 ? offset (bit for bit) : offset + d. roundMm(v) = Math.round(v * 1000) / 1000 || 0 */
+export function dragTarget(offset, pending, step)
+export class PivotController {        // Selectable 'pivot': id 'pivot', label 'Pivot', kind 'pivot', pickPriority 10
+  /** @param {{project, wallController: WallController, markerView: PivotMarkerView, stageAnchored: StageAnchored[],
+   *           selection: SelectionManager, gizmo: TransformGizmo, interaction: InteractionState, bus}} deps
+   *  stageAnchored = [cameraController, personController, carController] (re-expression order; 07 C45 appends more) */
+  constructor({ project, wallController, markerView, stageAnchored, selection, gizmo, interaction, bus })
+  get pivot()                         // project.wall.pivot
+  setMode(mode)                       // #commit(p => p.setMode(mode), 'mode')            row F3-1 (RangeError: nothing written)
+  setOffsetAxis(axis, raw)            // #commit(p => p.setOffsetAxis(axis, raw), 'offset'); returns pivot.offset[axis]  row F3-2
+  resetOffset()                       // #commit(p => p.resetOffset(), 'reset-offset')      row F3-3
+  /** if (pivot.setKeepStageLayout(on)) emit WALL_PIVOT_CHANGED {source: 'keep-stage', stageShift: (0, 0),
+   *  reexpressed: false, rebuilds: false, resolution: wallController.pivotResolution}   row F3-5 */
+  setKeepStageLayout(on)
+  /** display.showPivotMarker = on; emit WALL_PIVOT_CHANGED {source: 'marker', ... rebuilds: false}   row F3-5 */
+  setMarkerVisible(on)
+  setSnapStep(m)                      // m in PIVOT_SNAP_STEPS_M (else RangeError); gizmo.setSnapIncrements({pivotM: m})
+  /** O key / #pivot-select: no-op while interaction.isDraggingGizmo || interaction.gestureCancelled; selected ?
+   *  selection.deselect() : (selection.select('pivot'); if (gizmo.mode !== 'translate') gizmo.setMode('translate')) */
+  toggleSelect()
+  // Selectable (the path-B hook set of 03 5.4, 07 C33; the gizmo calls the hooks from 03 T5)
+  allowedAxes(mode)                   // 'translate' -> {x: true, y: true, z: true}; anything else -> null (unsupported)
+  isPickable()                        // markerView.exists && markerView.hasResolution && markerView.visible
+  pickMeshes()                        // markerView.pickMeshes()  (the invisible pick proxy)
+  hasGizmoTarget()                    // markerView.exists && wallController.pivotResolution !== null
+  gizmoAnchor(out)                    // stage frame: out.set(preview.x, (r ? r.point.y : 0) + preview.y, preview.z), r = the cache
+  orientGizmo(rotation, mode)         // rotation.set(0, 0, 0)
+  beginGizmoDrag()                    // pending = 0; target = {...offset}; preview = 0
+  /** pending += movement; target = dragTarget(offset, pending, ctx?.snap ? ctx.snap.pivotM : 0); preview = target - offset;
+   *  markerView.setPreview(preview); emit SELECTABLE_MOVED {id: 'pivot'}. No rebuild during a drag. */
+  applyGizmoTranslate(movement, ctx)
+  applyGizmoRotate(axis, deltaDeg, ctx)   // no-op (allowedAxes('rotate') is null)
+  /** clear the preview; {cancel: false} with a target that differs from the offset: #commit(p => p.setOffset(target), 'gizmo')
+   *  (row F3-4); otherwise (cancel, or nothing moved): emit SELECTABLE_MOVED {id: 'pivot'} only */
+  endGizmoDrag({ cancel })
+}
+```
+P-PIVOT (`#commit(mutate, source)`, 03 5.6): `snapshot = pivot.clone(); mutate(pivot); if (pivot.equals(snapshot)) return;`
+`after = wallController.resolvePivotNow(); shift = stageShift(wallController.pivotResolution, after); moved = shift.x !== 0 || shift.z !== 0;`
+`if (moved && pivot.keepStageLayout)` every participant's `translateStage(-shift.x, -shift.z)` (each clamped through its LIMITS, each emitting its own
+`'pivot'` pose event); `emit WALL_PIVOT_CHANGED {source, pivot: clone, resolution: after, stageShift: shift, reexpressed, rebuilds: moved}`;
+`wallController.commitPivot(after)` (one rebuild with cause `'pivot'` iff the stage origin moved, else the cache only);
+`emit SELECTABLE_MOVED {id: 'pivot'}`. The controller never calls `rebuild()`; WallController stays the rebuild decider (6.2).
 
 #### `js/app/ProjectIO.js`
 ```js
@@ -2684,7 +2742,8 @@ export class CameraPanel {
    *  #camera-hfov, #camera-vfov, #camera-aspect, #camera-pos-x/y/z, #camera-rot-x/y/z, #frustum-width, #frustum-height,
    *  #frustum-status-text, #safe-distance, #toggle-safe-distance, #reset-camera, #export-safe-distance).
    *  Subscribes: CAMERA_PREVIEW_CHANGED, CAMERA_FILMBACK_CHANGED, CAMERA_LENS_CHANGED, CAMERA_COVERAGE_CHANGED,
-   *  CAMERA_POSE_CHANGED, CAMERA_SAFE_DISTANCE_TOGGLED (formats below).
+   *  CAMERA_POSE_CHANGED, CAMERA_SAFE_DISTANCE_TOGGLED, and since 03 T4 WALL_PIVOT_CHANGED and WALL_REBUILT (the
+   *  #camera-pos-z min attribute) (formats below).
    *  @param {{doc, project: Project, cameraController: CameraController, projectIO: ProjectIO, bus, theme: {ui: UiColors}}} deps */
   constructor({ doc, project, cameraController, projectIO, bus, theme })
   /** Registers 4230-4329 in legacy order:
@@ -2709,8 +2768,14 @@ Mirror formats (verbatim legacy strings; `cine = project.camera` read at event t
   - `'gizmo-translate'`: pos-x/y/z `toFixed(2)` (3342-3344);
   - `'gizmo-rotate'`: only `#camera-rot-${axis}` `toFixed(1)` (axis 'x', 'y', else 'z'; 3378/3381/3384);
   - `'pilot-look'`: rot-x then rot-y `toFixed(1)` (3554-3555);
-  - `'pilot-move'`: pos-x/y/z `toFixed(2)` (3614-3616).
+  - `'pilot-move'`: pos-x/y/z `toFixed(2)` (3614-3616);
+  - `'pivot'` (03 T4, the re-expression of a pivot edit): pos-x and pos-z `toFixed(2)`.
 - `CAMERA_SAFE_DISTANCE_TOGGLED({enabled})`: `#export-safe-distance` display (4325).
+- `WALL_PIVOT_CHANGED({resolution})` and `WALL_REBUILT({layout})` (03 T4, 03 3.5): `#camera-pos-z.setAttribute('min', cameraZMinAttribute(wallZ))`
+  with `wallZ = resolution ? 0 - resolution.stageOrigin.z : 0` (`layout.pivot.resolution` for the rebuild). The exported helper
+  `cameraZMinAttribute(wallZ)` is `'0.1'` (the markup value) while `wallZ === 0`, else `minZ = r3(wallZ + 0.1)` floored to the 0.1 grid
+  (`(Math.floor(Math.round(minZ * 1000) / 100) / 10).toFixed(1)`: -2.3397 -> "-2.3", -2 -> "-1.9", 2 -> "2.1"). Step F (08 P2-11c)
+  removes the attribute and this mirror.
 
 #### `js/ui/PropsPanel.js`
 ```js
@@ -2718,7 +2783,8 @@ export class PropControls {            // new PropControls({doc, prefix: 'person
   /** Owns #toggle-<prefix>, #<prefix>-options, #<prefix>-pos-x, #<prefix>-pos-z, #<prefix>-rot-y, #<prefix>-scale.
    *  Subscribes PROP_VISIBILITY_CHANGED and PROP_POSE_CHANGED, ignoring payloads whose id !== prefix:
    *   visibility: #<prefix>-options display (4335 / 4366);
-   *   pose 'gizmo-translate': pos-x, pos-z = toFixed(2) (3351-3352 / 3358-3359); 'gizmo-rotate': rot-y = toFixed(1) (3391 / 3397).
+   *   pose 'gizmo-translate': pos-x, pos-z = toFixed(2) (3351-3352 / 3358-3359); 'gizmo-rotate': rot-y = toFixed(1) (3391 / 3397);
+   *   'pivot' (03 T4): pos-x, pos-z = toFixed(2).
    *  @param {{doc, prefix: 'person'|'car', controller: PropController, prop: Prop, bus}} deps */
   constructor({ doc, prefix, controller, prop, bus })
   /** 4332-4361 / 4363-4392: toggle click -> controller.setVisible(flipToggle(el));
@@ -2941,15 +3007,16 @@ Writers listed here are the only allowed writers (checked by `tests/static/check
 | `camera:filmbackChanged` (`CAMERA_FILMBACK_CHANGED`) | `{key}` | `CameraController.setFilmback` after `cine.applyPreset` (4254-4262) | `CameraPanel` (`#custom-filmback`, size inputs) |
 | `camera:lensChanged` (`CAMERA_LENS_CHANGED`) | `{hFov, vFov, filmbackWidth, filmbackHeight}` (radians, mm) | `CameraRigView.rebuildFrustum` at the legacy readout point (2369-2371); twice on the first enable, as legacy | `CameraPanel` (`#camera-hfov/vfov/aspect`) |
 | `camera:coverageChanged` (`CAMERA_COVERAGE_CHANGED`) | `{frameWidth, frameHeight, status, safeDistance, distToWall}` (`distToWall` since 03 T3: posZ - wallZ) | `CameraHub.refresh` step 5 (2460) | `CameraPanel` (frame size, status text + colour, max distance) |
-| `camera:poseChanged` (`CAMERA_POSE_CHANGED`) | `{source: 'reset'\|'gizmo-translate'\|'gizmo-rotate'\|'pilot-look'\|'pilot-move'\|'pivot', axis?}` (`'pivot'` since 03 T3; its input mirror lands with 03 T6) | `CameraController.resetPose` (2567), `applyGizmoTranslate` (3342), `applyGizmoRotate` (3378/3381/3384), `PilotController.onMouseMove` (3554), `tickKeyboard` (3614), `CameraController.translateStage` (03 T3): always after the model write, before the hub | `CameraPanel` (input values, per-source precision) |
+| `camera:poseChanged` (`CAMERA_POSE_CHANGED`) | `{source: 'reset'\|'gizmo-translate'\|'gizmo-rotate'\|'pilot-look'\|'pilot-move'\|'pivot', axis?}` (`'pivot'` since 03 T3; its input mirror since 03 T4) | `CameraController.resetPose` (2567), `applyGizmoTranslate` (3342), `applyGizmoRotate` (3378/3381/3384), `PilotController.onMouseMove` (3554), `tickKeyboard` (3614), `CameraController.translateStage` (03 T3): always after the model write, before the hub | `CameraPanel` (input values, per-source precision) |
 | `camera:safeDistanceToggled` (`CAMERA_SAFE_DISTANCE_TOGGLED`) | `{enabled}` | `CameraController.setSafeDistanceEnabled` (4325) | `CameraPanel` (`#export-safe-distance` display) |
 | `prop:visibilityChanged` (`PROP_VISIBILITY_CHANGED`) | `{id, visible}` | `PropController.setVisible` after the model write (4335 / 4366) | `PropControls` with that prefix (`#<id>-options`) |
-| `prop:poseChanged` (`PROP_POSE_CHANGED`) | `{id, source: 'gizmo-translate'\|'gizmo-rotate'\|'pivot'}` (`'pivot'` since 03 T3; its mirror lands with 03 T6) | `PropController.applyGizmoTranslate/Rotate` (3351, 3358, 3391, 3397), `PropController.translateStage` (03 T3) | `PropControls` with that prefix |
+| `prop:poseChanged` (`PROP_POSE_CHANGED`) | `{id, source: 'gizmo-translate'\|'gizmo-rotate'\|'pivot'}` (`'pivot'` since 03 T3; its mirror since 03 T4) | `PropController.applyGizmoTranslate/Rotate` (3351, 3358, 3391, 3397), `PropController.translateStage` (03 T3) | `PropControls` with that prefix |
 | `selection:changed` (`SELECTION_CHANGED`) | `{id, label}` (`null`s on deselect) | `SelectionManager.select` (before `gizmo.attach`), `deselect` (before `gizmo.detach`) (3141, 3148) | `ViewportToolbar` (badge) |
 | `selectable:moved` (`SELECTABLE_MOVED`) | `{id}` | `CameraHub.refresh` last step (2466-2468), `PropController.applyTransform` (2889, 2980) | `TransformGizmo` (`updatePosition()` iff its target has that id) |
 | `gizmo:modeChanged` (`GIZMO_MODE_CHANGED`) | `{mode}` | `TransformGizmo.setMode/clearMode` before `rebuild` (3176-3177, 4428-4429) | `ViewportToolbar` |
 | `gizmo:spaceChanged` (`GIZMO_SPACE_CHANGED`) | `{space}` | `TransformGizmo.toggleSpace` before re-orientation (3184-3188) | `ViewportToolbar` |
 | `pilot:changed` (`PILOT_CHANGED`) | `{active}` | `PilotController.toggle` right after the flip (3484-3485) | `ViewportToolbar` (button + banner) |
+| `wall:pivotChanged` (`WALL_PIVOT_CHANGED`) | `{source: 'mode'\|'offset'\|'reset-offset'\|'gizmo'\|'import'\|'keep-stage'\|'marker', pivot: {mode, offset, keepStageLayout} (a copy), resolution: PivotResolution\|null, stageShift: {x, z}, reexpressed, rebuilds}`; a visual event (07 C47), 03 T4 | `PivotController.#commit` after the model write and the re-expression, before `wallController.commitPivot`; `setKeepStageLayout` / `setMarkerVisible` (`rebuilds: false`, the cached resolution); `WallController.applyImport` after the pivot assignment, before every other import event and the rebuild (`rebuilds: true`, `resolvePivotNow()`) | `CameraPanel` (`#camera-pos-z` `min`; 03 T4); `PivotMarkerView` and `PivotPanel` land with 03 T5 and T6 |
 | `debug:viewChanged` (`DEBUG_VIEW_CHANGED`) | `{shading, normals: {enabled, vertex, face, lengthScale, onTop}}` (a frozen `DebugViewSettings.snapshot()`); a visual event (07 C47) | `DebugViewController` after every settings write, before its render call (01 F1-2) | `DebugViewControls` (buttons, inputs, legend, announcer); added in the same step as the emitter (5.1 rule 7) |
 
 Ordering guarantees per multi-subscriber event: `WALL_SECTIONS_CHANGED` runs `SectionListPanel` then `SectionLogosPanel` (construction order); `DISPLAY_CONTENT_CHANGED` runs `WallDisplayPanel` then `SectionLogosPanel`. Their targets are disjoint, so the order is not observable.
@@ -3023,10 +3090,15 @@ This table is the documentation of `WallController`'s rebuild policy and is repe
 | 21 | 2285 | logo clear | `SectionLogosPanel` | `rebuildIfPanelIds` | iff panel IDs | entry deleted, logo list render |
 | 22 | 2292 | logo position change | `SectionLogosPanel` | `rebuildIfPanelIds` | iff the entry exists and panel IDs | - |
 | 23 | 2303 | logo scale change | `SectionLogosPanel` | `rebuildIfPanelIds` | iff the entry exists and panel IDs | write-back always |
-| 24 | 5002 | import `FileReader.onload` | `ExportPanel` -> `ProjectIO` | `applyImport` | iff the validated read is ok (08 P2-3b), inside the `try`, with `cause: 'import'` (03 T3) | the pivot reset to the identity (03 4.4; no re-expression), labels iff `mesh_mode`, `WALL_SECTIONS_CHANGED{import}`; then M-IMP-5 iff corrected |
+| 24 | 5002 | import `FileReader.onload` | `ExportPanel` -> `ProjectIO` | `applyImport` | iff the validated read is ok (08 P2-3b), inside the `try`, with `cause: 'import'` (03 T3) | the pivot reset to the identity (03 4.4; no re-expression) and `WALL_PIVOT_CHANGED{import}` (03 T4), labels iff `mesh_mode`, `WALL_SECTIONS_CHANGED{import}`; then M-IMP-5 iff corrected |
+| F3-1 | - | pivot mode radio `change` | `PivotPanel` (03 T6) | `PivotController.setMode` -> `WallController.commitPivot` | iff the stage origin moved (`cause: 'pivot'`) | re-express iff keep (camera, person, car: `translateStage`); `WALL_PIVOT_CHANGED{mode}`; `SELECTABLE_MOVED{pivot}` |
+| F3-2 | - | pivot offset input `change` | `PivotPanel` (03 T6) | `setOffsetAxis` -> `commitPivot` | iff the x or z of the origin moved (never for y: the cache only) | write-back `toFixed(3)` |
+| F3-3 | - | `#pivot-reset-offset` | `PivotPanel` (03 T6) | `resetOffset` -> `commitPivot` | iff the origin moved | - |
+| F3-4 | - | gizmo mouse-up after a pivot drag | `TransformGizmo.onMouseUp` (03 T5) | `PivotController.endGizmoDrag({cancel: false})` -> `commitPivot` | iff the origin moved; **zero** rebuilds during the drag | Escape (`cancelDrag` -> `endGizmoDrag({cancel: true})`) commits nothing |
+| F3-5 | - | keep-stage or marker toggle | `PivotPanel` (03 T6) | `setKeepStageLayout` / `setMarkerVisible` | never | `WALL_PIVOT_CHANGED` only |
 | F6-1 | - | web fonts settled (06 5.6, the font gate) | `App.start` (`runFontGate`, fire-and-forget after the reset view) | `rebuildIfPanelIds` | iff a panel-ID canvas was drawn with a pending (font, text) **and** panel IDs are on (at most once; never in the harness) | none |
 
-No other path calls `rebuild()` (row F6-1 is the one call site added since Phase 1 so far). Never de-duplicate or debounce (row 8 rebuilds twice per click; rows 3, 16, 19 rebuild on every `input` event).
+No other path calls `rebuild()` (rows F6-1 and `commitPivot`'s rows F3-1 to F3-4, 03 T4, are the call sites added since Phase 1 so far; `PivotController` never calls `rebuild()` itself). Never de-duplicate or debounce (row 8 rebuilds twice per click; rows 3, 16, 19 rebuild on every `input` event).
 
 **Row ids** (07 §0.4, applied by 07 D0). Rows 1-24 are the legacy call sites and keep their numbers; tests and specs cite them by number (for example rows 3, 16 and 19). Every row added after Phase 1 carries a **named id** `<owner>-<n>` instead of the next free number, so rows from specs that land in any order never collide:
 - `F<k>-<n>` for feature spec 0k (Feature k), `X<i>-<n>` for spec 09's item X<i>;
@@ -3865,3 +3937,11 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 **03 T3b, the 'flat-pivot' type of the orbit's frame bounds (review follow-up of 03 T3)** (manifest `tests/regression/expected/F3-T3b.json`, an invariance gate: empty `expect`; comments and documentation only):
 - 3.8 `OrbitController`: the `frameBounds` dependency is typed `{totalWidth, maxHeight, minX, wallZ}` here and on the `#frameBounds` field, the `'flat-pivot'` fields `updateTargetPosition` reads since 03 T3 (both still named the Phase-1 `{totalWidth, maxHeight}`).
 - The module header of `ProjectIO` says the wall exports read `WallController.layout({frame: 'export'})` and the safe-distance OBJ re-expresses its group into the export frame (it still named the argument-less `layout()`).
+
+**03 T4, the pivot controller** (Feature 3 step A, fourth commit; docs/improvements/03-pivot.md 5.3, 5.5, 5.6, 6.5, 6.7, 10; manifest `tests/regression/expected/F3-T4.json`, an invariance commit: nothing in the app calls `PivotController` before 03 T5 wires it, and the import's new `WALL_PIVOT_CHANGED` reaches only `CameraPanel`, which writes `#camera-pos-z`'s markup `min` "0.1" back at the identity, so no output changes):
+- 2.2, 3.10: `app/PivotController.js` (new): `PIVOT_SNAP_STEPS_M`, `dragTarget` (03 6.7: the dragged distance is snapped, never the absolute value; an untouched axis keeps its stored value bit for bit) and `PivotController`: the use cases of rows F3-1 to F3-5 through P-PIVOT (`#commit`: model write through `WallPivot`, no-op when unchanged, the stage-origin shift against `WallController`'s cache, the re-expression of the `StageAnchored` participants iff keep stage layout, `WALL_PIVOT_CHANGED`, `commitPivot`, `SELECTABLE_MOVED`), `setSnapStep`, `toggleSelect`, and the Selectable 'pivot' (`kind`, `pickPriority` 10, `allowedAxes` null for rotate, `gizmoAnchor` from the cache plus the drag preview, `beginGizmoDrag` / `applyGizmoTranslate` / `endGizmoDrag({cancel})`).
+- 3.2, 5.2: `Events.WALL_PIVOT_CHANGED` ('wall:pivotChanged', visual, 07 C47) with its first emitters (`PivotController`, `WallController.applyImport`) and its first subscriber (`CameraPanel`), static rule 7. 3.10 `WallController.applyImport` emits it right after the pivot assignment (03 4.4, 5.5).
+- 3.11 `CameraPanel`: the `#camera-pos-z` `min` mirror on `WALL_PIVOT_CHANGED` and `WALL_REBUILT` with the exported `cameraZMinAttribute(wallZ)` (03 3.5), and the `'pivot'` pose mirror; `PropControls`: the `'pivot'` pose mirror. 5.2: the two pose rows say so. Both move here from 03 T6 (recorded in 03 10): the min mirror is the event's subscriber in the commit that adds it (5.1 rule 7), and the pose mirrors are the 5.5 subscribers of the events P-PIVOT emits.
+- 6.2: rows F3-1 to F3-5 and the amended row 24 (also in `WallController`'s module header); `PivotController` never calls `rebuild()`.
+- 4: the pivot rows already name the writers (`WallPivot` methods via `PivotController`; `PivotController.setMarkerVisible`). 10 (static rule 10): `showPivotMarker` joins the domain fields, `PivotController` (receiver `display`) is its one allowed writer.
+- 2.3: `pivot-controller.test.mjs` (new: 03 8.1 tests 10-15, test 15's marker part lands with `PivotMarkerView` in 03 T5), `wall-controller.test.mjs` (the import's `WALL_PIVOT_CHANGED`), `core.test.mjs` (the catalogue).

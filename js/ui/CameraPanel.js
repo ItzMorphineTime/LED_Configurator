@@ -19,6 +19,29 @@ import { CineCamera } from '../domain/CineCamera.js';
 import { byId, flipToggle, setDisplay } from './dom.js';
 
 /**
+ * The `min` attribute of #camera-pos-z for a wall plane at stage z = wallZ (03 3.5, until step F = 08 P2-11c removes
+ * the Z minimum): "0.1" (the markup value) while wallZ === 0 (+0 or -0, the identity and every on-plane pivot), else the
+ * posZ rule's floor minZ = r3(wallZ + 0.1) FLOORED to the 0.1 grid, so that with step="0.1" every whole tenth (0
+ * included) stays a valid step; the rule itself still clamps to the exact minZ on change.
+ * Side effects: none.
+ * @param {number} wallZ  0 - stageOrigin.z (metres; 0 for a null resolution)
+ * @returns {string} e.g. "0.1", "-1.9" (wallZ = -2), "-2.3" (wallZ = -2.3397), "2.1" (wallZ = 2)
+ */
+export function cameraZMinAttribute(wallZ) {
+  if (wallZ === 0) return '0.1';
+  const minZ = Math.round((wallZ + 0.1) * 1000) / 1000;
+  return (Math.floor(Math.round(minZ * 1000) / 100) / 10).toFixed(1);
+}
+
+/**
+ * The wall-plane z of a pivot resolution in the stage frame (03 3.5): 0 - stageOrigin.z, or 0 for a null resolution.
+ * Side effects: none.
+ * @param {{stageOrigin: {z: number}}|null|undefined} resolution
+ * @returns {number}
+ */
+const wallZOf = (resolution) => (resolution ? 0 - resolution.stageOrigin.z : 0);
+
+/**
  * The camera-section panel: binds the camera controls to CameraController / ProjectIO (down) and mirrors the
  * camera events into its own elements (up). One instance, constructed by App before the bootstrap rebuild.
  */
@@ -56,7 +79,7 @@ export class CameraPanel {
   /** @type {HTMLElement} */ #exportSafeDistance;
 
   /**
-   * Stores the collaborators, looks up the owned elements and subscribes the six mirrors:
+   * Stores the collaborators, looks up the owned elements and subscribes the eight mirrors:
    *  CAMERA_PREVIEW_CHANGED({enabled}): #camera-preview-options display (4233)
    *  CAMERA_FILMBACK_CHANGED({key}): #custom-filmback display; the size inputs unless custom (4254-4262)
    *  CAMERA_LENS_CHANGED({hFov, vFov, filmbackWidth, filmbackHeight}): #camera-hfov/vfov/aspect (2369-2371)
@@ -64,7 +87,9 @@ export class CameraPanel {
    *    colour, max distance (2484-2533)
    *  CAMERA_POSE_CHANGED({source, axis}): the pose inputs with the per-source precision
    *  CAMERA_SAFE_DISTANCE_TOGGLED({enabled}): #export-safe-distance display (4325)
-   * Side effects: DOM lookups (no mutation); six bus subscriptions.
+   *  WALL_PIVOT_CHANGED({resolution}) and WALL_REBUILT({layout}) (03 T4, 3.5): the `min` attribute of #camera-pos-z
+   *    from the pivot resolution (cameraZMinAttribute; "0.1" at the identity, the markup value)
+   * Side effects: DOM lookups (no mutation); eight bus subscriptions.
    * @param {{doc: Document, project: import('../domain/Project.js').Project,
    *          cameraController: import('../app/CameraController.js').CameraController,
    *          projectIO: import('../app/ProjectIO.js').ProjectIO,
@@ -108,6 +133,8 @@ export class CameraPanel {
     bus.on(Events.CAMERA_COVERAGE_CHANGED, (payload) => this.#mirrorCoverage(payload));
     bus.on(Events.CAMERA_POSE_CHANGED, (payload) => this.#mirrorPose(payload));
     bus.on(Events.CAMERA_SAFE_DISTANCE_TOGGLED, (payload) => this.#mirrorSafeDistanceToggle(payload));
+    bus.on(Events.WALL_PIVOT_CHANGED, ({ resolution }) => this.#mirrorZMin(resolution));
+    bus.on(Events.WALL_REBUILT, ({ layout }) => this.#mirrorZMin(layout?.pivot?.resolution ?? null));
   }
 
   /**
@@ -237,11 +264,17 @@ export class CameraPanel {
    * Ports: index.html@cd3fd3f lines 2567-2572 ('reset': X/Y toFixed(1), Z and rotations raw), 3342-3344
    * ('gizmo-translate': toFixed(2)), 3378 / 3381 / 3384 ('gizmo-rotate': the dragged axis, toFixed(1)),
    * 3554-3555 ('pilot-look': rot-x then rot-y, toFixed(1)), 3614-3616 ('pilot-move': toFixed(2)).
-   * @param {{source: 'reset'|'gizmo-translate'|'gizmo-rotate'|'pilot-look'|'pilot-move', axis?: 'x'|'y'|'z'}} payload
+   * 'pivot' (03 T4, 5.5: the re-expression after a pivot edit moved the stage origin): pos-x, pos-z toFixed(2), the
+   * two components translateStage writes.
+   * @param {{source: 'reset'|'gizmo-translate'|'gizmo-rotate'|'pilot-look'|'pilot-move'|'pivot', axis?: 'x'|'y'|'z'}} payload
    */
   #mirrorPose({ source, axis }) {
     const cine = this.#project.camera;
     switch (source) {
+      case 'pivot':
+        this.#posX.value = cine.posX.toFixed(2);
+        this.#posZ.value = cine.posZ.toFixed(2);
+        break;
       case 'reset':
         this.#posX.value = cine.posX.toFixed(1);
         this.#posY.value = cine.posY.toFixed(1);
@@ -281,5 +314,15 @@ export class CameraPanel {
    */
   #mirrorSafeDistanceToggle({ enabled }) {
     setDisplay(this.#exportSafeDistance, enabled);
+  }
+
+  /**
+   * WALL_PIVOT_CHANGED / WALL_REBUILT mirror (03 T4, 3.5): the `min` attribute of #camera-pos-z. At the identity (and
+   * for every pivot whose stage origin lies on the wall plane) it stays "0.1", the markup value. Step F (08 P2-11c)
+   * removes the attribute and this mirror.
+   * @param {{stageOrigin: {z: number}}|null} resolution  the pivot resolution of the payload (null: wallZ = 0)
+   */
+  #mirrorZMin(resolution) {
+    this.#posZ.setAttribute('min', cameraZMinAttribute(wallZOf(resolution)));
   }
 }

@@ -239,6 +239,16 @@ describe('the pivot cache, WALL_REBUILT cause and stageShift, commitPivot (03 5.
     assert.equal(rebuilt.cause, 'import');
     assert.deepEqual(rebuilt.stageShift, { x: -1.25, z: -2 });
     assert.equal(r.project.camera.posX, 0.5, 'an import is a load: nothing is re-expressed');
+    // 03 T4 (4.4, 5.5): WALL_PIVOT_CHANGED {import} after the assignment, before every other import mirror and the rebuild
+    const [changed] = r.emitted('WALL_PIVOT_CHANGED');
+    assert.deepEqual(Object.keys(changed), ['source', 'pivot', 'resolution', 'stageShift', 'reexpressed', 'rebuilds']);
+    assert.equal(changed.source, 'import');
+    assert.ok(changed.pivot.isIdentity && changed.pivot !== pivotAtRebuild, 'a copy of the assigned pivot');
+    assert.deepEqual(changed.resolution, resolvePivot(computeWallLayout(r.project.wall.sections), new WallPivot()));
+    assert.deepEqual(changed.stageShift, { x: -1.25, z: -2 }, 'against the cache, as the rebuild that follows');
+    assert.equal(changed.reexpressed, false);
+    assert.equal(changed.rebuilds, true);
+    assert.ok(r.trace.lastIndexOf('WALL_PIVOT_CHANGED') < r.trace.lastIndexOf('WALL_MESH_MODE_CHANGED'));
     const given = pivotOf('mesh-center');
     r.wc.applyImport({ sections: [new WallSection(fields())], meshMode: null, pivot: given });
     assert.equal(r.project.wall.pivot, given, "a file's pivot (03 T7, with project file v2) is assigned as given");
@@ -509,7 +519,7 @@ describe('rebuild policy (ARCHITECTURE.md 6.2): run counts and tile-cache clears
     r.bus.on(Events.WALL_MESH_MODE_CHANGED, () => seen.push(['mode', r.project.meshMode, r.project.wall.sections === sections]));
     r.bus.on(Events.WALL_SECTIONS_CHANGED, () => seen.push(['sections', r.project.wall.count]));
     r.wc.applyImport({ sections, meshMode: 'panel' });
-    assert.deepEqual(r.trace, ['WALL_MESH_MODE_CHANGED', 'WALL_SECTIONS_CHANGED', ...P1]);
+    assert.deepEqual(r.trace, ['WALL_PIVOT_CHANGED', 'WALL_MESH_MODE_CHANGED', 'WALL_SECTIONS_CHANGED', ...P1]);
     assert.deepEqual(r.emitted('WALL_MESH_MODE_CHANGED'), [{ mode: 'panel' }]);
     assert.deepEqual(r.emitted('WALL_SECTIONS_CHANGED'), [{ reason: 'import' }]);
     assert.deepEqual(seen, [['mode', 'panel', true], ['sections', 2]]);
@@ -544,7 +554,7 @@ describe('rebuild policy (ARCHITECTURE.md 6.2): run counts and tile-cache clears
       r.project.meshMode = 'section';
       r.wc.applyImport({ sections: [new WallSection(fields({ id: 7 }))], meshMode });
       assert.equal(r.project.meshMode, 'section');
-      assert.deepEqual(r.trace, ['WALL_SECTIONS_CHANGED', ...P1]);
+      assert.deepEqual(r.trace, ['WALL_PIVOT_CHANGED', 'WALL_SECTIONS_CHANGED', ...P1]);
       assert.equal(r.project.wall.nextSectionId, 8, 'the next free id (07 6.8)');
     }
   });

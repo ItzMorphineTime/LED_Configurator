@@ -37,6 +37,7 @@ export const Events = Object.freeze({
   PILOT_CHANGED:                'pilot:changed',
   // Feature events, each classified visual (it changes what the canvas shows) or non-visual (07 C47).
   DEBUG_VIEW_CHANGED:           'debug:viewChanged',   // visual (01 F1-2): DebugViewController -> DebugViewControls
+  WALL_PIVOT_CHANGED:           'wall:pivotChanged',   // visual (03 T4): PivotController, WallController.applyImport -> CameraPanel
 });
 
 /** The set of valid wire names (never mutated). */

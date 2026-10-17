@@ -37,13 +37,18 @@
  * | 21 | 2285   | logo clear                       | rebuildIfPanelIds                    | iff panel IDs                           | entry deleted, logo list render                         |
  * | 22 | 2292   | logo position change             | rebuildIfPanelIds                    | iff the entry exists and panel IDs      | -                                                       |
  * | 23 | 2303   | logo scale change                | rebuildIfPanelIds                    | iff the entry exists and panel IDs      | write-back always                                       |
- * | 24 | 5002   | import FileReader.onload         | applyImport                          | always (cause 'import'), in the `try`   | logos reset, pivot reset (03 4.4), labels iff mesh_mode, WALL_SECTIONS_CHANGED{import} |
+ * | 24 | 5002   | import FileReader.onload         | applyImport                          | always (cause 'import'), in the `try`   | logos reset, pivot reset + WALL_PIVOT_CHANGED{import} (03 4.4), labels iff mesh_mode, WALL_SECTIONS_CHANGED{import} |
  * | F6-1 | -    | web fonts settled (App.start, runFontGate) | rebuildIfPanelIds          | iff a panel-ID canvas was drawn with a pending (font, text) and panel IDs are on | none |
+ * | F3-1 | -    | pivot mode radio `change`        | PivotController.setMode -> commitPivot | iff the stage origin moved (cause 'pivot') | re-express iff keep; WALL_PIVOT_CHANGED{mode} |
+ * | F3-2 | -    | pivot offset input `change`      | PivotController.setOffsetAxis -> commitPivot | iff the origin's x or z moved (never for y) | write-back toFixed(3) |
+ * | F3-3 | -    | #pivot-reset-offset              | PivotController.resetOffset -> commitPivot | iff the origin moved             | -                                                       |
+ * | F3-4 | -    | gizmo mouse-up after a pivot drag | PivotController.endGizmoDrag({cancel: false}) -> commitPivot | iff the origin moved; zero during the drag | Escape (cancel) commits nothing |
+ * | F3-5 | -    | keep-stage or marker toggle      | setKeepStageLayout / setMarkerVisible | never                                   | WALL_PIVOT_CHANGED only                                 |
  *
  * No other path calls rebuild() (row F6-1, the font gate of 06 5.6, calls rebuildIfPanelIds at most once after the
- * web fonts settled), except commitPivot (03 5.6, the pivot use case of 03 T4: rebuild({cause: 'pivot'}) iff the stage
- * origin moved, else the pivot cache only). WALL_REBUILT carries the cause: 'init' (row 1), 'import' (row 24), 'pivot'
- * (commitPivot) and 'edit' (every other row). Never de-duplicate or debounce: row 8 rebuilds twice per click and rows 3, 16 and 19 rebuild
+ * web fonts settled), except commitPivot (03 5.6, rows F3-1 to F3-4 through app/PivotController's P-PIVOT, 03 T4:
+ * rebuild({cause: 'pivot'}) iff the stage origin moved, else the pivot cache only). WALL_REBUILT carries the cause:
+ * 'init' (row 1), 'import' (row 24), 'pivot' (commitPivot) and 'edit' (every other row). Never de-duplicate or debounce: row 8 rebuilds twice per click and rows 3, 16 and 19 rebuild
  * on every `input` event, exactly like legacy.
  */
 import { Events } from '../core/EventBus.js';
@@ -400,10 +405,13 @@ export class WallController {
    * truthy mesh mode (label mirror), re-render the cards (first expanded) and, with panel IDs on, the logo list, rebuild.
    * Feature 3 (03 4.4, Q14): the file's pivot replaces the session's, the identity for a file without one (every file
    * until project file v2: the pivot is session-only, the owner's decision of 2026-10-17), after the sections and before
-   * the rebuild, which runs with cause 'import'. An import is a load: nothing is re-expressed.
+   * the rebuild, which runs with cause 'import'. An import is a load: nothing is re-expressed. Since 03 T4 the pivot
+   * mirrors hear of it at once (WALL_PIVOT_CHANGED {source: 'import'}, 03 5.5), before the other import mirrors.
    * Ports: index.html@cd3fd3f lines 4976 + 4989 (via Wall.replaceAll), 4991-4996, 4998-5002.
-   * Side effects: model (logos, wall, wall.pivot, project.meshMode iff truthy); emits WALL_MESH_MODE_CHANGED {mode} iff
-   *   meshMode is truthy, then WALL_SECTIONS_CHANGED {reason: 'import'}; rebuild({cause: 'import'}).
+   * Side effects: model (logos, wall, wall.pivot, project.meshMode iff truthy); emits WALL_PIVOT_CHANGED {source:
+   *   'import', pivot, resolution: resolvePivotNow(), stageShift against the cache, reexpressed: false, rebuilds: true},
+   *   then WALL_MESH_MODE_CHANGED {mode} iff meshMode is truthy, then WALL_SECTIONS_CHANGED {reason: 'import'};
+   *   rebuild({cause: 'import'}).
    * @param {{sections: import('../domain/WallSection.js').WallSection[], meshMode: *,
    *          logos?: Array<[*, import('../domain/LogoLibrary.js').LogoEntry]>|null,
    *          pivot?: import('../domain/Wall.js').WallPivot|null}} parsed
@@ -417,6 +425,12 @@ export class WallController {
     if (logos) for (const [sectionId, entry] of logos) project.logos.set(sectionId, entry);
     project.wall.replaceAll(sections);
     project.wall.pivot = pivot ?? new WallPivot();
+    // 03 T4 (4.4, 5.5): the pivot mirrors follow the file's pivot before the rebuild; nothing is re-expressed.
+    const resolution = this.resolvePivotNow();
+    this.#bus.emit(Events.WALL_PIVOT_CHANGED, {
+      source: 'import', pivot: project.wall.pivot.clone(), resolution,
+      stageShift: stageShift(this.#pivotResolution, resolution), reexpressed: false, rebuilds: true,
+    });
 
     if (meshMode) {
       project.meshMode = meshMode;

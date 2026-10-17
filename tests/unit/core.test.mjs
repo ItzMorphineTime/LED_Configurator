@@ -54,8 +54,9 @@ describe('Events catalogue', () => {
       GIZMO_SPACE_CHANGED:          'gizmo:spaceChanged',
       PILOT_CHANGED:                'pilot:changed',
       DEBUG_VIEW_CHANGED:           'debug:viewChanged',   // 01 F1-2
+      WALL_PIVOT_CHANGED:           'wall:pivotChanged',   // 03 T4 (a visual event, 07 C47)
     });
-    assert.equal(Object.keys(Events).length, 20);
+    assert.equal(Object.keys(Events).length, 21);
     assert.ok(Object.isFrozen(Events));
   });
 
