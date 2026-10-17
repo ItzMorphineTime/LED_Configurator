@@ -1,0 +1,28 @@
+{
+  "commit": "B3-r",
+  "bugs": [],
+  "expect": [],
+  "mayChange": [
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-03 T3 runs); this commit changes no rendered byte"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; textures/L2_PanelIDs.png, L4_PanelIDs.png); this commit changes no texture"
+    },
+    {
+      "output": "pivot_stage/*.screenshot.png",
+      "change": "modified",
+      "reason": "the overlay-glyph jitter seen in the F3-T8b to B2-0 runs (1 level, at most 9 px, on the help badge and the camera preview footer labels over the canvas); this commit changes no rendered byte"
+    },
+    {
+      "output": "ui_visual/{00_initial,07_two_sections}.sidebar.screenshot.png",
+      "change": "modified",
+      "reason": "one sidebar pixel of these DOM-only captures has differed by up to 7 levels between runs (DOM text antialiasing; P2-7e and F3-T8b runs); this commit changes no rendered byte"
+    }
+  ],
+  "notes": "Documentation-only commit after unit B3 (08 P2-11; review follow-up). ARCHITECTURE.md: P2-11a left a stray code fence after the FrustumCoverage block, so every later fence of the contract was inverted (section headings from 3.6 WallMeshBuilder on rendered inside code blocks, code rendered as prose); the stray line is removed. tests/regression/README.md: the p2_true_framing baseline fact still described only the build before P2-11; it now records what P2-11a, P2-11b and P2-11c changed, as the other facts of that list do. No served file changes: every output must stay identical."
+}

@@ -933,7 +933,13 @@ in parentheses changes them:
   so on the half circle it stands at x = 2.5, beside the wall, and on the wall along +Z it looks past it; the orbit
   target is the centre of the flat bounds (B-L2). The status ignores the pan and the wall's shape: the 90° pan still
   reads "Exceeds wall" (B-M10). The frustum always reaches 15 m, through the wall (B-L33). `behind_wall`: Z −3 is
-  clamped to 0.1 (Q13), and the camera, facing away from the wall, reads "Within bounds" (B-M10).
+  clamped to 0.1 (Q13), and the camera, facing away from the wall, reads "Within bounds" (B-M10) (08 P2-11a: the
+  frame is measured along the optical axis on the wall plane it is aimed at, so the 90° pan, the wall along +Z seen
+  from the legacy Reset pose and `behind_wall` read "Not aimed at wall" with "—"; 08 P2-11b: the frustum ends where
+  its corner rays meet the wall, else at that plane; 08 P2-11c: Reset stands 5 m in front of each wall along its chord
+  facing, looking at the wall box centre (pan −99° on the half circle, −90° on the wall along +Z, 5.00 m from it), the
+  orbit target is the centre of the real wall, and Z −3 is kept: the camera behind the wall, facing its back, reads
+  "Not aimed at wall" with "—").
 
 A candidate that fixes these will report the missing error as a WARN, and the newly produced
 file as an EXTRA output (FAIL). Accept such a change deliberately through its expected-change

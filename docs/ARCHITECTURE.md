@@ -1375,7 +1375,6 @@ export function quadOverlapsFrame(q, o, basis, tx, ty)
  *  @returns {{status, frameWidth, frameHeight, distance, cornerDepths: number[4], centreDepth, cornerHits: boolean[4]}} */
 export function analyzeCoverage(layout, pose, lens, extent)
 ```
-```
 
 #### `js/geometry/WallMeshBuilder.js`: the one owner of winding, normals and UVs
 ```js
@@ -4382,3 +4381,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - Deviations from 08 6.10 and 03 6.6, recorded in 08 10 (P2-11 as built) and 03 6.6: the framing returns the named boxes, not the flat `{min, max, center, width, height, facing}` with the flat-pivot fields; `wallZ` is the walk start's z in the layout's frame; the stage extent counts a section without columns; the Reset mirror's display precision. The next unit's whole-wall orientation belongs in the walk, so every box, the facing, the quads and the stage extent follow it.
 - `README.md`: the Reset, orbit, Max Distance and Z Position release note. 03: the step-F as-built note.
 - 2.3: `frustum-coverage.test.mjs` (the framing: memo and keys, flat walls bit for bit, the pivot translation, 03 test 21's half circle, a 180-degree section (rotY 180, negative Z), the same D along X, Z and 45 degrees with Reset 5 m in front (08 AC 42, 43), Reset under a yaw of the wall, the stage extent without a ceiling section, the no-NaN fallback, `wrapDeg`, `finiteOr`, the Z rule); `pivot.test.mjs` (test 6 for step F; the flat consumers bit for bit); `domain.test.mjs` (the posZ rule, `resetTo`, `maxSafeDistance(extent)`; `flatBounds` gone); `geometry.test.mjs`, `camera-hub.test.mjs`, `pivot-controller.test.mjs` (no min attribute), `gizmo.test.mjs`, `safe-distance-band.test.mjs`, `core.test.mjs` (the Strategies value; B-L2 and B-M10 landed).
+
+**B3-r, documentation follow-up of unit B3 (08 P2-11; review)** (manifest `tests/regression/expected/B3-r.json`, an invariance gate: documentation only):
+- 3.6: the FrustumCoverage block (added by 08 P2-11a) was followed by a stray code fence, which inverted every later fence of this document (the headings from `js/geometry/WallMeshBuilder.js` on rendered inside code blocks); the stray line is removed.
+- The harness README's baseline fact for `p2_true_framing` records what 08 P2-11a, P2-11b and P2-11c changed, like the other entries of that list.
