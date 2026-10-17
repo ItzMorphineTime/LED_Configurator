@@ -62,7 +62,7 @@
     {
       "output": "ui_visual/00_initial.sidebar.screenshot.png",
       "change": "modified",
-      "reason": "added after the first gate run: one sidebar pixel differed by 7 levels (DOM text antialiasing of a DOM-only capture); this commit changes no markup, style or sidebar text (LED-sim material and tile cache key only)"
+      "reason": "the one sidebar pixel that differed by 7 levels in the P2-7e runs (DOM text antialiasing of a DOM-only capture); this commit changes no markup, style or sidebar text (export archives only)"
     }
   ],
   "notes": "08 P2-7f (Q5, no bug id): Export All ships the atlas in every mesh mode when canvasFits passes (#planAtlas, #addAtlasTexture: up-front and late skips, M-EXP-4); only the combined MTL references it. Export OBJ ships it in combined mode (its MTL references it). No glTF images (04 UV-8b), no JSON key, no screenshot change."
