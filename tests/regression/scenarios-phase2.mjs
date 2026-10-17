@@ -483,6 +483,46 @@ async function mixedContentScenario(ctx) {
     await shot(ctx, 'panel_ids_combined');
 }
 
+// ---- scenario: p2_true_framing (B-M10, B-L33, B-L2, Q13; captured before 08 P2-11) ----------------------------
+
+/** The B-L2 wall of 03 6.6: one section, 10 x 3 panels of 500 mm, concave 18 degrees per panel (a half circle). */
+const ARC18 = { version: '1.0', sections: [sec('Arc 18', 0, 10, 3, 500, 500, 64, 64, 18, 0, '#ffdd00')], mesh_mode: 'combined' };
+/** One flat section of 5 x 3 panels of 500 mm turned 90 degrees by its section offset: the wall runs along +Z (08 AC 42). */
+const OFFSET90 = { version: '1.0', sections: [sec('Offset 90', 0, 5, 3, 500, 500, 64, 64, 0, 90, '#00f0ff')], mesh_mode: 'combined' };
+
+/** cameraState() plus the "Distance to wall plane" read-out (03 3.5; the analyser's D0 from 08 P2-11a on). */
+const framingState = (app) => async () => ({
+    ...(await app.cameraState()),
+    wallDistance: await app.eval(`(() => { const el = document.getElementById('camera-wall-distance'); return el ? el.textContent.trim() : null; })()`),
+});
+
+async function trueFramingScenario(ctx) {
+    const { app } = ctx;
+    // 1. The half-circle wall: Reset (turning the preview on resets the pose), the orbit target, D, a 90-degree pan.
+    await importCfg(ctx, 'arc18_import', ARC18, 'arc18.json');
+    await step(ctx, 'arc18-preview-on', () => app.click('#toggle-camera-preview'));
+    await record(ctx, 'arc18_reset', framingState(app));
+    await step(ctx, 'arc18-safe-distance-on', () => app.click('#toggle-safe-distance'));
+    await shot(ctx, 'arc18');
+    await step(ctx, 'arc18-pan-90', () => app.setValue('#camera-rot-y', '90'));
+    await record(ctx, 'arc18_pan_90', framingState(app));
+    // 2. A flat wall along +Z (a 90-degree section offset): Reset, the coverage and D.
+    await freshPage(ctx, 'offset90');
+    await importCfg(ctx, 'offset90_import', OFFSET90, 'offset90.json');
+    await step(ctx, 'offset90-preview-on', () => app.click('#toggle-camera-preview'));
+    await record(ctx, 'offset90_reset', framingState(app));
+    await step(ctx, 'offset90-safe-distance-on', () => app.click('#toggle-safe-distance'));
+    await shot(ctx, 'offset90');
+    // 3. The default wall seen from behind: Z -3 (typed; Q13) and a 180-degree pan, facing the back of the wall.
+    await freshPage(ctx, 'behind');
+    await step(ctx, 'behind-preview-on', () => app.click('#toggle-camera-preview'));
+    await step(ctx, 'behind-pose', async () => {
+        await app.setValue('#camera-rot-y', '180');
+        await app.setValue('#camera-pos-z', '-3');
+    });
+    await record(ctx, 'behind_wall', framingState(app));
+}
+
 // ---- scenario: p2_shortcut_filters (B-L11, B-L25) ----------------------------------------------
 
 async function shortcutFiltersScenario(ctx) {
@@ -660,5 +700,9 @@ export const PHASE2_SCENARIOS = {
         description: 'Phase 2 (B-L31, B-L35, B-L36): full project save and restore (camera, props, display, panel-ID style, logos incl. a 2 MB BMP), preview-off save, hostile v2 logos and the stored SVG text; toggle_aria probes; records network.json.',
         run: projectV2Scenario,
         recordRequests: true,
+    },
+    p2_true_framing: {
+        description: 'Phase 2 (B-M10, B-L33, B-L2, Q13; before 08 P2-11): Reset, coverage, D and a 90-degree pan on the 18-degree half-circle wall; Reset on a flat wall along +Z (90-degree section offset); a camera behind the default wall facing it. Camera states with the wall-distance read-out, two screenshots.',
+        run: trueFramingScenario,
     },
 };

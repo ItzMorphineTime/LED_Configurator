@@ -121,11 +121,12 @@ Configs are applied by importing a JSON file through `#import-input`. The harnes
 | `p2_mixed_content` | 7 | Phase 2: LED sim and panel IDs on mixed section heights (B-M5, B-L18). |
 | `p2_shortcut_filters` | 8 | Phase 2: shortcut keys in a focused select, with Ctrl, auto-repeated, and a view preset in pilot mode (B-L11, B-L25). |
 | `p2_project_v2` | 35 | Phase 2: a full project save and restore, a save with the preview off, hostile v2 logos and the stored SVG text; the only scenario with `network.json` (B-L31, B-L35, B-L36). |
+| `p2_true_framing` | 11 | Phase 2, captured before 08 P2-11: Reset, coverage and D on the 18° half-circle wall and on a flat wall along +Z, a 90° pan, and a camera behind the default wall facing it (B-M10, B-L33, B-L2, Q13). |
 | `preview_compositing` | 9 | 07 R2 and the owner's 2026-10-17 report: preview on, the window enlarged with its handle, two orbit drags; the WebGL canvases, full-page screenshots and the mirrored-rectangle probe. See [The platform scenarios](#the-platform-scenarios-07-r1r2). |
 | `preview_clean` | 13 | 07 8.3: the person selected, preview and Safe Distance on, at Full Frame, RED V-RAPTOR and a 100×10 mm custom filmback dragged widest; canvas and window screenshots and the preview state. |
 
 The eight scenarios after `ui_visual` live in [`scenarios-extra.mjs`](scenarios-extra.mjs) and are
-spread into `SCENARIOS` after the original entries. The eight `p2_*` scenarios live in
+spread into `SCENARIOS` after the original entries. The nine `p2_*` scenarios live in
 [`scenarios-phase2.mjs`](scenarios-phase2.mjs) and are spread in after them (see
 [The Phase 2 scenarios](#the-phase-2-scenarios)). The five `pivot_*` feature scenarios ([`scenarios-features.mjs`](scenarios-features.mjs))
 follow, and the two platform scenarios ([`scenarios-platform.mjs`](scenarios-platform.mjs)) are registered last.
@@ -391,9 +392,9 @@ excluded overlay rects.
 ## The Phase 2 scenarios
 
 [`scenarios-phase2.mjs`](scenarios-phase2.mjs) adds the eight scenarios of
-`docs/improvements/08-bugfix-roadmap.md` section 8.3. They were captured at P2-0 against the
-**unfixed** code, so their baselines document the bugs; each later fix changes them on purpose,
-through its expected-change manifest. They follow the same DOM-only rules as the other scenarios.
+`docs/improvements/08-bugfix-roadmap.md` section 8.3, and `p2_true_framing` (B3-0, captured before 08 P2-11).
+They were captured against the **unfixed** code, so their baselines document the bugs; each later fix changes
+them on purpose, through its expected-change manifest. They follow the same DOM-only rules as the other scenarios.
 
 - **Export labels** are `<mesh mode>__<button>` (`section__export-obj`, `combined__export-zip`, ...) or
   `<wall>__export-safe-distance`, so the segment-agnostic manifest patterns
@@ -416,6 +417,7 @@ through its expected-change manifest. They follow the same DOM-only rules as the
 | `p2_mixed_content` | Import `mixed`; LED sim on (combined), screenshot; layout `square`, screenshot; panel IDs on, screenshot | 3 screenshots |
 | `p2_shortcut_filters` | LED sim on, focus `#led-layout`, press `g`; blur, Ctrl+G; preview on, `p` as three auto-repeat key downs; Escape and one `p` (pilot on from either state), click `#view-front`, screenshot | `gizmo_0{1..4}_*` (gizmo state, focused element, `#led-layout` value), `pilot_view_front` |
 | `p2_project_v2` | 1. preview on, custom filmback 30×20, focal 50, pose (2, 1.2, 4) / (5, −10, 2), safe distance on. 2. person at (1, 3), rot 45, scale 1.5; car on. 3. Add Section (so that section 1 exists), LED sim on then panel IDs on, border 12, font colour `#ff0000`, the 16×8 test PNG on section 0, a generated 2,000,000-byte 24-bit noise BMP on section 1, wireframe on. 4. `v2_first__export-json`. 5–6. fresh page, import it, record, screenshot, `v2_second__export-json`. 7. preview off (only if on), `v2_off__export-json`, fresh page, import it, preview on (only if off), record. 8. import an inline one-section v2 file whose `assets[]` hold an `https://` URL, a `data:text/html` URI, a data URI with a base64 length that is not a multiple of 4, and an SVG with `<script>`, `<foreignObject>` and an external `href` (the section's logo); `combined__export-panel-ids`, `combined__export-zip`; the stored SVG text, read from that archive | `camera_*`, `ui_*`, `toggle_aria_*` (the `toggle_aria` probe of 08 sections 6.18 and 8.3: every `.toggle`, `.active`, `role`, `aria-checked`, `tabindex`), `logos_*` (the list with every `data-*` attribute), `dialogs_page{1,2,3...}` (dialogs per page), the three JSON exports, the screenshot, `stored_svg_08_hostile` (every `.svg` entry and every base64 `data:image/svg+xml` URI of the archive's JSON, decoded: the DOM never shows a logo's bytes), `network.json` |
+| `p2_true_framing` | 1. Import the 18° half circle (one section, 10 × 3 panels of 500 mm, curve 18°); preview on (Reset); safe distance on; screenshot `arc18`; Pan 90. 2. Fresh page: import one flat 5 × 3 section with a 90° section offset (the wall along +Z); preview on; safe distance on; screenshot `offset90`. 3. Fresh page (default wall): preview on; Pan 180, then Z −3 (the back of the wall) | `arc18_reset`, `arc18_pan_90`, `offset90_reset`, `behind_wall` (`cameraState()` plus `wallDistance`, the `#camera-wall-distance` text), 2 screenshots |
 
 **`p2_project_v2` and the request log.** The scenario sets `recordRequests: true`. `lib/app.mjs`
 then keeps the URL of every `Network.requestWillBeSent` from the scenario's first step on, except
@@ -927,6 +929,11 @@ in parentheses changes them:
 - `p2_oversize_canvas`: since 08 P2-3b the import clamps the section's 70 columns to the 50-column limit (M-IMP-5),
   so the wall is 50,000 px wide: still beyond the 32,767 px of `CANVAS_HARD_LIMITS`, so M-EXP-2, M-EXP-4 and the
   viewport fallback are exercised as before (the harness browser itself could draw it).
+- `p2_true_framing` (captured before 08 P2-11): Reset puts the camera at (W/2, H/2, 5) facing −Z whatever the wall,
+  so on the half circle it stands at x = 2.5, beside the wall, and on the wall along +Z it looks past it; the orbit
+  target is the centre of the flat bounds (B-L2). The status ignores the pan and the wall's shape: the 90° pan still
+  reads "Exceeds wall" (B-M10). The frustum always reaches 15 m, through the wall (B-L33). `behind_wall`: Z −3 is
+  clamped to 0.1 (Q13), and the camera, facing away from the wall, reads "Within bounds" (B-M10).
 
 A candidate that fixes these will report the missing error as a WARN, and the newly produced
 file as an EXTRA output (FAIL). Accept such a change deliberately through its expected-change

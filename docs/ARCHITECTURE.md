@@ -387,7 +387,9 @@ tests/
                                                  gizmo_drag colour matchers for the Morph scene (isCameraBody for the opaque
                                                  Signal Red body, isGizmoRed g >= 24 against its anti-aliased edges); 03 T8:
                                                  its three drags call AppPage.drag
-    scenarios-phase2.mjs                   08 P2-0  the eight p2_* scenarios of 08 8.3, captured against the unfixed code
+    scenarios-phase2.mjs                   08 P2-0  the eight p2_* scenarios of 08 8.3, captured against the unfixed code;
+                                                 B3-0: p2_true_framing (Reset, coverage, D and the frustum on the 18-degree
+                                                 half circle and a wall along +Z, a camera behind the wall), before 08 P2-11
     scenarios-features.mjs                 03 T8  the five pivot_* scenarios of 03 8.3 (forward goldens; pivot_roundtrip and
                                                  pivot_validation in their session-only form until 03 T7), with the offset
                                                  and cancel post-checks
@@ -4273,3 +4275,6 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 **07 R2-b, the frame tick after 07 R2 (review follow-up of 07 R2)** (manifest `tests/regression/expected/07-R2-b.json`, an invariance gate: documentation, a comment and a unit test):
 - 3.12 and 6.12 still described the 07 R1 tick (`sceneManager.render()`, then `sceneManager.withPassHidden(() => preview.render(scene))`); they now name `sceneManager.renderFrame()`, which draws the main pass and then the injected preview pass, as 7 already did. `CameraController.setPreviewEnabled`'s comment no longer says a preview renderer is created on the first enable (it registers the resize handle).
 - 2.3: `preview-pass.test.mjs`'s fake renderer starts with a non-black clear colour and alpha, so the restore of the clear colour after the pass is asserted (the bars' black made it unobservable).
+
+**B3-0, the true-framing scenario before 08 P2-11** (docs/improvements/08-bugfix-roadmap.md 6.10, 8.3, AC 40-43; manifest `tests/regression/expected/B3-0.json`: the `p2_true_framing` outputs added, every existing output identical):
+- 2.3: `tests/regression/scenarios-phase2.mjs` gains `p2_true_framing`, registered after `p2_project_v2`: the 18-degree half circle of 03 6.6 (Reset, the safe distance, a 90-degree pan), a flat 5 x 3 section turned 90 degrees by its section offset (the wall along +Z: Reset and D, 08 AC 42) and the default wall seen from behind (Pan 180, Z -3). Each state is `cameraState()` plus the `#camera-wall-distance` text; two screenshots show the orbit target, the Reset pose and the frustum. Captured on the build before 08 P2-11, so its baseline documents B-L2, B-M10, B-L33 and the Z minimum of Q13; each P2-11 commit changes it on purpose. The harness README documents it.

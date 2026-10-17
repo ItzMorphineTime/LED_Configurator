@@ -1,0 +1,34 @@
+{
+  "commit": "B3-0",
+  "bugs": [],
+  "expect": [
+    {
+      "output": "p2_true_framing/**",
+      "change": "added",
+      "reason": "the true-framing scenario before 08 P2-11 (08 6.10, AC 40-43): the 18-degree half circle (Reset, D, a 90-degree pan), a flat wall along +Z (a 90-degree section offset) and a camera behind the default wall; camera states with the wall-distance read-out and two screenshots, documenting B-L2, B-M10, B-L33 and Q13's Z minimum on this build"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-03 T3 runs); this commit changes no rendered byte"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; textures/L2_PanelIDs.png); this commit changes no texture"
+    },
+    {
+      "output": "pivot_stage/*.screenshot.png",
+      "change": "modified",
+      "reason": "the overlay-glyph jitter seen in the F3-T8b, F3-T12, F3-T6b, F3-T6c and B1-pivot-floor runs (1 level, at most 9 px, on the help badge and the camera preview footer labels over the canvas); this commit changes no rendered byte"
+    },
+    {
+      "output": "ui_visual/{00_initial,07_two_sections}.sidebar.screenshot.png",
+      "change": "modified",
+      "reason": "one sidebar pixel of these DOM-only captures has differed by up to 7 levels between runs (DOM text antialiasing; P2-7e and F3-T8b runs); this commit changes no rendered byte"
+    }
+  ],
+  "notes": "Harness-only commit before 08 P2-11 (B3: true framing and rotation-aware coverage, the prerequisite of the owner's whole-wall orientation of 2026-10-17). scenarios-phase2.mjs adds p2_true_framing, registered after p2_project_v2. No app file changes, so every existing output must stay identical; only the new scenario's outputs are added."
+}
