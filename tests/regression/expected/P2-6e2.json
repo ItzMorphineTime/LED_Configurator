@@ -1,0 +1,28 @@
+{
+  "commit": "P2-6e2",
+  "bugs": [],
+  "expect": [],
+  "mayChange": [
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-08 P2-6e runs); this commit changes no rendered byte"
+    },
+    {
+      "output": "p2_curved_safe_distance/box_corner.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas on the preview footer label row (1 level, 1 px, seen in the 06 T6a-08 P2-6e runs); this commit changes no rendered byte"
+    },
+    {
+      "output": "p2_shortcut_filters/pilot_view_front.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas (1 level, 2 px, seen in the 06 T6b-08 P2-6e runs); this commit changes no rendered byte"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b); this commit changes no export"
+    }
+  ],
+  "notes": "Review follow-up of 08 P2-6e, invariance: the ObjExporter.write comment and ARCHITECTURE 3.9 still said that Export OBJ passes no texture names, so its standalone MTL has no map_Kd; since P2-6e Export OBJ's ZIP passes the section-mode names, like Export All. 08 5.6 and the 04 test row and the UV-8a and UV-9 manifest rows still cited P2-6c's standalone-MTL rule, which P2-6e replaced. A comment and documentation only, so no output may change."
+}

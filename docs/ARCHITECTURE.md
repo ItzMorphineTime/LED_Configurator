@@ -2033,8 +2033,9 @@ export class ObjExporter {
    *    literal of 4589 and 4635), normalIndex: () => constantIndex}; default: throw unsupportedStrategy('mesh.obj.stripNormals', ...) }
    *  section: mtl per section `newmtl Wall_${i+1}` ... `d 1.0\n` + `map_Kd ${mtlTextureFile(textureNames[i])}\n\n` (the ZIP
    *    entry path of that texture, 08 P2-6d: B-M2 fixed) only for a texture the caller ships (textureNames given and
-   *    textureNames[i] not null; 08 P2-6c, B-L7 fixed), else `\n` instead of the map_Kd line: Export OBJ passes no names,
-   *    so its standalone MTL has no map_Kd; the ZIP passes its names, null for a texture it left out (08 P2-1c);
+   *    textureNames[i] not null; 08 P2-6c, B-L7 fixed), else `\n` instead of the map_Kd line: both archives pass their
+   *    names, null for a texture they left out (08 P2-1c): Export All's ZIP, and Export OBJ's ZIP in section mode since
+   *    08 P2-6e (before it Export OBJ passed none, so its standalone MTL had no map_Kd);
    *    obj `mtllib ...\n\n`; per section: `o Wall_${i+1}\n usemtl Wall_${i+1}\n`, v lines, vt lines, the lines of
    *    #stripNormalLines(grid.normals, normalOffset), faces `f ${v}/${t}/${n} ...` with t === v (texCoordOffset equals
    *    vertexOffset at every section) and n = normalIndex(v): v for 'per-vertex', normalOffset (starts 1, +1 per section) for
@@ -3590,3 +3591,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 3.11, `index.html`: `#export-obj` reads "Export OBJ (ZIP)", with the title "Downloads one ZIP: the OBJ, its MTL and the textures the MTL uses".
 - 6.13: the export sequences. 8.2: the B-L7 fix cell names P2-6e; 8.4: the residual-download row is deleted (resolved).
 - 2.3: the harness expects one download per Export OBJ step (`lib/app.mjs OBJ_ZIP_DOWNLOAD`, used by `scenarios.mjs`, `scenarios-extra.mjs` and `scenarios-phase2.mjs`); `normals_debug` hashes the archive's entries; `io.test.mjs` (the use cases in every mode, the texture paths, the left-out textures, the golden OBJ and MTL read from the archive entries), `theme.test.mjs` U9 and `core.test.mjs` (`objZip`).
+
+**08 P2-6e2, Export OBJ's texture names in the ObjExporter text and the specs (review follow-up of 08 P2-6e)** (manifest `tests/regression/expected/P2-6e2.json`, an invariance gate: empty `expect`; a comment and documentation only):
+- 3.9 and the header of `ObjExporter.write`: both archives pass texture names (Export All's ZIP, and Export OBJ's ZIP in section mode since 08 P2-6e); the text still said that Export OBJ passes none, so its standalone MTL has no `map_Kd` (P2-6c's rule, which P2-6e replaced).
+- 08 5.6 (the B-M3, B-M2, B-L14, B-L7 row) and 04 8 (the `io.test.mjs` row and the UV-8a and UV-9 manifest rows) cited the same rule; they now follow 04 7.1 and 7.5 as amended by P2-6e: Export OBJ's ZIP writes `map_Kd` by the ZIP rules and ships every file it names, so UV-8a (combined `per-section` `map_Kd`) also changes the combined Export OBJ ZIPs and extends `ProjectIO`'s Export OBJ texture plan to combined mode.

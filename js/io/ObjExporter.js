@@ -77,18 +77,18 @@ export class ObjExporter {
    *   combined: one object `LED_Wall_Combined` coloured by the first section (B-L6); all `v` lines of all
    *     sections, then all `vt` lines (0..1 per section, B-M6), then the normals, then the faces;
    *   section: one material and object per section; per-section `v`, `vt` and normals; `map_Kd` only for a
-   *     texture the caller ships (08 P2-6c, B-L7 fixed): textureNames given and textureNames[i] not null. Export OBJ
-   *     passes no names, so its standalone MTL has no `map_Kd`; Export All (ZIP) passes its texture names, null for a
-   *     texture it left out (08 P2-1c). The path is that file's ZIP entry, `textures/<name>` (08 P2-6d, B-M2 fixed:
-   *     legacy named it by index);
+   *     texture the caller ships (08 P2-6c, B-L7 fixed): textureNames given and textureNames[i] not null. Both archives
+   *     pass their texture names, null for a texture they left out (08 P2-1c): Export All (ZIP), and Export OBJ (ZIP)
+   *     in section mode since 08 P2-6e (before it, Export OBJ passed none and its standalone MTL had no `map_Kd`).
+   *     The path is that file's ZIP entry, `textures/<name>` (08 P2-6d, B-M2 fixed: legacy named it by index);
    *   panel: one object per panel with 4 vertices, 4 `vt`, its facing `vn` and two faces (builder.panelQuadIndices).
    * Ports: index.html@cd3fd3f lines 4556-4717.
    * Side effects: none.
    * @param {{sections: import('../domain/WallSection.js').WallSection[], meshMode: *,
    *          layout: import('../geometry/WallLayout.js').WallLayout, textureNames?: (string|null)[]|null}} args
-   *   layout = layoutProject(project) of the same sections; textureNames (Export All ZIP only, 08 P2-6c): the shipped
-   *   texture file name of each section (PanelNaming.textureFileNames), null for a texture left out; absent or null: no
-   *   map_Kd at all
+   *   layout = layoutProject(project) of the same sections; textureNames (08 P2-6c; passed by Export All (ZIP) and, in
+   *   section mode, by Export OBJ (ZIP), 08 P2-6e): the shipped texture file name of each section
+   *   (PanelNaming.textureFileNames), null for a texture left out; absent or null: no map_Kd at all
    * @returns {{objContent: string, mtlContent: string}}
    * @throws {TypeError} combined mode on an empty wall (`sections[0].color`, as legacy);
    *   {Error} unsupportedStrategy for a foreign profile value
