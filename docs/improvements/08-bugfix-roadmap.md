@@ -420,8 +420,8 @@ The status comes from `WallController` in the `WALL_REBUILT` payload (§5.2, §5
 | `gizmoRotateSign` | `-1` | – | P2-9c | **retire** |
 | `pilotForwardYSign` | `-1` | – | P2-9g | **retire** |
 | `combinedLedSimColor` | `'white'` | – | P2-7e | **retire** |
-| `dispose.wallTextures` | `false` | – | Phase 1C H1, else P2-12a | **retire** (always dispose maps) |
-| `dispose.gizmo` | `false` | – | Phase 1C H2, else P2-12a | **retire** |
+| `dispose.wallTextures` | `false` | – | Phase 1C H1, else P2-12a | **retire** (always dispose maps). As built: Phase 1C H1 set it to `true` and kept the key; P2-12a retired it |
+| `dispose.gizmo` | `false` | – | Phase 1C H2, else P2-12a | **retire**. As built: Phase 1C H2 set it to `true` and kept the key; P2-12a retired it |
 
 **P2-13g: where the surviving keys go.** `Strategies` is deleted. Its two surviving parts move out of `legacy/`:
 - `js/geometry/MeshProfiles.js`: `export const MeshProfiles = deepFreeze({ viewport, obj, gltf })`, the `Strategies.mesh` values. `App.js` injects `MeshProfiles.*` as the builder and exporter profiles.
@@ -1949,7 +1949,7 @@ P2-12a and P2-12d merge in the owner-visible block (depends on P2-1); P2-12b and
 
 | Commit | Site | Rows removed | Expected manifest |
 |---|---|---|---|
-| P2-12a B-H5, B-L12 (only if Phase 1C did not land them) | `dispose.*` retired (always dispose) | `LEDWallView.js#rebuild` (B-H5), `TransformGizmo.js#rebuild/#detach` (B-L12) | empty; `mayChange`: `keyboard/*.screenshot.png` (program-id sort ties) |
+| P2-12a B-H5, B-L12 (only if Phase 1C did not land them) | `dispose.*` retired (always dispose) | `LEDWallView.js#rebuild` (B-H5), `TransformGizmo.js#rebuild/#detach` (B-L12) | empty; `mayChange`: `keyboard/*.screenshot.png` (program-id sort ties). As built: Phase 1C H1/H2 had landed both fixes as the values `true` (their tag rows were already gone), so P2-12a only retires the two keys (`Strategies.dispose` deleted; `LEDWallView` passes `disposeMaps: true`, `TransformGizmo` always disposes): an invariance gate with nothing to re-baseline |
 | P2-12b B-L20 | `LruCache(64)` of masters; normalised key | `LEDPixelTextureFactory.js#tile` (B-L20) | empty |
 | P2-12c B-L30 | `CameraHub.refresh({poseOnly})`: pose-only calls skip `syncSafeDistance` and rewrite all far-corner slots of the lines and the fill in place (`updateFrustumDepths`) | `CameraController.js#CameraHub.refresh` | **expect empty**: positions are identical, because the depths are recomputed on every pose change. `mayChange`: `camera/*.screenshot.png`, `gizmo_drag/camera_*.screenshot.png`, `pilot_look/*.screenshot.png`, `preview_off_in_pilot/*.screenshot.png` (transparent-object sort ties: the safe-distance and frustum objects are no longer re-created, so their ids no longer grow) |
 | P2-12d B-M16 + B-L19 | panel mode with panel IDs samples the section canvas (§6.15); `geometry/TextureBudget.js` (07 X3's module, early); `panelPxPerLed` gets 07 §6.12's **wall-wide** budget | the B-M16 id leaves `TextureAtlas.js#panelPxPerLed` (row deleted) and `PanelIdRenderer.js#panelCanvas`; that row keeps B-L19 with the text "reachable only with `uv.panel_uvs = 'panel'`" (for 04 UV-9) | `toggles/09_panelids_panel.screenshot.png`. `toggles/06_ledsim_panel` must stay **identical** (LED sim keeps per-panel UVs) |

@@ -28,11 +28,12 @@ function deepFreeze(value) {
 }
 
 /**
- * Deep-frozen compatibility switches. Phase 1 implements only these values: the legacy value of every key, except
- * the `dispose.*` keys flipped by the non-observable Phase 1C clean-ups (ARCHITECTURE.md 8.1). Phase 2 flips or retires
- * keys one fix at a time (docs/improvements/08-bugfix-roadmap.md 4.1); a flipped `mesh.*` key keeps its legacy case
- * for `LegacyProfiles`. Each leaf key is read at the site(s) named in ARCHITECTURE.md 8.1; enumerated keys are
- * read with switch-and-throw, the numeric keys and the `dispose.*` booleans are used as values,
+ * Deep-frozen compatibility switches. Phase 1 implemented only the legacy value of every key, except the `dispose.*`
+ * keys flipped by the non-observable Phase 1C clean-ups, which 08 P2-12a retired (wall rebuilds and the gizmo always
+ * dispose; ARCHITECTURE.md 8.1). Phase 2 flips or retires keys one fix at a time
+ * (docs/improvements/08-bugfix-roadmap.md 4.1); a flipped `mesh.*` key keeps its legacy case for `LegacyProfiles`.
+ * Each leaf key is read at the site(s) named in ARCHITECTURE.md 8.1; enumerated keys are read with switch-and-throw,
+ * the numeric keys are used as values,
  * `mesh.gltf.attributes` is iterated and each element switched (04 5.5), and the `mesh.*` profiles are injected into
  * the mesh builder and exporters as `profile`.
  * No module of WP3 reads any key.
@@ -60,8 +61,8 @@ export const Strategies = deepFreeze({
   gizmoRotateSign: -1,                             // B-M12
   pilotForwardYSign: -1,                           // B-M13
   combinedLedSimColor: 'white',                    // B-L18
-  dispose: { wallTextures: true, gizmo: true },    // B-H5 fixed (Phase 1C H1); B-L12 fixed (Phase 1C H2)
-});
+});                                                // dispose.wallTextures / dispose.gizmo (B-H5, B-L12: true since
+                                                   // Phase 1C H1 / H2) retired by 08 P2-12a: always dispose
 
 /**
  * The exact Phase-1 mesh profiles (docs/improvements/08-bugfix-roadmap.md 4.2). Production code never reads these;
@@ -120,7 +121,7 @@ const QUIRKS = deepFreeze({
   'B-H4': ['Preview off in pilot: alert, stuck in pilot (O-8)',
     'Landed in 08 P2-4a (`PilotController.toggle` applies the preview guard only when entering pilot mode, so turning the preview off leaves pilot mode cleanly; `CameraRigView.remove` nulls `bodyMesh`; no tag site)'],
   'B-H5': ['Wall textures leak (memory only)',
-    'Landed in Phase 1C H1 (`dispose.wallTextures = true`; no tag site)'],
+    'Landed in Phase 1C H1 (`dispose.wallTextures = true`; the key retired by 08 P2-12a: every wall rebuild disposes the old material maps; no tag site)'],
   'B-M1': ['Safe-distance OBJ throws ReferenceError (K-3)',
     'Landed in 08 P2-5a (`downloader.saveBlob`; no tag site)'],
   'B-M2': ['Index-based MTL texture path (R-3)',
@@ -176,7 +177,7 @@ const QUIRKS = deepFreeze({
   'B-L11': ['Shortcuts ignore SELECT focus, modifiers, repeat (W-1)',
     'Landed in 08 P2-9b (`core/typingTarget.js isTypingTarget` with the 07 3.8 truth table, re-exported by `InputState` as `isShortcutIgnoredTarget`; `ViewportInput.attachShortcuts` also ignores Ctrl, Meta, Alt and auto-repeat; no tag site)'],
   'B-L12': ['Gizmo resources leak (memory only)',
-    'Landed in Phase 1C H2 (`dispose.gizmo = true`; no tag site)'],
+    'Landed in Phase 1C H2 (`dispose.gizmo = true`; the key retired by 08 P2-12a: the replaced or removed gizmo group is always disposed; no tag site)'],
   'B-L13': ['Mesh-mode handler fires twice (C-4)',
     '"mode unchanged -> no-op" guard, never radio `change`'],
   'B-L14': ['Colliding ZIP texture names (U-3)',

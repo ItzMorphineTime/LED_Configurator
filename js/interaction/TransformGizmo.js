@@ -121,16 +121,16 @@ export class TransformGizmo {
    * Unbinds the gizmo and removes its group from the scene (the gizmo part of deselectObject).
    * Ports: index.html@cd3fd3f lines 3146-3152.
    * Side effects: resets hoveredAxis; removes the group helper from the scene and disposes its geometries and
-   *   materials (Strategies.dispose.gizmo).
+   *   materials.
    */
   detach() {
     this.#target = null;
     this.#hoveredAxis = null;
     if (this.#group) {
       this.#sceneManager.removeHelper(this.#group);
-      // The removed group's geometries and materials are disposed when Strategies.dispose.gizmo is true (true
-      // since Phase 1C H2, which fixed B-L12; legacy leaked them). No other object shares them.
-      if (Strategies.dispose.gizmo) disposeObject3D(this.#group);
+      // The removed group's geometries and materials are always disposed (Phase 1C H2 fixed B-L12, legacy leaked
+      // them; 08 P2-12a retired the switch Strategies.dispose.gizmo). No other object shares them.
+      disposeObject3D(this.#group);
       this.#group = null;
     }
   }
@@ -180,17 +180,17 @@ export class TransformGizmo {
    * handles in the exact legacy allocation order, orients and positions the group and adds it to the scene.
    * Never resets hoveredAxis (legacy keeps a stale hover across rebuilds).
    * Ports: index.html@cd3fd3f lines 2997-3099.
-   * Side effects: removes/adds the gizmo helper; disposes the replaced group's geometries and materials
-   *   (Strategies.dispose.gizmo); allocates THREE groups, geometries, materials and meshes.
+   * Side effects: removes/adds the gizmo helper; disposes the replaced group's geometries and materials; allocates
+   *   THREE groups, geometries, materials and meshes.
    */
   rebuild() {
     if (this.#group) {
       this.#sceneManager.removeHelper(this.#group);
-      // The replaced group is disposed when Strategies.dispose.gizmo is true (true since Phase 1C H2, which fixed
-      // B-L12; legacy leaked its geometries and materials on every rebuild). The full golden master, including the
+      // The replaced group is always disposed (Phase 1C H2 fixed B-L12: legacy leaked its geometries and materials on
+      // every rebuild; 08 P2-12a retired the switch Strategies.dispose.gizmo). The full golden master, including the
       // keyboard and gizmo_drag screenshots, was unchanged by the flip (freed materials could have changed WebGL
       // program ids and so the draw order).
-      if (Strategies.dispose.gizmo) disposeObject3D(this.#group);
+      disposeObject3D(this.#group);
       this.#group = null;
     }
 

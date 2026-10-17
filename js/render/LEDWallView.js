@@ -15,7 +15,6 @@
  */
 
 import THREE from '../vendor/three.js';
-import { Strategies } from '../legacy/LegacyCompat.js';
 import { computeAtlas } from '../geometry/TextureAtlas.js';
 import { maxIndexOf, indexWidth } from '../geometry/WallMeshBuilder.js';
 import { ResourceTracker } from './ResourceTracker.js';
@@ -56,9 +55,9 @@ export class LEDWallView {
   /** @type {{scene: object}} */
   #theme;
   /**
-   * Holds the current two group roots. Created by every rebuild() with the wall-texture dispose policy read there
-   * (Strategies.dispose.wallTextures, true since Phase 1C H1: the B-H5 fix) and disposed by the next rebuild();
-   * null before the first rebuild.
+   * Holds the current two group roots. Created by every rebuild() with the wall-texture dispose policy disposeMaps:
+   * true (the B-H5 fix of Phase 1C H1; the switch Strategies.dispose.wallTextures was retired by 08 P2-12a) and
+   * disposed by the next rebuild(); null before the first rebuild.
    * @type {ResourceTracker|null}
    */
   #tracker = null;
@@ -135,11 +134,12 @@ export class LEDWallView {
     const frameGroup = new THREE.Group();
     this.#wallGroup = wallGroup;
     this.#frameGroup = frameGroup;
-    // The dispose policy is Strategies.dispose.wallTextures (true since Phase 1C H1, which fixed B-H5): step 1 of
-    // the next rebuild also disposes every material map of these groups (panel-ID CanvasTextures and LED tile
-    // clones). Each map belongs to exactly one material; the LED tile cache masters are never placed on a material
-    // (LEDPixelTextureFactory.tile always returns a clone), so they are never disposed here.
-    this.#tracker = new ResourceTracker({ disposeMaps: Strategies.dispose.wallTextures });
+    // The wall maps are always disposed (Phase 1C H1 fixed B-H5; 08 P2-12a retired the switch
+    // Strategies.dispose.wallTextures): step 1 of the next rebuild also disposes every material map of these groups
+    // (panel-ID CanvasTextures and LED tile clones). Each map belongs to exactly one material; the LED tile cache
+    // masters are never placed on a material (LEDPixelTextureFactory.tile always returns a clone), so they are never
+    // disposed here.
+    this.#tracker = new ResourceTracker({ disposeMaps: true });
     this.#tracker.track(wallGroup, { detach: () => this.#sceneManager.remove(wallGroup) });
     this.#tracker.track(frameGroup, { detach: () => this.#sceneManager.remove(frameGroup) });
 

@@ -212,8 +212,8 @@ describe('Strategies', () => {
       gizmoRotateSign: -1,
       pilotForwardYSign: -1,
       combinedLedSimColor: 'white',
-      dispose: { wallTextures: true, gizmo: true },
     });
+    assert.equal(Strategies.dispose, undefined, 'dispose.* retired by 08 P2-12a (always dispose)');
   });
 
   test('is deep-frozen (nested profiles and arrays included)', () => {
@@ -221,7 +221,7 @@ describe('Strategies', () => {
     assert.throws(() => { Strategies.frustumDepthM = 30; }, TypeError);
     assert.throws(() => { Strategies.mesh.viewport.winding = 'legacy-cw'; }, TypeError);
     assert.throws(() => { Strategies.mesh.gltf.attributes.push('TEXCOORD_0'); }, TypeError);
-    assert.throws(() => { Strategies.dispose.gizmo = true; }, TypeError);
+    assert.throws(() => { Strategies.combinedLedSimColor = 'red'; }, TypeError);
     assert.equal(Strategies.frustumDepthM, 15);
   });
 
@@ -347,6 +347,9 @@ describe('LEGACY_SITES', () => {
   const PHASE2_LANDED = { 'B-M1': 'P2-5a', 'B-H3': 'P2-1a', 'B-L5': 'P2-1b', 'B-L4': 'P2-1c', 'B-H1': 'P2-2a', 'B-L3': 'P2-2b', 'B-H2': 'P2-2c',
     'B-L11': 'P2-9b', 'B-L15': 'P2-8a', 'B-M4': 'P2-3a', 'B-L8': 'P2-3b', 'B-L16': 'P2-3c', 'B-L21': 'P2-3d', 'B-H4': 'P2-4a', 'B-M8': 'P2-4b',
     'B-M15': 'P2-5b', 'B-L29': 'P2-5b', 'B-M3': 'P2-6a', 'B-L14': 'P2-6b', 'B-L7': 'P2-6c', 'B-M2': 'P2-6d' };
+  // The Phase 1C clean-ups (memory only; their Strategies.dispose.* switches were retired by 08 P2-12a), with the step
+  // their 8.2 fix cell names.
+  const PHASE1C_LANDED = { 'B-H5': 'Phase 1C H1', 'B-L12': 'Phase 1C H2' };
   // The quirks a Phase 3 feature step fixed (its spec and step, as its 8.2 fix cell names them): B-L24's badge overlap in
   // 06 T4a (its .view-btn.active half had landed in 01 F1-2; its two CSS documentation entries are gone).
   const PHASE3_LANDED = { 'B-L24': '06 T4a' };
@@ -360,11 +363,12 @@ describe('LEGACY_SITES', () => {
     assert.deepEqual(new Set(LEGACY_SITES.map((e) => e.id)), expected);
   });
 
-  test('landed fixes (8.2 "Landed ...") are exactly the Phase 1C flips true in Strategies.dispose and the Phase 2 and 3 fixes', () => {
-    const flipped = [];
-    if (Strategies.dispose.wallTextures === true) flipped.push('B-H5');
-    if (Strategies.dispose.gizmo === true) flipped.push('B-L12');
-    assert.deepEqual(landed.slice().sort(), [...flipped, ...Object.keys(PHASE2_LANDED), ...Object.keys(PHASE3_LANDED)].sort());
+  test('landed fixes (8.2 "Landed ...") are exactly the Phase 1C clean-ups and the Phase 2 and 3 fixes', () => {
+    assert.deepEqual(landed.slice().sort(),
+      [...Object.keys(PHASE1C_LANDED), ...Object.keys(PHASE2_LANDED), ...Object.keys(PHASE3_LANDED)].sort());
+    for (const [id, step] of Object.entries(PHASE1C_LANDED)) {
+      assert.match(register.get(id).fix, new RegExp(`^Landed in ${step}\\b`), `${id}: 8.2 names ${step}`);
+    }
     for (const id of landed) assert.ok(!LEGACY_SITES.some((e) => e.id === id), `${id} still has a LEGACY_SITES entry`);
     for (const [id, commit] of Object.entries(PHASE2_LANDED)) {
       assert.match(register.get(id).fix, new RegExp(`^Landed in 08 ${commit}\\b`), `${id}: 8.2 names ${commit}`);

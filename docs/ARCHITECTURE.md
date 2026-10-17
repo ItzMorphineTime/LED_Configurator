@@ -635,8 +635,8 @@ export const Strategies = deepFreeze({
   gizmoRotateSign: -1,                             // B-M12
   pilotForwardYSign: -1,                           // B-M13
   combinedLedSimColor: 'white',                    // B-L18
-  dispose: { wallTextures: true, gizmo: true },    // B-H5 fixed (Phase 1C H1); B-L12 fixed (Phase 1C H2)
-});
+});                                                // dispose.wallTextures / dispose.gizmo (B-H5, B-L12: true since
+                                                   // Phase 1C H1 / H2) retired by 08 P2-12a: always dispose
 
 /** The exact Phase-1 mesh profiles (08 P2-0, docs/improvements/08-bugfix-roadmap.md 4.2). Production code never
  *  reads these; the oracle tests inject them into WallMeshBuilder / ObjExporter / GltfExporter so that the
@@ -665,7 +665,7 @@ export const orDefault = (v, d) => v || d;
  *  Entries whose site is not under js/ (CSS, markup) are documentation-only. */
 export const LEGACY_SITES
 ```
-`deepFreeze` is module-private. `LegacyProfiles` is not a switch: it has no read site in `js/` and is not covered by the `Strategies` rule of the static check; when a Phase-2 commit flips a `Strategies.mesh.*` key, the builder keeps the legacy case for it (08 5.1 rule 3), and global keys (`exportCombinedColor`, ...) cannot be injected, so the oracle cases that depend on a retired global key become explicit expected-value tests in that commit (08 P2-1a retired `gltfBase64` and deleted `legacySpreadBase64`; `tests/unit/io.test.mjs` injects a verbatim copy of that encoder into its oracle exporter). The `behaviour` and `fix` strings of each `LEGACY_SITES` entry are the 8.2 cell texts with only the markdown escape `\|` unescaped to `|` (inline backticks are kept as written); the 8.2 register is stored once and expanded per 8.3 site. Phase 1 implements only the legacy value of every key, except the `dispose.*` keys flipped by the non-observable Phase 1C clean-ups (8.1; a landed fix keeps its 8.2 row and loses its 8.3 rows, so `LEGACY_SITES` no longer lists it). Phase 2 retires keys as 08 4.1 lists them (the key, its switch and its 8.1 row are deleted in the fixing commit); retired so far: `gltfBase64` (08 P2-1a), `importValidation` (08 P2-3b), `safeDistanceBand` (08 P2-5b), `zipJsonIncludesAngleOffset` (08 P2-6a), `zipTextureNaming` (08 P2-6b), `mtlDownloadDelayMs` (08 P2-6c; the constant `ProjectIO.MTL_DOWNLOAD_DELAY_MS` it became left with the second download in 08 P2-6e), `mtlTextureNaming` (08 P2-6d); flipped so far: `mesh.gltf.indexType` (`'auto'`, 08 P2-1b), `mesh.viewport.winding` (`'ccw'`, 08 P2-2a), `mesh.viewport.normals` (`'averaged'`, 08 P2-2b), `mesh.obj.winding` / `.normals` / `.stripNormals` (`'ccw'` / `'averaged'` / `'per-vertex'`, 08 P2-2c), `mesh.gltf.winding` / `.normals` / `.attributes` (`'ccw'` / `'averaged'` / `['POSITION', 'NORMAL']`, 08 P2-2d); added: `mesh.gltf.panelNormal` (`'facing'`, 08 P2-2d). Every leaf key (arrays such as `mesh.gltf.attributes` and `previewRendererSize` are leaves) has the read site given in section 8.1 and spelled out in that module's entry below; how it is read (switch-and-throw, value, array comparison) follows section 1.5.
+`deepFreeze` is module-private. `LegacyProfiles` is not a switch: it has no read site in `js/` and is not covered by the `Strategies` rule of the static check; when a Phase-2 commit flips a `Strategies.mesh.*` key, the builder keeps the legacy case for it (08 5.1 rule 3), and global keys (`exportCombinedColor`, ...) cannot be injected, so the oracle cases that depend on a retired global key become explicit expected-value tests in that commit (08 P2-1a retired `gltfBase64` and deleted `legacySpreadBase64`; `tests/unit/io.test.mjs` injects a verbatim copy of that encoder into its oracle exporter). The `behaviour` and `fix` strings of each `LEGACY_SITES` entry are the 8.2 cell texts with only the markdown escape `\|` unescaped to `|` (inline backticks are kept as written); the 8.2 register is stored once and expanded per 8.3 site. Phase 1 implemented only the legacy value of every key, except the `dispose.*` keys flipped by the non-observable Phase 1C clean-ups (a landed fix keeps its 8.2 row and loses its 8.3 rows, so `LEGACY_SITES` no longer lists it). Phase 2 retires keys as 08 4.1 lists them (the key, its switch and its 8.1 row are deleted in the fixing commit); retired so far: `dispose.wallTextures` and `dispose.gizmo` (08 P2-12a: Phase 1C had set both to `true`, so the wall maps and the gizmo groups are always disposed), `gltfBase64` (08 P2-1a), `importValidation` (08 P2-3b), `safeDistanceBand` (08 P2-5b), `zipJsonIncludesAngleOffset` (08 P2-6a), `zipTextureNaming` (08 P2-6b), `mtlDownloadDelayMs` (08 P2-6c; the constant `ProjectIO.MTL_DOWNLOAD_DELAY_MS` it became left with the second download in 08 P2-6e), `mtlTextureNaming` (08 P2-6d); flipped so far: `mesh.gltf.indexType` (`'auto'`, 08 P2-1b), `mesh.viewport.winding` (`'ccw'`, 08 P2-2a), `mesh.viewport.normals` (`'averaged'`, 08 P2-2b), `mesh.obj.winding` / `.normals` / `.stripNormals` (`'ccw'` / `'averaged'` / `'per-vertex'`, 08 P2-2c), `mesh.gltf.winding` / `.normals` / `.attributes` (`'ccw'` / `'averaged'` / `['POSITION', 'NORMAL']`, 08 P2-2d); added: `mesh.gltf.panelNormal` (`'facing'`, 08 P2-2d). Every leaf key (arrays such as `mesh.gltf.attributes` and `previewRendererSize` are leaves) has the read site given in section 8.1 and spelled out in that module's entry below; how it is read (switch-and-throw, value, array comparison) follows section 1.5.
 
 ### 3.4 `js/theme/Theme.js`
 
@@ -1324,7 +1324,7 @@ export class ResourceTracker {
   dispose()
 }
 ```
-Policies: `LEDWallView` tracks only its two group roots with `disposeMaps: Strategies.dispose.wallTextures` (true since Phase 1C H1, the B-H5 fix: the old wall's material maps, i.e. the panel-ID `CanvasTexture`s and the LED tile clones, are disposed; each map belongs to exactly one material, and the tile cache masters are never placed on a material, so they are never disposed here), using one tracker per rebuild: `rebuild()` step 2 creates it (this is where the key is read) and step 1 of the next rebuild disposes it; `SafeDistanceView` uses `disposeObject3D(group, { maps: true })` (legacy 2770); `CameraRigView` and `PropViews` use `maps: false`; `TransformGizmo` disposes its replaced or removed group (geometries and materials, no maps) iff `Strategies.dispose.gizmo` (true since Phase 1C H2, the B-L12 fix). `ResourceTracker.js` itself carries no tag. Both `dispose.*` keys are used as values (section 1.5), not switched on. Feature 5 (HDR/PMREM) and the Phase 1C flips use the same class.
+Policies: `LEDWallView` tracks only its two group roots with `disposeMaps: true` (the B-H5 fix of Phase 1C H1, whose switch `Strategies.dispose.wallTextures` 08 P2-12a retired: the old wall's material maps, i.e. the panel-ID `CanvasTexture`s and the LED tile clones, are disposed; each map belongs to exactly one material, and the tile cache masters are never placed on a material, so they are never disposed here), using one tracker per rebuild: `rebuild()` step 2 creates it and step 1 of the next rebuild disposes it; `SafeDistanceView` uses `disposeObject3D(group, { maps: true })` (legacy 2770); `CameraRigView` and `PropViews` use `maps: false`; `TransformGizmo` always disposes its replaced or removed group (geometries and materials, no maps; the B-L12 fix of Phase 1C H2, whose switch `Strategies.dispose.gizmo` 08 P2-12a retired). `ResourceTracker.js` itself carries no tag. Feature 5 (HDR/PMREM) and the Phase 1C flips used the same class.
 
 #### `js/render/SceneManager.js`
 ```js
@@ -1384,11 +1384,11 @@ export class LEDWallView {
    *     materials and never the shared debug ones; #display = display
    *  1. #tracker.dispose() (the previous rebuild's tracker, if any): for the previous wall group then the previous frame
    *     group: sceneManager.remove(group)
-   *     then disposeObject3D(group, {maps: Strategies.dispose.wallTextures}) (true since Phase 1C H1, the B-H5 fix:
+   *     then disposeObject3D(group, {maps: true}) (the B-H5 fix of Phase 1C H1; 08 P2-12a retired its switch:
    *     maps are disposed too); apart from the maps this is exactly legacy remove-wall, dispose-wall, remove-frames,
    *     dispose-frames (1458-1474).
    *  2. wallGroup = new THREE.Group(); frameGroup = new THREE.Group();
-   *     #tracker = new ResourceTracker({ disposeMaps: Strategies.dispose.wallTextures });
+   *     #tracker = new ResourceTracker({ disposeMaps: true });
    *     #tracker.track(wallGroup, {detach: () => sceneManager.remove(wallGroup)}); the same for frameGroup
    *  3. sections = layout.sections.map(sl => sl.section); atlas = computeAtlas(sections)   (pure, no THREE ids);
    *     materials.beginRebuild()   (08 P2-1d: the panel-ID fallback warning is given once per section and rebuild)
@@ -1816,7 +1816,7 @@ export class TransformGizmo {
   /** target = selectable; rebuild()   (the createGizmo call inside selectObject, 3142) */
   attach(target)
   /** 3146-3152: target = null; hoveredAxis = null; if (group) { sceneManager.removeHelper(group);
-   *  if (Strategies.dispose.gizmo) disposeObject3D(group) (true since Phase 1C H2, the B-L12 fix); group = null } */
+   *  disposeObject3D(group) (the B-L12 fix of Phase 1C H2; 08 P2-12a retired its switch); group = null } */
   detach()
   /** 3169-3180: mode = (mode === requested) ? null : requested; bus.emit(GIZMO_MODE_CHANGED, {mode}); rebuild() */
   setMode(requested)
@@ -1824,7 +1824,7 @@ export class TransformGizmo {
   clearMode()
   /** 3182-3193: space = space === 'world' ? 'local' : 'world'; bus.emit(GIZMO_SPACE_CHANGED, {space}); if (group) updateOrientation() */
   toggleSpace()
-  /** Verbatim createGizmo 2997-3099: if (group) { sceneManager.removeHelper(group); [dispose per Strategies.dispose.gizmo]; group = null }
+  /** Verbatim createGizmo 2997-3099: if (group) { sceneManager.removeHelper(group); disposeObject3D(group); group = null }
    *  if (!target || !mode) return; group = new THREE.Group(); group.renderOrder = RENDER_ORDER.GIZMO (999, core/renderOrder.js); handles = {};
    *  translate arrows / rotate tori built in the exact legacy allocation order (material per axis via the private
    *  material(color) factory: MeshBasicMaterial{color, transparent: true, opacity: idleOpacity, depthTest: false, depthWrite: false});
@@ -3093,8 +3093,6 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `gizmoRotateSign = -1` | B-M12 | Rotation opposite to the drag | `TransformGizmo.onMouseMove`: `Strategies.gizmoRotateSign * angle` | value | `+1` |
 | `pilotForwardYSign = -1` | B-M13 | Pilot W/S vertical inverted | `PilotController.tickKeyboard`: `Strategies.pilotForwardYSign * Math.sin(tilt)` | value | `+1` (or `getWorldDirection`) |
 | `combinedLedSimColor = 'white'` | B-L18 | Combined LED sim ignores section colours | `LEDMaterialFactory.combined`, LED-sim branch: `Strategies.combinedLedSimColor` | switch | vertex colours + normalised cache key |
-| `dispose.wallTextures = true` (Phase 1C H1; legacy value `false`) | B-H5 (fixed) | Landed: wall rebuilds dispose the old wall's material maps (legacy never disposed them) | `LEDWallView.rebuild`: `disposeObject3D(group, {maps: Strategies.dispose.wallTextures})` (tracker policy) | value | landed in Phase 1C step H1: full golden master identical to the baseline apart from the documented overlay-glyph jitter (run `h1`) |
-| `dispose.gizmo = true` (Phase 1C H2; legacy value `false`) | B-L12 (fixed) | Landed: the replaced or removed gizmo group's geometries and materials are disposed (legacy never disposed them) | `TransformGizmo.rebuild/detach`: `if (Strategies.dispose.gizmo) disposeObject3D(group)` | value (`if`) | landed in Phase 1C step H2: full golden master, including the `keyboard` and `gizmo_drag` screenshots, identical to the baseline apart from the documented overlay-glyph jitter (run `h2`), so the freed materials changed no draw order |
 
 "Referenced", for check rule 8: a leaf path `a.b.c` of `Strategies` (arrays are leaves) counts as referenced when the text `Strategies.a.b.c` occurs, outside comments, in a `js/` file other than `LegacyCompat.js`. For a leaf under `mesh.<consumer>.`, the text `profile.<leaf>` also counts, with any receiver (`this.profile.winding`, `this.#profile.stripNormals`, `builder.profile.attributes`). Every row above satisfies this through its "Read by" statement.
 
@@ -3106,7 +3104,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | B-H2 | Export winding, constant/contradicting normals, no doubleSided (R-5, S-2) | `Strategies.mesh.obj/gltf` (fixed) | Landed in 08 P2-2c (OBJ: `mesh.obj` winding `'ccw'`, normals `'averaged'`, stripNormals `'per-vertex'`) and 08 P2-2d (glTF: `mesh.gltf` winding `'ccw'`, normals `'averaged'`, panelNormal `'facing'`, attributes with `NORMAL`); no tag site |
 | B-H3 | glTF RangeError; ZIP dies silently (S-3, U-4) | `GltfExporter`'s default encoder; `ProjectIO` exports (fixed; `Strategies.gltfBase64` retired) | Landed in 08 P2-1a (`chunkedBase64` encoder; `ProjectIO.#runExport` reports every export failure; no tag site) |
 | B-H4 | Preview off in pilot: alert, stuck in pilot (O-8) | `PilotController.toggle` guard (fixed) | Landed in 08 P2-4a (`PilotController.toggle` applies the preview guard only when entering pilot mode, so turning the preview off leaves pilot mode cleanly; `CameraRigView.remove` nulls `bodyMesh`; no tag site) |
-| B-H5 | Wall textures leak (memory only) | `Strategies.dispose.wallTextures` | Landed in Phase 1C H1 (`dispose.wallTextures = true`; no tag site) |
+| B-H5 | Wall textures leak (memory only) | `LEDWallView.rebuild` (`disposeMaps: true`; fixed; the switch `Strategies.dispose.wallTextures` retired by 08 P2-12a) | Landed in Phase 1C H1 (`dispose.wallTextures = true`; the key retired by 08 P2-12a: every wall rebuild disposes the old material maps; no tag site) |
 | B-M1 | Safe-distance OBJ throws ReferenceError (K-3) | `ProjectIO.exportSafeDistanceOBJ` (fixed) | Landed in 08 P2-5a (`downloader.saveBlob`; no tag site) |
 | B-M2 | Index-based MTL texture path (R-3) | `PanelNaming.mtlTextureFile` (fixed; `Strategies.mtlTextureNaming` retired) | Landed in 08 P2-6d (`PanelNaming.mtlTextureFile(fileName)` is `textures/<fileName>`: the MTL `map_Kd` names the same `textureFileNames` entry as the ZIP texture and the JSON `texture_file`; `Strategies.mtlTextureNaming` retired; no tag site) |
 | B-M3 | ZIP JSON lacks angle offsets (U-1) | `ProjectSerializer.write` (fixed; `Strategies.zipJsonIncludesAngleOffset` retired) | Landed in 08 P2-6a (the ZIP JSON is the `'file'` document plus `texture_file` per section, so it keeps `angle_offset_degrees` and re-imports exactly; `Strategies.zipJsonIncludesAngleOffset` retired; no tag site) |
@@ -3134,7 +3132,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | B-L9 | `\|\| default` turns 0 into the default (D-7, J-5, V-3) | `orDefault` | change `orDefault` or per rule |
 | B-L10 | Gizmo posY >= 0 vs pilot >= 0.1 per frame; Z unclamped | `CineCamera.translateBy`, `CineCamera.pilotFly` (tags) | validated setter |
 | B-L11 | Shortcuts ignore SELECT focus, modifiers, repeat (W-1) | `core/typingTarget.js isTypingTarget` + `ViewportInput.attachShortcuts` (fixed) | Landed in 08 P2-9b (`core/typingTarget.js isTypingTarget` with the 07 3.8 truth table, re-exported by `InputState` as `isShortcutIgnoredTarget`; `ViewportInput.attachShortcuts` also ignores Ctrl, Meta, Alt and auto-repeat; no tag site) |
-| B-L12 | Gizmo resources leak (memory only) | `Strategies.dispose.gizmo` | Landed in Phase 1C H2 (`dispose.gizmo = true`; no tag site) |
+| B-L12 | Gizmo resources leak (memory only) | `TransformGizmo.rebuild/detach` (fixed; the switch `Strategies.dispose.gizmo` retired by 08 P2-12a) | Landed in Phase 1C H2 (`dispose.gizmo = true`; the key retired by 08 P2-12a: the replaced or removed gizmo group is always disposed; no tag site) |
 | B-L13 | Mesh-mode handler fires twice (C-4) | `WallDisplayPanel.bind` (tag + warning) | "mode unchanged -> no-op" guard, never radio `change` |
 | B-L14 | Colliding ZIP texture names (U-3) | `PanelNaming.textureFileNames` (fixed; `Strategies.zipTextureNaming` retired) | Landed in 08 P2-6b (`PanelNaming.textureFileNames`: the legacy names made unique case-insensitively with `_2`, `_3` suffixes, the one list of the ZIP texture entries and the JSON `texture_file`; `zipTextureFileName` deleted; `Strategies.zipTextureNaming` retired; no tag site) |
 | B-L15 | Fractional integer fields (D-8); declared vertex advance | `WallSection.FIELD_RULES` (fixed; the imported half of `WallMeshBuilder.sectionGrid` is B-L8's) | Landed in 08 P2-8a (`WallSection.LIMITS`; the card rules round columns, rows and LEDs and cap panel height, LEDs and curve; `step="1"` and the `max` attributes on the card inputs; no tag site) |
@@ -3595,3 +3593,8 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 **08 P2-6e2, Export OBJ's texture names in the ObjExporter text and the specs (review follow-up of 08 P2-6e)** (manifest `tests/regression/expected/P2-6e2.json`, an invariance gate: empty `expect`; a comment and documentation only):
 - 3.9 and the header of `ObjExporter.write`: both archives pass texture names (Export All's ZIP, and Export OBJ's ZIP in section mode since 08 P2-6e); the text still said that Export OBJ passes none, so its standalone MTL has no `map_Kd` (P2-6c's rule, which P2-6e replaced).
 - 08 5.6 (the B-M3, B-M2, B-L14, B-L7 row) and 04 8 (the `io.test.mjs` row and the UV-8a and UV-9 manifest rows) cited the same rule; they now follow 04 7.1 and 7.5 as amended by P2-6e: Export OBJ's ZIP writes `map_Kd` by the ZIP rules and ships every file it names, so UV-8a (combined `per-section` `map_Kd`) also changes the combined Export OBJ ZIPs and extends `ProjectIO`'s Export OBJ texture plan to combined mode.
+
+**08 P2-12a, the `dispose.*` switches retired** (manifest `tests/regression/expected/P2-12a.json`, an invariance gate: empty `expect`; Phase 1C H1/H2 had already landed B-H5 and B-L12 as the values `true`):
+- 3.3, 8.1: `Strategies.dispose` (`wallTextures`, `gizmo`) is deleted and its two 8.1 rows with it; 8.2 keeps the B-H5 and B-L12 rows (their single site is now the code that always disposes, and their fix cells name the retirement). No 8.3 row changes (the landed fixes had none).
+- 3.7: `LEDWallView.rebuild` creates its tracker with `disposeMaps: true`; the `ResourceTracker` policies. 3.8: `TransformGizmo.rebuild/detach` always call `disposeObject3D(group)`.
+- 2.3: `core.test.mjs` (`Strategies` has no `dispose` key; the Phase 1C landed fixes are listed with their steps).

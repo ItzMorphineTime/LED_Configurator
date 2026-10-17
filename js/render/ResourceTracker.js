@@ -2,10 +2,11 @@
  * @module render/ResourceTracker
  * Shared disposal of three.js resources: the traverse-dispose of every legacy dispose block (`disposeObject3D`)
  * and a small tracker that remembers roots (and standalone resources) and disposes them in tracking order.
- * Policies: LEDWallView tracks its two group roots with `disposeMaps: Strategies.dispose.wallTextures` (true since
- * Phase 1C H1, the B-H5 fix; legacy never disposed the wall textures); SafeDistanceView
- * calls disposeObject3D with `maps: true`; CameraRigView and PropViews use `maps: false`; TransformGizmo disposes
- * its replaced or removed group iff `Strategies.dispose.gizmo` (true since Phase 1C H2, the B-L12 fix).
+ * Policies: LEDWallView tracks its two group roots with `disposeMaps: true` (the B-H5 fix of Phase 1C H1; legacy
+ * never disposed the wall textures; the switch `Strategies.dispose.wallTextures` was retired by 08 P2-12a);
+ * SafeDistanceView calls disposeObject3D with `maps: true`; CameraRigView and PropViews use `maps: false`;
+ * TransformGizmo always disposes its replaced or removed group (the B-L12 fix of Phase 1C H2; the switch
+ * `Strategies.dispose.gizmo` was retired by 08 P2-12a).
  * This module carries no legacy tag.
  * Legacy source: index.html@cd3fd3f 1458-1474, 2321-2328, 2536-2548, 2764-2776, 2831-2837, 2894-2912, 2986-2992.
  * Layer: render (may import vendor/three, core, legacy, domain, geometry). Imports nothing: it only calls
