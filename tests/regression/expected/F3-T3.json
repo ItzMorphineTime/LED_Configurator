@@ -1,0 +1,23 @@
+{
+  "commit": "F3-T3",
+  "bugs": [],
+  "expect": [],
+  "mayChange": [
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-03 T2 runs); this commit changes no pixel of it"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen again in the 03 T2 gate, textures/L2_PanelIDs.png); this commit changes no texture"
+    },
+    {
+      "output": "ui_visual/00_initial.sidebar.screenshot.png",
+      "change": "modified",
+      "reason": "one sidebar pixel of this DOM-only capture differed by 7 levels in the P2-7e runs (DOM text antialiasing); this commit changes no markup, style or sidebar text"
+    }
+  ],
+  "notes": "03 T3 (docs/improvements/03-pivot.md 4.1, 5.2, 5.5, 5.6, 6.5, 6.6, 7, 10), step A's third commit, invariance (8.4 step A: zero diffs at the identity pivot). The consumers: the orbit target, CineCamera.resetTo and coverage read the 'flat-pivot' minX / wallZ (+0 at the identity, so x + 0, w/2 + 0 and posZ - 0 are the legacy values bit for bit; coverage also returns distToWall, which no subscriber writes before 03 T6); setCameraField passes {wallZ: +0} (the legacy posZ branch); WallController caches the pivot resolution, rebuild({cause}) adds cause and stageShift to WALL_REBUILT (its subscriber reads layout and view only), applyImport resets the pivot to the identity (already the identity); the exports read layoutProject(project, {frame: 'export'}) (the walk itself at the identity) and write the pivot header and glTF extras only for a non-identity pivot; the safe-distance OBJ translate is (0, -0, 0), which writes no component; SafeDistanceView stamps userData.stageOrigin (0, 0). Every output must stay identical."
+}

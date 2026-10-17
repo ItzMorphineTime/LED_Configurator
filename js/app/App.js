@@ -112,7 +112,8 @@ export class App {
     const cine = project.camera;
     const person = project.person;
     const car = project.car;
-    const frameBounds = () => framingBounds(project);
+    // 03 T3 (5.8): the cached pivot resolution of the last rebuild; evaluated lazily, after wallController exists
+    const frameBounds = () => framingBounds(project, wallController.pivotResolution);
     const colorToRgb = (s) => new THREE.Color(s);
 
     const interaction = new InteractionState();
@@ -213,7 +214,7 @@ export class App {
 
     // ---- legacy init() (1426-1455) ----
     sceneManager.init();                       // 1427-1449: scene, camera, renderer, lights, grid, axes
-    wallController.rebuild();                  // 1451: P1 (stats via HeaderStats, orbit target; hub skipped)
+    wallController.rebuild({ cause: 'init' });   // 1451: P1 (stats via HeaderStats, orbit target; hub skipped)
     orbit.attach();                            // 1452 setupControls: canvas mousedown, mousemove, mouseup, mouseleave, wheel
     keyboard.attach();                         // 1452 setupControls: doc keydown, doc keyup, win blur
     sceneManager.attachResize();               // 1453

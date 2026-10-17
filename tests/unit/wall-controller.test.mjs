@@ -21,7 +21,8 @@ import { fileURLToPath } from 'node:url';
 import { Events, EventBus } from '../../js/core/EventBus.js';
 import { Project } from '../../js/domain/Project.js';
 import { WallSection, SECTION_FIELDS } from '../../js/domain/WallSection.js';
-import { layoutProject } from '../../js/geometry/WallLayout.js';
+import { computeWallLayout, layoutProject, resolvePivot } from '../../js/geometry/WallLayout.js';
+import { WallPivot } from '../../js/domain/Wall.js';
 import { Palette } from '../../js/theme/Theme.js';
 import { WallController } from '../../js/app/WallController.js';
 import { ProjectSerializer } from '../../js/io/ProjectSerializer.js';
@@ -111,10 +112,23 @@ describe('WallController.rebuild (P1, ARCHITECTURE.md 6.1)', () => {
     assert.equal(args.meshMode, 'section');
     assert.equal(args.display, r.project.display);
     const [rebuilt] = r.emitted('WALL_REBUILT');
-    assert.deepEqual(Object.keys(rebuilt), ['layout', 'meshMode', 'view']);
+    assert.deepEqual(Object.keys(rebuilt), ['layout', 'meshMode', 'view', 'cause', 'stageShift']);
+    assert.equal(rebuilt.cause, 'edit');
+    assert.deepEqual(rebuilt.stageShift, { x: 0, z: 0 });
     assert.equal(rebuilt.layout, args.layout, 'WALL_REBUILT carries the same layout object');
     assert.equal(rebuilt.meshMode, 'section');
     assert.equal(rebuilt.view, r.view);
+  });
+
+  test("layout({frame}) is layoutProject(project, {frame}); the default is the stage frame (03 T3)", () => {
+    const r = makeRig();
+    r.project.wall.pivot = pivotOf('mesh-center', { x: 0, y: 0, z: 2 });
+    assert.deepEqual(r.wc.layout(), layoutProject(r.project));
+    assert.equal(r.wc.layout().pivot.frame, 'stage');
+    const exp = r.wc.layout({ frame: 'export' });
+    assert.deepEqual(exp, layoutProject(r.project, { frame: 'export' }));
+    assert.deepEqual(exp.pivot.translation, { x: -1.25, y: -0.75, z: -2 });
+    assert.throws(() => r.wc.layout({ frame: 'world' }), RangeError);
   });
 
   test('layout() is layoutProject(project), recomputed on every call', () => {
@@ -141,6 +155,93 @@ describe('WallController.rebuild (P1, ARCHITECTURE.md 6.1)', () => {
     assert.throws(() => r.wc.rebuild(), (err) => err === boom);
     assert.deepEqual(r.trace, []);
     assert.equal(r.orbit.calls, 0);
+  });
+});
+
+/** A WallPivot with the given mode and offset (03 T1 API). */
+function pivotOf(mode, offset = { x: 0, y: 0, z: 0 }) {
+  const pivot = new WallPivot();
+  pivot.setMode(mode);
+  pivot.setOffset(offset);
+  return pivot;
+}
+
+describe('the pivot cache, WALL_REBUILT cause and stageShift, commitPivot (03 5.5, 5.6, T3)', () => {
+  test('rebuild caches the stage layout\'s resolution before the view runs; stageShift is against the previous cache', () => {
+    const r = makeRig();
+    assert.equal(r.wc.pivotResolution, null, 'null before the first rebuild');
+    let seen;
+    r.view.rebuild = () => { seen = r.wc.pivotResolution; r.trace.push('view.rebuild'); };
+    r.wc.rebuild({ cause: 'init' });
+    assert.deepEqual(seen, r.wc.resolvePivotNow(), 'cached in step 1, before the view and the orbit read it');
+    const [init] = r.emitted('WALL_REBUILT');
+    assert.equal(init.cause, 'init');
+    assert.deepEqual(init.stageShift, { x: 0, z: 0 }, 'stageShift(null, identity) is (0, 0)');
+    r.project.wall.pivot = pivotOf('wall-center', { x: 0, y: 0, z: 2 });
+    r.wc.rebuild();
+    const [, edit] = r.emitted('WALL_REBUILT');
+    assert.equal(edit.cause, 'edit', 'the default cause');
+    assert.deepEqual(edit.stageShift, { x: 1.25, z: 2 });
+    assert.equal(edit.layout.pivot.resolution, r.wc.pivotResolution);
+    assert.deepEqual(r.wc.pivotResolution.stageOrigin, { x: 1.25, y: 0, z: 2 });
+  });
+
+  test('wall-center: adding a section moves the stage origin; WALL_REBUILT reports the shift with cause edit (03 3.6, AC 13)', () => {
+    const r = makeRig();
+    r.project.wall.pivot = pivotOf('wall-center');
+    r.wc.rebuild({ cause: 'init' });
+    r.wc.addSection();
+    const rebuilt = r.emitted('WALL_REBUILT').at(-1);
+    assert.equal(rebuilt.cause, 'edit');
+    assert.deepEqual(rebuilt.stageShift, { x: 1.25, z: 0 });
+    assert.deepEqual(rebuilt.layout.pivotPoint('wall-center'), { x: 0, y: 0, z: 0 }, 'the stage layout stays centred');
+    assert.deepEqual([r.project.camera.posX, r.project.camera.posZ], [0, 5], 'no camera input changes (no re-expression)');
+  });
+
+  test('commitPivot: rebuild with cause pivot iff the stage origin moved, else only the cache (03 5.6, rows F3-1..F3-4)', () => {
+    const r = makeRig();
+    r.wc.rebuild({ cause: 'init' });
+    const runs = r.rebuilds();
+    r.project.wall.pivot = pivotOf('bottom-left', { x: 0, y: 3, z: 0 });
+    const heightOnly = r.wc.resolvePivotNow();
+    r.wc.commitPivot(heightOnly);
+    assert.equal(r.rebuilds(), runs, 'a height-only change never rebuilds');
+    assert.equal(r.wc.pivotResolution, heightOnly, 'the cache takes the new resolution');
+    r.project.wall.pivot = pivotOf('wall-center', { x: 0, y: 3, z: 0 });
+    const moved = r.wc.resolvePivotNow();
+    r.wc.commitPivot(moved);
+    assert.equal(r.rebuilds(), runs + 1);
+    const rebuilt = r.emitted('WALL_REBUILT').at(-1);
+    assert.equal(rebuilt.cause, 'pivot');
+    assert.deepEqual(rebuilt.stageShift, { x: 1.25, z: 0 });
+    assert.deepEqual(r.wc.pivotResolution, moved);
+    r.wc.commitPivot(r.wc.resolvePivotNow());
+    assert.equal(r.rebuilds(), runs + 1, 'no change: no rebuild');
+  });
+
+  test('resolvePivotNow is resolvePivot of the raw walk and the live pivot, without caching', () => {
+    const r = makeRig({ sections: [fields({ panelCols: 4, curveIntensity: 5 })] });
+    r.project.wall.pivot = pivotOf('mesh-center', { x: 1, y: 0, z: 0 });
+    assert.deepEqual(r.wc.resolvePivotNow(), resolvePivot(computeWallLayout(r.project.wall.sections), r.project.wall.pivot));
+    assert.equal(r.wc.pivotResolution, null);
+  });
+
+  test('applyImport resets the pivot to the identity (a v1 file, 03 4.4, Q14) before the rebuild, which has cause import', () => {
+    const r = makeRig();
+    r.project.wall.pivot = pivotOf('wall-center', { x: 0, y: 0, z: 2 });
+    r.wc.rebuild({ cause: 'init' });
+    r.project.camera.posX = 0.5;
+    let pivotAtRebuild;
+    r.view.rebuild = () => { pivotAtRebuild = r.project.wall.pivot; r.trace.push('view.rebuild'); };
+    r.wc.applyImport({ sections: [new WallSection(fields())], meshMode: 'combined' });
+    assert.ok(pivotAtRebuild.isIdentity && pivotAtRebuild.keepStageLayout);
+    const rebuilt = r.emitted('WALL_REBUILT').at(-1);
+    assert.equal(rebuilt.cause, 'import');
+    assert.deepEqual(rebuilt.stageShift, { x: -1.25, z: -2 });
+    assert.equal(r.project.camera.posX, 0.5, 'an import is a load: nothing is re-expressed');
+    const given = pivotOf('mesh-center');
+    r.wc.applyImport({ sections: [new WallSection(fields())], meshMode: null, pivot: given });
+    assert.equal(r.project.wall.pivot, given, "a file's pivot (03 T7, with project file v2) is assigned as given");
   });
 });
 

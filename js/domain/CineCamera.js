@@ -208,19 +208,23 @@ export class CineCamera {
 
   /**
    * Frame size at the wall and the coverage status (the DOM writes of 2484-2485, 2515-2525, 2533 live in
-   * ui/CameraPanel; the status colours are Theme.UiColors.status).
+   * ui/CameraPanel; the status colours are Theme.UiColors.status). Since 03 T3 the flat wall is the 'flat-pivot'
+   * rectangle of framingBounds (03 6.6): x in [minX, minX + totalWidth], y in [0, maxHeight], in the plane z = wallZ, so
+   * the distance is posZ - wallZ and the edges are relative to minX. At the identity pivot minX = wallZ = +0 and every
+   * value is the legacy one bit for bit (posZ - 0 === posZ, 0 + W === W).
    * Ports: index.html@cd3fd3f lines 2473-2531.
    * Side effects: none.
-   * @param {{totalWidth: number, maxHeight: number}} bounds  flat wall bounds (metres)
-   * @returns {{frameWidth: number, frameHeight: number, status: 'within'|'offCenter'|'exceeds', safeDistance: number}}
+   * @param {{totalWidth: number, maxHeight: number, minX: number, wallZ: number}} bounds  'flat-pivot' bounds (metres)
+   * @returns {{frameWidth: number, frameHeight: number, status: 'within'|'offCenter'|'exceeds', safeDistance: number,
+   *            distToWall: number}}  distToWall (03 T3) feeds the "Distance to wall plane" readout (03 T6)
    */
   coverage(bounds) {
     const hFov = this.hFov();
     const vFov = this.vFov();
 
-    // LEGACY(B-M10): the distance is posZ and the wall is the flat rectangle [0, totalWidth] x [0, maxHeight];
-    // rotation, curvature and angle offsets are ignored.
-    const distToWall = this.posZ;
+    // LEGACY(B-M10): the distance is posZ - wallZ and the wall is the flat rectangle [minX, minX + totalWidth] x
+    // [0, maxHeight] at z = wallZ; rotation, curvature and angle offsets are ignored.
+    const distToWall = this.posZ - bounds.wallZ;
     const frameWidth = 2 * Math.tan(hFov / 2) * distToWall;
     const frameHeight = 2 * Math.tan(vFov / 2) * distToWall;
 
@@ -236,7 +240,7 @@ export class CineCamera {
     const frameBottom = camCenterY - frameHeight / 2;
     const frameTop = camCenterY + frameHeight / 2;
 
-    const withinBounds = frameLeft >= 0 && frameRight <= totalWallWidth &&
+    const withinBounds = frameLeft >= bounds.minX && frameRight <= bounds.minX + totalWallWidth &&
                          frameBottom >= 0 && frameTop <= maxWallHeight;
 
     let status;
@@ -249,19 +253,21 @@ export class CineCamera {
     }
 
     const safeDistance = this.maxSafeDistance(bounds);
-    return { frameWidth, frameHeight, status, safeDistance };
+    return { frameWidth, frameHeight, status, safeDistance, distToWall };
   }
 
   /**
-   * Centres the camera on the flat wall, 5 m away, with zero rotation.
+   * Centres the camera on the flat wall, 5 m in front of its plane, with zero rotation. Since 03 T3 the 'flat-pivot'
+   * bounds (03 6.6): posX = minX + totalWidth / 2, posZ = wallZ + 5 (at the identity pivot 0 + w / 2 === w / 2 and
+   * 0 + 5 === 5: the legacy pose).
    * Ports: index.html@cd3fd3f lines 2559-2564.
    * Side effects: writes the six pose fields.
-   * @param {{totalWidth: number, maxHeight: number}} bounds  flat wall bounds (metres)
+   * @param {{totalWidth: number, maxHeight: number, minX: number, wallZ: number}} bounds  'flat-pivot' bounds (metres)
    */
   resetTo(bounds) {
-    this.posX = bounds.totalWidth / 2;
+    this.posX = bounds.minX + bounds.totalWidth / 2;
     this.posY = bounds.maxHeight / 2;
-    this.posZ = 5;
+    this.posZ = bounds.wallZ + 5;
     this.rotX = 0;
     this.rotY = 0;
     this.rotZ = 0;

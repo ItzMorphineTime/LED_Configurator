@@ -14,7 +14,7 @@
  *
  * | #  | Legacy | Trigger                          | Controller call(s)                   | Rebuild                                 | Other steps, in order                                   |
  * |----|--------|----------------------------------|--------------------------------------|-----------------------------------------|---------------------------------------------------------|
- * | 1  | 1451   | bootstrap (App.start)            | rebuild()                            | always                                  | none (hub skipped: preview off)                         |
+ * | 1  | 1451   | bootstrap (App.start)            | rebuild({cause: 'init'})             | always                                  | none (hub skipped: preview off)                         |
  * | 2  | 4000   | swatch click                     | setSectionColor                      | always                                  | swatch classes, dot, custom input (PR4)                 |
  * | 3  | 4010   | custom colour `input`            | setSectionColor                      | always                                  | clear swatches, dot (PR4)                               |
  * | 4  | 4021   | name `input`                     | renameSection, commitRename          | iff panel IDs                           | title patch; WALL_SECTION_RENAMED iff panel IDs         |
@@ -37,16 +37,18 @@
  * | 21 | 2285   | logo clear                       | rebuildIfPanelIds                    | iff panel IDs                           | entry deleted, logo list render                         |
  * | 22 | 2292   | logo position change             | rebuildIfPanelIds                    | iff the entry exists and panel IDs      | -                                                       |
  * | 23 | 2303   | logo scale change                | rebuildIfPanelIds                    | iff the entry exists and panel IDs      | write-back always                                       |
- * | 24 | 5002   | import FileReader.onload         | applyImport                          | always, inside the import `try`         | logos reset, labels iff mesh_mode, WALL_SECTIONS_CHANGED{import} |
+ * | 24 | 5002   | import FileReader.onload         | applyImport                          | always (cause 'import'), in the `try`   | logos reset, pivot reset (03 4.4), labels iff mesh_mode, WALL_SECTIONS_CHANGED{import} |
  * | F6-1 | -    | web fonts settled (App.start, runFontGate) | rebuildIfPanelIds          | iff a panel-ID canvas was drawn with a pending (font, text) and panel IDs are on | none |
  *
  * No other path calls rebuild() (row F6-1, the font gate of 06 5.6, calls rebuildIfPanelIds at most once after the
- * web fonts settled). Never de-duplicate or debounce: row 8 rebuilds twice per click and rows 3, 16 and 19 rebuild
+ * web fonts settled), except commitPivot (03 5.6, the pivot use case of 03 T4: rebuild({cause: 'pivot'}) iff the stage
+ * origin moved, else the pivot cache only). WALL_REBUILT carries the cause: 'init' (row 1), 'import' (row 24), 'pivot'
+ * (commitPivot) and 'edit' (every other row). Never de-duplicate or debounce: row 8 rebuilds twice per click and rows 3, 16 and 19 rebuild
  * on every `input` event, exactly like legacy.
  */
 import { Events } from '../core/EventBus.js';
-import { layoutProject } from '../geometry/WallLayout.js';
-import { Wall } from '../domain/Wall.js';
+import { computeWallLayout, layoutProject, resolvePivot, stageShift } from '../geometry/WallLayout.js';
+import { Wall, WallPivot } from '../domain/Wall.js';
 
 /**
  * Wall use cases and the P1 rebuild pipeline.
@@ -68,6 +70,12 @@ export class WallController {
   #palette;
   /** @type {{alert(msg: string): void}} the dialogs facade (ui/dom.js createDialogs) */
   #dialogs;
+  /**
+   * The pivot resolution of the last rebuild (step 1) or pivot commit (03 5.6): null before the first rebuild and for a
+   * non-finite layout. Read through pivotResolution by the framing bounds, the gizmo anchor and the exports.
+   * @type {import('../geometry/WallLayout.js').PivotResolution|null}
+   */
+  #pivotResolution = null;
 
   /**
    * Stores the collaborators only (R4).
@@ -94,26 +102,73 @@ export class WallController {
   }
 
   /**
-   * A fresh layout of the live sections (the single cursor walk), as used by the rebuild and the exporters.
+   * A fresh layout of the live sections (the single cursor walk) in a frame of 03 5.1: the stage frame (the default)
+   * for the rebuild, the export frame for the exporters (ProjectIO, 03 7).
    * Ports: index.html@cd3fd3f lines 1479-1549 (the walk itself lives in geometry/WallLayout).
    * Side effects: none.
-   * @returns {import('../geometry/WallLayout.js').WallLayout} layoutProject(project)
+   * @param {{frame?: 'stage'|'export'|'layout'}} [options]
+   * @returns {import('../geometry/WallLayout.js').WallLayout} layoutProject(project, {frame})
    */
-  layout() {
-    return layoutProject(this.#project);
+  layout({ frame = 'stage' } = {}) {
+    return layoutProject(this.#project, { frame });
+  }
+
+  /**
+   * The cached pivot resolution (03 5.6): set in rebuild step 1 and by commitPivot, before WALL_REBUILT and
+   * SELECTABLE_MOVED are emitted, so readers never depend on subscriber order.
+   * Side effects: none.
+   * @returns {import('../geometry/WallLayout.js').PivotResolution|null}
+   */
+  get pivotResolution() {
+    return this.#pivotResolution;
+  }
+
+  /**
+   * The resolution of the live pivot against the live sections, without rebuilding or caching (03 6.3).
+   * Side effects: none.
+   * @returns {import('../geometry/WallLayout.js').PivotResolution|null}
+   *   resolvePivot(computeWallLayout(project.wall.sections), project.wall.pivot)
+   */
+  resolvePivotNow() {
+    return resolvePivot(computeWallLayout(this.#project.wall.sections), this.#project.wall.pivot);
+  }
+
+  /**
+   * The pivot use case's rebuild decision (03 5.6, P-PIVOT; ARCHITECTURE.md 6.2: this module decides wall rebuilds):
+   * when the stage origin moved against the cached resolution, the wall rebuilds with cause 'pivot' (which caches
+   * `after`); otherwise (a height-only change, or none) only the cache is updated, because the stage frame and the
+   * framing read the stage origin only.
+   * Side effects: rebuild({cause: 'pivot'}) or writes the cache.
+   * @param {import('../geometry/WallLayout.js').PivotResolution|null} after  resolvePivotNow() of the new pivot
+   */
+  commitPivot(after) {
+    const shift = stageShift(this.#pivotResolution, after);
+    if (shift.x !== 0 || shift.z !== 0) {
+      this.rebuild({ cause: 'pivot' });
+    } else {
+      this.#pivotResolution = after;
+    }
   }
 
   /**
    * P1 (ARCHITECTURE.md 6.1), legacy createLEDWall: layout -> view rebuild -> stats -> orbit target -> camera hub
    * (iff the preview is on) -> WALL_REBUILT. Exceptions of steps 1-5 propagate unchanged (no try/catch, R13).
+   * Step 1 (03 5.6) lays the wall out in the stage frame, caches its pivot resolution and measures the stage-origin
+   * shift against the previously cached one; WALL_REBUILT carries both with the cause (03 5.5): 'init' (the bootstrap),
+   * 'pivot' (commitPivot), 'import' (applyImport) or 'edit' (every other call site).
    * Ports: index.html@cd3fd3f lines 1457-1577 (orchestration; tail 1574-1576).
-   * Side effects: view.rebuild (scene); emits WALL_STATS_CHANGED; orbit.updateCameraPosition (main camera);
-   *   hub.refresh (iff project.camera.enabled); emits WALL_REBUILT {layout, meshMode, view}.
+   * Side effects: writes the pivot cache; view.rebuild (scene); emits WALL_STATS_CHANGED; orbit.updateCameraPosition
+   *   (main camera); hub.refresh (iff project.camera.enabled); emits WALL_REBUILT {layout, meshMode, view, cause,
+   *   stageShift}.
+   * @param {{cause?: 'init'|'pivot'|'import'|'edit'}} [options]
    */
-  rebuild() {
+  rebuild({ cause = 'edit' } = {}) {
     const project = this.#project;
-    // 1. layout (PR1: computed before the view disposes the old wall; pure, no THREE ids)
+    // 1. layout (PR1: computed before the view disposes the old wall; pure, no THREE ids), stage frame (03 5.6)
+    const prev = this.#pivotResolution;
     const layout = this.layout();
+    this.#pivotResolution = layout.pivot.resolution;
+    const shift = stageShift(prev, this.#pivotResolution);
     // 2. dispose + groups + build + frames + scene.add (1458-1477, 1551-1572)
     const meshMode = project.meshMode;
     this.#view.rebuild({ layout, meshMode, display: project.display });
@@ -123,8 +178,8 @@ export class WallController {
     this.#orbit.updateCameraPosition();
     // 5. if (cameraPreviewEnabled) updateCameraFrustum() (1576): re-drives the pilot view after step 4
     if (project.camera.enabled) this.#hub.refresh();
-    // 6. feature seam (no Phase-1 subscribers)
-    this.#bus.emit(Events.WALL_REBUILT, { layout, meshMode, view: this.#view });
+    // 6. feature seam: cause and stageShift since 03 T3 (additive; the Phase-1 subscribers ignore them)
+    this.#bus.emit(Events.WALL_REBUILT, { layout, meshMode, view: this.#view, cause, stageShift: shift });
   }
 
   /**
@@ -343,19 +398,25 @@ export class WallController {
    * logos given (08 P2-3d, B-L21 fixed: legacy kept every entry, so logos keyed by old ids reattached to imported
    * sections that reused those ids; a v1 import passes none), replace the sections (and the id allocator), adopt a
    * truthy mesh mode (label mirror), re-render the cards (first expanded) and, with panel IDs on, the logo list, rebuild.
+   * Feature 3 (03 4.4, Q14): the file's pivot replaces the session's, the identity for a file without one (every file
+   * until project file v2: the pivot is session-only, the owner's decision of 2026-10-17), after the sections and before
+   * the rebuild, which runs with cause 'import'. An import is a load: nothing is re-expressed.
    * Ports: index.html@cd3fd3f lines 4976 + 4989 (via Wall.replaceAll), 4991-4996, 4998-5002.
-   * Side effects: model (logos, wall, project.meshMode iff truthy); emits WALL_MESH_MODE_CHANGED {mode} iff meshMode is
-   *   truthy, then WALL_SECTIONS_CHANGED {reason: 'import'}; rebuild().
+   * Side effects: model (logos, wall, wall.pivot, project.meshMode iff truthy); emits WALL_MESH_MODE_CHANGED {mode} iff
+   *   meshMode is truthy, then WALL_SECTIONS_CHANGED {reason: 'import'}; rebuild({cause: 'import'}).
    * @param {{sections: import('../domain/WallSection.js').WallSection[], meshMode: *,
-   *          logos?: Array<[*, import('../domain/LogoLibrary.js').LogoEntry]>|null}} parsed
+   *          logos?: Array<[*, import('../domain/LogoLibrary.js').LogoEntry]>|null,
+   *          pivot?: import('../domain/Wall.js').WallPivot|null}} parsed
    *   sections and meshMode from the validated read; logos: [sectionId, entry] pairs to install after the reset (the
-   *   later v2 restore, 08 6.17), null for a v1 import
+   *   later v2 restore, 08 6.17), null for a v1 import; pivot: the file's validated pivot (03 T7, with project file v2),
+   *   null or absent for a v1 file (the identity)
    */
-  applyImport({ sections, meshMode, logos = null }) {
+  applyImport({ sections, meshMode, logos = null, pivot = null }) {
     const project = this.#project;
     project.logos.clear();
     if (logos) for (const [sectionId, entry] of logos) project.logos.set(sectionId, entry);
     project.wall.replaceAll(sections);
+    project.wall.pivot = pivot ?? new WallPivot();
 
     if (meshMode) {
       project.meshMode = meshMode;
@@ -363,6 +424,6 @@ export class WallController {
     }
 
     this.#bus.emit(Events.WALL_SECTIONS_CHANGED, { reason: 'import' });
-    this.rebuild();
+    this.rebuild({ cause: 'import' });
   }
 }

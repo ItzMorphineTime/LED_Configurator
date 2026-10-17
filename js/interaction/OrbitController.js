@@ -56,8 +56,9 @@ export class OrbitController {
    * @param {{sceneManager: import('../render/SceneManager.js').SceneManager,
    *          keyboard: import('./InputState.js').KeyboardState,
    *          interaction: import('./InputState.js').InteractionState,
-   *          frameBounds: () => {totalWidth: number, maxHeight: number}}} deps
-   *   frameBounds is the injected `framingBounds(project)` (flat bounds in Phase 1)
+   *          frameBounds: () => {totalWidth: number, maxHeight: number, minX: number, wallZ: number}}} deps
+   *   frameBounds is the injected `framingBounds(project, wallController.pivotResolution)` (the 'flat-pivot' bounds,
+   *   03 T3; the flat bounds in Phase 1)
    */
   constructor({ sceneManager, keyboard, interaction, frameBounds }) {
     this.#sceneManager = sceneManager;
@@ -103,15 +104,18 @@ export class OrbitController {
   }
 
   /**
-   * Recomputes the orbit target: the centre of the framing bounds plus the manual offset.
+   * Recomputes the orbit target: the centre of the framing bounds plus the manual offset. Since 03 T3 the 'flat-pivot'
+   * bounds (03 6.6): x = minX + totalWidth / 2 + offset.x, z = wallZ + offset.z (the flat wall translated by the stage
+   * origin). At the identity pivot minX = wallZ = +0, so x and y are the legacy values bit for bit and z differs only in
+   * the sign of a zero offset.z (0 + -0), which lookAt and the rendering cannot observe.
    * Ports: index.html@cd3fd3f lines 3756-3764 (the bounds loop 3757-3762 is the injected frameBounds).
    * Side effects: writes target.
    */
   updateTargetPosition() {
     // LEGACY(B-L2): the target uses the flat bounds (sum of section widths along +X, max height), via the
-    // injected frameBounds (= framingBounds), whatever the curve or angle of the wall.
+    // injected frameBounds (= framingBounds 'flat-pivot'), whatever the curve or angle of the wall.
     const b = this.#frameBounds();
-    this.target.set(b.totalWidth / 2 + this.offset.x, b.maxHeight / 2 + this.offset.y, this.offset.z);
+    this.target.set(b.minX + b.totalWidth / 2 + this.offset.x, b.maxHeight / 2 + this.offset.y, b.wallZ + this.offset.z);
   }
 
   /**

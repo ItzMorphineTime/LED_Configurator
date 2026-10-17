@@ -101,6 +101,21 @@ export class PropController {
     this.#bus.emit(Events.SELECTABLE_MOVED, { id: this.id });
   }
 
+  /**
+   * StageAnchored participant (03 5.3, 6.5): re-expresses the prop after an explicit pivot edit moved the stage origin
+   * by -(dx, dz), clamped through Prop.LIMITS (07 C45), mirrors its inputs and applies the transform (a no-op while the
+   * prop is hidden; the pose is re-expressed anyway).
+   * Side effects: writes prop.posX, prop.posZ; emits PROP_POSE_CHANGED {id, source: 'pivot'}; applyTransform().
+   * @param {number} dx  metres
+   * @param {number} dz  metres
+   * @returns {void}
+   */
+  translateStage(dx, dz) {
+    this.#prop.translateStage(dx, dz);
+    this.#bus.emit(Events.PROP_POSE_CHANGED, { id: this.id, source: 'pivot' });
+    this.applyTransform();
+  }
+
   // ---- Selectable ------------------------------------------------------------------------------------------
 
   /**

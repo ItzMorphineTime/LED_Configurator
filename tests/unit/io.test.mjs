@@ -25,7 +25,8 @@ import { fileURLToPath } from 'node:url';
 import { WallSection } from '../../js/domain/WallSection.js';
 import { Project } from '../../js/domain/Project.js';
 import { LegacyProfiles, Strategies, unsupportedStrategy } from '../../js/legacy/LegacyCompat.js';
-import { layoutProject } from '../../js/geometry/WallLayout.js';
+import { computeWallLayout, layoutProject, resolvePivot } from '../../js/geometry/WallLayout.js';
+import { WallPivot } from '../../js/domain/Wall.js';
 import { WallMeshBuilder, maxIndexOf } from '../../js/geometry/WallMeshBuilder.js';
 import { checkGltfDocument } from '../../tools/check-gltf.mjs';
 import { checkObjText, checkGltfOrientation } from '../../tools/check-orientation.mjs';
@@ -1182,7 +1183,8 @@ function fakeIO(project, log, extra = {}) {
     },
   };
   const wallController = {
-    layout: () => { log.push(['layout']); return layoutProject(project); },
+    layout: ({ frame = 'stage' } = {}) => { log.push(['layout']); extra.frames?.push(frame); return layoutProject(project, { frame }); },
+    pivotResolution: extra.pivotResolution ?? null,
     applyImport: (parsed) => log.push(['applyImport', parsed]),
   };
   const panelIds = {
@@ -2280,5 +2282,135 @@ describe('the combined atlas in the archives (08 P2-7f, Q5; 04 7.1, 7.5)', () =>
     for (const meshMode of ['section', 'panel']) {
       assert.deepEqual(OBJ.write({ sections, meshMode, layout, atlasFile: ATLAS }), OBJ.write({ sections, meshMode, layout }), meshMode);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// Feature 3 (03 T3, 7): exports in the export frame, the conditional pivot metadata, the safe-distance translate
+// ---------------------------------------------------------------------------------------------------------------
+
+/** A WallPivot with the given mode and offset (03 T1 API). */
+function pivotOf(mode, offset = { x: 0, y: 0, z: 0 }) {
+  const pivot = new WallPivot();
+  pivot.setMode(mode);
+  pivot.setOffset(offset);
+  return pivot;
+}
+
+/** The `v` lines of an OBJ text as [x, y, z] numbers. */
+const vLines = (objContent) => objContent.split('\n').filter((l) => l.startsWith('v ')).map((l) => l.slice(2).split(' ').map(Number));
+
+describe('Feature 3 exports (03 7, T3)', () => {
+  test('identity pivot: the export layout is the walk itself, and OBJ and glTF carry no pivot metadata (bytes unchanged)', () => {
+    for (const mode of MODES) {
+      const project = projectOf([WallSection.createDefault()], mode);
+      const plain = { sections: project.wall.sections, meshMode: mode, layout: computeWallLayout(project.wall.sections) };
+      const framed = { ...plain, layout: layoutProject(project, { frame: 'export' }) };
+      assert.equal(OBJ.write(framed).objContent, OBJ.write(plain).objContent);
+      assert.equal(json2(GLTF.write(framed)), json2(GLTF.write(plain)));
+      assert.ok(!OBJ.write(framed).objContent.includes('# Pivot:'));
+      assert.equal(GLTF.write(framed).scenes[0].extras, undefined);
+    }
+  });
+
+  test('the 6.8 table: the first combined v line per pivot, and the OBJ y range of mesh-center', () => {
+    const cases = [
+      ['bottom-left', { x: 0, y: 0, z: 0 }, 'v 0.000000 0.000000 0.000000', [0, 1.5]],
+      ['wall-center', { x: 0, y: 0, z: 0 }, 'v -1.250000 0.000000 0.000000', [0, 1.5]],
+      ['mesh-center', { x: 0, y: 0, z: 0 }, 'v -1.250000 -0.750000 0.000000', [-0.75, 0.75]],
+      ['wall-center', { x: 0, y: 0, z: 2 }, 'v -1.250000 0.000000 -2.000000', [0, 1.5]],
+    ];
+    for (const [mode, offset, first, [lo, hi]] of cases) {
+      const project = projectOf([WallSection.createDefault()], 'combined');
+      project.wall.pivot = pivotOf(mode, offset);
+      const { objContent } = OBJ.write({ sections: project.wall.sections, meshMode: 'combined', layout: layoutProject(project, { frame: 'export' }) });
+      assert.equal(objContent.split('\n').find((l) => l.startsWith('v ')), first, `${mode} ${JSON.stringify(offset)}`);
+      const ys = vLines(objContent).map((v) => v[1]);
+      assert.deepEqual([Math.min(...ys), Math.max(...ys)], [lo, hi]);
+    }
+  });
+
+  test('the conditional OBJ header (7.1): two lines after the orientation line, before the generator line', () => {
+    const project = projectOf([WallSection.createDefault()], 'section');
+    project.wall.pivot = pivotOf('mesh-center', { x: 0.5, y: 1, z: 2 });
+    const { objContent } = OBJ.write({ sections: project.wall.sections, meshMode: 'section', layout: layoutProject(project, { frame: 'export' }) });
+    const lines = objContent.split('\n');
+    assert.deepEqual(lines.slice(1, 5), [
+      '# Mesh Mode: section',
+      '# Faces: counter-clockwise front faces; vn point out of the LED surface (toward the stage)',
+      '# Pivot: mesh-center anchor 1.250000 0.750000 0.000000 offset 0.500000 1.000000 2.000000 (layout m); file origin = pivot',
+      '# Stage placement: origin at stage (0 1.750000 0) (Y up, metres)',
+    ]);
+    assert.equal(`${lines[5]}\n`, Brand.objGeneratorLine.split('\n')[0] + '\n');
+    // a non-finite layout: no resolution, no header, untranslated
+    const nan = projectOf([new WallSection({ ...WallSection.createDefault(), panelWidth: NaN })], 'section');
+    nan.wall.pivot = pivotOf('wall-center');
+    const out = layoutProject(nan, { frame: 'export' });
+    assert.equal(out.pivot.resolution, null);
+    assert.ok(!OBJ.write({ sections: nan.wall.sections, meshMode: 'section', layout: out }).objContent.includes('# Pivot:'));
+  });
+
+  test('glTF (7.2): POSITION in the export frame (exact float32 y = baseY + row * panelH), scenes[0].extras.pivot after the nodes', () => {
+    for (const mode of MODES) {
+      const project = projectOf([WallSection.createDefault()], mode);
+      project.wall.pivot = pivotOf('mesh-center', { x: 0, y: 0.25, z: 0 });
+      const layout = layoutProject(project, { frame: 'export' });
+      const gltf = GLTF.write({ sections: project.wall.sections, meshMode: mode, layout });
+      assert.deepEqual(Object.keys(gltf.scenes[0]), ['nodes', 'extras']);
+      assert.deepEqual(gltf.scenes[0].extras, {
+        pivot: { mode: 'mesh-center', offset_m: [0, 0.25, 0], anchor_layout_m: [1.25, 0.75, 0], point_layout_m: [1.25, 1, 0] },
+      });
+      assert.equal(gltf.nodes.some((n) => 'translation' in n), false, 'no node translation: the frame is baked');
+      const buffer = Buffer.from(gltf.buffers[0].uri.split(',')[1], 'base64');
+      const accessor = gltf.accessors[gltf.meshes[0].primitives[0].attributes.POSITION];
+      const view = gltf.bufferViews[accessor.bufferView];
+      const f32 = new Float32Array(buffer.buffer.slice(buffer.byteOffset + view.byteOffset, buffer.byteOffset + view.byteOffset + accessor.count * 12));
+      const ys = new Set();
+      for (let i = 1; i < f32.length; i += 3) ys.add(f32[i]);
+      if (mode !== 'panel') {
+        const baseY = layout.sections[0].baseY;
+        assert.equal(baseY, -1);
+        assert.deepEqual([...ys].sort((a, b) => a - b), [0, 1, 2, 3].map((row) => Math.fround(baseY + row * 0.5)));
+      }
+      assert.equal(accessor.min[1], Math.min(...ys));
+    }
+  });
+
+  test('writeSafeDistance(group, band, {translate}): an axis is shifted iff its translation is non-zero (7.1)', () => {
+    const attr = (values) => ({ count: values.length / 3, getX: (i) => values[i * 3], getY: (i) => values[i * 3 + 1], getZ: (i) => values[i * 3 + 2] });
+    const group = { traverse: (cb) => cb({ isMesh: true, geometry: { attributes: { position: attr([0, 0.005, 0, -1.25, 0.005, 3.5]) }, index: null } }) };
+    const identity = OBJ.writeSafeDistance(group);
+    assert.equal(OBJ.writeSafeDistance(group, null, { translate: { x: 0, y: -0, z: 0 } }), identity, '-0 is no translation');
+    const moved = OBJ.writeSafeDistance(group, null, { translate: { x: 1.25, y: -0.75, z: 0 } });
+    assert.deepEqual(vLines(moved), [[1.25, -0.745, 0], [0, -0.745, 3.5]]);
+  });
+
+  test('ProjectIO: the wall exports read the export frame; the safe-distance OBJ translates by sb - P (7.1)', async () => {
+    const project = Project.createDefault();
+    project.wall.pivot = pivotOf('mesh-center', { x: 0, y: 0, z: 2 });
+    const frames = [];
+    const log = [];
+    const resolution = resolvePivot(computeWallLayout(project.wall.sections), project.wall.pivot);
+    const io = fakeIO(project, log, { frames, pivotResolution: resolution });
+    io.exportGLTF();
+    assert.deepEqual(frames, ['export']);
+    const saved = JSON.parse(log.find((e) => e[0] === 'saveText')[3]);
+    assert.deepEqual(saved.scenes[0].extras.pivot.point_layout_m, [1.25, 0.75, 2]);
+    await io.exportOBJ();
+    await io.exportZIP();
+    assert.deepEqual(frames, ['export', 'export', 'export']);
+
+    // a group built under an earlier pivot (stamp at the layout origin) is written in the current export frame
+    const attr = (values) => ({ count: values.length / 3, getX: (i) => values[i * 3], getY: (i) => values[i * 3 + 1], getZ: (i) => values[i * 3 + 2] });
+    const stale = { userData: { stageOrigin: { x: 0, z: 0 } },
+      traverse: (cb) => cb({ isMesh: true, geometry: { attributes: { position: attr([0, 0.005, 0]) }, index: null } }) };
+    const blobs = [];
+    class FakeBlob { constructor(parts) { this.parts = parts; blobs.push(this); } }
+    await withGlobals([[globalThis, 'Blob', FakeBlob]], () => fakeIO(project, [], { group: stale, pivotResolution: resolution }).exportSafeDistanceOBJ());
+    assert.deepEqual(vLines(blobs[0].parts[0]), [[-1.25, -0.745, -2]]);
+    // a fresh group (stamp = the current stage origin): only y moves, by -P.y, so the floor lines up with the wall export
+    const fresh = { ...stale, userData: { stageOrigin: { x: 1.25, z: 2 } } };
+    await withGlobals([[globalThis, 'Blob', FakeBlob]], () => fakeIO(project, [], { group: fresh, pivotResolution: resolution }).exportSafeDistanceOBJ());
+    assert.deepEqual(vLines(blobs[1].parts[0]), [[0, -0.745, 0]]);
   });
 });

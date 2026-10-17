@@ -419,3 +419,101 @@ describe('03 test 8: composition contract (5.10 #2; spec 02 reruns it as E17)', 
 // ---- 9. B-L1 migration ------------------------------------------------------------------------------------------------
 
 test('03 test 9: the B-L1 between-panels migration (skipped: the owner kept the convention, 6.9; 08 Q10)', { skip: 'no between-panels branch exists (B-L1 decided 2026-10-16: kept)' }, () => {});
+
+// ---- 6 (consumers, 03 T3): 'flat-pivot' at the identity is the legacy 'flat' framing, bit for bit -------------------
+
+/** A minimal THREE for OrbitController (Vector3 with set; the main camera is a plain object). */
+class Vec3 { constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z = z; } set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; } }
+globalThis.window = { THREE: { Vector3: Vec3 } };
+const { OrbitController } = await import('../../js/interaction/OrbitController.js');
+const { CineCamera } = await import('../../js/domain/CineCamera.js');
+
+/** Seeded walls of 0..4 sections with numeric fields (zeros, fractions, negative curves and offsets). */
+function seededWalls(seed, count) {
+  let state = seed >>> 0;
+  const rand = () => ((state = (Math.imul(state, 1664525) + 1013904223) >>> 0) / 4294967296);
+  const pick = (a) => a[Math.floor(rand() * a.length)];
+  const walls = [];
+  for (let w = 0; w < count; w++) {
+    const n = Math.floor(rand() * 5);
+    const sections = [];
+    for (let i = 0; i < n; i++) {
+      sections.push(section({ id: i, panelCols: pick([0, 1, 2, 5, 7, 12]), panelRows: pick([0, 1, 3, 4]),
+        panelWidth: pick([500, 250, 333.3, 1000]), panelHeight: pick([500, 562.5, 250]),
+        curveIntensity: pick([0, -0, 5, -7.25, 18, 3.5]), angleOffset: pick([0, 15, -20, 90]) }));
+    }
+    walls.push(sections);
+  }
+  return walls;
+}
+
+/** The Phase-1 'flat' consumer expressions (03 6.6, the oracle of the identity proof). */
+const LEGACY = {
+  target: (b, off) => [b.totalWidth / 2 + off.x, b.maxHeight / 2 + off.y, off.z],
+  reset: (b) => ({ posX: b.totalWidth / 2, posY: b.maxHeight / 2, posZ: 5 }),
+  coverage(cam, b) {
+    const hFov = cam.hFov(), vFov = cam.vFov();
+    const distToWall = cam.posZ;
+    const frameWidth = 2 * Math.tan(hFov / 2) * distToWall;
+    const frameHeight = 2 * Math.tan(vFov / 2) * distToWall;
+    const fitsWidth = frameWidth <= b.totalWidth, fitsHeight = frameHeight <= b.maxHeight;
+    const frameLeft = cam.posX - frameWidth / 2, frameRight = cam.posX + frameWidth / 2;
+    const frameBottom = cam.posY - frameHeight / 2, frameTop = cam.posY + frameHeight / 2;
+    const within = frameLeft >= 0 && frameRight <= b.totalWidth && frameBottom >= 0 && frameTop <= b.maxHeight;
+    const status = within ? 'within' : fitsWidth && fitsHeight ? 'offCenter' : 'exceeds';
+    return { frameWidth, frameHeight, status, safeDistance: cam.maxSafeDistance(b) };
+  },
+  posZ: (raw) => Math.max(0.1, parseFloat(raw) || 5),
+};
+
+describe("03 test 6 (consumers, T3): 'flat-pivot' at the identity equals the legacy 'flat' expressions", () => {
+  test('the orbit target (Object.is in x and y, === in z), resetTo, every coverage output and the posZ rule', () => {
+    const offsets = [{ x: 0, y: 0, z: 0 }, { x: -0, y: -0, z: -0 }, { x: 1.5, y: -2.25, z: 0.75 }, { x: -3, y: 0.5, z: -0 }];
+    const poses = [[0, 1.5, 5], [1.25, 0.75, 1.5], [-2, 0, 0.1], [10, 3, 25], [-0, -0, -0]];
+    const raws = ['', '0', '-0', '1.5', '-5', 'abc', '0.05', '7'];
+    let checks = 0;
+    for (const sections of [...Object.values(WALLS), ...seededWalls(0x3a3a, 300)]) {
+      const project = projectOf(sections);
+      const b = framingBounds(project);
+      const flat = project.wall.flatBounds();
+      for (const off of offsets) {
+        const orbit = new OrbitController({ sceneManager: null, keyboard: null, interaction: null, frameBounds: () => b });
+        orbit.offset.set(off.x, off.y, off.z);
+        orbit.updateTargetPosition();
+        const [x, y, z] = LEGACY.target(flat, off);
+        assert.ok(Object.is(orbit.target.x, x) && Object.is(orbit.target.y, y) && orbit.target.z === z, JSON.stringify([orbit.target, x, y, z]));
+        checks++;
+      }
+      for (const [posX, posY, posZ] of poses) {
+        const cam = new CineCamera();
+        Object.assign(cam, { posX, posY, posZ });
+        const got = cam.coverage(b);
+        const want = LEGACY.coverage(cam, flat);
+        for (const k of ['frameWidth', 'frameHeight', 'safeDistance']) assert.ok(Object.is(got[k], want[k]), k);
+        assert.equal(got.status, want.status);
+        assert.ok(Object.is(got.distToWall, posZ));
+        cam.resetTo(b);
+        const r = LEGACY.reset(flat);
+        assert.ok(Object.is(cam.posX, r.posX) && Object.is(cam.posY, r.posY) && Object.is(cam.posZ, r.posZ));
+        checks++;
+      }
+      for (const raw of raws) assert.ok(Object.is(new CineCamera().setField('posZ', raw, { wallZ: b.wallZ }), LEGACY.posZ(raw)), raw);
+    }
+    assert.ok(checks > 2000);
+  });
+
+  test("off the identity: the target and Reset follow the stage origin; the coverage of a re-expressed camera is unchanged (6.5, 6.8)", () => {
+    const project = projectOf(WALLS.default, pivotOf('wall-center', { x: 0, y: 0, z: 2 }));
+    const b = framingBounds(project);
+    assert.deepEqual(b, { totalWidth: 2.5, maxHeight: 1.5, minX: -1.25, wallZ: -2 });
+    const orbit = new OrbitController({ sceneManager: null, keyboard: null, interaction: null, frameBounds: () => b });
+    orbit.updateTargetPosition();
+    assert.deepEqual([orbit.target.x, orbit.target.y, orbit.target.z], [0, 0.75, -2], 'the centre of the translated flat wall');
+    const cam = new CineCamera();
+    cam.resetTo(b);
+    assert.deepEqual([cam.posX, cam.posY, cam.posZ], [0, 0.75, 3], '5 m in front of the wall plane');
+    assert.equal(cam.coverage(b).distToWall, 5);
+    assert.ok(Object.is(cam.setField('posZ', '0', { wallZ: b.wallZ }), 0));
+    assert.equal(cam.setField('posZ', '-5', { wallZ: b.wallZ }), -1.9);
+  });
+});

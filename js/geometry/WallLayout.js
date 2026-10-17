@@ -441,6 +441,17 @@ export function stageShift(a, b) {
 }
 
 /**
+ * Whether a resolution is the identity pivot (bottom-left with a zero offset): the exports write pivot metadata only
+ * for a non-identity pivot (03 7.1, 7.2, Q10), so the identity keeps their Phase-1 bytes (03 T3).
+ * Side effects: none.
+ * @param {PivotResolution} r
+ * @returns {boolean}
+ */
+export function isIdentityResolution(r) {
+  return r.mode === PivotMode.BOTTOM_LEFT && r.offset.x === 0 && r.offset.y === 0 && r.offset.z === 0;
+}
+
+/**
  * THE single entry point used by every consumer (LEDWallView via WallController, SafeDistanceView via CameraHub,
  * exporters via ProjectIO, which pass {frame: 'export'}). Feature 3 (03 6.3, 5.1): the raw walk (every postTransform
  * null) is resolved against the wall pivot and translated once into the requested frame:

@@ -12,6 +12,7 @@
 import { exportSectionName, exportPanelName, mtlTextureFile } from '../geometry/PanelNaming.js';
 import { computeAtlas } from '../geometry/TextureAtlas.js';
 import { atlasUvRect } from '../geometry/WallMeshBuilder.js';
+import { isIdentityResolution } from '../geometry/WallLayout.js';
 import { unsupportedStrategy } from '../legacy/LegacyCompat.js';
 
 /**
@@ -19,6 +20,24 @@ import { unsupportedStrategy } from '../legacy/LegacyCompat.js';
  * winds 'ccw': it documents the convention in every file, for pipelines that compensated for the old inverted output.
  */
 const FACE_CONVENTION_LINE = '# Faces: counter-clockwise front faces; vn point out of the LED surface (toward the stage)\n';
+
+/** The identity translation of the safe-distance OBJ (03 7.1). */
+const NO_TRANSLATE = Object.freeze({ x: 0, y: 0, z: 0 });
+
+/**
+ * The two pivot header lines of 03 7.1 for a layout of layoutProject (the export frame), or '' when the layout has no
+ * pivot block, a null resolution (a non-finite layout) or the identity pivot. Numbers are toFixed(6).
+ * @param {import('../geometry/WallLayout.js').WallLayout} layout
+ * @returns {string}
+ */
+function pivotHeaderLines(layout) {
+  const r = layout.pivot?.resolution ?? null;
+  if (r === null || isIdentityResolution(r)) return '';
+  const f = (v) => v.toFixed(6);
+  const { anchor: a, offset: o, point: P } = r;
+  return `# Pivot: ${r.mode} anchor ${f(a.x)} ${f(a.y)} ${f(a.z)} offset ${f(o.x)} ${f(o.y)} ${f(o.z)} (layout m); file origin = pivot\n` +
+    `# Stage placement: origin at stage (0 ${f(P.y)} 0) (Y up, metres)\n`;
+}
 
 /**
  * The brand strings this writer uses (a subset of Theme.Brand).
@@ -73,7 +92,9 @@ export class ObjExporter {
   /**
    * The OBJ and MTL text of the wall, the string assembly of 4556-4717 (line order, separators and toFixed
    * precision as legacy). Header: brand.objHeader, `# Mesh Mode: ${meshMode}`, the orientation line (01 CR-3)
-   * when the profile winds 'ccw' (none for 'legacy-cw'), brand.objGeneratorLine. Dispatch: 'combined' / 'section' /
+   * when the profile winds 'ccw' (none for 'legacy-cw'), the two pivot lines of 03 7.1 for a non-identity pivot with a
+   * resolution (layout.pivot, 03 T3; nothing at the identity, so those bytes are unchanged), brand.objGeneratorLine.
+   * Every `v` is in the layout's frame: ProjectIO passes the export frame (03 5.1), whose origin is the pivot. Dispatch: 'combined' / 'section' /
    * anything else is written as panels. Strip normals (#stripNormalLines): 'per-vertex' (08 P2-2c) writes one `vn`
    * per vertex from the builder normals and faces `f a/a/a`; 'constant-z' (Phase 1) one `vn 0 0 1` per object.
    *   combined: one object `LED_Wall_Combined` with one material per section, `Wall_<i+1>` with that section's colour
@@ -92,7 +113,7 @@ export class ObjExporter {
    * Side effects: none.
    * @param {{sections: import('../domain/WallSection.js').WallSection[], meshMode: *,
    *          layout: import('../geometry/WallLayout.js').WallLayout, textureNames?: (string|null)[]|null}} args
-   *   layout = layoutProject(project) of the same sections; textureNames (08 P2-6c; passed by Export All (ZIP) and, in
+   *   layout = layoutProject(project, {frame: 'export'}) of the same sections (03 T3); textureNames (08 P2-6c; passed by Export All (ZIP) and, in
    *   section mode, by Export OBJ (ZIP), 08 P2-6e): the shipped texture file name of each section
    *   (PanelNaming.textureFileNames), null for a texture left out; absent or null: no map_Kd at all. atlasFile (08 P2-7f):
    *   the archive path of the combined atlas the caller ships (PanelNaming.atlasTexturePath), read in combined mode only;
@@ -106,6 +127,7 @@ export class ObjExporter {
     let objContent = brand.objHeader;
     objContent += `# Mesh Mode: ${meshMode}\n`;
     objContent += this.#faceConventionLine();
+    objContent += pivotHeaderLines(layout);
     objContent += brand.objGeneratorLine;
 
     const text = { objContent, mtlContent: brand.mtlHeader };
@@ -345,15 +367,19 @@ export class ObjExporter {
    * `v` lines (toFixed(6)), its `vn` lines from geometry.attributes.normal (toFixed(6); (0, 1, 0) for the +Y band), a
    * blank line and its faces `f a//a b//b c//c` (1-based; running vertex and normal offsets, equal while every mesh has
    * one normal per vertex). A mesh without a normal attribute writes no `vn` and faces `f a b c` (the Phase-1 form).
+   * The vertices are re-expressed by `translate` (03 T3, 7.1): each axis k with translate[k] !== 0 writes
+   * (v + translate[k]).toFixed(6), the others v.toFixed(6) as before, so the identity translation keeps the bytes.
    * Duck-typed (traverse / isMesh / geometry.attributes.position, .normal / geometry.index): no THREE import.
    * Ports: index.html@cd3fd3f lines 2792-2823.
    * Side effects: none.
    * @param {Object3DLike} group  SafeDistanceView.object3D
    * @param {{clampedVertices: number, totalSafeVertices: number, distance: number}|null} [band]
    *   SafeDistanceView.lastBand (geometry/SafeDistanceBand); null or absent writes no `# Clamped:` line
+   * @param {{translate?: {x: number, y: number, z: number}}} [options]  translate: from the group's stage frame to the
+   *   current export frame, (sb.x - P.x, -P.y, sb.z - P.z) (ProjectIO.exportSafeDistanceOBJ); default (0, 0, 0)
    * @returns {string}
    */
-  writeSafeDistance(group, band = null) {
+  writeSafeDistance(group, band = null, { translate = NO_TRANSLATE } = {}) {
     let objContent = this.#brand.safeDistanceObjHeader;
     if (band && band.clampedVertices > 0) {
       const line = `# Clamped: ${band.clampedVertices} of ${band.totalSafeVertices} offset vertices are closer than ` +
@@ -372,9 +398,13 @@ export class ObjExporter {
 
         // Export vertices
         for (let i = 0; i < positions.count; i++) {
-          const x = positions.getX(i);
-          const y = positions.getY(i);
-          const z = positions.getZ(i);
+          let x = positions.getX(i);
+          let y = positions.getY(i);
+          let z = positions.getZ(i);
+          // 03 7.1: into the current export frame; an axis whose translation is 0 (or -0) is written as before
+          if (translate.x !== 0) x += translate.x;
+          if (translate.y !== 0) y += translate.y;
+          if (translate.z !== 0) z += translate.z;
           objContent += `v ${x.toFixed(6)} ${y.toFixed(6)} ${z.toFixed(6)}\n`;
         }
 

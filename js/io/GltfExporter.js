@@ -3,7 +3,8 @@
  * glTF 2.0 JSON of the wall in the three mesh modes (combined / section / panel) with one embedded base64 buffer.
  * Vertex grids, normals, indices and panel corners come from the injected WallMeshBuilder (Strategies.mesh.gltf
  * profile), colours from the injected colorToRgb, the generator string from the injected brand.
- * JSON.stringify(gltf, null, 2) is the caller's job (ProjectIO).
+ * JSON.stringify(gltf, null, 2) is the caller's job (ProjectIO). Since 03 T3 the positions are in the layout's frame
+ * (ProjectIO passes the export frame, whose origin is the pivot) and a non-identity pivot adds scenes[0].extras.pivot.
  * Legacy source: index.html@cd3fd3f 4719-4909 (generateGLTFContent, inner addMesh 4737-4828).
  * Layer: io (may import domain, geometry, legacy; THREE-free and DOM-free).
  */
@@ -11,6 +12,7 @@
 import { exportSectionName, exportPanelName } from '../geometry/PanelNaming.js';
 import { maxIndexOf, indexWidth, atlasUvRect, WallMeshBuilder } from '../geometry/WallMeshBuilder.js';
 import { computeAtlas } from '../geometry/TextureAtlas.js';
+import { isIdentityResolution } from '../geometry/WallLayout.js';
 import { unsupportedStrategy } from '../legacy/LegacyCompat.js';
 
 /**
@@ -92,11 +94,15 @@ export class GltfExporter {
    * pixel-accurate atlas UVs (profile.combinedUV), section (col / cols, row / rows), panel PANEL_UVS; the 'ccw' indices
    * of 08 P2-2d face the stage, consistent with NORMAL.
    * The buffer is encoded with the injected encoder (default chunkedBase64, any size).
+   * Feature 3 (03 T3, 7.2): POSITION and its min/max are in the layout's frame (no node translation is written); with a
+   * non-identity pivot and a resolution (layout.pivot), scenes[0].extras = {pivot: {mode, offset_m, anchor_layout_m,
+   * point_layout_m}} (arrays [x, y, z]), assigned after the nodes, so the scene's keys are nodes, extras; at the
+   * identity nothing is added and the document is unchanged.
    * Ports: index.html@cd3fd3f lines 4719-4909.
    * Side effects: none.
    * @param {{sections: import('../domain/WallSection.js').WallSection[], meshMode: *,
-   *          layout: import('../geometry/WallLayout.js').WallLayout}} args  layout = layoutProject(project) of
-   *   the same sections
+   *          layout: import('../geometry/WallLayout.js').WallLayout}} args  layout = layoutProject(project,
+   *   {frame: 'export'}) of the same sections (03 T3)
    * @returns {object} the glTF document (plain JSON)
    * @throws {Error} unsupportedStrategy for a foreign profile (an empty wall no longer throws in combined mode since
    *   08 P2-7d; the validator never lets one in, 08 P2-3b)
@@ -127,6 +133,15 @@ export class GltfExporter {
       this.#writePanels(state, layout);
     } else {
       throw new Error(`Unknown mesh mode ${JSON.stringify(meshMode)}`);
+    }
+
+    // 03 7.2: the pivot metadata, only for a non-identity pivot with a resolution (after the nodes: key order nodes, extras)
+    const r = layout.pivot?.resolution ?? null;
+    if (r !== null && !isIdentityResolution(r)) {
+      const v = (p) => [p.x, p.y, p.z];
+      gltf.scenes[0].extras = {
+        pivot: { mode: r.mode, offset_m: v(r.offset), anchor_layout_m: v(r.anchor), point_layout_m: v(r.point) },
+      };
     }
 
     const totalLength = state.allBufferData.reduce((sum, arr) => sum + arr.length, 0);

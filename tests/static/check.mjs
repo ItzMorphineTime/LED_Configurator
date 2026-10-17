@@ -67,6 +67,8 @@ export const ALLOWLIST = Object.freeze([
     { file: 'js/app/WallController.js', receiver: 'display', field: 'wireframe' },
     { file: 'js/app/WallController.js', receiver: 'display', field: 'showFrame' },
     { file: 'js/app/WallController.js', receiver: 'display', field: 'ledLayout' },
+    // The wall pivot (03 T3, 03 8.2): replaced only by the import (03 4.4); its fields change through WallPivot methods.
+    { file: 'js/app/WallController.js', receiver: 'wall', field: 'pivot' },
     { file: 'js/render/SceneManager.js', receiver: 'display', field: 'showGrid' },
     { file: 'js/app/CameraController.js', receiver: 'display', field: 'showSafeDistance' },
     { file: 'js/app/CameraController.js', receiver: 'cine', field: 'enabled' },
@@ -143,7 +145,7 @@ const DOMAIN_FIELDS = Object.freeze(['posX', 'posY', 'posZ', 'rotX', 'rotY', 'ro
     'focalLength', 'enabled', 'visible', 'scale', 'content', 'wireframe', 'showFrame', 'ledLayout', 'showGrid', 'showSafeDistance',
     'meshMode', 'nextSectionId', 'panelCols', 'panelRows', 'panelWidth', 'panelHeight', 'ledX', 'ledY', 'curveIntensity',
     'angleOffset', 'name', 'color', 'borderThickness', 'fontSize', 'fontColor', 'sectionLabelEnabled', 'sectionLabelFontSize',
-    'sectionLabelColor', 'shading', 'vertex', 'face', 'lengthScale', 'onTop']);
+    'sectionLabelColor', 'shading', 'vertex', 'face', 'lengthScale', 'onTop', 'pivot']);
 const DOMAIN_RECEIVERS = new Set(['project', 'wall', 'section', 'sections[...]', 'cine', 'prop', 'person', 'car', 'display',
     'panelIdStyle', 'style', 'settings', 'normals']);
 const ASSIGNMENT_OPS = ['>>>=', '**=', '<<=', '>>=', '&&=', '||=', '??=', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '++', '--'];

@@ -426,7 +426,8 @@ tests/
     normal-lines.test.mjs                  01 F1-1  NormalLines: auto length table, strides, 6.6 line counts, writers, stats
                                                  strings, the AC 14a cap benchmark (200 sections x 50x20)
     material-override.test.mjs             01 F1-1  MaterialOverride with plain objects (Material[] kept; restore before dispose)
-    led-wall-view.test.mjs                 01 F1-1  LEDWallView debug shading and withContentMaterials (fake THREE)
+    led-wall-view.test.mjs                 01 F1-1  LEDWallView debug shading and withContentMaterials (fake THREE);
+                                                 03 T3: no wall root transform in any mode and pivot (07 C32)
     debug-view-controller.test.mjs         01 F1-1  DebugViewController: model write, then exactly one render call (spies);
                                                  01 F1-2: exactly one DEBUG_VIEW_CHANGED between the two (R2)
     debug-view-controls.test.mjs           01 F1-2  DebugViewControls on a fake DOM: N / Shift+N filters (typing target,
@@ -1060,13 +1061,17 @@ export class CineCamera {
   /** Math.min(bounds.totalWidth / (2 * Math.tan(hFov / 2)), bounds.maxHeight / (2 * Math.tan(vFov / 2)))
    *  (2529-2531 == 2610-2612; hFov/vFov from the methods above) */
   maxSafeDistance(bounds)
-  /** LEGACY(B-M10) verbatim 2473-2531: distToWall = posZ; frameWidth = 2 * Math.tan(hFov / 2) * distToWall;
-   *  frameHeight likewise; fitsWidth/fitsHeight; frameLeft/Right/Bottom/Top around (posX, posY); rotation ignored;
-   *  wall = [0, totalWidth] x [0, maxHeight]; safeDistance = this.maxSafeDistance(bounds) (the same expressions,
-   *  hFov()/vFov() recomputed: pure, identical values); the unused legacy locals wallCenterX/Y are dropped.
-   *  @returns {{frameWidth, frameHeight, status: 'within'|'offCenter'|'exceeds', safeDistance}} */
+  /** LEGACY(B-M10) 2473-2531 on the 'flat-pivot' bounds (03 T3, 03 6.6): distToWall = posZ - bounds.wallZ;
+   *  frameWidth = 2 * Math.tan(hFov / 2) * distToWall; frameHeight likewise; fitsWidth/fitsHeight; frameLeft/Right/
+   *  Bottom/Top around (posX, posY); rotation ignored; wall = [minX, minX + totalWidth] x [0, maxHeight] at z = wallZ;
+   *  safeDistance = this.maxSafeDistance(bounds) (the same expressions, hFov()/vFov() recomputed: pure, identical values);
+   *  the unused legacy locals wallCenterX/Y are dropped. At the identity pivot minX = wallZ = +0, so every value is the
+   *  legacy one bit for bit (posZ - 0 === posZ, 0 + W === W).
+   *  @returns {{frameWidth, frameHeight, status: 'within'|'offCenter'|'exceeds', safeDistance, distToWall}}
+   *  (distToWall since 03 T3, for 03 T6's "Distance to wall plane") */
   coverage(bounds)
-  /** posX = bounds.totalWidth / 2; posY = bounds.maxHeight / 2; posZ = 5; rotX = 0; rotY = 0; rotZ = 0  (2559-2564) */
+  /** 2559-2564 on the 'flat-pivot' bounds (03 T3): posX = bounds.minX + bounds.totalWidth / 2; posY = bounds.maxHeight / 2;
+   *  posZ = bounds.wallZ + 5; rotX = 0; rotY = 0; rotZ = 0   (identity: 0 + w / 2 === w / 2, 0 + 5 === 5) */
   resetTo(bounds)
   /** LEGACY(B-L34): FILMBACK_PRESETS[this.filmback]?.name.split(' ')[0] || 'Custom' */
   presetShortName()
@@ -1160,6 +1165,9 @@ export function computeWallLayout(sections, { postTransforms = null } = {})
 export function resolvePivot(layoutL, pivot)          // PivotResolution | null
 /** 03 T2: {x: so(b).x - so(a).x, z: so(b).z - so(a).z}, so(null) = (0, 0, 0)   (the stage-origin change, layout frame) */
 export function stageShift(a, b)
+/** 03 T3: r.mode === 'bottom-left' && r.offset.x === 0 && r.offset.y === 0 && r.offset.z === 0 (the exporters write
+ *  pivot metadata only for a non-identity resolution, 03 7.1, 7.2, Q10) */
+export function isIdentityResolution(r)
 
 /** THE single entry point used by every consumer (LEDWallView via WallController, SafeDistanceView via CameraHub,
  *  exporters via ProjectIO with {frame: 'export'}, 03 T3). 03 T2 (6.3, 1.4): raw = computeWallLayout(sections) (every
@@ -1772,7 +1780,9 @@ export class SafeDistanceView {
    *  labelPos = band.labelAnchor (the legacy middle index), scale (2, 0.5, 1).
    *  ALWAYS sceneManager.addHelper(group), even when there are no edges (empty wall: [] edges, empty group, no throw).
    *  The legacy inner guard `if (!cameraPreviewEnabled) return` (2589) is unreachable (its only caller checks it) and dropped.
-   *  @param {{layout: WallLayout, cine: CineCamera, bounds: {totalWidth, maxHeight}}} args */
+   *  03 T3 (7.1): right after the group is allocated, group.userData.stageOrigin = {x, z} of
+   *  layout.pivot?.resolution?.stageOrigin ?? {x: 0, z: 0} (layout frame), read by the safe-distance OBJ.
+   *  @param {{layout: WallLayout, cine: CineCamera, bounds: {totalWidth, maxHeight, minX, wallZ}}} args */
   create({ layout, cine, bounds })
   /** Verbatim 2764-2776: if (group) { sceneManager.removeHelper(group); disposeObject3D(group, { maps: true }); group = null };
    *  lastBand = null */
@@ -1895,8 +1905,9 @@ export class OrbitController {
    *  mouseup, mouseleave, wheel (if pilot: return; preventDefault; distance clamped [2, 30] by deltaY * 0.01).
    *  Then calls updateCameraPosition() where legacy did. Registered in the init phase (before ViewportInput). */
   attach()
-  /** LEGACY(B-L2) via the injected frameBounds (framingBounds): b = frameBounds();
-   *  target.set(b.totalWidth / 2 + offset.x, b.maxHeight / 2 + offset.y, offset.z)  (3756-3764) */
+  /** LEGACY(B-L2) via the injected frameBounds (framingBounds 'flat-pivot'): b = frameBounds();
+   *  target.set(b.minX + b.totalWidth / 2 + offset.x, b.maxHeight / 2 + offset.y, b.wallZ + offset.z)  (3756-3764;
+   *  03 T3: the flat wall translated by the stage origin; identity-exact except the sign of a zero z, 03 6.6) */
   updateTargetPosition()
   /** Verbatim 3857-3863: updateTargetPosition(); spherical placement of sceneManager.camera; camera.lookAt(target). */
   updateCameraPosition()
@@ -2158,7 +2169,9 @@ export class ObjExporter {
    *  only), profile.stripNormals and profile.combinedUV; the builder reads profile.winding / normals / panelNormal. */
   constructor({ brand, colorToRgb, builder })
   /** Verbatim string assembly 4556-4717 (line order, separators and toFixed precision exactly as legacy):
-   *  header: brand.objHeader + `# Mesh Mode: ${meshMode}\n` + #faceConventionLine() + brand.objGeneratorLine; mtl starts
+   *  header: brand.objHeader + `# Mesh Mode: ${meshMode}\n` + #faceConventionLine() + the two pivot lines of 03 7.1 (03 T3:
+   *  `# Pivot: <mode> anchor <a> offset <o> (layout m); file origin = pivot` and `# Stage placement: origin at stage (0 <P.y> 0)
+   *  (Y up, metres)`, toFixed(6), only for a non-identity layout.pivot.resolution) + brand.objGeneratorLine; mtl starts
    *  with brand.mtlHeader. private #faceConventionLine() (01 CR-3, 08 P2-2c): switch (profile.winding) { case 'ccw': return
    *  '# Faces: counter-clockwise front faces; vn point out of the LED surface (toward the stage)\n'; case 'legacy-cw':
    *  return ''; default: throw unsupportedStrategy('mesh.obj.winding', ...) }.
@@ -2203,8 +2216,9 @@ export class ObjExporter {
    *  group.traverse(child => child.isMesh && child.geometry): `v` lines from position.getX/Y/Z(i).toFixed(6), `vn` lines from
    *  geometry.attributes.normal (toFixed(6); (0, 1, 0)), a blank line, faces `f a//a b//b c//c` from index.getX + the running
    *  vertex and normal offsets (both start 1). A mesh without a normal attribute writes no `vn` and `f a b c` (the Phase-1
-   *  text). Duck-typed: no THREE import. band: SafeDistanceView.lastBand, or null. */
-  writeSafeDistance(group, band = null)
+   *  text). Duck-typed: no THREE import. band: SafeDistanceView.lastBand, or null. 03 T3 (7.1): each axis k with
+   *  translate[k] !== 0 writes (v + translate[k]).toFixed(6) (the identity translation keeps the bytes). */
+  writeSafeDistance(group, band = null, { translate = {x: 0, y: 0, z: 0} } = {})
 }
 ```
 
@@ -2219,7 +2233,9 @@ export class GltfExporter {
    *  encodeBase64 defaults to chunkedBase64 (08 P2-1a, B-H3; the Phase-1 `gltfBase64` switch and its spread encoder are retired) */
   constructor({ brand, colorToRgb, builder, encodeBase64 })
   /** Verbatim 4719-4909. gltf = { asset: {version: "2.0", generator: brand.gltfGenerator}, scene: 0, scenes: [{nodes: []}], nodes: [],
-   *  meshes: [], accessors: [], bufferViews: [], buffers: [], materials: [] } (this key order).
+   *  meshes: [], accessors: [], bufferViews: [], buffers: [], materials: [] } (this key order). 03 T3 (7.2): after the mode
+   *  writers, a non-identity layout.pivot.resolution r adds scenes[0].extras = {pivot: {mode, offset_m, anchor_layout_m,
+   *  point_layout_m}} ([x, y, z] arrays; the scene keys are then nodes, extras); positions are in the layout's frame.
    *  #addMesh(name, primitives = [{attrs: {positions, normals?, uvs?}, indices, color, materialName?}]) (08 5.2, P2-2d, P2-7c;
    *  per-primitive attrs since 08 P2-7d), verbatim
    *  4737-4828 for the Phase-1 profile (one primitive, POSITION only). Its strategy reads come first, before any output:
@@ -2277,9 +2293,16 @@ export class WallController {
    *           hub: CameraHub, bus: EventBus, palette: {sectionColors: string[]}, dialogs: Dialogs}} deps
    *  dialogs: M-SEC-1 (08 P2-3b) */
   constructor({ project, view, ledTiles, orbit, hub, bus, palette, dialogs })
-  layout()                       // layoutProject(project)  (fresh, from live sections)
-  /** P1 (section 6.1): legacy createLEDWall. */
-  rebuild()
+  layout({ frame = 'stage' } = {})   // layoutProject(project, {frame})  (fresh, from live sections; 'export' for ProjectIO, 03 T3)
+  /** 03 T3 (5.6): the cached resolution of the last rebuild (step 1) or commitPivot; null before the first rebuild */
+  get pivotResolution()
+  resolvePivotNow()              // 03 T3: resolvePivot(computeWallLayout(project.wall.sections), project.wall.pivot) (pure)
+  /** 03 T3 (5.6; the pivot rebuild decision): stageShift(cache, after) non-zero ? rebuild({cause: 'pivot'})
+   *  : cache = after (a height-only change rebuilds nothing). Called by 03 T4's PivotController. */
+  commitPivot(after)
+  /** P1 (section 6.1): legacy createLEDWall. 03 T3: cause 'init' (bootstrap), 'pivot' (commitPivot), 'import'
+   *  (applyImport) or 'edit' (the default, every other call site), carried by WALL_REBUILT with stageShift. */
+  rebuild({ cause = 'edit' } = {})
   /** bus.emit(WALL_STATS_CHANGED, project.wall.totals())  (legacy updateStats call sites 1574, 4073) */
   publishStats()
   /** P-ADD (section 6.4). 08 P2-3b: if (!project.wall.canAddSection()) { dialogs.alert(`A wall can have at most
@@ -2317,8 +2340,10 @@ export class WallController {
   /** P-IMPORT tail (section 6.10): project.logos.clear(); if (logos) for ([id, entry] of logos) project.logos.set(id, entry)
    *  (08 P2-3d, B-L21 fixed; a v1 import passes logos: null); wall.replaceAll(sections); if (meshMode) { project.meshMode =
    *  meshMode; bus.emit(WALL_MESH_MODE_CHANGED, {mode: meshMode}) } bus.emit(WALL_SECTIONS_CHANGED, {reason: 'import'});
-   *  rebuild(). With panel IDs on, SectionLogosPanel re-renders the logo list on that event. */
-  applyImport({ sections, meshMode, logos = null })
+   *  rebuild({cause: 'import'}). With panel IDs on, SectionLogosPanel re-renders the logo list on that event.
+   *  03 T3 (4.4, Q14): project.wall.pivot = pivot ?? new WallPivot() right after replaceAll (the identity for every file
+   *  until project file v2; no re-expression: an import is a load). */
+  applyImport({ sections, meshMode, logos = null, pivot = null })
 }
 ```
 
@@ -2347,8 +2372,12 @@ export class CameraController {        // use cases + Selectable 'camera'
   resetPose()
   /** 4251-4264: cine.applyPreset(key); bus.emit(CAMERA_FILMBACK_CHANGED, {key}); if (cine.enabled) hub.refresh() */
   setFilmback(key)
-  /** cine.setField(field, raw) (model only). @returns the stored value */
+  /** cine.setField(field, raw, {wallZ: frameBounds().wallZ}) (model only; 03 T3: the posZ rule's wall-plane context).
+   *  @returns the stored value */
   setCameraField(field, raw)
+  /** 03 T3 (5.6, StageAnchored): cine.translateStage(dx, dz) (clamped through CineCamera.LIMITS);
+   *  bus.emit(CAMERA_POSE_CHANGED, {source: 'pivot'}); no hub refresh (the pivot commit's rebuild runs it) */
+  translateStage(dx, dz)
   /** if (cine.enabled) hub.refresh()  (the `if (cameraPreviewEnabled) updateCameraFrustum()` tail of 4266-4317) */
   commitCameraField()
   /** 4322-4327: display.showSafeDistance = on; bus.emit(CAMERA_SAFE_DISTANCE_TOGGLED, {enabled: on}); hub.syncSafeDistance() */
@@ -2382,6 +2411,9 @@ export class PropController {          // one instance per prop; Selectable prop
   setField(field, raw)
   /** 2883-2892 / 2974-2983: if (!view.exists) return; view.updateTransform(prop); bus.emit(SELECTABLE_MOVED, {id}) */
   applyTransform()
+  /** 03 T3 (5.6, StageAnchored): prop.translateStage(dx, dz) (clamped through Prop.LIMITS);
+   *  bus.emit(PROP_POSE_CHANGED, {id, source: 'pivot'}); applyTransform() (re-expressed even while hidden) */
+  translateStage(dx, dz)
   // Selectable
   isPickable()            // prop.visible && view.exists   (3446, 3455)
   pickMeshes()            // view.pickMeshes()
@@ -2423,7 +2455,7 @@ export class ProjectIO {
   /** 4942-4965: downloader.saveText(JSON.stringify(serializer.write(project, {variant: 'file'}), null, 2), brand.files.json, 'application/json') */
   exportJSON()
   /** 08 P2-6e (the owner's decision of 2026-10-17; replaces 08 Q7's two downloads, B-L7 fixed): async, one download.
-   *  #writeObjZip(): zip = new JSZip(); layout = wallController.layout(); plan = meshMode === 'section' ?
+   *  #writeObjZip(): zip = new JSZip(); layout = wallController.layout({frame: 'export'}) (03 T3); plan = meshMode === 'section' ?
    *  #planSectionTextures(sections) : null; atlasPlan = meshMode === 'combined' ? #planAtlas(sections) : null (08 P2-7f);
    *  {objContent, mtlContent} = objExporter.write({sections, meshMode, layout, textureNames: plan?.textureNames,
    *  atlasFile: atlasPlan?.file}); zip.file(brand.files.obj, objContent); zip.file(brand.files.mtl, mtlContent);
@@ -2434,7 +2466,8 @@ export class ProjectIO {
    *  section mode, the atlas in combined mode (since 08 P2-7f), nothing in panel mode. Legacy (4911-4917) downloaded the
    *  OBJ and, 100 ms later, the MTL, which a browser could block, so importers found no materials. */
   async exportOBJ()
-  /** 4919-4924: saveText(JSON.stringify(gltfExporter.write({...}), null, 2), brand.files.gltf, 'application/json') */
+  /** 4919-4924: saveText(JSON.stringify(gltfExporter.write({..., layout: wallController.layout({frame: 'export'})}),
+   *  null, 2), brand.files.gltf, 'application/json')   (the export frame since 03 T3) */
   exportGLTF()
   /** 4926-4940 (stays async), with the 08 6.3 size guard (B-L4 fixed in 08 P2-1c): atlas = computeAtlas(sections);
    *  {width, height} = panelIds.atlasSize(sections, atlas); if (!canvasFits(width, height)) { dialogs.alert(M-EXP-2); return }
@@ -2448,7 +2481,7 @@ export class ProjectIO {
    *     textureNames[i] = skipped[i] ? null : names[i]; atlasPlan = #planAtlas(sections) (08 P2-7f, every mesh mode:
    *     path = atlasTexturePath(brand.files), skipped = !canvasFits(panelIds.atlasSize(sections, atlas)));
    *  2. zip.file(brand.files.json, JSON.stringify(serializer.write(project, {variant: 'zip', textureNames}), null, 2));
-   *     layout = wallController.layout(); OBJ + MTL files (objExporter.write({..., textureNames, atlasFile: combined mode ?
+   *     layout = wallController.layout({frame: 'export'}) (03 T3); OBJ + MTL files (objExporter.write({..., textureNames, atlasFile: combined mode ?
    *     atlasPlan.file : null}), 08 P2-6c, P2-7f: only the combined MTL maps the atlas, its UVs are atlas-placed); glTF file;
    *  3. folder = zip.folder('textures'); atlas = computeAtlas(sections); for i not skipped: canvas = panelIds.sectionCanvas(
    *     sections[i], i, null, atlas.entries[i].startCol); dataUrl = canvas.toDataURL('image/png'); `data:,` (a device limit
@@ -2473,7 +2506,9 @@ export class ProjectIO {
   #planSectionTextures(sections); #addSectionTextures(folder, sections, plan); #reportLeftOut(plan, atlasPlan)
   #planAtlas(sections); #addAtlasTexture(zip, sections, atlasPlan)
   /** 2786-2827: group = safeDistance.object3D; if (!group) { dialogs.alert('Enable Safe Distance 3D visualization first'); return }
-   *  text = objExporter.writeSafeDistance(group, safeDistance.lastBand); blob = new Blob([text], {type: 'text/plain'});
+   *  sb = group.userData?.stageOrigin ?? {x: 0, z: 0}; P = wallController.pivotResolution?.point ?? {x: 0, y: 0, z: 0};
+   *  text = objExporter.writeSafeDistance(group, safeDistance.lastBand, {translate: {x: sb.x - P.x, y: -P.y, z: sb.z - P.z}})
+   *  (03 T3, 7.1: into the current export frame, a stale group included); blob = new Blob([text], {type: 'text/plain'});
    *  downloader.saveBlob(blob, brand.files.safeDistanceObj)   (B-M1 fixed in 08 P2-5a: legacy called the undefined
    *  `downloadBlob` and threw a ReferenceError; since 08 P2-5b the band is mitred, clamped and +Y, with `vn` lines and the
    *  `# Clamped:` header line: B-M15 and B-L29 fixed) */
@@ -2779,7 +2814,7 @@ export class App {
   start()
 }
 ```
-`App` is the only module that imports `theme/Theme.js` (and, since 06 T3, `theme/ThemeBridge.js`), `vendor/jszip.js` and every class. It defines `colorToRgb = (s) => new THREE.Color(s)` and `frameBounds = () => framingBounds(project)`, and the frame tick `() => { orbit.tickKeyboard(); pilot.tickKeyboard(); sceneManager.render(); preview.render(sceneManager.scene, sceneManager.helpers); }` (legacy animate 3886-3889; the helpers argument since 08 P2-10a).
+`App` is the only module that imports `theme/Theme.js` (and, since 06 T3, `theme/ThemeBridge.js`), `vendor/jszip.js` and every class. It defines `colorToRgb = (s) => new THREE.Color(s)` and `frameBounds = () => framingBounds(project, wallController.pivotResolution)` (03 T3: the cached resolution; evaluated lazily, after `wallController` exists), and the frame tick `() => { orbit.tickKeyboard(); pilot.tickKeyboard(); sceneManager.render(); preview.render(sceneManager.scene, sceneManager.helpers); }` (legacy animate 3886-3889; the helpers argument since 08 P2-10a).
 
 
 ---
@@ -2899,16 +2934,16 @@ Writers listed here are the only allowed writers (checked by `tests/static/check
 | `wall:sectionsChanged` (`WALL_SECTIONS_CHANGED`) | `{reason: 'add'\|'delete'\|'import', addedId?}` | `WallController.addSection/deleteSection` right after the model change (legacy re-render point 4105 / 4134); `applyImport` (4998) | `SectionListPanel` (snapshot, render, restore; or render + expandFirst for import), `SectionLogosPanel` (render iff panel IDs are on, for every reason; the import since 08 P2-3d, B-L21) |
 | `wall:sectionRenamed` (`WALL_SECTION_RENAMED`) | `{}` | `WallController.commitRename()` only when panel IDs are on (4020) | `SectionLogosPanel` (render) |
 | `wall:meshModeChanged` (`WALL_MESH_MODE_CHANGED`) | `{mode}` | `WallController.setMeshMode` (after the model write, 4160) and `applyImport` iff `meshMode` is truthy (4992-4995) | `WallDisplayPanel` (label `.active` by equality; idempotent after a click) |
-| `wall:rebuilt` (`WALL_REBUILT`) | `{layout: WallLayout, meshMode, view: LEDWallView}` | `WallController.rebuild()` last step (after the hub) | `NormalsDebugView` (01 F1-1: caches `{layout, view}`, re-syncs the lines while they are on); seam for Features 2, 4, 5 |
+| `wall:rebuilt` (`WALL_REBUILT`) | `{layout: WallLayout, meshMode, view: LEDWallView, cause: 'init'\|'pivot'\|'import'\|'edit', stageShift: {x, z}}` (`cause` and `stageShift` since 03 T3, additive: the stage-origin change against the resolution cached before this rebuild; `layout.pivot` holds `{resolution, frame: 'stage', translation}`) | `WallController.rebuild()` last step (after the hub) | `NormalsDebugView` (01 F1-1: caches `{layout, view}`, re-syncs the lines while they are on); seam for Features 2, 4, 5 |
 | `display:contentChanged` (`DISPLAY_CONTENT_CHANGED`) | `{toggled: 'ledSim'\|'panelIds', on: boolean, forcedOff: boolean}` | `WallController.setLedSim/setPanelIds` after the model update, before cache clear and rebuild (4170-4176, 4190-4197) | `WallDisplayPanel` (option blocks, forced-off toggle), `SectionLogosPanel` (render iff `toggled === 'panelIds' && on`) |
 | `camera:previewChanged` (`CAMERA_PREVIEW_CHANGED`) | `{enabled}` | `CameraController.setPreviewEnabled` after `cine.enabled = on` (4233) | `CameraPanel` (`#camera-preview-options` display) |
 | `camera:filmbackChanged` (`CAMERA_FILMBACK_CHANGED`) | `{key}` | `CameraController.setFilmback` after `cine.applyPreset` (4254-4262) | `CameraPanel` (`#custom-filmback`, size inputs) |
 | `camera:lensChanged` (`CAMERA_LENS_CHANGED`) | `{hFov, vFov, filmbackWidth, filmbackHeight}` (radians, mm) | `CameraRigView.rebuildFrustum` at the legacy readout point (2369-2371); twice on the first enable, as legacy | `CameraPanel` (`#camera-hfov/vfov/aspect`) |
-| `camera:coverageChanged` (`CAMERA_COVERAGE_CHANGED`) | `{frameWidth, frameHeight, status, safeDistance}` | `CameraHub.refresh` step 5 (2460) | `CameraPanel` (frame size, status text + colour, max distance) |
-| `camera:poseChanged` (`CAMERA_POSE_CHANGED`) | `{source: 'reset'\|'gizmo-translate'\|'gizmo-rotate'\|'pilot-look'\|'pilot-move', axis?}` | `CameraController.resetPose` (2567), `applyGizmoTranslate` (3342), `applyGizmoRotate` (3378/3381/3384), `PilotController.onMouseMove` (3554), `tickKeyboard` (3614): always after the model write, before the hub | `CameraPanel` (input values, per-source precision) |
+| `camera:coverageChanged` (`CAMERA_COVERAGE_CHANGED`) | `{frameWidth, frameHeight, status, safeDistance, distToWall}` (`distToWall` since 03 T3: posZ - wallZ) | `CameraHub.refresh` step 5 (2460) | `CameraPanel` (frame size, status text + colour, max distance) |
+| `camera:poseChanged` (`CAMERA_POSE_CHANGED`) | `{source: 'reset'\|'gizmo-translate'\|'gizmo-rotate'\|'pilot-look'\|'pilot-move'\|'pivot', axis?}` (`'pivot'` since 03 T3; its input mirror lands with 03 T6) | `CameraController.resetPose` (2567), `applyGizmoTranslate` (3342), `applyGizmoRotate` (3378/3381/3384), `PilotController.onMouseMove` (3554), `tickKeyboard` (3614), `CameraController.translateStage` (03 T3): always after the model write, before the hub | `CameraPanel` (input values, per-source precision) |
 | `camera:safeDistanceToggled` (`CAMERA_SAFE_DISTANCE_TOGGLED`) | `{enabled}` | `CameraController.setSafeDistanceEnabled` (4325) | `CameraPanel` (`#export-safe-distance` display) |
 | `prop:visibilityChanged` (`PROP_VISIBILITY_CHANGED`) | `{id, visible}` | `PropController.setVisible` after the model write (4335 / 4366) | `PropControls` with that prefix (`#<id>-options`) |
-| `prop:poseChanged` (`PROP_POSE_CHANGED`) | `{id, source: 'gizmo-translate'\|'gizmo-rotate'}` | `PropController.applyGizmoTranslate/Rotate` (3351, 3358, 3391, 3397) | `PropControls` with that prefix |
+| `prop:poseChanged` (`PROP_POSE_CHANGED`) | `{id, source: 'gizmo-translate'\|'gizmo-rotate'\|'pivot'}` (`'pivot'` since 03 T3; its mirror lands with 03 T6) | `PropController.applyGizmoTranslate/Rotate` (3351, 3358, 3391, 3397), `PropController.translateStage` (03 T3) | `PropControls` with that prefix |
 | `selection:changed` (`SELECTION_CHANGED`) | `{id, label}` (`null`s on deselect) | `SelectionManager.select` (before `gizmo.attach`), `deselect` (before `gizmo.detach`) (3141, 3148) | `ViewportToolbar` (badge) |
 | `selectable:moved` (`SELECTABLE_MOVED`) | `{id}` | `CameraHub.refresh` last step (2466-2468), `PropController.applyTransform` (2889, 2980) | `TransformGizmo` (`updatePosition()` iff its target has that id) |
 | `gizmo:modeChanged` (`GIZMO_MODE_CHANGED`) | `{mode}` | `TransformGizmo.setMode/clearMode` before `rebuild` (3176-3177, 4428-4429) | `ViewportToolbar` |
@@ -2947,13 +2982,14 @@ Boundaries of these proofs (recorded at WP10 integration from the WP4, WP6 and W
 ### 6.1 P1: wall rebuild, `WallController.rebuild()` (legacy `createLEDWall`, 1457-1577)
 
 ```
-1. layout = layoutProject(project)                                  // 1479-1549 (PR1)
+1. prev = #pivotResolution; layout = layoutProject(project)         // 1479-1549 (PR1); the stage frame (03 T3, 5.6)
+   #pivotResolution = layout.pivot.resolution; shift = stageShift(prev, #pivotResolution)
 2. view.rebuild({ layout, meshMode: project.meshMode, display })    // 1458-1477 dispose + groups, 1551-1557 dispatch,
                                                                     // 1559-1569 frames, 1571-1572 scene.add
 3. this.publishStats()  -> emit WALL_STATS_CHANGED (HeaderStats)    // 1574
 4. orbit.updateCameraPosition()                                     // 1575  flat target (B-L2, via framingBounds); moves the camera even in pilot
 5. if (project.camera.enabled) hub.refresh()                        // 1576  P2; re-drives the pilot view after step 4
-6. emit WALL_REBUILT { layout, meshMode, view }                     // new seam, no Phase-1 subscribers
+6. emit WALL_REBUILT { layout, meshMode, view, cause, stageShift: shift }   // new seam; cause and stageShift since 03 T3
 ```
 Exceptions in steps 1-5 propagate unchanged (for example, an import of garbage is caught by the import `try`, see 6.10).
 
@@ -2963,7 +2999,7 @@ This table is the documentation of `WallController`'s rebuild policy and is repe
 
 | # | Legacy line | Trigger | UI entry | Controller call(s) | Rebuild | Other steps, in order |
 |---|---|---|---|---|---|---|
-| 1 | 1451 | bootstrap | `App.start` | `rebuild()` | always | none (hub skipped: preview off) |
+| 1 | 1451 | bootstrap | `App.start` | `rebuild({cause: 'init'})` (03 T3) | always | none (hub skipped: preview off) |
 | 2 | 4000 | swatch click | `SectionListPanel` | `setSectionColor` | always | swatch classes, dot, custom input (PR4) |
 | 3 | 4010 | custom colour `input` | `SectionListPanel` | `setSectionColor` | always | clear swatches, dot (PR4) |
 | 4 | 4021 | name `input` | `SectionListPanel` | `renameSection`, `commitRename` | iff panel IDs | title patch; `WALL_SECTION_RENAMED` (logo list) iff panel IDs |
@@ -2986,7 +3022,7 @@ This table is the documentation of `WallController`'s rebuild policy and is repe
 | 21 | 2285 | logo clear | `SectionLogosPanel` | `rebuildIfPanelIds` | iff panel IDs | entry deleted, logo list render |
 | 22 | 2292 | logo position change | `SectionLogosPanel` | `rebuildIfPanelIds` | iff the entry exists and panel IDs | - |
 | 23 | 2303 | logo scale change | `SectionLogosPanel` | `rebuildIfPanelIds` | iff the entry exists and panel IDs | write-back always |
-| 24 | 5002 | import `FileReader.onload` | `ExportPanel` -> `ProjectIO` | `applyImport` | iff the validated read is ok (08 P2-3b), inside the `try` | labels iff `mesh_mode`, `WALL_SECTIONS_CHANGED{import}`; then M-IMP-5 iff corrected |
+| 24 | 5002 | import `FileReader.onload` | `ExportPanel` -> `ProjectIO` | `applyImport` | iff the validated read is ok (08 P2-3b), inside the `try`, with `cause: 'import'` (03 T3) | the pivot reset to the identity (03 4.4; no re-expression), labels iff `mesh_mode`, `WALL_SECTIONS_CHANGED{import}`; then M-IMP-5 iff corrected |
 | F6-1 | - | web fonts settled (06 5.6, the font gate) | `App.start` (`runFontGate`, fire-and-forget after the reset view) | `rebuildIfPanelIds` | iff a panel-ID canvas was drawn with a pending (font, text) **and** panel IDs are on (at most once; never in the harness) | none |
 
 No other path calls `rebuild()` (row F6-1 is the one call site added since Phase 1 so far). Never de-duplicate or debounce (row 8 rebuilds twice per click; rows 3, 16, 19 rebuild on every `input` event).
@@ -3144,7 +3180,7 @@ e.target.value = ''                                // synchronous reset (5009)
 
 ### 6.13 Exports
 
-All exports read the live project and a fresh `layoutProject(project)`; none reads the scene except the safe-distance OBJ (its group). See `ProjectIO` (section 3.10) for the exact sequences of `exportJSON`, `exportOBJ` (async since 08 P2-6e: one ZIP, `brand.files.objZip`, with the OBJ, the MTL and the textures its `map_Kd` lines reference: the section textures in section mode, the combined atlas in combined mode since 08 P2-7f; legacy: the OBJ, then the MTL after 100 ms), `exportGLTF`, `exportPanelIds` (async, `toBlob`), `exportZIP` (async; JSON -> OBJ -> MTL -> glTF -> textures -> the combined atlas (08 P2-7f, every mode; only the combined MTL maps it) -> `generateAsync` -> download) and `exportSafeDistanceOBJ` (alert or download; 08 P2-5a). Export Panel IDs and Export All (ZIP) check every canvas against `CANVAS_HARD_LIMITS` before drawing it (08 P2-1c): an oversize atlas alerts M-EXP-2 and a null `toBlob` result M-EXP-3, with no download; the ZIP leaves oversize (or `data:,`) section textures and atlas out, writes `texture_file: null` and no `map_Kd` for them, and alerts M-EXP-4 after the download. Every export runs inside `ProjectIO.#runExport` (08 P2-1a): an export that throws or rejects shows the M-EXP-1 alert `<label> failed: <message>. No file was downloaded.` and warns in the console instead of raising an uncaught exception or an unhandled rejection (legacy's empty-wall combined OBJ/glTF TypeError of `import_edge`, which the validator removed in 08 P2-3b and 08 P2-7d made impossible). Console and dialog behaviour must match the baseline of the parent commit.
+All exports read the live project and a fresh `layoutProject(project, {frame: 'export'})` (since 03 T3: the file origin is the pivot; at the default pivot the walk itself), and a non-identity pivot adds the OBJ header lines and the glTF `scenes[0].extras.pivot` (03 7); none reads the scene except the safe-distance OBJ (its group, written in the current export frame through its `userData.stageOrigin` stamp). See `ProjectIO` (section 3.10) for the exact sequences of `exportJSON`, `exportOBJ` (async since 08 P2-6e: one ZIP, `brand.files.objZip`, with the OBJ, the MTL and the textures its `map_Kd` lines reference: the section textures in section mode, the combined atlas in combined mode since 08 P2-7f; legacy: the OBJ, then the MTL after 100 ms), `exportGLTF`, `exportPanelIds` (async, `toBlob`), `exportZIP` (async; JSON -> OBJ -> MTL -> glTF -> textures -> the combined atlas (08 P2-7f, every mode; only the combined MTL maps it) -> `generateAsync` -> download) and `exportSafeDistanceOBJ` (alert or download; 08 P2-5a). Export Panel IDs and Export All (ZIP) check every canvas against `CANVAS_HARD_LIMITS` before drawing it (08 P2-1c): an oversize atlas alerts M-EXP-2 and a null `toBlob` result M-EXP-3, with no download; the ZIP leaves oversize (or `data:,`) section textures and atlas out, writes `texture_file: null` and no `map_Kd` for them, and alerts M-EXP-4 after the download. Every export runs inside `ProjectIO.#runExport` (08 P2-1a): an export that throws or rejects shows the M-EXP-1 alert `<label> failed: <message>. No file was downloaded.` and warns in the console instead of raising an uncaught exception or an unhandled rejection (legacy's empty-wall combined OBJ/glTF TypeError of `import_edge`, which the validator removed in 08 P2-3b and 08 P2-7d made impossible). Console and dialog behaviour must match the baseline of the parent commit.
 
 ---
 
@@ -3158,7 +3194,7 @@ theme = buildTheme(Theme, (name) => win.getComputedStyle(doc.documentElement).ge
                    { warn: (m) => win.console.warn(m) });   // 06 T3 (was theme = Theme); bindFonts: BIND_FONTS_DEFAULT (true since 06 T5)
 brand = theme.brand; bus = new EventBus(); dialogs = createDialogs(win)
 project = Project.createDefault({ defaultSectionColor: theme.palette.defaultSectionColor })   // 06 T7
-frameBounds = () => framingBounds(project); colorToRgb = (s) => new THREE.Color(s)
+frameBounds = () => framingBounds(project, wallController.pivotResolution); colorToRgb = (s) => new THREE.Color(s)   // 03 T3
 interaction = new InteractionState(); keyboard = new KeyboardState({ doc, win })
 sceneManager = new SceneManager({ canvas: byId(doc, 'three-canvas'), win, display: project.display, theme })
 pointerRay = new PointerRay({ sceneManager })
@@ -3205,7 +3241,7 @@ tick = () => { orbit.tickKeyboard(); pilot.tickKeyboard(); sceneManager.render()
 
 // ---- legacy init() (1426-1455) ----
 sceneManager.init()                       // 1427-1449: scene, camera, renderer, lights, grid, axes
-wallController.rebuild()                  // 1451: P1 (stats via HeaderStats, orbit target; hub skipped)
+wallController.rebuild({ cause: 'init' })   // 1451: P1 (stats via HeaderStats, orbit target; hub skipped); cause since 03 T3
 orbit.attach()                            // 1452 setupControls: canvas mousedown, mousemove, mouseup, mouseleave, wheel
 keyboard.attach()                         // 1452 setupControls: doc keydown, doc keyup, win blur
 sceneManager.attachResize()               // 1453
@@ -3396,7 +3432,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 |---|---|---|
 | **1. Normals flipped by default + normals debug view** | One winding function (`quadIndices`) and per-consumer profiles in `Strategies.mesh` used by the viewport, OBJ and glTF; `side` in the viewport profile; `LEDWallView.meshes()`; `WALL_REBUILT`; `SceneManager.addHelper` + `LAYERS`; `ResourceTracker`; the toolbar button pattern. | The flips are Phase-2 commits 08 P2-2a–d, one consumer per commit (`docs/improvements/08-bugfix-roadmap.md`): `'ccw'` winding and `'averaged'` normals in `WallMeshBuilder`, OBJ per-vertex `vn` and the glTF `NORMAL` attribute. Feature 1 adds the debug view and options only: `render/NormalsDebugView.js` (LineSegments from attributes x `matrixWorld`, subscribes to `WALL_REBUILT`, registered as a helper, disposed with a tracker); a `#toggle-normals` view button and a `.view-btn.active` rule (B-L24). Landed so far (docs/improvements/01-normals.md 8.4): F1-0a, F1-0b and F1-0c (tooling), F1-1 (the debug core without UI: `NormalLines`, `NormalsDebugView`, `DebugMaterials`, `MaterialOverride`, `LEDWallView.setDebugShading` / `withContentMaterials`, `DebugViewSettings`, `DebugViewController`, `core/renderOrder.js`), F1-2 (the debug UI: `#toggle-normals`, `#debug-view-btn` and its popover, the legend in `#viewport-top-stack`, the announcer, N / Shift+N, `DEBUG_VIEW_CHANGED`, `css/features/debug-view.css` with `.view-btn.active`, the help-badge token ` N=normals`), F1-3 (the `normals_debug` harness scenario), F1-2b and F1-2c (review follow-ups of F1-2: legend legibility, the `DebugViewControls` import-boundary test). |
 | **2. Section selection, property editing, per-section offsets** | `WallSection` with stable ids; `SectionLayout.postTransform` hook (null, never fed back into the cursor); mesh tags `userData.{kind, mode, sectionId, sectionIndex, col, row}` and combined `sectionRanges`; `LEDWallView.sectionNodes()`; the `Selectable` registry and generic gizmo; field rule tables; `WallController` as the single writer of section state; mirror events to cards; `ProjectSerializer.read` version-dispatch point. | `WallSection.offset {position, rotation}` + rules; `layoutProject` builds per-section `postTransforms`; the builder applies them to positions/normals; `LEDWallView` adds per-section groups (section/panel) or bakes (combined) and a transform-only update path; `WallSectionSelectable` (pick by `userData` / `faceIndex` -> `sectionRanges`); select-on-click (B-M14 fix); a `section:changed` event emitted by `WallController` so cards, an inspector and the UV viewer update reactively; safe distance per floor run: `floorRuns()`, each run through 08 P2-5b's `buildSafeDistanceBand` (02 6.12, CR-08-a); schema v2. Exporters follow automatically through the layout. |
-| **3. Configurable pivot + offset** | `WallPivot`/`PivotMode` in `Wall` (identity); `WallLayout.firstEdge/lastEdge/bounds()/pivotPoint(mode)` including "middle of entire wall" = midpoint of the first section's first edge and the last section's last edge on the floor; the single `framingBounds` switch for the four flat-bounds consumers; the single `layoutProject()` entry. | A baked translation in `layoutProject`: stage frame `−(P.x, 0, P.z)`, export frame `−P`, P = anchor + offset (1.4). The raw walk is translated first, and spec 02's `applySectionOffsets(out)` builds its section matrices from the translated layout (07 C32). **No wall root transform, ever:** the identity `wallGroup` transform is a unit-tested invariant (03 §5.1, §5.9 #2). `ui/PivotPanel`; a pivot Selectable + marker view; switch `framingBounds` to pivot/bounds (fixes B-L2); optional re-expression of camera/prop poses; schema v2. Landed so far (docs/improvements/03-pivot.md 10; session-only, the owner's decision of 2026-10-17): T13 (the sign-off of 5.10.1), T1 (the domain: the `WallPivot` API, the pose `LIMITS` and `translateStage`, the `posZ` context, `SceneTheme.pivot`), T2 (the geometry: `baseY`, `generativeBounds`, `translated`, `resolvePivot`, `stageShift`, the frames of `layoutProject`, `framingBounds` `'flat-pivot'`). |
+| **3. Configurable pivot + offset** | `WallPivot`/`PivotMode` in `Wall` (identity); `WallLayout.firstEdge/lastEdge/bounds()/pivotPoint(mode)` including "middle of entire wall" = midpoint of the first section's first edge and the last section's last edge on the floor; the single `framingBounds` switch for the four flat-bounds consumers; the single `layoutProject()` entry. | A baked translation in `layoutProject`: stage frame `−(P.x, 0, P.z)`, export frame `−P`, P = anchor + offset (1.4). The raw walk is translated first, and spec 02's `applySectionOffsets(out)` builds its section matrices from the translated layout (07 C32). **No wall root transform, ever:** the identity `wallGroup` transform is a unit-tested invariant (03 §5.1, §5.9 #2). `ui/PivotPanel`; a pivot Selectable + marker view; switch `framingBounds` to pivot/bounds (fixes B-L2); optional re-expression of camera/prop poses; schema v2. Landed so far (docs/improvements/03-pivot.md 10; session-only, the owner's decision of 2026-10-17): T13 (the sign-off of 5.10.1), T1 (the domain: the `WallPivot` API, the pose `LIMITS` and `translateStage`, the `posZ` context, `SceneTheme.pivot`), T2 (the geometry: `baseY`, `generativeBounds`, `translated`, `resolvePivot`, `stageShift`, the frames of `layoutProject`, `framingBounds` `'flat-pivot'`), T3 (the consumers: the orbit target, Reset and coverage on the `'flat-pivot'` bounds, the `posZ` context, `WallController`'s pivot cache, `rebuild({cause})`, `commitPivot` and the import reset, the export frame with the OBJ header lines and glTF `extras`, the safe-distance OBJ `translate`, both `translateStage` participants). |
 | **4. Clean 0..1 UVs + UV viewer/editor** | UV strategies in one builder function per consumer; `TextureAtlas` as the single source of offsets, widths and start columns (yields per-section `uvRects`); `PanelIdRenderer.sectionCanvas()` for the viewer background; mesh tags; the selection registry; `PreviewWindow`'s resize handle as the floating-panel pattern. | `'per-section'` / `'atlas-pixel-accurate'` strategies (fix B-M5/B-M6) and a baked per-section `uvTransform`; glTF TEXCOORD_0. The `'atlas-pixel-accurate'` strategies (the viewport one landed in 08 P2-7a, the OBJ one in 08 P2-7b, the new `mesh.gltf.combinedUV` leaf with glTF `TEXCOORD_0` in 08 P2-7c) and the per-section combined materials and glTF primitives (08 P2-7d), the combined vertex ranges and `sectionRangeForFace` (08 P2-7a) are Phase 2's; Feature 4 adds `'plan'`; the viewport panel-ID path of panel mode (one section canvas per section, `WallMeshBuilder.panelUvs`, `LEDMaterialFactory.sectionShared`, `geometry/TextureBudget.js`) is 08 P2-12d, and 04 UV-9 adds the panel-mode export UVs and the `uv.panel_uvs` option; `ui/UVViewer.js` (2D canvas; subscribes to `SELECTION_CHANGED` and `WALL_REBUILT`); `ui/FloatingPanel.js` extracted from `PreviewWindow`. |
 | **5. HDRI projection (+ reflective car)** | `DisplaySettings.content` enum (`'color' \| 'ledSim' \| 'panelIds'`, ready for `'hdri'`); `LEDMaterialFactory` as the only wall-material constructor; `ResourceTracker` for HDR/PMREM disposal; `SceneManager` owns the main renderer and the helper registry; the second renderer is encapsulated in `PreviewWindow`; `PropView` base with `buildMesh()`; `CineCamera` lens math for the default projection point. | `ContentMode.HDRI` + `render/HdriProjectionMaterial.js` (wall and dome); `ui/HdriPanel.js` + the projection-point Selectable (`'hdri-point'`, kind `'projector'`, 07 C36); the second renderer is replaced by spec 07's `PreviewPass` (scissor rendering, R1/R2; `SceneManager` keeps only `setEnvironment` and `setPunctualLightScale`), which excludes `LAYERS.HELPERS` (B-M9/B-M11, first fixed by 08 P2-10 or 07 R1/R2, 07 C31); the backdrop dome on `LAYERS.ENVIRONMENT`; `GltfCarPropView extends CarPropView`; colour management in `render/ColorManagement.js` as per-material patches (Option L on r128; Option G after 07 U3b); loaders from 07's `vendor/three-addons.js` factories (spec 05 §5.11 #17). |
 | **6. Morph branding** | `css/02-tokens.css` holds every `:root` token; `Theme.js` holds every scene/canvas colour, font, palette and export string, and every consumer receives it by injection from `App`; header and watermark markup in one place in `index.html`. | Role-based tokens; `theme/ThemeBridge.js` reading CSS variables into an object of `Theme`'s shape (one line in `App`); new `Brand` strings and filenames (+ a JSON `generator` field in v2); Morph logo SVG, favicon, valid author meta; inline styles -> classes; card swatches from `Palette`; re-baseline `ui_visual` and exports separately. Gizmo axis colours stay XYZ = RGB. Landed so far (docs/improvements/06-morph-branding.md 8.4): T1 (the static inline styles of `index.html` and the two panel templates became the classes of `css/99-utilities.css`, linked last; dead CSS removed; `css-slices.mjs --report-only`; static rule 12; `compare.mjs --ignore-keys`), T2 (`theme/ThemeBridge.js`, pure and not wired, with U1-U3), T3 (layer-4 tokens with the legacy values and spec 01's four debug tokens, ThemeBridge wired in `App`, `.status-*` on `--status-*`, U4/U10/U11), T4a (the ungated Morph chrome: token layers 1-3 with the brand values and every stylesheet on role tokens, static rules 13-15; the text-only `<h1>` header in the three-column grid; the third-party logo deleted; the head metas and Montserrat; the component states of 06 3.5, including the opaque selection badge at `bottom: 64px`, B-L24; U5 in `contrast.test.mjs`, U6), T4b (the owner-approved brand artwork: the six app files in `assets/brand/` with `NOTICE.md`, the favicons, the apple-touch icon and `og:image`, the wordmark lockup with the monogram at <= 520 px, the viewport watermark hidden in pilot mode, static rule 16), T4c (British English in the visible labels and tooltips: "Colour", "Centre", and "Panel Angle (°)" for the one label that wrapped), T5 (the Morph scene and canvas: layer-4 brand values with `--scene-frame-on-light` and `--scene-overlay-halo`, adaptive panel frames, the outlined opaque camera body, the two-tone dashed frustum, JetBrains Mono 700 and Montserrat on the canvases with `BIND_FONTS_DEFAULT` true, the font gate of row F6-1), T6a (the Morph export headers and generator strings, `Brand.jsonGenerator`, `shortName`, `company`, `homepage`; the oracle tests keep the Phase-1 strings through `LEGACY_BRAND`), T6b (every download name derived from `Brand.filePrefix = 'morph-led-wall'`, `Brand.files.hdriPixelMap`, `compare.mjs --rename`, static rule 17), T7 (the 8-colour Morph palette with Studio Grey `#d9d9d6` as the injected default, the card swatches from the palette, the v1 colour fill from `Palette.legacySectionColors`, U5 scene rows, U7, U8), T9 (the README with the Morph lockups via `<picture>`, the product name, the brand badge colours and the Brand and licence section; the two README lockups complete the 8 files of 06 5.8). |
@@ -3815,3 +3851,12 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 2.2, 3.6 `WallLayout`: `SectionLayout.baseY` and `translated`; `WallLayout.pivot`, `generativeBounds()` (the Phase-1 `bounds()` box with `baseY`; `bounds()` delegates to it until spec 02), `pivotPoint` with the floor modes at `sections[0].baseY` and `mesh-center` on `generativeBounds()` (the y policy settled: half the tallest section, B5), `translated(dx, dy, dz)` on the raw walk only; `resolvePivot`, `stageShift`; `layoutProject(project, {frame = 'stage'})` (identity: the walk itself); `framingBounds(project, resolution)` with `'flat-pivot'`. 3.6 `WallMeshBuilder`: `sectionGrid`'s `y = baseY === 0 ? row * panelH : baseY + row * panelH`.
 - 3.3, 8.1: `Strategies.framingBounds = 'flat-pivot'`; 8.3 keeps the `WallLayout.js#framingBounds` row (B-L2, B-M10), whose tag now says "flat bounds, translated by the stage origin".
 - 2.3: `pivot.test.mjs` (new: 03 8.1 tests 1-6 and 8, test 9 skipped), `geometry.test.mjs` (`'flat-pivot'` at the identity, and `layoutProject` at the identity pivot is the walk itself in every frame over the fuzzed walls, 03 test 3), `core.test.mjs`.
+
+**03 T3, the pivot consumers** (Feature 3 step A, third commit; 03 4.1, 5.2, 5.5, 5.6, 6.5, 6.6, 7, 10; manifest `tests/regression/expected/F3-T3.json`, an invariance commit: at the default pivot the stage and export frames are the layout frame, `minX` and `wallZ` are +0 and no pivot metadata is written, so no output changes):
+- 3.5 `CineCamera`: `coverage` reads the `'flat-pivot'` rectangle (`distToWall = posZ - wallZ`, edges against `minX`) and returns `distToWall`; `resetTo` puts the camera at `minX + totalWidth / 2`, `wallZ + 5` (moved here from 03 T1, recorded in 03 10).
+- 3.6: `isIdentityResolution`. 3.7 `SafeDistanceView.create` stamps `group.userData.stageOrigin`. 3.8 `OrbitController.updateTargetPosition` on the `'flat-pivot'` bounds.
+- 3.9 `ObjExporter`: the two pivot header lines after the orientation line and before the generator line, only for a non-identity resolution; `writeSafeDistance(group, band, {translate})` (the `band` argument of 08 P2-5b stays second). `GltfExporter`: `scenes[0].extras.pivot` after the nodes, only for a non-identity resolution.
+- 3.10 `WallController`: `layout({frame})`, `pivotResolution`, `resolvePivotNow`, `commitPivot`, `rebuild({cause})` with `cause` and `stageShift` on `WALL_REBUILT`, `applyImport` assigns the file's pivot or the identity before its `'import'` rebuild (03 4.4; the `WALL_PIVOT_CHANGED{import}` emission lands with the event key, 03 10). `CameraController.setCameraField` passes `{wallZ: frameBounds().wallZ}`; `CameraController.translateStage` and `PropController.translateStage` (the `StageAnchored` participants of 03 T4). `CameraHub`'s coverage payload carries `distToWall`. `ProjectIO`: `exportOBJ`, `exportGLTF` and `exportZIP` read `layout({frame: 'export'})`; `exportSafeDistanceOBJ` passes `translate = (sb.x - P.x, -P.y, sb.z - P.z)`.
+- 3.12, 7: `frameBounds = () => framingBounds(project, wallController.pivotResolution)`; the bootstrap rebuild is `rebuild({cause: 'init'})`. 5.2: the `WALL_REBUILT`, `CAMERA_COVERAGE_CHANGED`, `CAMERA_POSE_CHANGED` and `PROP_POSE_CHANGED` payload rows. 6.1, 6.2 (rows 1 and 24), 6.13. 9: the F3 row.
+- 10 (static rule 10): `pivot` joins the domain fields, and `WallController` (receiver `wall`) is its one allowed writer outside `js/domain/` (03 8.2, the field half; the rest of 8.2 lands with 03 T6).
+- 2.3: `pivot.test.mjs` (test 6's consumer part: the orbit target, Reset, every coverage output and the `posZ` rule `Object.is`-equal to the Phase-1 `'flat'` expressions at the identity over seeded walls, poses and orbit offsets; the off-identity values), `domain.test.mjs`, `camera-hub.test.mjs`, `wall-controller.test.mjs` (the cache, the cause and shift, `commitPivot`, the import reset), `io.test.mjs` (identity bytes, the 6.8 export table, the header, the glTF float32 y values and `extras`, the safe-distance `translate`, the export frame of `ProjectIO`), `led-wall-view.test.mjs` (no wall root transform in any mode and pivot, 07 C32).

@@ -70,6 +70,8 @@ export class SafeDistanceView {
    * CameraHub.syncSafeDistance (permitted reordering PR7).
    * Ports: index.html@cd3fd3f lines 2586-2762 (2591-2612 and 2614-2647 replaced by the arguments, 2649-2708 by
    *   buildSafeDistanceBand).
+   * The group records the stage origin of the layout it was built from in `userData.stageOrigin` ({x, z}, layout
+   * frame; (0, 0) for a layout without a pivot block or with a null resolution), read by the safe-distance OBJ (03 7.1).
    * Side effects: removes and disposes the previous group; allocates the new group, then (when the band has vertices)
    *   the floor geometry, material and mesh, the line material, geometry and Line, the label canvas (DOM),
    *   CanvasTexture, SpriteMaterial and Sprite; adds the group to the scene as a helper; keeps the band as lastBand.
@@ -83,6 +85,10 @@ export class SafeDistanceView {
 
     const group = new THREE.Group();
     this.#group = group;
+    // 03 T3 (7.1): the stage origin (layout frame) the band was built in, so the safe-distance OBJ can re-express a
+    // group built under an earlier pivot (B-M8's stale group) into the current export frame.
+    const so = layout.pivot?.resolution?.stageOrigin ?? { x: 0, z: 0 };
+    group.userData.stageOrigin = { x: so.x, z: so.z };
 
     // Safe distance = maximum distance where the frame still fits within the wall (MIN over both dimensions)
     const overallSafeDist = cine.maxSafeDistance(bounds);

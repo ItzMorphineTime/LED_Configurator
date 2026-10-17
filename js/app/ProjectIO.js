@@ -217,7 +217,7 @@ export class ProjectIO {
     const brand = this.#brand;
     const project = this.#project;
     const sections = project.wall.sections;
-    const layout = this.#wallController.layout();
+    const layout = this.#wallController.layout({ frame: 'export' });   // 03 T3: the file origin is the pivot
     const objArgs = { sections, meshMode: project.meshMode, layout };
 
     // The archive ships exactly what the MTL references (08 P2-6e): one texture per section in section mode, the combined
@@ -247,7 +247,7 @@ export class ProjectIO {
    */
   exportGLTF() {
     this.#runExport('Export glTF', () => {
-      const layout = this.#wallController.layout();
+      const layout = this.#wallController.layout({ frame: 'export' });   // 03 T3: the file origin is the pivot
       const gltfContent = this.#gltfExporter.write({
         sections: this.#project.wall.sections, meshMode: this.#project.meshMode, layout,
       });
@@ -323,7 +323,7 @@ export class ProjectIO {
     // Step 2: JSON (texture_file null when skipped), OBJ + MTL (no map_Kd when skipped), glTF.
     zip.file(brand.files.json, jsonText());
 
-    const layout = this.#wallController.layout();
+    const layout = this.#wallController.layout({ frame: 'export' });   // 03 T3: the file origin is the pivot
     const objArgs = { sections, meshMode: project.meshMode, layout };
     // The MTL references the atlas only while the UVs are atlas-placed: combined mode (08 6.3 step 1, P2-7f).
     const writeObj = () => this.#objExporter.write({
@@ -455,7 +455,10 @@ export class ProjectIO {
    * Export Safe Distance OBJ: alerts when there is no safe-distance group; otherwise builds the text and Blob
    * and downloads it (B-M1 fixed in 08 P2-5a: legacy called a download helper that was never defined, so every
    * click threw a ReferenceError). Since 08 P2-5b the band is mitred, clamped and faces +Y (B-M15, B-L29), the OBJ
-   * carries `vn` lines, and the band's clamp count (safeDistance.lastBand) adds the `# Clamped:` header line.
+   * carries `vn` lines, and the band's clamp count (safeDistance.lastBand) adds the `# Clamped:` header line. Since 03 T3
+   * (7.1) the vertices are written in the current export frame: translate = (sb.x - P.x, -P.y, sb.z - P.z), with sb the
+   * stage origin the group was built in (SafeDistanceView's userData.stageOrigin, so a stale group, B-M8, is re-expressed)
+   * and P the cached pivot point (0 at the identity pivot, whose bytes are unchanged).
    * Ports: index.html@cd3fd3f lines 2786-2827 (the download call of 2826 is the Downloader's).
    * Side effects: an alert, or one download (brand.files.safeDistanceObj, text/plain), or the M-EXP-1 alert.
    */
@@ -467,7 +470,11 @@ export class ProjectIO {
         return;
       }
 
-      const objContent = this.#objExporter.writeSafeDistance(safeDistanceMesh, this.#safeDistance.lastBand);
+      // 03 T3 (7.1): from the stage frame the group was built in (its stamp) into the current export frame
+      const sb = safeDistanceMesh.userData?.stageOrigin ?? { x: 0, z: 0 };
+      const P = this.#wallController.pivotResolution?.point ?? { x: 0, y: 0, z: 0 };
+      const translate = { x: sb.x - P.x, y: -P.y, z: sb.z - P.z };
+      const objContent = this.#objExporter.writeSafeDistance(safeDistanceMesh, this.#safeDistance.lastBand, { translate });
 
       const blob = new Blob([objContent], { type: 'text/plain' });
       this.#downloader.saveBlob(blob, this.#brand.files.safeDistanceObj);

@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 import { Events, EventBus } from '../../js/core/EventBus.js';
 import { Project } from '../../js/domain/Project.js';
+import { WallPivot } from '../../js/domain/Wall.js';
 import { WallLayout, framingBounds } from '../../js/geometry/WallLayout.js';
 import { CameraHub, CameraController } from '../../js/app/CameraController.js';
 import { PropController } from '../../js/app/PropController.js';
@@ -137,7 +138,8 @@ describe('CameraHub.refresh (P2, ARCHITECTURE.md 6.3)', () => {
     s.hub.refresh();
     assert.deepEqual(s.entry('emit CAMERA_COVERAGE_CHANGED').payload, s.cine.coverage(framingBounds(s.project)));
     assert.deepEqual(Object.keys(s.entry('emit CAMERA_COVERAGE_CHANGED').payload),
-      ['frameWidth', 'frameHeight', 'status', 'safeDistance']);
+      ['frameWidth', 'frameHeight', 'status', 'safeDistance', 'distToWall']);
+    assert.equal(s.entry('emit CAMERA_COVERAGE_CHANGED').payload.distToWall, 7.25, '03 T3: posZ - wallZ, wallZ +0 here');
     assert.deepEqual(s.entry('emit SELECTABLE_MOVED').payload, { id: 'camera' });
   });
 
@@ -332,11 +334,38 @@ describe('CameraController lens/pose inputs and safe-distance toggle', () => {
     assert.equal(s.controller.setCameraField('posY', '0'), 1.5, 'B-L9 via orDefault');
     assert.equal(s.controller.setCameraField('posX', 'abc'), 0);
     s.controller.commitCameraField();
-    assert.deepEqual(s.calls(), []);
+    assert.deepEqual(s.calls(), ['frameBounds', 'frameBounds', 'frameBounds'], 'only the context read (03 T3), no refresh');
 
+    s.log.length = 0;
     s.cine.enabled = true;
     s.controller.commitCameraField();
     assert.deepEqual(s.calls(), ['hub.refresh']);
+  });
+
+  test('setCameraField passes the wall-plane context {wallZ: frameBounds().wallZ} (03 4.1, T3)', () => {
+    const s = setup({ enabled: false, spyHub: true });
+    assert.equal(s.controller.setCameraField('posZ', '0'), 5, 'identity pivot: wallZ +0, the legacy rule (B-L9)');
+    assert.deepEqual(s.calls(), ['frameBounds']);
+    const pivot = new WallPivot();
+    pivot.setMode('wall-center');
+    pivot.setOffset({ x: 0, y: 0, z: 2 });
+    s.project.wall.pivot = pivot;
+    assert.equal(framingBounds(s.project).wallZ, -2);
+    assert.ok(Object.is(s.controller.setCameraField('posZ', '0'), 0), 'a stage origin off the wall plane: 0 is valid');
+    assert.equal(s.controller.setCameraField('posZ', '-5'), -1.9);
+    assert.equal(s.controller.setCameraField('posY', '0'), 1.5, 'the other rules ignore the context');
+  });
+
+  test('translateStage: the clamped model write, then the pose mirror; no hub refresh (03 5.6)', () => {
+    const s = setup({ enabled: true, spyHub: true });
+    s.cine.posX = 1.25;
+    s.cine.posZ = 1.5;
+    s.controller.translateStage(-1.25, -0);
+    assert.deepEqual(s.calls(), ['emit CAMERA_POSE_CHANGED']);
+    assert.deepEqual(s.entry('emit CAMERA_POSE_CHANGED').payload, { source: 'pivot' });
+    assert.deepEqual([s.entry('emit CAMERA_POSE_CHANGED').pose.posX, s.entry('emit CAMERA_POSE_CHANGED').pose.posZ], [0, 1.5]);
+    s.controller.translateStage(-3e5, 0);
+    assert.equal(s.cine.posX, -100000, 'clamped through CineCamera.LIMITS (07 C45)');
   });
 
   test('setSafeDistanceEnabled: model, then the toggle event, then hub.syncSafeDistance', () => {
@@ -503,6 +532,18 @@ describe('PropController (ARCHITECTURE.md 6.8)', () => {
     const t = setupProp('car', { exists: true, selectedId: 'camera' });
     t.controller.setVisible(false);
     assert.deepEqual(t.calls(), ['emit PROP_VISIBILITY_CHANGED', 'view.remove', 'selection.isSelected']);
+  });
+
+  test("translateStage: the clamped model write, the 'pivot' pose event, then the transform (03 5.6, T3)", () => {
+    const s = setupProp('person', { exists: true });
+    s.controller.translateStage(-1.25, 0);
+    assert.deepEqual(s.calls(), ['emit PROP_POSE_CHANGED', 'view.updateTransform', 'emit SELECTABLE_MOVED']);
+    assert.deepEqual(s.entry('emit PROP_POSE_CHANGED').payload, { id: 'person', source: 'pivot' });
+    assert.deepEqual([s.prop.posX, s.prop.posZ], [0.75, 2]);
+    const hidden = setupProp('car');
+    hidden.controller.translateStage(-1.25, -0);
+    assert.deepEqual(hidden.calls(), ['emit PROP_POSE_CHANGED'], 'hidden: re-expressed, no transform');
+    assert.deepEqual([hidden.prop.posX, hidden.prop.posZ], [2.75, 3]);
   });
 
   test('applyTransform is a no-op while the view does not exist; setField stores the rule value', () => {

@@ -33,7 +33,7 @@ export class CameraHub {
   #safeDistance;
   /** @type {import('../interaction/PilotController.js').PilotCameraDriver} */
   #pilotDriver;
-  /** @type {() => {totalWidth: number, maxHeight: number}} */
+  /** @type {() => {totalWidth: number, maxHeight: number, minX: number, wallZ: number}} */
   #frameBounds;
   /** @type {import('../core/EventBus.js').EventBus} */
   #bus;
@@ -46,9 +46,10 @@ export class CameraHub {
    *          preview: import('../render/PreviewWindow.js').PreviewWindow,
    *          safeDistance: import('../render/SafeDistanceView.js').SafeDistanceView,
    *          pilotDriver: import('../interaction/PilotController.js').PilotCameraDriver,
-   *          frameBounds: () => {totalWidth: number, maxHeight: number},
+   *          frameBounds: () => {totalWidth: number, maxHeight: number, minX: number, wallZ: number},
    *          bus: import('../core/EventBus.js').EventBus}} deps
-   *   frameBounds: the flat framing bounds (WallLayout.framingBounds of the live project), evaluated per call
+   *   frameBounds: the 'flat-pivot' framing bounds (WallLayout.framingBounds of the live project with the cached pivot
+   *   resolution, 03 T3), evaluated per call
    */
   constructor({ project, rig, preview, safeDistance, pilotDriver, frameBounds, bus }) {
     this.#project = project;
@@ -68,7 +69,8 @@ export class CameraHub {
    * labels updated, the safe-distance overlay synced, the pilot view re-driven and the gizmo told to follow.
    * Ports: index.html@cd3fd3f lines 2451-2469 (2460: the coverage of 2471-2534).
    * Side effects: rig.create (iff missing), rig.rebuildFrustum (emits CAMERA_LENS_CHANGED), rig.updateTransform;
-   *   emits CAMERA_COVERAGE_CHANGED {frameWidth, frameHeight, status, safeDistance}; preview.updateCamera();
+   *   emits CAMERA_COVERAGE_CHANGED {frameWidth, frameHeight, status, safeDistance, distToWall} (distToWall since 03 T3:
+   *   the distance to the flat wall plane, posZ - wallZ); preview.updateCamera();
    *   syncSafeDistance(); pilotDriver.refresh(); emits SELECTABLE_MOVED {id: 'camera'}.
    * @returns {void}
    */
@@ -135,7 +137,7 @@ export class CameraController {
   #pilot;
   /** @type {import('../interaction/SelectionManager.js').SelectionManager} */
   #selection;
-  /** @type {() => {totalWidth: number, maxHeight: number}} */
+  /** @type {() => {totalWidth: number, maxHeight: number, minX: number, wallZ: number}} */
   #frameBounds;
   /** @type {import('../core/EventBus.js').EventBus} */
   #bus;
@@ -149,7 +151,7 @@ export class CameraController {
    *          hub: CameraHub,
    *          pilot: import('../interaction/PilotController.js').PilotController,
    *          selection: import('../interaction/SelectionManager.js').SelectionManager,
-   *          frameBounds: () => {totalWidth: number, maxHeight: number},
+   *          frameBounds: () => {totalWidth: number, maxHeight: number, minX: number, wallZ: number},
    *          bus: import('../core/EventBus.js').EventBus}} deps
    */
   constructor({ project, rig, preview, hub, pilot, selection, frameBounds, bus }) {
@@ -203,8 +205,8 @@ export class CameraController {
   }
 
   /**
-   * Centres the camera on the flat wall, 5 m away, unrotated; the hub runs unconditionally (it guards itself).
-   * Also the #reset-camera click.
+   * Centres the camera on the flat wall, 5 m in front of its plane, unrotated (03 T3: the 'flat-pivot' bounds); the hub
+   * runs unconditionally (it guards itself). Also the #reset-camera click.
    * Ports: index.html@cd3fd3f lines 2550-2575.
    * Side effects: writes the camera pose; emits CAMERA_POSE_CHANGED {source: 'reset'} (pose inputs); hub.refresh().
    * @returns {void}
@@ -233,7 +235,8 @@ export class CameraController {
 
   /**
    * Stores a lens or pose input (model only; the panel writes back iff CineCamera.FIELD_RULES[field].writeBack,
-   * then calls commitCameraField()).
+   * then calls commitCameraField()). The rules get the wall-plane context {wallZ: frameBounds().wallZ} (03 4.1, T3):
+   * the posZ rule is the legacy one while the stage origin lies on the wall plane (wallZ = 0, the identity pivot).
    * Ports: index.html@cd3fd3f lines 4267, 4273, 4279, 4285, 4290, 4296, 4302, 4308, 4314.
    * Side effects: writes cine[field].
    * @param {string} field  a CineCamera.FIELD_RULES key
@@ -241,7 +244,21 @@ export class CameraController {
    * @returns {number} the stored value
    */
   setCameraField(field, raw) {
-    return this.#project.camera.setField(field, raw);
+    return this.#project.camera.setField(field, raw, { wallZ: this.#frameBounds().wallZ });
+  }
+
+  /**
+   * StageAnchored participant (03 5.3, 6.5): re-expresses the camera after an explicit pivot edit moved the stage
+   * origin by -(dx, dz), clamped through CineCamera.LIMITS (07 C45), and mirrors the pose inputs. No hub refresh: the
+   * pivot commit's rebuild runs it (03 5.6).
+   * Side effects: writes posX, posZ; emits CAMERA_POSE_CHANGED {source: 'pivot'}.
+   * @param {number} dx  metres
+   * @param {number} dz  metres
+   * @returns {void}
+   */
+  translateStage(dx, dz) {
+    this.#project.camera.translateStage(dx, dz);
+    this.#bus.emit(Events.CAMERA_POSE_CHANGED, { source: 'pivot' });
   }
 
   /**
