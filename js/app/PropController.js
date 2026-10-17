@@ -116,6 +116,18 @@ export class PropController {
     this.applyTransform();
   }
 
+  /**
+   * StageAnchored participant, the rigid form (03 12.6): Prop.reexpressStage(change), the input mirror and the transform.
+   * Side effects: writes the prop's pose; emits PROP_POSE_CHANGED {id, source: 'pivot'}; applyTransform().
+   * @param {{yawDeg: number, cos: number, sin: number, dx: number, dz: number}} change  WallLayout.stageChange
+   * @returns {void}
+   */
+  reexpressStage(change) {
+    this.#prop.reexpressStage(change);
+    this.#bus.emit(Events.PROP_POSE_CHANGED, { id: this.id, source: 'pivot' });
+    this.applyTransform();
+  }
+
   // ---- Selectable ------------------------------------------------------------------------------------------
 
   /**

@@ -365,7 +365,7 @@ describe("03 test 6: framingBounds 'layout' (6.6 step F = 08 P2-11c)", () => {
     for (const sections of Object.values(WALLS)) {
       const f = framingBounds(layoutProject(projectOf(sections)));
       assert.ok(Object.is(f.wallZ, 0), 'never -0 at the identity');
-      assert.deepEqual(Object.keys(f), ['generativeBox', 'wallBox', 'stageExtent', 'facing', 'wallZ']);
+      assert.deepEqual(Object.keys(f), ['generativeBox', 'wallBox', 'stageExtent', 'facing', 'wallZ', 'centre', 'aligned', 'viewYawDeg', 'frontZ']);
     }
     for (const name of ['concave_offsets', 'box_corner', 'mixed']) {
       const identity = framingBounds(layoutProject(projectOf(WALLS[name])));

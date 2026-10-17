@@ -144,3 +144,33 @@
 .pivot-readout .pivot-warning {
     color: var(--pivot-warning);
 }
+
+/* ---- orientation (03 12.9) -------------------------------------------------------------------------- */
+
+.pivot-orientation {
+    margin: 10px 0 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--color-border-subtle);
+}
+
+.pivot-subtitle {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    margin-bottom: 8px;
+}
+
+.section-row.pivot-orientation-row {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.pivot-yaw-readout {
+    margin-top: 6px;
+    padding: 8px 10px;
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}

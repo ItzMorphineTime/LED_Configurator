@@ -9,7 +9,7 @@
  */
 
 import { orDefault } from '../legacy/LegacyCompat.js';
-import { clamp, deepFreeze, STAGE_POSITION_LIMIT_M } from './rules.js';
+import { clamp, deepFreeze, STAGE_POSITION_LIMIT_M, wrapDeg } from './rules.js';
 
 /**
  * A reference prop (person or car): pose, scale and visibility, written only through its methods
@@ -108,6 +108,26 @@ export class Prop {
     const { posX, posZ } = Prop.LIMITS;
     this.posX = clamp(this.posX + dx, posX.min, posX.max);
     this.posZ = clamp(this.posZ + dz, posZ.min, posZ.max);
+  }
+
+  /**
+   * The rigid re-expression of an explicit pivot or orientation edit (03 12.6): with a zero yaw change exactly
+   * translateStage(dx, dz); otherwise the position turns about the stage origin by the change, (dx, dz) is added, each
+   * component is clamped through LIMITS and rotY turns with it (wrapDeg); scale is untouched.
+   * Side effects: writes posX, posZ and maybe rotY.
+   * @param {{yawDeg: number, cos: number, sin: number, dx: number, dz: number}} change  WallLayout.stageChange
+   */
+  reexpressStage({ yawDeg, cos, sin, dx, dz }) {
+    if (yawDeg === 0) {
+      this.translateStage(dx, dz);
+      return;
+    }
+    const { posX, posZ } = Prop.LIMITS;
+    const x = this.posX * cos + this.posZ * sin + dx;
+    const z = -this.posX * sin + this.posZ * cos + dz;
+    this.posX = clamp(x, posX.min, posX.max);
+    this.posZ = clamp(z, posZ.min, posZ.max);
+    this.rotY = wrapDeg(this.rotY + yawDeg);
   }
 
   /**

@@ -8,13 +8,13 @@
  * delivering any payload twice gives the same DOM.
  * Owns #pivot-mode-select (its .pivot-mode-option labels and pivot-mode radios), #pivot-offset-x/y/z,
  * #pivot-reset-offset, #pivot-select, #pivot-snap, #toggle-pivot-keep-stage, #toggle-pivot-marker, #pivot-readout and
- * #pivot-status.
+ * #pivot-status; since 03 12.9 the Orientation block's #pivot-align, #pivot-yaw-offset and #pivot-yaw-readout.
  * Legacy source: none (new panel).
  * Layer: ui (may import core, legacy, domain static rule tables and ui/dom.js).
  */
 
 import { Events } from '../core/EventBus.js';
-import { PIVOT_MODES } from '../domain/Wall.js';
+import { OrientationAlign, PIVOT_MODES } from '../domain/Wall.js';
 import { byId } from './dom.js';
 
 /** A pivot more than this far from its anchor (metres) turns the readout into a warning (03 3.6). */
@@ -31,6 +31,31 @@ const AXES = Object.freeze(['x', 'y', 'z']);
  * @returns {string}
  */
 const signed = (v) => `${v > 0 ? '+' : ''}${v.toFixed(3)}`;
+
+/**
+ * Degrees with one decimal, never '-0.0' (03 12.9). Side effects: none.
+ * @param {number} v
+ * @returns {string}
+ */
+const deg1 = (v) => (Math.round(v * 10) / 10 || 0).toFixed(1);
+
+/** A signed degree value for the status line: '+90.0', '-30.0', '0.0'. Side effects: none. @param {number} v */
+const signedDeg = (v) => `${Math.round(v * 10) / 10 > 0 ? '+' : ''}${deg1(v)}`;
+
+/**
+ * The read-only wall-yaw line of the Orientation block (03 12.9).
+ * Side effects: none.
+ * @param {import('../geometry/WallLayout.js').PivotResolution|null} resolution
+ * @returns {string}
+ */
+export function yawReadoutText(resolution) {
+  if (!resolution) return 'Wall yaw unavailable · invalid section values';
+  const yaw = resolution.yawDeg ?? 0;
+  const offset = resolution.yawOffsetDeg ?? 0;
+  return resolution.align === OrientationAlign.CENTER_NEG_X
+    ? `Wall yaw ${deg1(yaw)}° = alignment ${deg1(resolution.alignYawDeg ?? 0)}° + offset ${deg1(offset)}°`
+    : `Wall yaw ${deg1(yaw)}° (no alignment, offset ${deg1(offset)}°)`;
+}
 
 /**
  * The readout line of a resolution (03 3.2, 3.6): the pivot point in the LAYOUT frame, or the empty-wall and
@@ -59,8 +84,13 @@ export function pivotReadoutText(resolution, sectionCount) {
  * @param {{source: string, resolution: object|null, stageShift: {x: number, z: number}, reexpressed: boolean}} payload
  * @returns {string|null}
  */
-export function pivotStatusText({ source, resolution, stageShift, reexpressed }) {
+export function pivotStatusText({ source, resolution, stageShift, reexpressed, yawShiftDeg = 0 }) {
   switch (source) {
+    case 'align':
+    case 'yaw-offset':
+      if (yawShiftDeg === 0) return `Wall yaw unchanged at ${deg1(resolution?.yawDeg ?? 0)}°`;
+      return `Wall turned ${signedDeg(yawShiftDeg)}° about the pivot · camera and props kept their `
+        + (reexpressed ? 'place' : 'coordinates');
     case 'mode':
     case 'offset':
     case 'reset-offset':
@@ -83,11 +113,19 @@ export function pivotStatusText({ source, resolution, stageShift, reexpressed })
  * @param {{cause?: string, stageShift?: {x: number, z: number}}} payload
  * @returns {string|null}
  */
-export function rebuildStatusText({ cause, stageShift }) {
+export function rebuildStatusText({ cause, stageShift, yawShiftDeg = 0 }) {
   if (cause === 'init' || cause === 'import') return '';
   if (cause === 'edit') {
     const s = stageShift ?? { x: 0, z: 0 };
-    return s.x !== 0 || s.z !== 0
+    const moved = s.x !== 0 || s.z !== 0;
+    // 03 12.9: a section edit under 'center-neg-x' may also turn the wall (the alignment follows the centre normal)
+    const turned = yawShiftDeg !== 0;
+    if (moved && turned) {
+      return `Wall edit moved the stage origin by ${signed(s.x)}, ${signed(s.z)} m and turned the wall by `
+        + `${signedDeg(yawShiftDeg)}° (relative to the wall start) · camera and props kept their coordinates`;
+    }
+    if (turned) return `Wall edit turned the wall by ${signedDeg(yawShiftDeg)}° about the pivot · camera and props kept their coordinates`;
+    return moved
       ? `Wall edit moved the stage origin by ${signed(s.x)}, ${signed(s.z)} m (relative to the wall start) · camera and props kept their coordinates`
       : '';
   }
@@ -113,6 +151,9 @@ export class PivotPanel {
   /** @type {HTMLElement} */ #keep;
   /** @type {HTMLElement} */ #marker;
   /** @type {HTMLElement} */ #readout;
+  /** @type {HTMLSelectElement} */ #align;
+  /** @type {HTMLInputElement} */ #yawOffset;
+  /** @type {HTMLElement} */ #yawReadout;
   /** @type {HTMLElement} */ #status;
 
   /**
@@ -137,6 +178,9 @@ export class PivotPanel {
     this.#keep = byId(doc, 'toggle-pivot-keep-stage');
     this.#marker = byId(doc, 'toggle-pivot-marker');
     this.#readout = byId(doc, 'pivot-readout');
+    this.#align = byId(doc, 'pivot-align');
+    this.#yawOffset = byId(doc, 'pivot-yaw-offset');
+    this.#yawReadout = byId(doc, 'pivot-yaw-readout');
     this.#status = byId(doc, 'pivot-status');
 
     bus.on(Events.WALL_PIVOT_CHANGED, (payload) => this.#mirrorPivot(payload));
@@ -168,6 +212,13 @@ export class PivotPanel {
     }
     this.#reset.addEventListener('click', () => controller.resetOffset());
     this.#select.addEventListener('click', () => controller.toggleSelect());
+    // 03 12.9 (rows F3-6, F3-7): the orientation; the yaw input writes back the stored value (a rejected entry reverts)
+    const align = this.#align;
+    align.addEventListener('change', () => controller.setAlign(align.value));
+    const yaw = this.#yawOffset;
+    yaw.addEventListener('change', () => {
+      yaw.value = controller.setYawOffset(yaw.value).toFixed(1);
+    });
     const snap = this.#snap;
     snap.addEventListener('change', () => controller.setSnapStep(Number(snap.value)));
     this.#bindSwitch(this.#keep, () => controller.setKeepStageLayout(!controller.pivot.keepStageLayout));
@@ -205,6 +256,10 @@ export class PivotPanel {
     this.#reset.disabled = pivot.offset.x === 0 && pivot.offset.y === 0 && pivot.offset.z === 0;
     this.#setSwitch(this.#keep, pivot.keepStageLayout);
     this.#setSwitch(this.#marker, this.#project.display.showPivotMarker === true);
+    if (pivot.orientation) {
+      this.#align.value = pivot.orientation.align;
+      this.#yawOffset.value = pivot.orientation.yawOffsetDeg.toFixed(1);
+    }
     this.#writeReadout(payload.resolution);
     const status = pivotStatusText(payload);
     if (status !== null) this.#status.textContent = status;
@@ -234,6 +289,7 @@ export class PivotPanel {
     const { text, warning } = pivotReadoutText(resolution, this.#project.wall.count);
     this.#readout.textContent = text;
     this.#readout.classList.toggle('pivot-warning', warning);
+    this.#yawReadout.textContent = yawReadoutText(resolution);
   }
 
   /**

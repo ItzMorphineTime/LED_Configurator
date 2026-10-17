@@ -398,7 +398,7 @@ describe('08 P2-11c: framingBounds (the layout framing), resetTo, the safe dista
     const f = framingBounds(layout);
     assert.equal(framingBounds(layout), f, 'the same object');
     assert.ok(Object.isFrozen(f) && Object.isFrozen(f.generativeBox) && Object.isFrozen(f.stageExtent));
-    assert.deepEqual(Object.keys(f), ['generativeBox', 'wallBox', 'stageExtent', 'facing', 'wallZ']);
+    assert.deepEqual(Object.keys(f), ['generativeBox', 'wallBox', 'stageExtent', 'facing', 'wallZ', 'centre', 'aligned', 'viewYawDeg', 'frontZ']);
     assert.notEqual(framingBounds(layoutProject(projectOf(FLAT3))), f, 'a new layout, a new framing');
   });
 

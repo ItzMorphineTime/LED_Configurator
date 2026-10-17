@@ -65,7 +65,7 @@ function makeRig() {
   group.querySelector = (sel) => labels.find(({ radio }) => sel === `input[name="pivot-mode"][value="${radio.value}"]`)?.radio ?? null;
   map.set('pivot-mode-select', group);
   for (const id of ['pivot-offset-x', 'pivot-offset-y', 'pivot-offset-z', 'pivot-reset-offset', 'pivot-select', 'pivot-snap',
-    'toggle-pivot-keep-stage', 'toggle-pivot-marker', 'pivot-readout', 'pivot-status']) map.set(id, el(id));
+    'toggle-pivot-keep-stage', 'toggle-pivot-marker', 'pivot-readout', 'pivot-status', 'pivot-align', 'pivot-yaw-offset', 'pivot-yaw-readout']) map.set(id, el(id));
   map.get('toggle-pivot-keep-stage').classList.add('active');
   const doc = { getElementById: (id) => map.get(id) ?? null };
   const panel = new PivotPanel({ doc, project, pivotController: pc, bus });
@@ -145,7 +145,7 @@ describe('test 17: the status is a pure function of the mirrored payloads (03 5.
     const src = readFileSync(join(ROOT, 'js/ui/PivotPanel.js'), 'utf8');
     assert.doesNotMatch(src, /#(status|last)[A-Z]\w*\s*[;=]/, 'no #status* / #last* fields');
     const fields = [...src.matchAll(/^ {2}(?:\/\*\*[^*]*\*\/ )?#(\w+);/gm)].map((m) => m[1]);
-    assert.deepEqual(fields.sort(), ['keep', 'marker', 'offsets', 'pivotController', 'project', 'radios', 'readout', 'reset', 'select',
+    assert.deepEqual(fields.sort(), ['align', 'keep', 'marker', 'offsets', 'pivotController', 'project', 'radios', 'readout', 'reset', 'select', 'yawOffset', 'yawReadout',
       'snap', 'status'].sort());
   });
 });

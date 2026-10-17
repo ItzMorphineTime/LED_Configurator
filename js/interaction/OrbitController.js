@@ -206,12 +206,16 @@ export class OrbitController {
    * @param {string} view
    */
   setView(view) {
+    // 03 12.7: the presets turn with the wall (theta0 = the framing's viewYawDeg; 0 at the identity, where the legacy
+    // angles are used verbatim)
+    const yawDeg = this.#frameBounds()?.viewYawDeg ?? 0;
+    const t0 = yawDeg === 0 ? 0 : yawDeg * Math.PI / 180;
     // LEGACY(B-L25): no pilot guard; in pilot mode the preset moves the main camera away from the pilot view.
-    if (view === 'front') this.angle = { theta: 0, phi: Math.PI / 2 };
-    else if (view === 'side') this.angle = { theta: Math.PI / 2, phi: Math.PI / 2 };
-    else if (view === 'top') this.angle = { theta: 0, phi: 0.1 };
+    if (view === 'front') this.angle = { theta: t0, phi: Math.PI / 2 };
+    else if (view === 'side') this.angle = { theta: t0 + Math.PI / 2, phi: Math.PI / 2 };
+    else if (view === 'top') this.angle = { theta: t0, phi: 0.1 };
     else {
-      this.angle = { theta: 0.3, phi: Math.PI / 2.5 };
+      this.angle = { theta: t0 + 0.3, phi: Math.PI / 2.5 };
       this.distance = 8;
       this.offset.set(0, 0, 0); // Reset offset on view reset
     }

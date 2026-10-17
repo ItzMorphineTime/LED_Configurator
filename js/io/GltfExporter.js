@@ -139,9 +139,12 @@ export class GltfExporter {
     const r = layout.pivot?.resolution ?? null;
     if (r !== null && !isIdentityResolution(r)) {
       const v = (p) => [p.x, p.y, p.z];
-      gltf.scenes[0].extras = {
-        pivot: { mode: r.mode, offset_m: v(r.offset), anchor_layout_m: v(r.anchor), point_layout_m: v(r.point) },
-      };
+      const pivot = { mode: r.mode, offset_m: v(r.offset), anchor_layout_m: v(r.anchor), point_layout_m: v(r.point) };
+      // 03 12.8: the orientation, only for a turned wall (no node rotation: the vertices are baked)
+      if ((r.yawDeg ?? 0) !== 0) {
+        pivot.orientation = { align: r.align, yaw_deg: r.yawDeg, align_yaw_deg: r.alignYawDeg, yaw_offset_deg: r.yawOffsetDeg };
+      }
+      gltf.scenes[0].extras = { pivot };
     }
 
     const totalLength = state.allBufferData.reduce((sum, arr) => sum + arr.length, 0);

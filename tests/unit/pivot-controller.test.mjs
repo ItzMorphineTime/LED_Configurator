@@ -94,7 +94,7 @@ describe('P-PIVOT: mode, offset and reset (03 5.6; tests 10, 11, 13; rows F3-1 t
     ]);
     for (const a of r.anchored) assert.deepEqual(a.calls, [[-1.25, -0]], `${a.id}: -dO (03 6.8: dO = (1.25, 0))`);
     const [payload] = r.emitted('WALL_PIVOT_CHANGED');
-    assert.deepEqual(Object.keys(payload), ['source', 'pivot', 'resolution', 'stageShift', 'reexpressed', 'rebuilds']);
+    assert.deepEqual(Object.keys(payload), ['source', 'pivot', 'resolution', 'stageShift', 'yawShiftDeg', 'reexpressed', 'rebuilds']);
     assert.equal(payload.source, 'mode');
     assert.equal(payload.pivot.mode, 'wall-center');
     assert.notEqual(payload.pivot, r.project.wall.pivot, 'a copy');
@@ -186,7 +186,7 @@ describe('toggles and snapping (row F3-5)', () => {
     const [payload] = r.emitted('WALL_PIVOT_CHANGED');
     assert.deepEqual(payload, {
       source: 'keep-stage', pivot: payload.pivot, resolution: r.wc.pivotResolution, stageShift: { x: 0, z: 0 },
-      reexpressed: false, rebuilds: false,
+      yawShiftDeg: 0, reexpressed: false, rebuilds: false,
     });
     assert.equal(payload.pivot.keepStageLayout, false);
     assert.throws(() => r.pc.setKeepStageLayout('yes'), TypeError);
@@ -500,7 +500,7 @@ describe('PivotController module boundaries (ARCHITECTURE.md 1.3; 03 8.2)', () =
   test('imports only core and geometry (no ui/, render/, interaction/, no THREE)', () => {
     const src = readFileSync(join(ROOT, 'js/app/PivotController.js'), 'utf8');
     const imports = [...src.matchAll(/^\s*import\s+[^'"]*from\s+['"]([^'"]+)['"]/gm)].map((m) => m[1]);
-    assert.deepEqual(imports, ['../core/EventBus.js', '../geometry/WallLayout.js']);
+    assert.deepEqual(imports, ['../core/EventBus.js', '../geometry/WallLayout.js', '../geometry/WallOrientation.js']);
   });
 
   test('WallPivot fields are written only through WallPivot methods (no direct assignment in the controller)', () => {

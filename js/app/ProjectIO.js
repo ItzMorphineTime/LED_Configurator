@@ -20,6 +20,7 @@
 import { computeAtlas, canvasFits, CANVAS_HARD_LIMITS } from '../geometry/TextureAtlas.js';
 import { textureFileNames, atlasTexturePath } from '../geometry/PanelNaming.js';
 import { MAX_IMPORT_BYTES } from '../domain/rules.js';
+import { turnXZ, yawTrig } from '../geometry/WallOrientation.js';
 
 /**
  * The dialogs facade (ui/dom.js createDialogs).
@@ -473,9 +474,15 @@ export class ProjectIO {
 
       // 03 T3 (7.1): from the stage frame the group was built in (its stamp) into the current export frame
       const sb = safeDistanceMesh.userData?.stageOrigin ?? { x: 0, z: 0 };
-      const P = this.#wallController.pivotResolution?.point ?? { x: 0, y: 0, z: 0 };
-      const translate = { x: sb.x - P.x, y: -P.y, z: sb.z - P.z };
-      const objContent = this.#objExporter.writeSafeDistance(safeDistanceMesh, this.#safeDistance.lastBand, { translate });
+      const r = this.#wallController.pivotResolution;
+      const P = r?.point ?? { x: 0, y: 0, z: 0 };
+      // 03 12.8: s_E = R(psi - psi_b) s + R(psi)(O_b - P) in x and z, y - P.y
+      const yaw = r?.yawDeg ?? 0;
+      const yawB = safeDistanceMesh.userData?.stageYawDeg ?? 0;
+      const d = yaw === 0 ? { x: sb.x - P.x, z: sb.z - P.z } : turnXZ(sb.x - P.x, sb.z - P.z, yawTrig(yaw));
+      const translate = { x: d.x, y: -P.y, z: d.z };
+      const objContent = this.#objExporter.writeSafeDistance(safeDistanceMesh, this.#safeDistance.lastBand,
+        { translate, yawDeg: yaw - yawB });
 
       const blob = new Blob([objContent], { type: 'text/plain' });
       this.#downloader.saveBlob(blob, this.#brand.files.safeDistanceObj);

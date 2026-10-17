@@ -52,7 +52,7 @@
  * on every `input` event, exactly like legacy.
  */
 import { Events } from '../core/EventBus.js';
-import { computeWallLayout, layoutProject, resolvePivot, stageShift } from '../geometry/WallLayout.js';
+import { computeWallLayout, layoutProject, resolvePivot, stageShift, yawShift } from '../geometry/WallLayout.js';
 import { Wall, WallPivot } from '../domain/Wall.js';
 
 /**
@@ -166,7 +166,7 @@ export class WallController {
    */
   commitPivot(after) {
     const shift = stageShift(this.#pivotResolution, after);
-    if (shift.x !== 0 || shift.z !== 0) {
+    if (shift.x !== 0 || shift.z !== 0 || yawShift(this.#pivotResolution, after) !== 0) {   // 03 12.6: or the yaw
       this.rebuild({ cause: 'pivot' });
     } else {
       this.#pivotResolution = after;
@@ -193,6 +193,7 @@ export class WallController {
     this.#currentLayout = layout;
     this.#pivotResolution = layout.pivot.resolution;
     const shift = stageShift(prev, this.#pivotResolution);
+    const yawShiftDeg = yawShift(prev, this.#pivotResolution);   // 03 12.4
     // 2. dispose + groups + build + frames + scene.add (1458-1477, 1551-1572)
     const meshMode = project.meshMode;
     this.#view.rebuild({ layout, meshMode, display: project.display });
@@ -203,7 +204,7 @@ export class WallController {
     // 5. if (cameraPreviewEnabled) updateCameraFrustum() (1576): re-drives the pilot view after step 4
     if (project.camera.enabled) this.#hub.refresh();
     // 6. feature seam: cause and stageShift since 03 T3 (additive; the Phase-1 subscribers ignore them)
-    this.#bus.emit(Events.WALL_REBUILT, { layout, meshMode, view: this.#view, cause, stageShift: shift });
+    this.#bus.emit(Events.WALL_REBUILT, { layout, meshMode, view: this.#view, cause, stageShift: shift, yawShiftDeg });
   }
 
   /**
@@ -448,7 +449,8 @@ export class WallController {
     const resolution = this.resolvePivotNow();
     this.#bus.emit(Events.WALL_PIVOT_CHANGED, {
       source: 'import', pivot: project.wall.pivot.clone(), resolution,
-      stageShift: stageShift(this.#pivotResolution, resolution), reexpressed: false, rebuilds: true,
+      stageShift: stageShift(this.#pivotResolution, resolution), yawShiftDeg: yawShift(this.#pivotResolution, resolution),
+      reexpressed: false, rebuilds: true,
     });
 
     if (meshMode) {

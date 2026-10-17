@@ -8,7 +8,9 @@
  * the frames of layoutProject (layout, stage, export). 08 P2-11a adds the world-space geometry that the coverage
  * analyser and the framing read (docs/improvements/08-bugfix-roadmap.md 6.10): columnQuads() and worldVertices()
  * (memoised per instance, after spec 02's postTransform), extentAcross(facing) and chordFacing(); 08 P2-11c makes
- * framingBounds the 'layout' framing of a layout (FramingPolicy's three named boxes, 07 C34).
+ * framingBounds the 'layout' framing of a layout (FramingPolicy's three named boxes, 07 C34). F3-O2 (03 section 12, the
+ * owner's request of 2026-10-17) turns the stage and export frames by the wall yaw about the pivot: rotated(), the
+ * orientation fields of the resolution (geometry/WallOrientation.js computes the alignment), yawShift and stageChange.
  * Legacy source: index.html@cd3fd3f 1479-1549 (walk + panel centres), 2614-2647 (flattened edges),
  * 5012-5038 + 5051-5066 (the export copy of the walk); the flat bounds of 2489-2493 / 2553-2557 / 2598-2603 / 3758-3762 are
  * replaced by the 'layout' framing (08 P2-11c).
@@ -16,8 +18,10 @@
  */
 
 import { MM_TO_M } from '../domain/WallSection.js';
-import { PivotMode } from '../domain/Wall.js';
+import { OrientationAlign, PivotMode } from '../domain/Wall.js';
+import { wrapDeg } from '../domain/rules.js';
 import { Strategies, unsupportedStrategy } from '../legacy/LegacyCompat.js';
+import { alignmentYawDeg, turnXZ, wallCentre, yawTrig } from './WallOrientation.js';
 
 /**
  * One edge of the cursor walk: the position after a column move and the direction it was made in.
@@ -104,6 +108,37 @@ export class SectionLayout {
       baseY: this.baseY + dy,
     });
   }
+
+  /**
+   * A copy turned about the vertical axis through the frame origin (03 12.3, F3-O2): edges and panel centres (x, z)
+   * through R_y(psi) (turnXZ), y and baseY unchanged; edge angles minus psi (a walk heading turns the other way: a
+   * direction at heading a has azimuth 90 deg - a) and panel rotY plus psi (the panel quad's local +X is R_y(rotY) +X);
+   * every other walk field copied; postTransform null. Called only by WallLayout.rotated, which checks the raw-walk
+   * precondition first.
+   * Side effects: none.
+   * @param {{cos: number, sin: number}} trig  yawTrig(psi)
+   * @param {number} yawRad  psi in radians
+   * @returns {SectionLayout}
+   */
+  rotated(trig, yawRad) {
+    return new SectionLayout({
+      section: this.section,
+      sectionIndex: this.sectionIndex,
+      panelW: this.panelW,
+      panelH: this.panelH,
+      isFlat: this.isFlat,
+      edges: this.edges.map((e) => {
+        const t = turnXZ(e.x, e.z, trig);
+        return { x: t.x, z: t.z, angle: e.angle - yawRad };
+      }),
+      panels: this.panels.map((p) => {
+        const t = turnXZ(p.x, p.z, trig);
+        return { x: t.x, y: p.y, z: t.z, rotY: p.rotY + yawRad, col: p.col, row: p.row, sectionIndex: p.sectionIndex };
+      }),
+      postTransform: null,
+      baseY: this.baseY,
+    });
+  }
 }
 
 /** The origin (layout frame); also the translation of the identity frames. Frozen. */
@@ -114,16 +149,21 @@ const FRAMES = Object.freeze(['stage', 'export', 'layout']);
 
 /**
  * The resolved pivot (03 6.2), layout frame: the mode and offset it was resolved from, the anchor of 6.1 (the layout
- * origin for an empty wall), the pivot point P = anchor + offset and the stage origin (P.x, 0, P.z).
+ * origin for an empty wall), the pivot point P = anchor + offset and the stage origin (P.x, 0, P.z). Since F3-O2 (03
+ * 12.4) also the orientation: align and yawOffsetDeg (copied from the pivot), alignYawDeg (the alignment yaw psi_a of
+ * 'center-neg-x', 0 with 'none' or without a centre) and yawDeg (the total yaw psi = wrapDeg(psi_a + yawOffsetDeg),
+ * degrees about +Y through P, the three.js rotation.y sign).
  * @typedef {{mode: string, offset: {x: number, y: number, z: number}, anchor: {x: number, y: number, z: number},
- *            point: {x: number, y: number, z: number}, stageOrigin: {x: number, y: number, z: number}}} PivotResolution
+ *            point: {x: number, y: number, z: number}, stageOrigin: {x: number, y: number, z: number},
+ *            align: string, yawOffsetDeg: number, alignYawDeg: number, yawDeg: number}} PivotResolution
  */
 
 /**
- * What layoutProject records on its result (03 6.3): the resolution (null for a non-finite layout), the frame and the
- * translation that was applied (the identity frames translate by ZERO and return the walk itself).
+ * What layoutProject records on its result (03 6.3): the resolution (null for a non-finite layout), the frame, the
+ * translation that was applied (the identity frames translate by ZERO and return the walk itself) and (F3-O2, 03 12.3)
+ * the yaw the translated walk was turned by (0 for the layout frame, a null resolution and the identity orientation).
  * @typedef {{resolution: PivotResolution|null, frame: 'stage'|'export'|'layout',
- *            translation: {x: number, y: number, z: number}}} LayoutPivot
+ *            translation: {x: number, y: number, z: number}, yawDeg: number}} LayoutPivot
  */
 
 /**
@@ -307,6 +347,29 @@ export class WallLayout {
       }
     }
     return new WallLayout({ sections: this.sections.map((sl) => sl.translated(dx, dy, dz)) });
+  }
+
+  /**
+   * A copy of the raw walk turned by yawDeg about the vertical axis through this frame's origin (03 12.3, F3-O2; the
+   * pivot, once translated() has moved it to the origin): R_y(psi)(x, y, z) = (x cos + z sin, y, -x sin + z cos), the
+   * three.js rotation.y matrix (positive = counter-clockwise seen from above). Edges and panel centres turn, headings
+   * and panel rotY follow, baseY and heights are unchanged; cos and sin are exact at multiples of 90 degrees (yawTrig).
+   * The copy has no pivot block. Like translated(), the raw walk only: spec 02's section offsets are built afterwards,
+   * from the turned geometry.
+   * Side effects: none.
+   * @param {number} yawDeg
+   * @returns {WallLayout}
+   * @throws {Error} 'rotated() expects the raw walk: apply section offsets after the orientation'
+   */
+  rotated(yawDeg) {
+    for (const sl of this.sections) {
+      if (sl.postTransform !== null) {
+        throw new Error('rotated() expects the raw walk: apply section offsets after the orientation');
+      }
+    }
+    const trig = yawTrig(yawDeg);
+    const yawRad = (yawDeg * Math.PI) / 180;
+    return new WallLayout({ sections: this.sections.map((sl) => sl.rotated(trig, yawRad)) });
   }
 
   /**
@@ -600,13 +663,19 @@ function panelCentres(section, sectionIndex, edges, panelH) {
   return panels;
 }
 
+/** The orientation of a pivot object without one (a plain {mode, offset} test double): 'none', no yaw offset. */
+const NO_ORIENTATION = Object.freeze({ align: OrientationAlign.NONE, yawOffsetDeg: 0 });
+
 /**
  * Resolves the wall pivot on the raw walk (03 6.2): the anchor of the mode (the layout origin for an empty wall), plus
- * the offset. Generative quantities only (03 5.10 #1): a section offset never moves the pivot.
+ * the offset. Generative quantities only (03 5.10 #1): a section offset never moves the pivot. F3-O2 (03 12.2, 12.4):
+ * the orientation too: alignYawDeg = alignmentYawDeg(layoutL) for 'center-neg-x' (the yaw that turns the LED normal at
+ * the wall's centre point to +X; it depends on the sections only, never on the pivot point), else 0; yawDeg =
+ * wrapDeg(alignYawDeg + yawOffsetDeg) ('none': wrapDeg(yawOffsetDeg); +0 at the identity).
  * Side effects: none.
  * @param {WallLayout} layoutL  the raw walk (layout frame)
  * @param {import('../domain/Wall.js').WallPivot} pivot
- * @returns {PivotResolution|null} null when P is not finite (a non-finite layout: the identity fallback)
+ * @returns {PivotResolution|null} null when P is not finite (a non-finite layout: the identity fallback, no turn)
  * @throws {RangeError} for an unknown mode (WallLayout.pivotPoint)
  */
 export function resolvePivot(layoutL, pivot) {
@@ -614,7 +683,13 @@ export function resolvePivot(layoutL, pivot) {
   const o = pivot.offset;
   const P = { x: a.x + o.x, y: a.y + o.y, z: a.z + o.z };
   if (!Number.isFinite(P.x) || !Number.isFinite(P.y) || !Number.isFinite(P.z)) return null;
-  return { mode: pivot.mode, offset: { ...o }, anchor: a, point: P, stageOrigin: { x: P.x, y: 0, z: P.z } };
+  const { align, yawOffsetDeg } = pivot.orientation ?? NO_ORIENTATION;
+  const alignYawDeg = align === OrientationAlign.CENTER_NEG_X ? alignmentYawDeg(layoutL) : 0;
+  const yawDeg = wrapDeg(alignYawDeg + yawOffsetDeg);
+  return {
+    mode: pivot.mode, offset: { ...o }, anchor: a, point: P, stageOrigin: { x: P.x, y: 0, z: P.z },
+    align, yawOffsetDeg, alignYawDeg, yawDeg,
+  };
 }
 
 /**
@@ -631,14 +706,47 @@ export function stageShift(a, b) {
 }
 
 /**
- * Whether a resolution is the identity pivot (bottom-left with a zero offset): the exports write pivot metadata only
- * for a non-identity pivot (03 7.1, 7.2, Q10), so the identity keeps their Phase-1 bytes (03 T3).
+ * The change of the wall yaw between two resolutions (03 12.4, F3-O2): psi(b) - psi(a) in degrees, unwrapped; a null
+ * resolution (and a resolution without a yaw) counts as 0.
+ * Side effects: none.
+ * @param {PivotResolution|null} a  before
+ * @param {PivotResolution|null} b  after
+ * @returns {number} degrees
+ */
+export function yawShift(a, b) {
+  return (b ? b.yawDeg ?? 0 : 0) - (a ? a.yawDeg ?? 0 : 0);
+}
+
+/**
+ * The rigid map that carries a stage point from the stage frame of resolution a into that of resolution b while it
+ * keeps its place relative to the wall (03 12.6, F3-O2): s_b = R(dPsi) s_a + R(psi_b) (O_a - O_b), dPsi = psi_b - psi_a.
+ * cos and sin are yawTrig(dPsi) (exact at quarter turns); (dx, dz) = R(psi_b) (O_a - O_b), which is exactly
+ * -stageShift(a, b) when psi_b is 0 (the 03 6.5 re-expression, bit for bit).
+ * Side effects: none.
+ * @param {PivotResolution|null} a  before
+ * @param {PivotResolution|null} b  after
+ * @returns {{yawDeg: number, cos: number, sin: number, dx: number, dz: number}}
+ */
+export function stageChange(a, b) {
+  const shift = stageShift(a, b);
+  const yawB = b ? b.yawDeg ?? 0 : 0;
+  const yawDeg = yawShift(a, b);
+  const d = yawB === 0 ? { x: -shift.x, z: -shift.z } : turnXZ(-shift.x, -shift.z, yawTrig(yawB));
+  const trig = yawTrig(yawDeg);
+  return { yawDeg, cos: trig.cos, sin: trig.sin, dx: d.x, dz: d.z };
+}
+
+/**
+ * Whether a resolution is the identity pivot (bottom-left with a zero offset and, since 03 12.4, a zero wall yaw): the
+ * exports write pivot metadata only for a non-identity pivot (03 7.1, 7.2, Q10), so the identity keeps their Phase-1
+ * bytes (03 T3).
  * Side effects: none.
  * @param {PivotResolution} r
  * @returns {boolean}
  */
 export function isIdentityResolution(r) {
-  return r.mode === PivotMode.BOTTOM_LEFT && r.offset.x === 0 && r.offset.y === 0 && r.offset.z === 0;
+  return r.mode === PivotMode.BOTTOM_LEFT && r.offset.x === 0 && r.offset.y === 0 && r.offset.z === 0 &&
+    (r.yawDeg ?? 0) === 0;
 }
 
 /**
@@ -649,11 +757,14 @@ export function isIdentityResolution(r) {
  *   'export': t = -P, the file origin is the pivot;
  *   'layout': t = 0, the legacy world.
  * A null resolution (a non-finite layout) translates nothing. A zero translation (the identity pivot; -0 included)
- * returns the walk itself, bit-identical. Spec 02 inserts applySectionOffsets(out) after the translation (07 C32).
+ * returns the walk itself, bit-identical. F3-O2 (03 12.3): the stage and export frames are then turned by the wall yaw
+ * psi = resolution.yawDeg about the frame origin's vertical (the pivot): x_S = R_y(psi)(x_L - O), x_E = R_y(psi)(x_L - P);
+ * the layout frame and a zero yaw are never turned. Spec 02 inserts applySectionOffsets(out) after the translation and
+ * the turn (07 C32; its section frames are built from the turned geometry, 03 12.3).
  * Side effects: none (the returned layout is fresh; its `pivot` block is set here).
  * @param {import('../domain/Project.js').Project} project
  * @param {{frame?: 'stage'|'export'|'layout'}} [options]
- * @returns {WallLayout} with `pivot = {resolution, frame, translation}`
+ * @returns {WallLayout} with `pivot = {resolution, frame, translation, yawDeg}`
  * @throws {RangeError} `Unknown layout frame ${JSON.stringify(frame)}` for any other frame
  */
 export function layoutProject(project, { frame = 'stage' } = {}) {
@@ -663,9 +774,12 @@ export function layoutProject(project, { frame = 'stage' } = {}) {
   const t = frame === 'layout' || !resolution ? ZERO
     : frame === 'export' ? { x: -resolution.point.x, y: -resolution.point.y, z: -resolution.point.z }
       : { x: -resolution.stageOrigin.x, y: 0, z: -resolution.stageOrigin.z };
-  const out = (t.x === 0 && t.y === 0 && t.z === 0) ? raw : raw.translated(t.x, t.y, t.z);   // identity: the same object
-  // spec 02 inserts applySectionOffsets(out) here: S_i is built from the TRANSLATED section frame (03 5.10 #2, 07 C32)
-  out.pivot = { resolution, frame, translation: t };
+  const yawDeg = frame === 'layout' || !resolution ? 0 : resolution.yawDeg;
+  let out = (t.x === 0 && t.y === 0 && t.z === 0) ? raw : raw.translated(t.x, t.y, t.z);   // identity: the same object
+  if (yawDeg !== 0) out = out.rotated(yawDeg);                                             // 03 12.3: about the pivot
+  // spec 02 inserts applySectionOffsets(out) here: S_i is built from the TRANSLATED (and turned) section frame
+  // (03 5.10 #2, 12.3; 07 C32)
+  out.pivot = { resolution, frame, translation: t, yawDeg };
   return out;
 }
 
@@ -684,13 +798,21 @@ export function layoutProject(project, { frame = 'stage' } = {}) {
  *     Q16): width = extentAcross(facing) (the wall seen face-on, invariant under a yaw of the wall), height = the y range
  *     of their vertices; read by the safe distance D and the coverage's fits test;
  *   facing: chordFacing(), the direction the wall faces as a whole: Reset stands on it, 5 m from wallBox.center;
- *   wallZ: the z of the walk's start in this frame (0 + the layout's translation z; 0 for a bare walk): the posZ rule's
- *     context (03 4.1: a non-numeric Z entry puts the camera 5 m in front of the wall start plane).
+ *   wallZ: the z of the walk's start in this frame (0 + the layout's translation z, turned by the layout's yaw since
+ *     F3-O2; 0 for a bare walk): the posZ rule's context (03 4.1: a non-numeric Z entry puts the camera 5 m in front of
+ *     the wall start plane).
  * On every harness wall (no offsets, no detached or horizontal sections) the boxes coincide with the box of
  * worldVertices(). Nothing here assumes the wall runs along +X or faces +Z.
+ * The orientation additions (03 12.7): centre = wallCentre(layout) in this frame (null without one); aligned = the
+ *   resolution's align is 'center-neg-x' (stage or export frame); viewYawDeg = wrapDeg(90 + yawOffsetDeg) when aligned
+ *   with a centre (the azimuth of the turned centre normal), else the layout's yaw (0 at the identity): the view presets
+ *   and the aligned Reset read it; frontZ = the posZ input's fallback for a non-numeric entry, 5 m in front of the LED
+ *   face: wallZ + 5 at a zero yaw (the legacy rule), else the z of the Reset position.
  * @typedef {Readonly<{generativeBox: FramingBox, wallBox: FramingBox,
  *            stageExtent: Readonly<{width: number, height: number}>,
- *            facing: Readonly<{x: number, y: number, z: number}>, wallZ: number}>} Framing
+ *            facing: Readonly<{x: number, y: number, z: number}>, wallZ: number,
+ *            centre: Readonly<{point: {x: number, y: number, z: number}, normal: {x: number, y: number, z: number}}>|null,
+ *            aligned: boolean, viewYawDeg: number, frontZ: number}>} Framing
  */
 
 /** The framing memo: one framing per layout instance (a layout is rebuilt once per WALL_REBUILT). */
@@ -750,20 +872,34 @@ function stageExtentOf(layout, facing) {
  */
 function layoutFraming(layout) {
   const t = layout.pivot ? layout.pivot.translation : ZERO;
-  const wallZ = 0 + t.z;
+  const yawDeg = layout.pivot ? layout.pivot.yawDeg ?? 0 : 0;
+  const start = yawDeg === 0 ? t : turnXZ(t.x, t.z, yawTrig(yawDeg));   // the walk start in this frame (03 12.5)
+  const wallZ = 0 + start.z;
   const generativeBox = framingBox(layout.generativeBounds());
   const wallBox = framingBox(layout.bounds());
   const facing = layout.chordFacing();
   const stageExtent = generativeBox && wallBox ? stageExtentOf(layout, facing) : null;
+  // 03 12.7: the orientation additions (the wall centre, whether 'center-neg-x' is on, the azimuth the views face from)
+  const res = layout.pivot ? layout.pivot.resolution : null;
+  const aligned = !!res && layout.pivot.frame !== 'layout' && res.align === OrientationAlign.CENTER_NEG_X;
+  const c = wallCentre(layout);
+  const centre = c ? Object.freeze({ point: Object.freeze(c.point), normal: Object.freeze(c.normal) }) : null;
+  const viewYawDeg = aligned && centre ? wrapDeg(90 + res.yawOffsetDeg) : yawDeg;
   if (!generativeBox || !wallBox || !stageExtent) {
-    const origin = { x: 0 + t.x, y: 0, z: wallZ };
+    const origin = { x: 0 + start.x, y: 0, z: wallZ };
     const box = framingBox({ min: origin, max: origin });
     return Object.freeze({
       generativeBox: box, wallBox: box, stageExtent: Object.freeze({ width: 0, height: 0 }),
-      facing: Object.freeze({ x: 0, y: 0, z: 1 }), wallZ,
+      facing: Object.freeze({ x: 0, y: 0, z: 1 }), wallZ, centre: null, aligned, viewYawDeg: yawDeg,
+      frontZ: yawDeg === 0 ? wallZ + 5 : wallZ,
     });
   }
-  return Object.freeze({ generativeBox, wallBox, stageExtent, facing: Object.freeze(facing), wallZ });
+  const frontZ = yawDeg === 0 ? wallZ + 5
+    : aligned && centre ? centre.point.z + 5 * yawTrig(viewYawDeg).cos
+      : wallBox.center.z + 5 * facing.z;
+  return Object.freeze({
+    generativeBox, wallBox, stageExtent, facing: Object.freeze(facing), wallZ, centre, aligned, viewYawDeg, frontZ,
+  });
 }
 
 /**

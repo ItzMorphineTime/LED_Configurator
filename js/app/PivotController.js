@@ -11,7 +11,8 @@
  */
 
 import { Events } from '../core/EventBus.js';
-import { stageShift } from '../geometry/WallLayout.js';
+import { stageChange, stageShift } from '../geometry/WallLayout.js';
+import { turnXZ, yawTrig } from '../geometry/WallOrientation.js';
 
 /** The "Ctrl-drag snap" steps in metres: the values of the #pivot-snap options (03 3.2), smallest first. */
 export const PIVOT_SNAP_STEPS_M = Object.freeze([0.001, 0.01, 0.1, 0.5, 1]);
@@ -141,6 +142,27 @@ export class PivotController {
    */
   setMode(mode) {
     this.#commit((p) => p.setMode(mode), 'mode');
+  }
+
+  /**
+   * #pivot-align (rebuild-policy row F3-6, 03 12.9): the orientation alignment.
+   * Side effects: P-PIVOT iff the alignment changes.
+   * @param {string} align  an ORIENTATION_ALIGNS value
+   * @throws {RangeError} for an unknown alignment (WallPivot.setAlign), before anything is written
+   */
+  setAlign(align) {
+    this.#commit((p) => p.setAlign(align), 'align');
+  }
+
+  /**
+   * #pivot-yaw-offset (row F3-7, 03 12.9): the yaw offset in degrees; a rejected entry writes nothing.
+   * Side effects: P-PIVOT iff the stored offset changes.
+   * @param {number|string} raw
+   * @returns {number} the stored offset, for the input's write-back
+   */
+  setYawOffset(raw) {
+    this.#commit((p) => p.setYawOffset(raw), 'yaw-offset');
+    return this.pivot.orientation.yawOffsetDeg;
   }
 
   /**
@@ -294,9 +316,21 @@ export class PivotController {
     pending.y += movement.y;
     pending.z += movement.z;
     const offset = this.pivot.offset;
-    const target = dragTarget(offset, pending, ctx?.snap ? ctx.snap.pivotM : 0);
+    const step = ctx?.snap ? ctx.snap.pivotM : 0;
+    const yaw = this.#wallController.pivotResolution?.yawDeg ?? 0;
+    let target;
+    if (yaw === 0) {
+      target = dragTarget(offset, pending, step);
+      this.#preview = { x: target.x - offset.x, y: target.y - offset.y, z: target.z - offset.z };
+    } else {
+      // 03 12.5: snapped along the dragged stage axes, then turned by -yaw into the layout-axis offset (Q6)
+      const snap = (v) => (step > 0 ? Math.round(v / step) * step : v);
+      const l = turnXZ(snap(pending.x), snap(pending.z), yawTrig(-yaw));
+      target = dragTarget(offset, { x: l.x, y: snap(pending.y), z: l.z }, 0);
+      const s = turnXZ(target.x - offset.x, target.z - offset.z, yawTrig(yaw));
+      this.#preview = { x: s.x, y: target.y - offset.y, z: s.z };
+    }
     this.#target = target;
-    this.#preview = { x: target.x - offset.x, y: target.y - offset.y, z: target.z - offset.z };
     this.#markerView.setPreview(this.#preview.x, this.#preview.y, this.#preview.z);
     this.#bus.emit(Events.SELECTABLE_MOVED, { id: this.id });
   }
@@ -344,7 +378,7 @@ export class PivotController {
    * Side effects: the pivot; maybe translateStage on each participant (their pose events); emits WALL_PIVOT_CHANGED;
    *   wallController.commitPivot(after); emits SELECTABLE_MOVED {id: 'pivot'}.
    * @param {(pivot: import('../domain/Wall.js').WallPivot) => void} mutate
-   * @param {'mode'|'offset'|'reset-offset'|'gizmo'} source
+   * @param {'mode'|'offset'|'reset-offset'|'gizmo'|'align'|'yaw-offset'} source
    */
   #commit(mutate, source) {
     const pivot = this.pivot;
@@ -355,13 +389,20 @@ export class PivotController {
     const before = wallController.pivotResolution;
     const after = wallController.resolvePivotNow();
     const shift = stageShift(before, after);
-    const moved = shift.x !== 0 || shift.z !== 0;
+    const change = stageChange(before, after);
+    const moved = shift.x !== 0 || shift.z !== 0 || change.yawDeg !== 0;
     const reexpressed = moved && pivot.keepStageLayout;
     if (reexpressed) {
-      for (const participant of this.#stageAnchored) participant.translateStage(-shift.x, -shift.z);
+      // 03 12.6: a translation alone is translateStage (the 6.5 rule; (dx, dz) = -shift at a zero yaw), a turn the
+      // rigid reexpressStage
+      for (const participant of this.#stageAnchored) {
+        if (change.yawDeg === 0) participant.translateStage(change.dx, change.dz);
+        else participant.reexpressStage(change);
+      }
     }
     this.#bus.emit(Events.WALL_PIVOT_CHANGED, {
-      source, pivot: pivot.clone(), resolution: after, stageShift: shift, reexpressed, rebuilds: moved,
+      source, pivot: pivot.clone(), resolution: after, stageShift: shift, yawShiftDeg: change.yawDeg, reexpressed,
+      rebuilds: moved,
     });
     wallController.commitPivot(after);
     this.#bus.emit(Events.SELECTABLE_MOVED, { id: this.id });
@@ -375,7 +416,7 @@ export class PivotController {
   #emitToggle(source) {
     this.#bus.emit(Events.WALL_PIVOT_CHANGED, {
       source, pivot: this.pivot.clone(), resolution: this.#wallController.pivotResolution, stageShift: { x: 0, z: 0 },
-      reexpressed: false, rebuilds: false,
+      yawShiftDeg: 0, reexpressed: false, rebuilds: false,
     });
   }
 

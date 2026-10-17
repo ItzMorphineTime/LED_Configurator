@@ -20,6 +20,7 @@ import { Events } from '../core/EventBus.js';
 import { RENDER_ORDER } from '../core/renderOrder.js';
 import { ResourceTracker } from './ResourceTracker.js';
 import { LAYERS } from './SceneManager.js';
+import { turnXZ, yawTrig } from '../geometry/WallOrientation.js';
 
 /** The anchor ghost's cross half-size in metres (03 3.3: a grey cross of +-0.12 m). */
 const GHOST_HALF_SIZE_M = 0.12;
@@ -262,9 +263,13 @@ export class PivotMarkerView {
     const gz = p.z;
     this.#glyph.position.set(gx, gy, gz);
     // The anchor in the stage frame: A - O = (A.x - P.x, A.y, A.z - P.z) = (-offset.x, A.y, -offset.z).
-    const ax = r.anchor.x - r.stageOrigin.x;
+    // 03 12.5: turned by the wall yaw about the stage origin's vertical
+    const yaw = r.yawDeg ?? 0;
+    const t = yaw === 0 ? { x: r.anchor.x - r.stageOrigin.x, z: r.anchor.z - r.stageOrigin.z }
+      : turnXZ(r.anchor.x - r.stageOrigin.x, r.anchor.z - r.stageOrigin.z, yawTrig(yaw));
+    const ax = t.x;
     const ay = r.anchor.y;
-    const az = r.anchor.z - r.stageOrigin.z;
+    const az = t.z;
     this.#ghost.position.set(ax, ay, az);
     const linked = gx !== ax || gy !== ay || gz !== az;
     this.#ghost.visible = linked;

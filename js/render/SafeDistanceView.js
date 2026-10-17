@@ -90,6 +90,7 @@ export class SafeDistanceView {
     // group built under an earlier pivot (B-M8's stale group) into the current export frame.
     const so = layout.pivot?.resolution?.stageOrigin ?? { x: 0, z: 0 };
     group.userData.stageOrigin = { x: so.x, z: so.z };
+    group.userData.stageYawDeg = layout.pivot?.resolution?.yawDeg ?? 0;   // 03 12.8: the yaw the band was built under
 
     // Safe distance = maximum distance where the frame still fits within the wall (MIN over both dimensions)
     const overallSafeDist = cine.maxSafeDistance(extent);

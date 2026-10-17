@@ -13,6 +13,7 @@ import { exportSectionName, exportPanelName, mtlTextureFile } from '../geometry/
 import { computeAtlas } from '../geometry/TextureAtlas.js';
 import { atlasUvRect } from '../geometry/WallMeshBuilder.js';
 import { isIdentityResolution } from '../geometry/WallLayout.js';
+import { turnXZ, yawTrig } from '../geometry/WallOrientation.js';
 import { unsupportedStrategy } from '../legacy/LegacyCompat.js';
 
 /**
@@ -36,7 +37,20 @@ function pivotHeaderLines(layout) {
   const f = (v) => v.toFixed(6);
   const { anchor: a, offset: o, point: P } = r;
   return `# Pivot: ${r.mode} anchor ${f(a.x)} ${f(a.y)} ${f(a.z)} offset ${f(o.x)} ${f(o.y)} ${f(o.z)} (layout m); file origin = pivot\n` +
-    `# Stage placement: origin at stage (0 ${f(P.y)} 0) (Y up, metres)\n`;
+    `# Stage placement: origin at stage (0 ${f(P.y)} 0) (Y up, metres)\n` + orientationHeaderLine(r);
+}
+
+/**
+ * The orientation header line of 03 12.8, only for a turned wall ('' at a zero yaw). Numbers are toFixed(6).
+ * @param {import('../geometry/WallLayout.js').PivotResolution} r
+ * @returns {string}
+ */
+function orientationHeaderLine(r) {
+  const yaw = r.yawDeg ?? 0;
+  if (yaw === 0) return '';
+  const f = (v) => v.toFixed(6);
+  return `# Orientation: yaw ${f(yaw)} deg about +Y through the pivot (align ${r.align}: ${f(r.alignYawDeg)} deg + ` +
+    `offset ${f(r.yawOffsetDeg)} deg)\n`;
 }
 
 /**
@@ -375,11 +389,14 @@ export class ObjExporter {
    * @param {Object3DLike} group  SafeDistanceView.object3D
    * @param {{clampedVertices: number, totalSafeVertices: number, distance: number}|null} [band]
    *   SafeDistanceView.lastBand (geometry/SafeDistanceBand); null or absent writes no `# Clamped:` line
-   * @param {{translate?: {x: number, y: number, z: number}}} [options]  translate: from the group's stage frame to the
-   *   current export frame, (sb.x - P.x, -P.y, sb.z - P.z) (ProjectIO.exportSafeDistanceOBJ); default (0, 0, 0)
+   * @param {{translate?: {x: number, y: number, z: number}, yawDeg?: number}} [options]  translate: from the group's
+   *   stage frame to the current export frame, (sb.x - P.x, -P.y, sb.z - P.z) (ProjectIO.exportSafeDistanceOBJ); default
+   *   (0, 0, 0); yawDeg (03 12.8): the turn applied to x and z before the translation (the current wall yaw minus the
+   *   yaw the group was built under; default 0, which writes the bytes of 7.1)
    * @returns {string}
    */
-  writeSafeDistance(group, band = null, { translate = NO_TRANSLATE } = {}) {
+  writeSafeDistance(group, band = null, { translate = NO_TRANSLATE, yawDeg = 0 } = {}) {
+    const trig = yawDeg === 0 ? null : yawTrig(yawDeg);
     let objContent = this.#brand.safeDistanceObjHeader;
     if (band && band.clampedVertices > 0) {
       const line = `# Clamped: ${band.clampedVertices} of ${band.totalSafeVertices} offset vertices are closer than ` +
@@ -401,6 +418,8 @@ export class ObjExporter {
           let x = positions.getX(i);
           let y = positions.getY(i);
           let z = positions.getZ(i);
+          // 03 12.8: first turned by yawDeg (the current wall yaw minus the group's), then translated
+          if (trig) ({ x, z } = turnXZ(x, z, trig));
           // 03 7.1: into the current export frame; an axis whose translation is 0 (or -0) is written as before
           if (translate.x !== 0) x += translate.x;
           if (translate.y !== 0) y += translate.y;

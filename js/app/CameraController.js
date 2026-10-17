@@ -289,7 +289,8 @@ export class CameraController {
    * @returns {number} the stored value
    */
   setCameraField(field, raw) {
-    return this.#project.camera.setField(field, raw, { wallZ: this.#frameBounds().wallZ });
+    const fb = this.#frameBounds();
+    return this.#project.camera.setField(field, raw, { wallZ: fb.wallZ, frontZ: fb.frontZ });
   }
 
   /**
@@ -303,6 +304,17 @@ export class CameraController {
    */
   translateStage(dx, dz) {
     this.#project.camera.translateStage(dx, dz);
+    this.#bus.emit(Events.CAMERA_POSE_CHANGED, { source: 'pivot' });
+  }
+
+  /**
+   * StageAnchored participant, the rigid form (03 12.6): CineCamera.reexpressStage(change) and the pose mirror.
+   * Side effects: writes the pose; emits CAMERA_POSE_CHANGED {source: 'pivot'}.
+   * @param {{yawDeg: number, cos: number, sin: number, dx: number, dz: number}} change  WallLayout.stageChange
+   * @returns {void}
+   */
+  reexpressStage(change) {
+    this.#project.camera.reexpressStage(change);
     this.#bus.emit(Events.CAMERA_POSE_CHANGED, { source: 'pivot' });
   }
 

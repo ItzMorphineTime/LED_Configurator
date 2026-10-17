@@ -144,10 +144,23 @@
                         <option value="0.1" selected>10 cm</option><option value="0.5">50 cm</option><option value="1">1 m</option>
                     </select>
                 </div>
+                <div class="pivot-orientation" id="pivot-orientation" role="group" aria-labelledby="pivot-orientation-title">
+                    <div class="pivot-subtitle" id="pivot-orientation-title">Orientation</div>
+                    <div class="section-row pivot-orientation-row">
+                        <div class="input-field"><label for="pivot-align">Alignment</label>
+                            <select id="pivot-align" class="ui-select pivot-align" title="Turn the wall about the pivot so the LED face's centre normal points along +X and the wall's centre lies toward −X.">
+                                <option value="center-neg-x">Centre on −X</option>
+                                <option value="none" selected>None</option>
+                            </select></div>
+                        <div class="input-field"><label for="pivot-yaw-offset">Yaw offset (°)</label>
+                            <input type="number" id="pivot-yaw-offset" step="0.1" min="-180" max="180" value="0"></div>
+                    </div>
+                    <div class="pivot-yaw-readout" id="pivot-yaw-readout" aria-live="polite">Wall yaw 0.0° (no alignment, offset 0.0°)</div>
+                </div>
                 <div class="toggle-container">
                     <span class="toggle-label" id="pivot-keep-stage-label">Keep stage layout on pivot change</span>
                     <div class="toggle active" id="toggle-pivot-keep-stage" role="switch" tabindex="0" aria-checked="true" aria-labelledby="pivot-keep-stage-label"
-                         title="Move the camera and props with the wall when the pivot changes, so their placement relative to the wall is kept."></div>
+                         title="Move and turn the camera and props with the wall when the pivot or orientation changes, so their placement relative to the wall is kept."></div>
                 </div>
                 <div class="toggle-container">
                     <span class="toggle-label" id="pivot-marker-label">Show pivot marker</span>
@@ -156,7 +169,7 @@
                 <div class="pivot-readout">
                     <div id="pivot-readout">Pivot (from wall start): 0.000, 0.000, 0.000 m</div>
                     <div class="pivot-hint">Exports: mesh origin = pivot. Viewport: grid origin = pivot on the floor.</div>
-                    <div class="pivot-hint">Session only: the pivot is not saved in project files yet.</div>
+                    <div class="pivot-hint">Session only: the pivot and orientation are not saved in project files yet.</div>
                     <div class="pivot-status" id="pivot-status" aria-live="polite"></div>
                 </div>
             </div>

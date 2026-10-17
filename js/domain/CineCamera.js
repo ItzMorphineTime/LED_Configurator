@@ -41,12 +41,30 @@ export const FILMBACK_PRESETS = Object.freeze({
 
 /**
  * The context of a camera input rule (03 4.1): wallZ is the stage z of the wall's start plane (`framingBounds().wallZ`,
- * the negated stage-origin z; 0 at the identity pivot and for every pivot whose stage origin lies on that plane).
- * @typedef {{wallZ: number}} FieldContext
+ * the negated stage-origin z; 0 at the identity pivot and for every pivot whose stage origin lies on that plane);
+ * frontZ (03 12.5, optional) is `framingBounds().frontZ`, the z 5 m in front of the LED face (wallZ + 5 for an unturned
+ * wall, the Reset position's z for a turned one): when present it is the posZ fallback.
+ * @typedef {{wallZ: number, frontZ?: number}} FieldContext
  */
 
 /** The context of the legacy rules: the wall plane at stage z = 0. */
 const WALL_PLANE_AT_ORIGIN = Object.freeze({ wallZ: 0 });
+
+/**
+ * The (cos, sin) of an angle in degrees, exact at multiples of 90 (geometry/WallOrientation's yawTrig; the domain may
+ * not import geometry). Side effects: none.
+ * @param {number} deg
+ * @returns {{cos: number, sin: number}}
+ */
+function quarterExactTrig(deg) {
+  const q = deg / 90;
+  if (Number.isInteger(q)) {
+    const k = ((q % 4) + 4) % 4;
+    return { cos: [1, 0, -1, 0][k], sin: [0, 1, 0, -1][k] };
+  }
+  const r = deg * Math.PI / 180;
+  return { cos: Math.cos(r), sin: Math.sin(r) };
+}
 
 /** Rounds to 1 mm: the posZ fallback of a stage origin off the wall's start plane (03 4.1). */
 const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -86,7 +104,7 @@ export class CineCamera {
     posX: Object.freeze({ parse: (r) => orDefault(parseFloat(r), 0), writeBack: false }),
     posY: Object.freeze({ parse: (r) => Math.max(0, orDefault(parseFloat(r), 1.5)), writeBack: true }),
     posZ: Object.freeze({
-      parse: (r, ctx = WALL_PLANE_AT_ORIGIN) => finiteOr(parseFloat(r), r3(ctx.wallZ + 5)),
+      parse: (r, ctx = WALL_PLANE_AT_ORIGIN) => finiteOr(parseFloat(r), r3(ctx.frontZ ?? ctx.wallZ + 5)),
       writeBack: true,
     }),
     rotX: Object.freeze({ parse: (r) => Math.max(-90, Math.min(90, orDefault(parseFloat(r), 0))), writeBack: true }),
@@ -96,6 +114,9 @@ export class CineCamera {
 
   /** How far in front of the wall Reset puts the camera (metres; the legacy 5; 08 P2-11c). */
   static RESET_DISTANCE_M = 5;
+
+  /** The eye height of the aligned Reset (metres; 03 12.7). */
+  static RESET_EYE_HEIGHT_M = 1.5;
 
   /**
    * The writer bounds of the pose (spec 07 C22 and 4.3: x and z within +-100,000 m, y in [0, 100,000]), shared with the
@@ -138,6 +159,27 @@ export class CineCamera {
     const { posX, posZ } = CineCamera.LIMITS;
     this.posX = clamp(this.posX + dx, posX.min, posX.max);
     this.posZ = clamp(this.posZ + dz, posZ.min, posZ.max);
+  }
+
+  /**
+   * The rigid re-expression of an explicit pivot or orientation edit (03 12.6): with a zero yaw change exactly
+   * translateStage(dx, dz); otherwise the position turns about the stage origin by the change (cos, sin), (dx, dz) is
+   * added and each component is clamped through LIMITS, and the pan turns with it (wrapDeg(rotY + yawDeg)); y, tilt and
+   * roll are untouched ('YXZ': R_y(d) R_y(pan) R_x R_z = R_y(pan + d) R_x R_z).
+   * Side effects: writes posX, posZ and maybe rotY.
+   * @param {{yawDeg: number, cos: number, sin: number, dx: number, dz: number}} change  WallLayout.stageChange
+   */
+  reexpressStage({ yawDeg, cos, sin, dx, dz }) {
+    if (yawDeg === 0) {
+      this.translateStage(dx, dz);
+      return;
+    }
+    const { posX, posZ } = CineCamera.LIMITS;
+    const x = this.posX * cos + this.posZ * sin + dx;
+    const z = -this.posX * sin + this.posZ * cos + dz;
+    this.posX = clamp(x, posX.min, posX.max);
+    this.posZ = clamp(z, posZ.min, posZ.max);
+    this.rotY = wrapDeg(this.rotY + yawDeg);
   }
 
   /**
@@ -215,6 +257,21 @@ export class CineCamera {
    *   framingBounds(layout) (metres)
    */
   resetTo(framing) {
+    if (framing.aligned && framing.centre) {
+      // 03 12.7: 'center-neg-x': 5 m along the turned centre normal from the wall centre, at eye height, looking at the
+      // wall's mid-height above the centre point
+      const p = wrapDeg(framing.viewYawDeg);
+      const n = quarterExactTrig(p);
+      const C = framing.centre.point;
+      const h = framing.wallBox.center.y;
+      this.posX = C.x + CineCamera.RESET_DISTANCE_M * n.sin;
+      this.posY = CineCamera.RESET_EYE_HEIGHT_M;
+      this.posZ = C.z + CineCamera.RESET_DISTANCE_M * n.cos;
+      this.rotX = Math.atan2(h - CineCamera.RESET_EYE_HEIGHT_M, CineCamera.RESET_DISTANCE_M) * 180 / Math.PI;
+      this.rotY = p;
+      this.rotZ = 0;
+      return;
+    }
     const c = framing.wallBox.center;
     const f = framing.facing;
     this.posX = c.x + CineCamera.RESET_DISTANCE_M * f.x;

@@ -112,7 +112,7 @@ describe('WallController.rebuild (P1, ARCHITECTURE.md 6.1)', () => {
     assert.equal(args.meshMode, 'section');
     assert.equal(args.display, r.project.display);
     const [rebuilt] = r.emitted('WALL_REBUILT');
-    assert.deepEqual(Object.keys(rebuilt), ['layout', 'meshMode', 'view', 'cause', 'stageShift']);
+    assert.deepEqual(Object.keys(rebuilt), ['layout', 'meshMode', 'view', 'cause', 'stageShift', 'yawShiftDeg']);
     assert.equal(rebuilt.cause, 'edit');
     assert.deepEqual(rebuilt.stageShift, { x: 0, z: 0 });
     assert.equal(rebuilt.layout, args.layout, 'WALL_REBUILT carries the same layout object');
@@ -241,7 +241,7 @@ describe('the pivot cache, WALL_REBUILT cause and stageShift, commitPivot (03 5.
     assert.equal(r.project.camera.posX, 0.5, 'an import is a load: nothing is re-expressed');
     // 03 T4 (4.4, 5.5): WALL_PIVOT_CHANGED {import} after the assignment, before every other import mirror and the rebuild
     const [changed] = r.emitted('WALL_PIVOT_CHANGED');
-    assert.deepEqual(Object.keys(changed), ['source', 'pivot', 'resolution', 'stageShift', 'reexpressed', 'rebuilds']);
+    assert.deepEqual(Object.keys(changed), ['source', 'pivot', 'resolution', 'stageShift', 'yawShiftDeg', 'reexpressed', 'rebuilds']);
     assert.equal(changed.source, 'import');
     assert.ok(changed.pivot.isIdentity && changed.pivot !== pivotAtRebuild, 'a copy of the assigned pivot');
     assert.deepEqual(changed.resolution, resolvePivot(computeWallLayout(r.project.wall.sections), new WallPivot()));

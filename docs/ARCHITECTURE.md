@@ -101,12 +101,12 @@ Direction of communication:
 | Frame | Origin | Produced by | Consumers |
 |---|---|---|---|
 | **Layout (L)** | The first section's first bottom edge vertex (the legacy world) | `computeWallLayout(sections)` (the verbatim walk, oracle-tested; B-L1 convention above) | `resolvePivot`, unit tests, the `pivot.resolved_m` readouts |
-| **Stage (S)**, `x_S = x_L − O`, O = (P.x, 0, P.z) | The pivot P projected onto the floor; the floor stays y = 0 | `layoutProject(project)` (default `frame: 'stage'`), read through `WallController.currentLayout` (spec 02's single layout accessor; before it lands, the layout of the last P1 rebuild) | `LEDWallView` (wall and frames), picking, gizmo anchors, spec 02's outlines and transform-only fast path, spec 01's normal lines (`matrixWorld`), spec 04's hover readout (`panelCornersWorld`), spec 05's shader (`modelMatrix·position`) and its T13 bake, 08's `FrustumCoverage` and `CameraHub`, the safe-distance band (`SafeDistanceView`), `framingBounds`, `OrbitController`, spec 09's inner frustum, measurement snapping and X15 plan SVG, and every stored pose (camera, props, HDRI point, measurements, orbit) |
-| **Export (E)**, `x_E = x_L − P = x_S − (0, P.y, 0)` | The pivot P | `layoutProject(project, {frame: 'export'})` | `ObjExporter`, `GltfExporter`, the ZIP, spec 09's X11 stage packs. The safe-distance OBJ is the stage band translated by (0, −P.y, 0) (03 §7.1). |
+| **Stage (S)**, `x_S = R_y(ψ)(x_L − O)`, O = (P.x, 0, P.z) (ψ = 0 unless the orientation is used, F3-O2) | The pivot P projected onto the floor; the floor stays y = 0 | `layoutProject(project)` (default `frame: 'stage'`), read through `WallController.currentLayout` (spec 02's single layout accessor; before it lands, the layout of the last P1 rebuild) | `LEDWallView` (wall and frames), picking, gizmo anchors, spec 02's outlines and transform-only fast path, spec 01's normal lines (`matrixWorld`), spec 04's hover readout (`panelCornersWorld`), spec 05's shader (`modelMatrix·position`) and its T13 bake, 08's `FrustumCoverage` and `CameraHub`, the safe-distance band (`SafeDistanceView`), `framingBounds`, `OrbitController`, spec 09's inner frustum, measurement snapping and X15 plan SVG, and every stored pose (camera, props, HDRI point, measurements, orbit) |
+| **Export (E)**, `x_E = R_y(ψ)(x_L − P) = x_S − (0, P.y, 0)` | The pivot P | `layoutProject(project, {frame: 'export'})` | `ObjExporter`, `GltfExporter`, the ZIP, spec 09's X11 stage packs. The safe-distance OBJ is the stage band translated by (0, −P.y, 0) (03 §7.1). |
 
 - Texture content (spec 04's UVs, spec 05's bake, panel IDs) does not depend on the frame. The trap this table prevents: spec 05's bake must read the **stage** layout, because the projection point is stored in the stage frame; the export layout would sample every texel P.y too low.
-- **There is never a wall root transform** (07 C32). Each frame is baked into the vertex positions by `layoutProject`, and the identity transform of the wall group is an invariant (Feature 3 adds its unit test, 03 §5.1). The pipeline is: the raw walk (every `postTransform` `null`), `resolvePivot` on it from generative quantities only, `translated(t)` with `t` = −O (stage), −P (export) or 0 (layout), then spec 02's `applySectionOffsets(out)`, which builds each section matrix from the translated layout (section 9, Feature 3 row).
-- **Orientation (03 §12, the owner's request of 2026-10-17; steps F3-O1 to F3-O7).** The stage and export frames gain the wall yaw ψ, a turn about +Y through the pivot (the sign of three.js `rotation.y`): x_S = R_y(ψ)(x_L − O) and x_E = R_y(ψ)(x_L − P) = x_S − (0, P.y, 0), with R_y(ψ)(x, y, z) = (x·cos ψ + z·sin ψ, y, −x·sin ψ + z·cos ψ). ψ = wrapDeg(ψa + yawOffsetDeg), where ψa, the alignment of `WallPivot.orientation.align = 'center-neg-x'` ("Centre on −X"), turns the LED normal at the wall's centre point (the arc-length midpoint of the bottom edge chain) to +X, and is 0 with `'none'`. `layoutProject` turns the translated raw walk (`WallLayout.rotated`) before spec 02's `applySectionOffsets`, so every consumer of the table above follows without orientation code and there is still no wall root transform. ψ = 0 (the default `'none'` with a zero offset) keeps the frames above bit for bit; the table and the pipeline are amended when F3-O2 lands the turn.
+- **There is never a wall root transform** (07 C32). Each frame is baked into the vertex positions by `layoutProject`, and the identity transform of the wall group is an invariant (Feature 3 adds its unit test, 03 §5.1). The pipeline is: the raw walk (every `postTransform` `null`), `resolvePivot` on it from generative quantities only, `translated(t)` with `t` = −O (stage), −P (export) or 0 (layout), then (F3-O2) `rotated(ψ)` when the wall yaw ψ of the stage or export frame is not 0, then spec 02's `applySectionOffsets(out)`, which builds each section matrix from the translated (and turned) layout (section 9, Feature 3 row).
+- **Orientation (03 §12, the owner's request of 2026-10-17; steps F3-O1 to F3-O7).** The stage and export frames gain the wall yaw ψ, a turn about +Y through the pivot (the sign of three.js `rotation.y`): x_S = R_y(ψ)(x_L − O) and x_E = R_y(ψ)(x_L − P) = x_S − (0, P.y, 0), with R_y(ψ)(x, y, z) = (x·cos ψ + z·sin ψ, y, −x·sin ψ + z·cos ψ). ψ = wrapDeg(ψa + yawOffsetDeg), where ψa, the alignment of `WallPivot.orientation.align = 'center-neg-x'` ("Centre on −X"), turns the LED normal at the wall's centre point (the arc-length midpoint of the bottom edge chain) to +X, and is 0 with `'none'`. `layoutProject` turns the translated raw walk (`WallLayout.rotated`) before spec 02's `applySectionOffsets`, so every consumer of the table above follows without orientation code and there is still no wall root transform. ψ = 0 (the default `'none'` with a zero offset) keeps the frames above bit for bit. Landed in F3-O2 (`geometry/WallOrientation.js`, 3.6); the yaw's cosine and sine are exact at multiples of 90° (`yawTrig`), so the default flat wall turned by 90° lies exactly on x = 0 with LED normals exactly +X.
 
 ### 1.5 Code conventions
 
@@ -237,7 +237,13 @@ js/
                                                  03 T2: baseY, generativeBounds, translated, resolvePivot, stageShift, the
                                                  frames of layoutProject; 08 P2-11a: columnQuads, worldVertices (memoised per
                                                  instance), extentAcross, chordFacing; 08 P2-11c: framingBounds 'layout'
-                                                 (FramingPolicy's generativeBox, wallBox, stageExtent; memoised per layout)
+                                                 (FramingPolicy's generativeBox, wallBox, stageExtent; memoised per layout);
+                                                 F3-O2: rotated, the orientation of resolvePivot, yawShift, stageChange,
+                                                 layoutProject's turn of the stage and export frames
+    WallOrientation.js                     F3-O2  The whole-wall orientation's geometry (03 12.2): yawTrig (exact at
+                                                 quarter turns), turnXZ, azimuthDeg, wallCentre (the arc-length midpoint of
+                                                 the bottom edge chain and its LED normal), alignmentYawDeg; imports
+                                                 domain/rules
     WallMeshBuilder.js                     WP4   quadIndices + WallMeshBuilder: the one owner of winding, normals, UVs, panel quads;
                                                  maxIndexOf, indexWidth (index component width, 08 P2-1b)
     TextureAtlas.js                        WP4   computeAtlas (LED totals, px/LED, start columns, x offsets, UV offsets),
@@ -452,7 +458,10 @@ tests/
     core.test.mjs                          WP3   EventBus semantics, LegacyCompat helpers, LEGACY_SITES shape
     domain.test.mjs                        WP3   rule tables vs legacy expressions, Wall/CineCamera/Prop/LogoLibrary semantics
     oracle/legacy-geometry.mjs             WP4   verbatim THREE-free copies of the legacy layout walks and grid builders
-    orientation.test.mjs                   F3-O1  the whole-wall orientation (03 12.12): the domain rules (test 1)
+    orientation.test.mjs                   F3-O1  the whole-wall orientation (03 12.12): the domain rules (test 1);
+                                                 F3-O2: wallCentre, the alignment yaw (the flat wall exactly +90 on x = 0, the
+                                                 symmetric concave middle on -X, asymmetric and multi-section walls, the empty
+                                                 wall), the turned stage and export frames, yawShift, stageChange (tests 2-4)
     pivot.test.mjs                         03 T2  Feature 3's geometry (03 8.1 tests 1-9): the 6.8 anchors, resolvePivot,
                                                  stageShift, the frames of layoutProject, translated(), the export frame of
                                                  the grids and panel corners, the framing ('flat-pivot', then 'layout' since
@@ -1266,11 +1275,20 @@ export function computeWallLayout(sections, { postTransforms = null } = {})
 
 /** 03 T2 (6.2): a = layoutL.pivotPoint(pivot.mode) ?? {x: 0, y: 0, z: 0} (empty wall: the layout origin);
  *  P = a + pivot.offset; P not finite -> null (a non-finite layout: the identity fallback);
- *  else {mode, offset: {...offset}, anchor: a, point: P, stageOrigin: {x: P.x, y: 0, z: P.z}} (layout frame).
- *  Generative quantities only: a section offset never moves the pivot (03 5.10 #1). */
+ *  else {mode, offset: {...offset}, anchor: a, point: P, stageOrigin: {x: P.x, y: 0, z: P.z}} (layout frame),
+ *  plus (F3-O2, 03 12.4) the orientation: align and yawOffsetDeg (pivot.orientation, or 'none' / 0 for an object
+ *  without one), alignYawDeg = align === 'center-neg-x' ? alignmentYawDeg(layoutL) : 0, yawDeg = wrapDeg(alignYawDeg +
+ *  yawOffsetDeg) (+0 at the identity). Generative quantities only: a section offset never moves the pivot (03 5.10 #1);
+ *  the alignment depends on the sections only. */
 export function resolvePivot(layoutL, pivot)          // PivotResolution | null
 /** 03 T2: {x: so(b).x - so(a).x, z: so(b).z - so(a).z}, so(null) = (0, 0, 0)   (the stage-origin change, layout frame) */
 export function stageShift(a, b)
+/** F3-O2 (03 12.4): yaw(b) - yaw(a) in degrees, unwrapped; a null resolution counts as 0 */
+export function yawShift(a, b)
+/** F3-O2 (03 12.6): the rigid map s_b = R(dPsi) s_a + R(psi_b)(O_a - O_b) of a stage point that keeps its place relative to
+ *  the wall: {yawDeg: dPsi, cos, sin: yawTrig(dPsi), dx, dz: R(psi_b)(-stageShift(a, b))}; at psi_b = 0, (dx, dz) is
+ *  exactly -stageShift (the 6.5 re-expression bit for bit) */
+export function stageChange(a, b)
 /** 03 T3: r.mode === 'bottom-left' && r.offset.x === 0 && r.offset.y === 0 && r.offset.z === 0 (the exporters write
  *  pivot metadata only for a non-identity resolution, 03 7.1, 7.2, Q10) */
 export function isIdentityResolution(r)
@@ -1279,8 +1297,10 @@ export function isIdentityResolution(r)
  *  exporters via ProjectIO with {frame: 'export'}, 03 T3). 03 T2 (6.3, 1.4): raw = computeWallLayout(sections) (every
  *  postTransform null); resolution = resolvePivot(raw, project.wall.pivot); t = frame === 'layout' || !resolution ? 0
  *  : frame === 'export' ? -P : -(P.x, 0, P.z) ('stage', the default); out = t is all zero (-0 included) ? raw (the
- *  same object, bit-identical) : raw.translated(t); spec 02 inserts applySectionOffsets(out) here (07 C32);
- *  out.pivot = {resolution, frame, translation: t}. Any other frame throws RangeError. */
+ *  same object, bit-identical) : raw.translated(t); F3-O2 (03 12.3): yawDeg = frame === 'layout' || !resolution ? 0
+ *  : resolution.yawDeg, and out = out.rotated(yawDeg) when yawDeg !== 0 (the turn about the pivot's vertical); spec 02
+ *  inserts applySectionOffsets(out) here (07 C32); out.pivot = {resolution, frame, translation: t, yawDeg}. Any other
+ *  frame throws RangeError. */
 export function layoutProject(project, { frame = 'stage' } = {})
 
 /** 08 P2-11c (6.10; B-L2 fixed; 03 step F): the framing of a layout, injected as `frameBounds` (App:
@@ -1289,9 +1309,9 @@ export function layoutProject(project, { frame = 'stage' } = {})
  *    its box: {generativeBox: framingBox(generativeBounds()) (the orbit target before 07 I4b), wallBox:
  *    framingBox(bounds()) (Reset's centre), stageExtent: {width: extentAcross(facing, include), height: the y range}
  *    over every section without a column whose |n.y| > 0.9 (a ceiling or a floor) (D and fits), facing: chordFacing() (Reset stands on it),
- *    wallZ: 0 + pivot.translation.z (the wall start plane's z: the posZ rule's context)}; framingBox(b) = {min, max,
- *    center: (min + max) / 2}; a wall without finite grid vertices falls back to a zero box at the walk's start
- *    (0 + t.x, 0, wallZ), stageExtent {0, 0}, facing (0, 0, 1) (the empty wall's 'flat-pivot' framing; no NaN);
+ *    wallZ: 0 + start.z (the wall start plane's z: the posZ rule's context), start = pivot.translation turned by
+ *    pivot.yawDeg (F3-O2; the translation itself at a zero yaw)}; framingBox(b) = {min, max, center: (min + max) / 2};
+ *    a wall without finite grid vertices falls back to a zero box at the walk's start (0 + start.x, 0, wallZ), stageExtent {0, 0}, facing (0, 0, 1) (the empty wall's 'flat-pivot' framing; no NaN);
  *  default: throw unsupportedStrategy(...) }   (Phase-1 'flat' deleted in 03 T2, 'flat-pivot' in P2-11c)
  *  A flat wall along +X at the identity gives the legacy target (W/2, H/2, 0), Reset and D bit for bit. */
 export function framingBounds(layout)
@@ -1311,12 +1331,16 @@ export class SectionLayout {
   /** 03 T2: a new SectionLayout with every field copied, edges {x + dx, z + dz, angle}, panels {x + dx, y + dy, z + dz,
    *  rotY, col, row, sectionIndex}, baseY + dy, postTransform null (called by WallLayout.translated) */
   translated(dx, dy, dz)
+  /** F3-O2 (03 12.3): a new SectionLayout with every field copied, edges {turnXZ(x, z), angle - yawRad}, panels
+   *  {turnXZ(x, z), y, rotY + yawRad, col, row, sectionIndex}, baseY unchanged, postTransform null (called by
+   *  WallLayout.rotated) */
+  rotated(trig, yawRad)
 }
 
 export class WallLayout {
   constructor({ sections })   // built only by computeWallLayout and translated()
   sections;         // SectionLayout[]
-  pivot = null;     // 03 T2: {resolution, frame, translation}, set by layoutProject only
+  pivot = null;     // 03 T2: {resolution, frame, translation} (+ yawDeg since F3-O2), set by layoutProject only
   /** Legacy safe-distance `allEdges` (2619-2647): [] when there are no sections; otherwise sections[0].edges[0]
    *  followed by every section's edges.slice(1), in order. MUST return [] (not throw) for an empty wall:
    *  legacy imports of `sections: []` with preview + safe distance on add an empty group and do not throw. The one
@@ -1345,6 +1369,11 @@ export class WallLayout {
    *  if any section has a postTransform (the one composition rule, 03 5.10 #2, 07 C32); else a new WallLayout of
    *  sl.translated(dx, dy, dz) per section, with no pivot block. Pure. */
   translated(dx, dy, dz)
+  /** F3-O2 (03 12.3): throws Error('rotated() expects the raw walk: apply section offsets after the orientation') if any
+   *  section has a postTransform; else a new WallLayout of sl.rotated(yawTrig(yawDeg), yawDeg * PI / 180) per section
+   *  (R_y about the frame origin's vertical: (x cos + z sin, y, -x sin + z cos), the three.js rotation.y sign), with no
+   *  pivot block. Pure; layoutProject never calls it with 0. */
+  rotated(yawDeg)
   /** 08 P2-11a (6.10), memoised per instance (frozen; the same array on every call; a translated copy computes its
    *  own): per section column k, p0 = T(e[k].x, baseY, e[k].z), a = T_vec(e[k+1] - e[k]), b = T_vec(0, panelRows *
    *  panelH, 0), n = normalize(a x b), aa = a.a, bb = b.b, {sectionIndex, column: k}; T = the section's postTransform
@@ -1363,6 +1392,24 @@ export class WallLayout {
    *  1e-9 m (a closed ring, an empty wall). */
   chordFacing()
 }
+```
+
+#### `js/geometry/WallOrientation.js` (F3-O2; docs/improvements/03-pivot.md 12.2; imports `domain/rules.js`)
+```js
+/** The exact (cos, sin) of a yaw in degrees at every multiple of 90; Math.cos / Math.sin of deg * PI / 180 otherwise. */
+export function yawTrig(deg)                  // {cos, sin}
+/** R_y(psi)(x, z) = {x: x cos + z sin, z: -x sin + z cos} (three.js rotation.y; +Z -> +X at 90 degrees) */
+export function turnXZ(x, z, trig)
+/** atan2(v.x, v.z) in degrees: +Z is 0, +X is 90; azimuthDeg(R_y(psi) v) = azimuthDeg(v) + psi (mod 360) */
+export function azimuthDeg(v)
+/** The arc-length midpoint of layout.flatEdges() and its LED normal (-dz / l, 0, dx / l), in the layout's frame: inside a
+ *  column, that column's normal; within 1e-9 * max(1, Lt) of a column edge, the edge and the normalised mean of the two
+ *  adjacent normals; y = sections[0].baseY; zero-length columns skipped; null for an empty wall, no positive length or a
+ *  non-finite length. Equivariant under translation and turn. */
+export function wallCentre(layout)            // {point, normal} | null
+/** wrapDeg(90 - azimuthDeg(wallCentre(layout).normal)): the yaw that turns the centre normal to +X ('center-neg-x');
+ *  exactly 90 for a flat wall along +X; 0 without a centre */
+export function alignmentYawDeg(layout)
 ```
 
 #### `js/geometry/FrustumCoverage.js`: the coverage analyser (08 P2-11a, B-M10; 08 6.10)
@@ -4413,3 +4460,8 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 3.5 `js/domain/Wall.js`: `OrientationAlign`, `ORIENTATION_ALIGNS`, `YAW_OFFSET_LIMIT_DEG`; `WallPivot.DEFAULT_ALIGN` (`'none'` in this unit), `orientation = {align, yawOffsetDeg}` (replaced by its setters), `setAlign` (`RangeError` outside the enum), `setYawOffset` and `parseYawOffset` (finite, clamped to ±180°, 0.1°, never `orDefault`, −0 normalised, idempotent); `isIdentity`, `clone` and `equals` cover the orientation.
 - 4: the `Project.wall.pivot` row names the orientation and its two setters.
 - 2.3: `tests/unit/orientation.test.mjs` (03 12.12 test 1); `domain.test.mjs`'s WallPivot defaults gain the orientation.
+
+**F3-O2, the orientation geometry (03 §12.2, 12.3)** (manifest `tests/regression/expected/F3-O2.json`, an invariance gate: the default orientation ('none', 0) gives ψ = 0, so `layoutProject` never turns):
+- 1.4: the stage and export frames are x_S = R_y(ψ)(x_L − O) and x_E = R_y(ψ)(x_L − P); the pipeline turns the translated walk (`rotated(ψ)`) before spec 02's section offsets; the orientation bullet records the landing.
+- 2.2, 3.6: `geometry/WallOrientation.js` (new, pure): `yawTrig`, `turnXZ`, `azimuthDeg`, `wallCentre`, `alignmentYawDeg`. `WallLayout.js`: `SectionLayout.rotated`, `WallLayout.rotated` (raw walk only), the orientation fields of `resolvePivot` (`align`, `yawOffsetDeg`, `alignYawDeg`, `yawDeg`), `yawShift`, `stageChange`, `layoutProject`'s turn and its `pivot.yawDeg`, and the framing's `wallZ` at the turned walk start.
+- 2.3: `orientation.test.mjs` tests 2-4 and the composition contract under a turn (03 12.3: spec 02's stub section matrix built on the turned layout equals the raw one translated and turned).
