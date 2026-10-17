@@ -876,9 +876,9 @@ describe('DisplaySettings', () => {
     const d = new DisplaySettings();
     assert.deepEqual({ ...d }, {
       wireframe: false, showFrame: false, content: 'color', ledLayout: 'single-dot', showGrid: true, showSafeDistance: false,
-      showPivotMarker: false,
+      showPivotMarker: true,
     });
-    assert.equal(DisplaySettings.DEFAULT_SHOW_PIVOT_MARKER, false, '03 4.1: false until step C (03 T9)');
+    assert.equal(DisplaySettings.DEFAULT_SHOW_PIVOT_MARKER, true, '03 4.1, Q9: true since step C (03 T9)');
     assert.equal(d.ledSimEnabled, false);
     assert.equal(d.panelIdsEnabled, false);
     assert.deepEqual({ ...ContentMode }, { COLOR: 'color', LED_SIM: 'ledSim', PANEL_IDS: 'panelIds' });

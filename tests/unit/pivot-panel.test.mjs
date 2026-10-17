@@ -213,10 +213,14 @@ describe('PivotPanel mirrors and listeners with the real controller (03 3.2; AC 
     keep.fire('keydown', { key: 'a' });
     assert.equal(r.project.wall.pivot.keepStageLayout, true, 'other keys do nothing');
     const marker = r.$('toggle-pivot-marker');
+    const initial = r.project.display.showPivotMarker;   // DisplaySettings.DEFAULT_SHOW_PIVOT_MARKER (true since 03 T9)
     marker.fire('keydown', { key: 'Enter' });
-    assert.equal(r.project.display.showPivotMarker, true);
-    assert.equal(marker.classList.contains('active'), true);
-    assert.equal(marker.attrs['aria-checked'], 'true');
+    assert.equal(r.project.display.showPivotMarker, !initial);
+    assert.equal(marker.classList.contains('active'), !initial);
+    assert.equal(marker.attrs['aria-checked'], String(!initial));
+    marker.fire('click');
+    assert.equal(r.project.display.showPivotMarker, initial);
+    assert.equal(marker.attrs['aria-checked'], String(initial));
   });
 
   test('Select pivot toggles the selection; its state mirrors SELECTION_CHANGED; the snap select sets the step', () => {

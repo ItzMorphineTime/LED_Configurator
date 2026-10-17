@@ -8,7 +8,9 @@
  * camera sees it, the preview camera never does), and registered as a helper, so the preview render hides it too
  * (08 P2-10a, B-M11). The glyph and the ghost keep a minimum on-screen size (updateScale, a pre-render hook).
  * 06 5.12 (D15): two-tone overlays, closed LineSegments geometry (never LineLoop), the halo under the core.
- * Mirrors only (R3): it subscribes WALL_REBUILT, WALL_PIVOT_CHANGED and SELECTION_CHANGED and writes its own objects.
+ * Hidden in pilot mode (03 T9: 3.3 and AC 12, "hidden and unpickable in pilot"; Q9's previs views stay clean once the
+ * marker is shown by default). Mirrors only (R3): it subscribes WALL_REBUILT, WALL_PIVOT_CHANGED, SELECTION_CHANGED and
+ * PILOT_CHANGED and writes its own objects.
  * Legacy source: none (new view).
  * Layer: render (may import vendor/three, core, legacy, domain, geometry).
  */
@@ -66,13 +68,16 @@ export class PivotMarkerView {
   #preview = { x: 0, y: 0, z: 0 };
   /** @type {boolean} the pivot is the selected Selectable (the last SELECTION_CHANGED) */
   #selected = false;
+  /** @type {boolean} pilot mode is on (the last PILOT_CHANGED; 03 T9) */
+  #pilot = false;
 
   /**
-   * Stores the dependencies and subscribes the three mirrors (R4: no THREE allocation):
+   * Stores the dependencies and subscribes the four mirrors (R4: no THREE allocation):
    *  WALL_REBUILT({layout}) -> #place(layout.pivot.resolution)   (ignored until init)
    *  WALL_PIVOT_CHANGED({resolution}) -> #place(resolution); visibility (the marker toggle)
    *  SELECTION_CHANGED({id}) -> colour (selected vs idle); visibility
-   * Side effects: three bus subscriptions.
+   *  PILOT_CHANGED({active}) -> visibility (03 T9: hidden in pilot)
+   * Side effects: four bus subscriptions.
    * @param {{sceneManager: import('./SceneManager.js').SceneManager, bus: import('../core/EventBus.js').EventBus,
    *          display: import('../domain/Project.js').DisplaySettings, theme: {scene: {pivot: object}}}} deps
    */
@@ -89,6 +94,10 @@ export class PivotMarkerView {
     bus.on(Events.SELECTION_CHANGED, ({ id }) => {
       this.#selected = id === 'pivot';
       if (this.#group) this.#applyColor();
+      if (this.#group) this.#applyVisibility();
+    });
+    bus.on(Events.PILOT_CHANGED, ({ active }) => {
+      this.#pilot = active === true;
       if (this.#group) this.#applyVisibility();
     });
   }
@@ -263,9 +272,9 @@ export class PivotMarkerView {
     this.#setSegment(this.#drop, Math.abs(gy) > DROP_EPSILON_M, gx, 0, gz, gx, gy, gz);
   }
 
-  /** visible = hasResolution && (display.showPivotMarker || the pivot is selected) (03 3.3). */
+  /** visible = hasResolution && !pilot && (display.showPivotMarker || the pivot is selected) (03 3.3; pilot since 03 T9). */
   #applyVisibility() {
-    this.#group.visible = this.#resolution !== null && (this.#display.showPivotMarker === true || this.#selected);
+    this.#group.visible = this.#resolution !== null && !this.#pilot && (this.#display.showPivotMarker === true || this.#selected);
   }
 
   /** The cores of the glyph: the selected colour while the pivot is selected, else the idle colour. */

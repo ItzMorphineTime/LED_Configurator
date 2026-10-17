@@ -21,11 +21,12 @@ export const ContentMode = Object.freeze({ COLOR: 'color', LED_SIM: 'ledSim', PA
 /** Viewport display flags (legacy globals 1279-1294) and the pivot-marker flag (Feature 3). */
 export class DisplaySettings {
   /**
-   * The default of showPivotMarker (03 4.1): false until step C (03 T9) makes it true. A future v2 reader takes the
-   * same constant as its default for a missing `display.show_pivot_marker`, so the file and in-app defaults agree.
+   * The default of showPivotMarker (03 4.1, Q9): true since step C (03 T9), which waited for B-M11's fix (08 P2-10a: the
+   * camera preview hides every registered helper, the marker included). A future v2 reader takes the same constant as its
+   * default for a missing `display.show_pivot_marker`, so the file and in-app defaults agree.
    * @type {boolean}
    */
-  static DEFAULT_SHOW_PIVOT_MARKER = false;
+  static DEFAULT_SHOW_PIVOT_MARKER = true;
 
   /** legacy wireframeEnabled */
   wireframe = false;

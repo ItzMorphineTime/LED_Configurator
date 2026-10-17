@@ -1,0 +1,42 @@
+{
+  "commit": "F3-T9",
+  "bugs": [],
+  "expect": [
+    {
+      "output": "**/*.screenshot.png",
+      "exclude": "ui_visual/**",
+      "change": "modified",
+      "reason": "03 8.4 step C: the pivot marker is shown by default (DisplaySettings.DEFAULT_SHOW_PIVOT_MARKER = true): its dashed light cross and octahedron core at the stage origin (the identity pivot: the wall's bottom-left corner), drawn through the wall, in every #three-canvas capture whose view contains the origin; the camera preview never shows it (08 P2-10a hides registered helpers; it is also on LAYERS.HELPERS)"
+    },
+    {
+      "output": "ui_visual/*.sidebar.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "step C: the Show pivot marker switch is on (class active, the knob moved)"
+    },
+    {
+      "output": "p2_project_v2/toggle_aria_*.json",
+      "change": "modified",
+      "each": true,
+      "reason": "step C: #toggle-pivot-marker is active with aria-checked true in the page-wide switch probe"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "ui_visual/*.{styles,text}.json",
+      "change": "modified",
+      "reason": "step C: the switch probes of ui_visual may now find the marker switch active (03 8.4: ui_visual toggle class/knob)"
+    },
+    {
+      "output": "ui_visual/*.viewport.screenshot.png",
+      "change": "modified",
+      "reason": "step C: these page captures mask the canvas but show the visible part of the sidebar, where the marker switch may be"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen again in the 03 T2 gate and the 03 T3 review run, textures/L2_PanelIDs.png); this commit changes no texture"
+    }
+  ],
+  "notes": "03 T9 (docs/improvements/03-pivot.md 3.3, 4.1, Q9, 8.4 step C), after B-M11's fix (08 P2-10a, landed): the marker is visible by default. The v2 read/write of display.show_pivot_marker is not part of this commit: there is no project file v2 yet (the owner's session-only sequence; it moves to M7a with 03 T7). Allowed: #three-canvas screenshots, the ui_visual switch state, the toggle_aria probe. No export, JSON, ZIP, pose or selection output may change: in particular no scenario's pick may land on the marker's pick proxy (a FAIL there is a regression to investigate)."
+}

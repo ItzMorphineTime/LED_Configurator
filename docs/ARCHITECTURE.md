@@ -995,7 +995,7 @@ export class DisplaySettings {
   ledLayout = 'single-dot';          // legacy ledLayout
   showGrid = true;                   // legacy showGrid
   showSafeDistance = false;          // legacy safeDistanceEnabled
-  static DEFAULT_SHOW_PIVOT_MARKER = false;          // 03 T1 (4.1): true from step C (03 T9); the v2 reader's default too
+  static DEFAULT_SHOW_PIVOT_MARKER = true;           // 03 T1 (4.1): false until step C; true since 03 T9 (Q9); the v2 reader's default too
   showPivotMarker = DisplaySettings.DEFAULT_SHOW_PIVOT_MARKER;   // 03 T1; view-only, session-only
   get ledSimEnabled()                // content === 'ledSim'
   get panelIdsEnabled()              // content === 'panelIds'
@@ -1929,7 +1929,7 @@ export class PivotMarkerView {
 ```
 Placement (`#place`): glyph at `(0, P.y, 0)` plus the preview; ghost at `A - O = (-offset.x, A.y, -offset.z)`, shown (with the link
 from it to the glyph) while the effective offset (offset plus preview) is non-zero; the drop line from `(gx, 0, gz)` to the glyph
-while `|gy| > 1e-6`. Visibility: `hasResolution && (display.showPivotMarker || the pivot is selected)`. A null resolution hides
+while `|gy| > 1e-6`. Visibility: `hasResolution && !pilot && (display.showPivotMarker || the pivot is selected)` (the pilot term since 03 T9, from `PILOT_CHANGED`). A null resolution hides
 the marker and skips every geometry update. The cross and octahedron cores are `selectedColor` while the pivot is selected.
 
 ### 3.8 Interaction
@@ -3125,7 +3125,7 @@ Writers listed here are the only allowed writers (checked by `tests/static/check
 | (03 T1, not legacy) the wall pivot | `Project.wall.pivot` (`WallPivot`: `mode`, `offset`, `keepStageLayout`; session-only until project file v2, the owner's decision of 2026-10-17) | `WallPivot` methods only (`setMode`, `setOffsetAxis`, `setOffset`, `resetOffset`, `setKeepStageLayout`), called from `PivotController` (03 T4); the field `Project.wall.pivot` itself is assigned only by `WallController.applyImport` (03 4.4) |
 | (03 T5, not legacy) the cancelled-gesture flag and the snap increments | `InteractionState.gestureCancelled` (set by `cancelDrag`, cleared by `onMouseUp` and the next `onMouseDown`), `InteractionState.snap` (`{pivotM: 0.1}`; spec 02 adds its keys; session-only) | `TransformGizmo` only (`snap` through `setSnapIncrements`, a merge) |
 | (03 T5, not legacy) the pivot marker | `PivotMarkerView` private `#group` (its glyph, ghost, drop and link objects), `#resolution`, `#preview`, `#selected` | `PivotMarkerView` (`init`, its three mirrors, `setPreview` / `clearPreview` from `PivotController`, `updateScale` from the pre-render hook) |
-| (03 T1, not legacy) the pivot-marker flag | `Project.display.showPivotMarker` (initially `DisplaySettings.DEFAULT_SHOW_PIVOT_MARKER`, `false` until 03 step C) | `PivotController.setMarkerVisible` (03 T4) |
+| (03 T1, not legacy) the pivot-marker flag | `Project.display.showPivotMarker` (initially `DisplaySettings.DEFAULT_SHOW_PIVOT_MARKER`, `true` since 03 step C, T9; session-only) | `PivotController.setMarkerVisible` (03 T4) |
 
 `InteractionState` is a shared read surface; its writers are listed above. `Project` and its parts are read by many modules but written only through the methods listed.
 
@@ -3165,7 +3165,7 @@ Writers listed here are the only allowed writers (checked by `tests/static/check
 | `selectable:moved` (`SELECTABLE_MOVED`) | `{id}` | `CameraHub.refresh` last step (2466-2468), `PropController.applyTransform` (2889, 2980), `PivotController` (03 T4: the drag preview, the end of a drag or cancel, the end of P-PIVOT) | `TransformGizmo` (`updatePosition()` iff its target has that id) |
 | `gizmo:modeChanged` (`GIZMO_MODE_CHANGED`) | `{mode}` | `TransformGizmo.setMode/clearMode` before `rebuild` (3176-3177, 4428-4429) | `ViewportToolbar` |
 | `gizmo:spaceChanged` (`GIZMO_SPACE_CHANGED`) | `{space}` | `TransformGizmo.toggleSpace` before re-orientation (3184-3188) | `ViewportToolbar` |
-| `pilot:changed` (`PILOT_CHANGED`) | `{active}` | `PilotController.toggle` right after the flip (3484-3485) | `ViewportToolbar` (button + banner) |
+| `pilot:changed` (`PILOT_CHANGED`) | `{active}` | `PilotController.toggle` right after the flip (3484-3485) | `ViewportToolbar` (button + banner), `PivotMarkerView` (03 T9: hidden in pilot) |
 | `wall:pivotChanged` (`WALL_PIVOT_CHANGED`) | `{source: 'mode'\|'offset'\|'reset-offset'\|'gizmo'\|'import'\|'keep-stage'\|'marker', pivot: {mode, offset, keepStageLayout} (a copy), resolution: PivotResolution\|null, stageShift: {x, z}, reexpressed, rebuilds}`; a visual event (07 C47), 03 T4 | `PivotController.#commit` after the model write and the re-expression, before `wallController.commitPivot`; `setKeepStageLayout` / `setMarkerVisible` (`rebuilds: false`, the cached resolution); `WallController.applyImport` after the pivot assignment, before every other import event and the rebuild (`rebuilds: true`, `resolvePivotNow()`) | `CameraPanel` (`#camera-pos-z` `min`; 03 T4); `PivotMarkerView` (placement, visibility; 03 T5); `PivotPanel` (03 T6: radios, offsets, Reset, switches, readout, status) |
 | `debug:viewChanged` (`DEBUG_VIEW_CHANGED`) | `{shading, normals: {enabled, vertex, face, lengthScale, onTop}}` (a frozen `DebugViewSettings.snapshot()`); a visual event (07 C47) | `DebugViewController` after every settings write, before its render call (01 F1-2) | `DebugViewControls` (buttons, inputs, legend, announcer); added in the same step as the emitter (5.1 rule 7) |
 
@@ -4122,3 +4122,9 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 10, 2.3: static rules 18 (the pivot markup and the frozen help-badge text), 19 (the pivot radios never `display: none`) and 20 (the gizmo interaction state written only by `TransformGizmo`), with their bad-fixture cases and good-fixture near misses (03 8.2).
 - Deviations from 03 10's T6 row, recorded there: the distance row uses the read-out classes instead of `.pivot-distance-*`; the snap select is a `.ui-select`; the session-only hint; a zero in the status line prints `0.000`; the far-from-anchor warning is appended to the readout.
 - 2.3: `pivot-panel.test.mjs` (new; 03 8.1 test 17 and the panel's mirrors and listeners). The harness README's markup contract lists the pivot ids.
+
+**03 T9, the pivot marker shown by default** (Feature 3 step C; docs/improvements/03-pivot.md 3.3, 4.1, Q9, 8.4; manifest `tests/regression/expected/F3-T9.json`: the `#three-canvas` screenshots that show the stage origin, the `ui_visual` switch state and the page-wide switch probe change; no export, pose or selection output does):
+- 3.5 `Project`: `DisplaySettings.DEFAULT_SHOW_PIVOT_MARKER = true` (B-M11 is fixed by 08 P2-10a, so the camera preview never shows the marker; it is also on `LAYERS.HELPERS`); `index.html`'s `#toggle-pivot-marker` starts `active` with `aria-checked="true"`. 4: the flag's row.
+- 3.7 `PivotMarkerView`: hidden in pilot mode (a `PILOT_CHANGED` mirror; 03 3.3 and AC 12: "hidden and unpickable in pilot", so the pilot view, a previs view like the camera preview, stays clean now that the marker is shown by default; Q9). 5.2: `pilot:changed` gains the subscriber.
+- The v2 read and write of `display.show_pivot_marker` (the other half of 03 T9) waits for project file v2 with 03 T7 (M7a; the owner's session-only sequence), recorded in 03 10.
+- 2.3: `domain.test.mjs` (the default), `pivot-marker.test.mjs` (shown by default), `pivot-panel.test.mjs` (the switch from the default).

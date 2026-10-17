@@ -175,16 +175,25 @@ describe('placement in the stage frame (03 5.3)', () => {
 });
 
 describe('visibility and colour (03 3.3)', () => {
-  test('hidden by default (marker toggle off); shown while the pivot is selected or the toggle is on', () => {
+  test('shown by default (03 T9); with the marker toggle off, shown only while the pivot is selected', () => {
+    const shown = makeRig({ show: Project.createDefault().display.showPivotMarker });
+    shown.view.init(resolutionOf('bottom-left'));
+    assert.equal(shown.view.visible, true, 'DEFAULT_SHOW_PIVOT_MARKER is true since step C');
     const r = makeRig();
     r.view.init(resolutionOf('bottom-left'));
-    assert.equal(r.view.visible, false, 'DEFAULT_SHOW_PIVOT_MARKER until step C');
+    assert.equal(r.view.visible, false, 'the toggle off');
     r.bus.emit(Events.SELECTION_CHANGED, { id: 'pivot', label: 'Pivot', modes: ['translate'] });
     assert.equal(r.view.visible, true);
     r.bus.emit(Events.SELECTION_CHANGED, { id: 'camera', label: 'Camera', modes: ['translate', 'rotate'] });
     assert.equal(r.view.visible, false);
     r.display.showPivotMarker = true;
     r.bus.emit(Events.WALL_PIVOT_CHANGED, { source: 'marker', resolution: resolutionOf('bottom-left') });
+    assert.equal(r.view.visible, true);
+    r.bus.emit(Events.PILOT_CHANGED, { active: true });
+    assert.equal(r.view.visible, false, '03 T9: hidden in pilot mode (AC 12), so the pick proxy is not pickable either');
+    r.bus.emit(Events.SELECTION_CHANGED, { id: 'pivot' });
+    assert.equal(r.view.visible, false, 'also while selected');
+    r.bus.emit(Events.PILOT_CHANGED, { active: false });
     assert.equal(r.view.visible, true);
   });
 

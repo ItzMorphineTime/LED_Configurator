@@ -93,6 +93,10 @@ it; the main viewport still shows them.
   placement relative to the wall is kept; turn it off to keep their coordinates instead
 - "Distance to wall plane" in the camera panel shows the camera's distance to the wall's start plane
 
+Release note: the pivot marker (a small cross at the pivot, with a dashed line to the floor when the pivot is raised and
+a grey cross at the anchor when an offset is set) is shown by default; "Show pivot marker" hides it. It never appears in
+the camera preview window or in pilot mode.
+
 Release note: the pivot is new. It lasts for the session only: Export JSON does not save it yet, and importing a
 project file resets it to the bottom-left corner. The camera's "Z Distance from Wall" field is now "Z Position", because
 it is a stage coordinate measured from the pivot on the floor.
