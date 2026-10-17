@@ -122,7 +122,7 @@ The authoritative plan is `docs/improvements/08-bugfix-roadmap.md` (batch cards 
 3. **P2-1** **B-H3, B-L5, B-L4**: exports never fail silently (chunked base64, 32-bit indices from 65,535 on, canvas-size guards and messages). **Landed** (manifests P2-1a to P2-1e: B-H3; B-L5 glTF and viewport; B-L4 exports and viewport).
 4. **P2-2** **B-H1, B-H2, B-L3**: stage-facing winding and real normals in the viewport and every export (the owner-reported "inverted normals"). It must follow P2-1: adding `NORMAL` puts `large_wall`'s glTF buffer at 121,056 bytes, inside the band where the legacy spread encoder throws `RangeError` (B-H3). **Landed** (manifests P2-2a to P2-2d: B-H1 viewport winding; B-L3 viewport normals; B-H2 OBJ and glTF).
 5. **P2-8a** **B-L15**: integer counts and sanity caps in the UI rules, before the validator. **Landed** (manifest `P2-8a`).
-6. **P2-3** **B-M4, B-L8, B-L16, B-L21**: escaped names and validated imports.
+6. **P2-3** **B-M4, B-L8, B-L16, B-L21**: escaped names and validated imports. **P2-3a landed** (manifest `P2-3a`: B-M4).
 7. **P2-4** **B-H4, B-M8**: a clean preview-off (no stuck pilot mode, no stale safe-distance floor).
 8. **P2-5b** **B-L29, B-M15**: the mitred, clamped safe-distance band.
 9. **P2-6** **B-M3, B-L14, B-L7, B-M2**: consistent, lossless bundles (ZIP JSON offsets, texture names, MTL delivery).

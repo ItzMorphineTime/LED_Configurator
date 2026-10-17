@@ -1,0 +1,25 @@
+{
+  "commit": "P2-3a",
+  "bugs": ["B-M4"],
+  "expect": [
+    { "output": "p2_xss_names/{sections_initial,sections_renamed}.json", "change": "modified", "each": true,
+      "reason": "the card titles show the literal names (`<b id=\"xss-probe\">B</b>`, `<i id=\"xss-probe2\">i</i>`), and the name input of `Say \"hi\"` keeps its whole value (legacy truncated it to `Say ` at the quote); 08 criteria 13, 14" },
+    { "output": "p2_xss_names/xss_probe_*.json", "change": "modified", "each": true,
+      "reason": "xss_probe (all three probes) and xss_probe2 (after the live rename) are false: no injected element exists (08 criterion 13). color_outline_injected stays true for the third card until the colour rule of 08 P2-3b, because escaping does not stop `red;outline:...` inside style" },
+    { "output": "p2_xss_names/logos_*.json", "change": "modified", "each": true,
+      "reason": "the logo-list rows show the literal names as text (the 08 P2-3a card listed only the sections and probes; the logo list is the third escaped template)" },
+    { "output": "name_with_panel_ids/name_01_per_keystroke.json", "change": "modified",
+      "reason": "from the `<` key on, the typed `Grip <i>L</i>` stays text in the card title (its innerHTML holds &lt; &gt;) and in the logo-list row instead of becoming an <i> element; the input values are unchanged" }
+  ],
+  "mayChange": [
+    { "output": "p2_curved_safe_distance/box_corner.screenshot.png", "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas on the preview footer label row (1 level, 1 px at (920, 912), seen in the 06 T6a-T6b2 runs); this commit changes no rendered pixel of it" },
+    { "output": "p2_shortcut_filters/pilot_view_front.screenshot.png", "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas (1 level, 2 px, seen in the 06 T6b, T7, T6b2 and 08 P2-8a runs); this commit changes no rendered pixel of it" },
+    { "output": "toggles/15_car_moved.screenshot.png", "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-08 P2-8a runs)" },
+    { "output": "large_wall/final__export-zip__morph-led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b); this commit changes no export" }
+  ],
+  "notes": "08 P2-3a (B-M4, = 07 D7): ui/dom.js escapeHtml on every interpolation of the card and logo-row templates and on the live rename's title; legacyHtml deleted. Unchanged by construction: every name without & < > \" ' (every other scenario), the exports (names reach them only through the canvas text and the sanitised file names), the canvas screenshots (name_with_panel_ids/name_02_typed is canvas-clipped) and the CSS-injecting colour (08 P2-3b)."
+}

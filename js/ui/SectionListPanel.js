@@ -17,16 +17,17 @@
  * injected palette's cardSwatches, one per line with the legacy indentation, so the six legacy swatches would give the
  * legacy markup byte for byte. 08 P2-8a (B-L15, 08 4.4): the four integer inputs (columns, rows, Pixels X/Y) gain
  * step="1", panel height max="100000", Pixels X/Y max="65536" and the panel angle min="-180" max="180"
- * (WallSection.LIMITS).
+ * (WallSection.LIMITS). 08 P2-3a (B-M4, 08 6.5): every interpolation of a section value goes through escapeHtml
+ * (legacy interpolated them raw), so imported or typed markup renders as text.
  */
 import { Events } from '../core/EventBus.js';
-import { legacyHtml } from '../legacy/LegacyCompat.js';
-import { byId } from './dom.js';
+import { byId, escapeHtml } from './dom.js';
 
 /**
  * The 4K warning block of a freshly rendered card (multi-line markup, render only; the in-place patch inserts
  * a different, single-line markup, see SectionListPanel#patchCard).
- * The canvas size is the product of two section fields, so it is always a number (never user text).
+ * The canvas size is the product of two section fields, so it is always a number (never user text); it goes through
+ * escapeHtml like every other interpolation (a no-op for a number).
  * Ports: index.html@cd3fd3f lines 3904-3905, 3908-3916.
  * Side effects: none.
  * @param {import('../domain/WallSection.js').WallSection} section
@@ -42,7 +43,7 @@ function warningBlockHtml(section) {
                             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
                             <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
                         </svg>
-                        <span>Canvas ${canvasWidth}×${canvasHeight} exceeds 4K</span>
+                        <span>Canvas ${escapeHtml(canvasWidth)}×${escapeHtml(canvasHeight)} exceeds 4K</span>
                     </div>` : '';
   return warningHTML;
 }
@@ -63,9 +64,9 @@ function swatchesHtml(section, swatches) {
 }
 
 /**
- * The card's inner markup. Every interpolation of a section value goes through legacyHtml() (B-M4, tagged at
- * render): name (title and input), colour (dot and colour input), id, the eight numeric field values (imported
- * strings are not coerced, B-L8), summary and hint. The swatches come from the palette (06 T7).
+ * The card's inner markup. Every interpolation of a section value goes through escapeHtml() (B-M4 fixed in 08 P2-3a):
+ * name (title and input), colour (dot and colour input), id, the eight numeric field values (imported strings are not
+ * coerced until 08 P2-3b, B-L8), summary and hint. The swatches come from the palette (06 T7).
  * Ports: index.html@cd3fd3f lines 3898, 3906, 3908, 3920-3980.
  * Side effects: none.
  * @param {import('../domain/WallSection.js').WallSection} section
@@ -81,14 +82,14 @@ function cardHtml(section, showDelete, swatches) {
   return `
                     <div class="section-header">
                         <div class="section-header-left">
-                            <div class="section-color" style="background: ${legacyHtml(section.color)}"></div>
+                            <div class="section-color" style="background: ${escapeHtml(section.color)}"></div>
                             <div>
-                                <div class="section-title">${legacyHtml(section.name)}${exceeds4K ? ' <span class="warning-indicator">⚠</span>' : ''}</div>
-                                <div class="section-summary">${legacyHtml(summary)}</div>
+                                <div class="section-title">${escapeHtml(section.name)}${exceeds4K ? ' <span class="warning-indicator">⚠</span>' : ''}</div>
+                                <div class="section-summary">${escapeHtml(summary)}</div>
                             </div>
                         </div>
                         <div class="section-header-right">
-                            ${showDelete ? `<button class="section-delete" data-id="${legacyHtml(section.id)}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>` : ''}
+                            ${showDelete ? `<button class="section-delete" data-id="${escapeHtml(section.id)}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>` : ''}
                             <div class="section-toggle"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></div>
                         </div>
                     </div>
@@ -97,30 +98,30 @@ function cardHtml(section, showDelete, swatches) {
                         <div class="section-row single">
                             <div class="input-field">
                                 <label>Section Name</label>
-                                <input type="text" class="section-name-input" value="${legacyHtml(section.name)}" maxlength="32">
+                                <input type="text" class="section-name-input" value="${escapeHtml(section.name)}" maxlength="32">
                             </div>
                         </div>
                         <div class="section-row">
-                            <div class="input-field"><label>Columns</label><input type="number" data-field="panelCols" value="${legacyHtml(section.panelCols)}" min="1" max="50" step="1"></div>
-                            <div class="input-field"><label>Rows</label><input type="number" data-field="panelRows" value="${legacyHtml(section.panelRows)}" min="1" max="20" step="1"></div>
+                            <div class="input-field"><label>Columns</label><input type="number" data-field="panelCols" value="${escapeHtml(section.panelCols)}" min="1" max="50" step="1"></div>
+                            <div class="input-field"><label>Rows</label><input type="number" data-field="panelRows" value="${escapeHtml(section.panelRows)}" min="1" max="20" step="1"></div>
                         </div>
                         <div class="section-row">
-                            <div class="input-field"><label>Width (mm)</label><input type="number" data-field="panelWidth" value="${legacyHtml(section.panelWidth)}" min="50" max="5000"></div>
-                            <div class="input-field"><label>Height (mm)</label><input type="number" data-field="panelHeight" value="${legacyHtml(section.panelHeight)}" min="50" max="100000"></div>
+                            <div class="input-field"><label>Width (mm)</label><input type="number" data-field="panelWidth" value="${escapeHtml(section.panelWidth)}" min="50" max="5000"></div>
+                            <div class="input-field"><label>Height (mm)</label><input type="number" data-field="panelHeight" value="${escapeHtml(section.panelHeight)}" min="50" max="100000"></div>
                         </div>
                         <div class="section-row">
-                            <div class="input-field"><label>Pixels X</label><input type="number" data-field="ledX" value="${legacyHtml(section.ledX)}" min="8" max="65536" step="1"></div>
-                            <div class="input-field"><label>Pixels Y</label><input type="number" data-field="ledY" value="${legacyHtml(section.ledY)}" min="8" max="65536" step="1"></div>
+                            <div class="input-field"><label>Pixels X</label><input type="number" data-field="ledX" value="${escapeHtml(section.ledX)}" min="8" max="65536" step="1"></div>
+                            <div class="input-field"><label>Pixels Y</label><input type="number" data-field="ledY" value="${escapeHtml(section.ledY)}" min="8" max="65536" step="1"></div>
                         </div>
                         <div class="section-row">
                             <div class="input-field">
                                 <label>Panel Angle (°)</label>
-                                <input type="number" data-field="curveIntensity" value="${legacyHtml(section.curveIntensity)}" min="-180" max="180" step="0.1">
-                                <div class="curve-hint">${legacyHtml(hint)}</div>
+                                <input type="number" data-field="curveIntensity" value="${escapeHtml(section.curveIntensity)}" min="-180" max="180" step="0.1">
+                                <div class="curve-hint">${escapeHtml(hint)}</div>
                             </div>
                             <div class="input-field">
                                 <label>Section Offset (°)</label>
-                                <input type="number" data-field="angleOffset" value="${legacyHtml(section.angleOffset || 0)}" min="-180" max="180" step="1">
+                                <input type="number" data-field="angleOffset" value="${escapeHtml(section.angleOffset || 0)}" min="-180" max="180" step="1">
                                 <div class="curve-hint curve-hint--small">Rotation before section</div>
                             </div>
                         </div>
@@ -129,7 +130,7 @@ function cardHtml(section, showDelete, swatches) {
                                 <label>Panel Colour</label>
                                 <div class="section-color-picker">
                                     ${swatchesHtml(section, swatches)}
-                                    <input type="color" class="color-input-custom" value="${legacyHtml(section.color)}" title="Custom colour">
+                                    <input type="color" class="color-input-custom" value="${escapeHtml(section.color)}" title="Custom colour">
                                 </div>
                             </div>
                         </div>
@@ -210,8 +211,8 @@ export class SectionListPanel {
 
       const sectionEl = this.#doc.createElement('div');
       sectionEl.className = 'wall-section collapsed';
-      // LEGACY(B-M4): names, colours, ids and field values are interpolated into innerHTML unescaped
-      // (legacyHtml is the identity); an imported name such as `<img onerror=...>` runs script.
+      // Every section value in the template is escaped (B-M4 fixed in 08 P2-3a): a name such as `<img onerror=...>`
+      // renders as text.
       sectionEl.innerHTML = cardHtml(section, wall.count > 1, this.#palette.cardSwatches);
 
       container.appendChild(sectionEl);
@@ -275,7 +276,7 @@ export class SectionListPanel {
     sectionEl.querySelector('.section-name-input').addEventListener('input', (e) => {
       e.stopPropagation();
       const name = wallController.renameSection(section, e.target.value, index);
-      sectionEl.querySelector('.section-title').innerHTML = legacyHtml(name) +
+      sectionEl.querySelector('.section-title').innerHTML = escapeHtml(name) +
           (sectionEl.querySelector('.warning-indicator') ? ' <span class="warning-indicator">⚠</span>' : '');
       wallController.commitRename();
     });
@@ -323,7 +324,7 @@ export class SectionListPanel {
     if (exceeds4K && !existingWarning) {
       const warningEl = this.#doc.createElement('div');
       warningEl.className = 'section-warning';
-      warningEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>Canvas ${canvasWidth}×${canvasHeight} exceeds 4K</span>`;
+      warningEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>Canvas ${escapeHtml(canvasWidth)}×${escapeHtml(canvasHeight)} exceeds 4K</span>`;
       sectionEl.querySelector('.section-content').insertBefore(warningEl, sectionEl.querySelector('.section-content').firstChild);
       if (!titleEl.innerHTML.includes('warning-indicator')) {
         // LEGACY(B-L16): the ⚠ is inserted after the first "Wall <digits>" match, so a renamed section gets none

@@ -11,11 +11,11 @@ import { fileURLToPath } from 'node:url';
 import { Events, EventBus } from '../../js/core/EventBus.js';
 import { RENDER_ORDER } from '../../js/core/renderOrder.js';
 import {
-  Strategies, unsupportedStrategy, orDefault, legacyHtml, LEGACY_SITES,
+  Strategies, unsupportedStrategy, orDefault, LEGACY_SITES,
 } from '../../js/legacy/LegacyCompat.js';
 import * as LegacyCompat from '../../js/legacy/LegacyCompat.js';
 import { SceneTheme, CanvasTheme, UiColors, Palette, Brand, Theme } from '../../js/theme/Theme.js';
-import { byId, flipToggle, setDisplay, createDialogs } from '../../js/ui/dom.js';
+import { byId, flipToggle, setDisplay, createDialogs, escapeHtml } from '../../js/ui/dom.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ARCHITECTURE = readFileSync(join(ROOT, 'docs', 'ARCHITECTURE.md'), 'utf8');
@@ -268,15 +268,6 @@ describe('orDefault', () => {
   });
 });
 
-describe('legacyHtml', () => {
-  test('is the identity (no escaping, no coercion)', () => {
-    const obj = { a: 1 };
-    for (const v of ['<b>x</b>', '"\'&<>', '', 0, -0, NaN, 5, null, undefined, obj, true]) {
-      assert.ok(Object.is(legacyHtml(v), v), `legacyHtml(${String(v)})`);
-    }
-  });
-});
-
 describe('retired legacy helpers', () => {
   test('legacyMissingDownloadBlob is gone (B-M1 landed in 08 P2-5a: the safe-distance OBJ uses downloader.saveBlob)', () => {
     assert.equal('legacyMissingDownloadBlob' in LegacyCompat, false);
@@ -286,6 +277,10 @@ describe('retired legacy helpers', () => {
   test('legacySpreadBase64 and Strategies.gltfBase64 are gone (B-H3 landed in 08 P2-1a: GltfExporter.chunkedBase64)', () => {
     assert.equal('legacySpreadBase64' in LegacyCompat, false);
     assert.equal('gltfBase64' in Strategies, false);
+  });
+
+  test('legacyHtml is gone (B-M4 landed in 08 P2-3a: ui/dom.js escapeHtml)', () => {
+    assert.equal('legacyHtml' in LegacyCompat, false);
   });
 });
 
@@ -351,7 +346,7 @@ describe('LEGACY_SITES', () => {
   // The Phase 2 fixes landed so far (docs/improvements/08-bugfix-roadmap.md section 10, merge order), each with the
   // 08 commit its 8.2 fix cell names. Every landing commit adds its id here.
   const PHASE2_LANDED = { 'B-M1': 'P2-5a', 'B-H3': 'P2-1a', 'B-L5': 'P2-1b', 'B-L4': 'P2-1c', 'B-H1': 'P2-2a', 'B-L3': 'P2-2b', 'B-H2': 'P2-2c',
-    'B-L11': 'P2-9b', 'B-L15': 'P2-8a' };
+    'B-L11': 'P2-9b', 'B-L15': 'P2-8a', 'B-M4': 'P2-3a' };
   // The quirks a Phase 3 feature step fixed (its spec and step, as its 8.2 fix cell names them): B-L24's badge overlap in
   // 06 T4a (its .view-btn.active half had landed in 01 F1-2; its two CSS documentation entries are gone).
   const PHASE3_LANDED = { 'B-L24': '06 T4a' };
@@ -501,6 +496,17 @@ describe('ui/dom', () => {
     assert.equal(byId(doc, 'x'), el);
     assert.equal(byId(doc, 'y'), null);
     assert.deepEqual(seen, ['x', 'y']);
+  });
+
+  test('escapeHtml escapes & < > " \' (08 6.5) and converts non-strings like a template literal', () => {
+    assert.equal(escapeHtml('&<>"\''), '&amp;&lt;&gt;&quot;&#39;');
+    assert.equal(escapeHtml('<b id="xss-probe">B</b>'), '&lt;b id=&quot;xss-probe&quot;&gt;B&lt;/b&gt;');
+    assert.equal(escapeHtml('Say "hi"'), 'Say &quot;hi&quot;');
+    assert.equal(escapeHtml('a &amp; b'), 'a &amp;amp; b', 'escapes an existing entity again (no double-decoding)');
+    assert.equal(escapeHtml('red;outline:3px solid lime'), 'red;outline:3px solid lime', 'CSS needs the colour rule (P2-3b), not escaping');
+    for (const v of [0, -0, 5, 2.5, NaN, Infinity, null, undefined, true, { toString: () => 'x<' }, 'plain']) {
+      assert.equal(escapeHtml(v), `${v}`.replace(/</g, '&lt;'), `escapeHtml(${String(v)})`);
+    }
   });
 
   test('flipToggle toggles `active` and reads the new state back', () => {

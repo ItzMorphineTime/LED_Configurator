@@ -179,8 +179,9 @@ export class ProjectSerializer {
       }
       // 06 T7 (4.3, Q20; spec 07 C11 carries the rule into migrateV1toV2): the Phase-1 palette fills missing colours.
       const sectionColors = this.#palette.legacySectionColors ?? this.#palette.sectionColors;
-      // LEGACY(B-L8, B-M4): no validation, no coercion and no escaping: imported strings, NaN or duplicate ids,
-      // empty walls and unknown mesh modes are accepted; `|| default` turns 0 and '' into the default.
+      // LEGACY(B-L8): no validation and no coercion: imported strings, NaN or duplicate ids, empty walls and unknown
+      // mesh modes are accepted; `|| default` turns 0 and '' into the default. (Names are escaped where they are
+      // rendered since 08 P2-3a, B-M4.)
       const sections = data.sections.map((s, i) => new WallSection({
         id: s.id !== undefined ? s.id : i,
         name: s.name || `Wall ${i + 1}`,

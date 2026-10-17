@@ -13,12 +13,12 @@
  * (logo-row__label) and the scale input (logo-row__input). The row div takes the class logo-row instead of the
  * legacy style.cssText; the file input keeps its inline display: none. 06 T4c spells the visible position
  * option labels in British English ("Top Centre", "Centre Left", "Centre", "Centre Right", "Bottom Centre"); the
- * option values (top-center, ...) are data and do not change. Do not re-indent it.
+ * option values (top-center, ...) are data and do not change. 08 P2-3a (B-M4, 08 6.5): the section name and every
+ * id interpolation go through escapeHtml (legacy interpolated them raw). Do not re-indent it.
  */
 import { Events } from '../core/EventBus.js';
-import { legacyHtml } from '../legacy/LegacyCompat.js';
 import { LogoLibrary } from '../domain/LogoLibrary.js';
-import { byId } from './dom.js';
+import { byId, escapeHtml } from './dom.js';
 
 /**
  * One logo row's inner markup.
@@ -33,21 +33,21 @@ import { byId } from './dom.js';
  */
 function logoRowHtml(section, index, hasLogo, logoData) {
   return `
-                    <div class="logo-row__title">${legacyHtml(section.name || 'Wall ' + (index + 1))}</div>
+                    <div class="logo-row__title">${escapeHtml(section.name || 'Wall ' + (index + 1))}</div>
                     <div class="section-logo-upload">
-                        <label class="section-logo-upload-btn ${hasLogo ? 'has-logo' : ''}" data-section-id="${legacyHtml(section.id)}">
+                        <label class="section-logo-upload-btn ${hasLogo ? 'has-logo' : ''}" data-section-id="${escapeHtml(section.id)}">
                             ${hasLogo ? '✓ Logo uploaded' : '+ Upload Logo'}
-                            <input type="file" accept="image/*" style="display: none;" data-section-id="${legacyHtml(section.id)}">
+                            <input type="file" accept="image/*" style="display: none;" data-section-id="${escapeHtml(section.id)}">
                         </label>
-                        <button class="section-logo-clear ${hasLogo ? 'visible' : ''}" data-section-id="${legacyHtml(section.id)}" title="Remove logo">
+                        <button class="section-logo-clear ${hasLogo ? 'visible' : ''}" data-section-id="${escapeHtml(section.id)}" title="Remove logo">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                             </svg>
                         </button>
                     </div>
-                    <div class="section-logo-position ${hasLogo ? 'visible' : ''}" data-section-id="${legacyHtml(section.id)}">
+                    <div class="section-logo-position ${hasLogo ? 'visible' : ''}" data-section-id="${escapeHtml(section.id)}">
                         <label class="logo-row__label">Position</label>
-                        <select data-section-id="${legacyHtml(section.id)}" data-field="position">
+                        <select data-section-id="${escapeHtml(section.id)}" data-field="position">
                             <option value="top-left" ${logoData.position === 'top-left' ? 'selected' : ''}>Top Left</option>
                             <option value="top-center" ${logoData.position === 'top-center' ? 'selected' : ''}>Top Centre</option>
                             <option value="top-right" ${logoData.position === 'top-right' ? 'selected' : ''}>Top Right</option>
@@ -59,10 +59,10 @@ function logoRowHtml(section, index, hasLogo, logoData) {
                             <option value="bottom-right" ${logoData.position === 'bottom-right' ? 'selected' : ''}>Bottom Right</option>
                         </select>
                     </div>
-                    <div class="section-logo-scale ${hasLogo ? 'visible' : ''}" data-section-id="${legacyHtml(section.id)}">
+                    <div class="section-logo-scale ${hasLogo ? 'visible' : ''}" data-section-id="${escapeHtml(section.id)}">
                         <label class="logo-row__label">Scale (%)</label>
                         <input type="number" value="${Math.round((logoData.scale || 0.3) * 100)}" min="5" max="100" step="5" 
-                               data-section-id="${legacyHtml(section.id)}" data-field="scale"
+                               data-section-id="${escapeHtml(section.id)}" data-field="scale"
                                class="logo-row__input">
                     </div>
                 `;
@@ -127,8 +127,8 @@ export class SectionLogosPanel {
 
       const sectionDiv = this.#doc.createElement('div');
       sectionDiv.className = 'logo-row';
-      // LEGACY(B-M4, B-L8): the section name is interpolated into innerHTML unescaped (legacyHtml is the identity),
-      // and the raw section id is written to data-section-id and parsed back with parseInt by the handlers, while
+      // The section name and ids are escaped (B-M4 fixed in 08 P2-3a).
+      // LEGACY(B-L8): the raw section id is written to data-section-id and parsed back with parseInt by the handlers, while
       // this render (and the panel-ID renderer) read the entry with the raw id: an id whose parseInt has a different
       // property key ('a', '07', 1.5; every non-numeric string shares the key "NaN") never shows its logo.
       sectionDiv.innerHTML = logoRowHtml(section, index, hasLogo, logoData);

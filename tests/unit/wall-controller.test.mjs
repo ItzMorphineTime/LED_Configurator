@@ -26,6 +26,7 @@ import { Palette } from '../../js/theme/Theme.js';
 import { WallController } from '../../js/app/WallController.js';
 import { runFontGate } from '../../js/app/fontGate.js';
 import { HeaderStats } from '../../js/ui/HeaderStats.js';
+import { escapeHtml } from '../../js/ui/dom.js';
 import { SectionListPanel } from '../../js/ui/SectionListPanel.js';
 import { SectionLogosPanel } from '../../js/ui/SectionLogosPanel.js';
 import { WallDisplayPanel } from '../../js/ui/WallDisplayPanel.js';
@@ -656,6 +657,8 @@ const lines = (a, b) => LEGACY_LINES.slice(a - 1, b).join('\n');
  * indentation), so the six literal swatch lines of the legacy template become the palette's lines.
  * 08 P2-8a (B-L15, 08 4.4): the card's integer inputs gain step="1", panel height and Pixels X/Y their max, the panel
  * angle min/max (WallSection.LIMITS), and the number handler's rules round the integer fields and apply the caps.
+ * 08 P2-3a (B-M4, 08 6.5): every interpolation of a section value in the card and logo-row templates, and the live
+ * rename's title, go through escapeHtml (ui/dom.js, passed into the legacy closure).
  */
 /** The legacy template's swatch line for colour `c` (index.html@cd3fd3f 3970-3975). */
 const swatchLine = (c) => `<div class="color-swatch-small \${section.color === '${c}' ? 'active' : ''}" data-color="${c}" style="background: ${c};"></div>`;
@@ -688,6 +691,26 @@ const TEMPLATE_EDITS = Object.freeze([
   ["else if (field === 'panelHeight') value = Math.max(50, value || 500);", "else if (field === 'panelHeight') value = Math.min(100000, Math.max(50, value || 500));", 1],
   ["else if (field === 'ledX' || field === 'ledY') value = Math.max(8, value || 32);", "else if (field === 'ledX' || field === 'ledY') value = Math.min(65536, Math.max(8, Math.round(value || 32)));", 1],
   ["else if (field === 'curveIntensity') value = value || 0;", "else if (field === 'curveIntensity') value = Math.min(180, Math.max(-180, value || 0));", 1],
+  [">${section.name || 'Wall ' + (index + 1)}</div>", ">${escapeHtml(section.name || 'Wall ' + (index + 1))}</div>", 1],
+  ['data-section-id="${section.id}"', 'data-section-id="${escapeHtml(section.id)}"', 7],
+  ['style="background: ${section.color}"></div>', 'style="background: ${escapeHtml(section.color)}"></div>', 1],
+  ['<div class="section-title">${section.name}${exceeds4K', '<div class="section-title">${escapeHtml(section.name)}${exceeds4K', 1],
+  ['<div class="section-summary">${summary}</div>', '<div class="section-summary">${escapeHtml(summary)}</div>', 1],
+  ['data-id="${section.id}"', 'data-id="${escapeHtml(section.id)}"', 1],
+  ['value="${section.name}"', 'value="${escapeHtml(section.name)}"', 1],
+  ['value="${section.panelCols}"', 'value="${escapeHtml(section.panelCols)}"', 1],
+  ['value="${section.panelRows}"', 'value="${escapeHtml(section.panelRows)}"', 1],
+  ['value="${section.panelWidth}"', 'value="${escapeHtml(section.panelWidth)}"', 1],
+  ['value="${section.panelHeight}"', 'value="${escapeHtml(section.panelHeight)}"', 1],
+  ['value="${section.ledX}"', 'value="${escapeHtml(section.ledX)}"', 1],
+  ['value="${section.ledY}"', 'value="${escapeHtml(section.ledY)}"', 1],
+  ['value="${section.curveIntensity}"', 'value="${escapeHtml(section.curveIntensity)}"', 1],
+  ['value="${section.angleOffset || 0}"', 'value="${escapeHtml(section.angleOffset || 0)}"', 1],
+  ['value="${section.color}"', 'value="${escapeHtml(section.color)}"', 1],
+  ["<div class=\"curve-hint\">${curveType}${section.curveIntensity !== 0 ? ` (${section.curveIntensity > 0 ? '+' : ''}${section.curveIntensity}°)` : ''}</div>",
+    "<div class=\"curve-hint\">${escapeHtml(`${curveType}${section.curveIntensity !== 0 ? ` (${section.curveIntensity > 0 ? '+' : ''}${section.curveIntensity}°)` : ''}`)}</div>", 1],
+  ['Canvas ${canvasWidth}×${canvasHeight} exceeds 4K</span>', 'Canvas ${escapeHtml(canvasWidth)}×${escapeHtml(canvasHeight)} exceeds 4K</span>', 2],
+  ["sectionEl.querySelector('.section-title').innerHTML = section.name + ", "sectionEl.querySelector('.section-title').innerHTML = escapeHtml(section.name) + ", 1],
 ]);
 
 /** `src` with every TEMPLATE_EDITS row applied; throws when a row does not occur exactly its declared number of times. */
@@ -741,7 +764,7 @@ ${lines(4975, 5003)}
         sectionLabelFontSize, sectionLabelColor, sectionLogos }),
     };`;
   // eslint-disable-next-line no-new-func
-  return new Function('document', 'initialSections', src)(doc, initialSections);
+  return new Function('document', 'initialSections', 'escapeHtml', src)(doc, initialSections, escapeHtml);
 }
 
 /** The markup that holds every element the wall panels own (header stats .. logo container). */
@@ -1068,7 +1091,7 @@ describe('legacy parity: panels + WallController vs index.html@cd3fd3f', { skip:
     assert.deepEqual(collapsed(mdoc), [false, true], 'ids 2, 3 keep their own states');
   });
 
-  test('card template parity for odd section values (strings, NaN ids, fractions, unescaped markup)', () => {
+  test('card template parity for odd section values (strings, NaN ids, fractions, markup escaped since 08 P2-3a)', () => {
     const variants = [
       [fields()],
       [fields({ id: 'x"y', name: '<b>bold</b> "q"', color: 'red', panelCols: '7', ledX: '64', curveIntensity: '3', angleOffset: undefined })],

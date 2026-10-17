@@ -263,8 +263,8 @@ screenshot shows the logo on the combined wall.
 With panel IDs on, it focuses the first `.section-name-input`, selects its text and types
 `Grip <i>L</i>` with real CDP key events, one key at a time. After each key it records the input
 value, the `.section-title` text and `innerHTML`, and the logo-list text
-(`name_01_per_keystroke.json`). The name contains markup, so the unescaped `innerHTML` (B-M4) shows
-in the title and the logo list. It also contains the shortcut letters g, r, p and l, so the gizmo
+(`name_01_per_keystroke.json`). The name contains markup, which the original's unescaped `innerHTML` (B-M4)
+turned into an `<i>` element in the title and the logo list; since 08 P2-3a both show it as text. It also contains the shortcut letters g, r, p and l, so the gizmo
 state recorded after typing proves that the shortcut handlers ignore INPUT targets (B-L11). Then it
 exports the panel-ID PNG and JSON, clears the field with Backspace, and exports again: the model
 falls back to `Wall 1` (title, logo list, JSON) while the input stays empty.
@@ -817,7 +817,9 @@ in parentheses changes them:
   pilot mode stays on until the preview is enabled again (B-H4).
 - `preview_resize`: the second drag produces a 1200×120 preview window (B-L32).
 - `p2_xss_names`: `xss_probe` and (after the rename) `xss_probe2` are `true`, the third card's colour
-  swatch gets the injected outline, and the second card's name input shows `Say ` (B-M4, B-L8, B-L16).
+  swatch gets the injected outline, and the second card's name input shows `Say ` (B-M4, B-L8, B-L16) (08 P2-3a:
+  both probes are `false`, the cards and the logo list show the names as text and the input keeps `Say "hi"`; the
+  injected outline stays until the colour rule of 08 P2-3b).
 - `p2_curved_safe_distance`: each of the four exports throws the B-M1 `ReferenceError`, so no OBJ is
   produced (08 P2-5a: the four OBJs download); the `concave30` screenshot shows the folded band (B-M15).
 - `p2_oversize_canvas`: Export Panel IDs throws `TypeError: Failed to execute 'createObjectURL' on

@@ -195,8 +195,8 @@ js/
     renderOrder.js                         01 F1-1  RENDER_ORDER: every non-default renderOrder slot of every spec (01 5.5,
                                                  CR-10); static rule 11 forbids literals >= 900 elsewhere
   legacy/
-    LegacyCompat.js                        WP3   Strategies (deep-frozen switches), LegacyProfiles, legacy helpers (orDefault,
-                                                 legacyHtml), unsupportedStrategy, LEGACY_SITES
+    LegacyCompat.js                        WP3   Strategies (deep-frozen switches), LegacyProfiles, legacy helpers (orDefault;
+                                                 legacyHtml deleted by 08 P2-3a), unsupportedStrategy, LEGACY_SITES
   theme/
     Theme.js                               WP3   SceneTheme, CanvasTheme, UiColors, Palette, Brand, Theme (ThemeBridge-ready shape);
                                                  06 T5: the Morph scene, canvas and status values, frameOnLight,
@@ -274,7 +274,7 @@ js/
     fontGate.js                            06 T5  runFontGate: loads the canvas preload fonts and the pending (font, text)
                                                  pairs, then rebuildIfPanelIds once if any was pending (6.2 row F6-1)
   ui/
-    dom.js                                 WP3   byId, flipToggle, setDisplay, createDialogs
+    dom.js                                 WP3   byId, flipToggle, setDisplay, createDialogs; 08 P2-3a: escapeHtml (B-M4)
     HeaderStats.js                         WP9   #total-pixels / #total-panels / #total-sections / #total-arc
     SectionListPanel.js                    WP9   #wall-sections cards (verbatim templates; 06 T1: the offset hint's class;
                                                  06 T4c: "Panel Angle (°)", "Panel Colour", title "Custom colour"; 06 T7:
@@ -643,9 +643,7 @@ export function unsupportedStrategy(key, value)
 /** LEGACY(B-L9): `v || d` (0, '', NaN fall back to the default). Every input rule table uses it. */
 export const orDefault = (v, d) => v || d;
 
-/** LEGACY(B-M4): returns s unchanged; every template interpolation of user text goes through it,
- *  so escaping is a one-function fix. */
-export const legacyHtml = (s) => s;
+// legacyHtml (the identity "escaper" of B-M4) was deleted by 08 P2-3a: ui/dom.js escapeHtml replaces it (3.11).
 
 /** Register of every tagged legacy site (sections 8.2 and 8.3). Frozen array of
  *  { id: 'B-M14', site: 'js/interaction/ViewportInput.js#attachPointer', behaviour: '...', fix: '...' }.
@@ -1910,7 +1908,7 @@ export class ProjectSerializer {
    *    curveIntensity: s.curvature?.angle_degrees || 0, angleOffset: s.curvature?.angle_offset_degrees || 0,
    *    color: s.color || colors[i % colors.length] }))   with colors = palette.legacySectionColors ?? palette.sectionColors
    *    (06 T7, 4.3: a v1 file without colours looks as authored; spec 07 C11 carries the rule into migrateV1toV2)
-   *  LEGACY(B-L8, B-M4): no validation, no escaping.
+   *  LEGACY(B-L8): no validation (names are escaped where they are rendered since 08 P2-3a, B-M4).
    *  @returns {{sections: WallSection[], meshMode: any} | null}  meshMode = data.mesh_mode (raw, may be undefined) */
   read(data)
 }
@@ -2227,6 +2225,10 @@ Every panel follows the same shape:
 #### `js/ui/dom.js`
 ```js
 export const byId = (doc, id) => doc.getElementById(id);
+/** 08 P2-3a (B-M4, 08 6.5): String(s) with & < > " ' replaced by &amp; &lt; &gt; &quot; &#39; (HTML_ESC); every
+ *  interpolation of a section value in a ui/ innerHTML template goes through it (text content and double-quoted
+ *  attribute values). Non-strings go through String(), which is what a template literal does with them. */
+export const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => HTML_ESC[c]);
 /** The legacy toggle idiom: el.classList.toggle('active'); return el.classList.contains('active'); */
 export function flipToggle(el)
 /** el.style.display = visible ? 'block' : 'none' */
@@ -2261,10 +2263,10 @@ export class SectionListPanel {
    *  <div class="curve-hint curve-hint--small"> instead of its inline font-size: 9px; 06 T4c: the labels "Panel Angle (°)"
    *  and "Panel Colour" and the title "Custom colour"; 08 P2-8a: step="1" on the columns, rows and Pixels X/Y inputs,
    *  max="100000" on panel height, max="65536" on Pixels X/Y, min="-180" max="180" on the panel angle) with EVERY interpolation of a
-   *  section value passed through legacyHtml() (LEGACY(B-M4)): name (title and input value), colour (dot style and colour input),
+   *  section value passed through escapeHtml() (ui/dom.js; B-M4 fixed in 08 P2-3a): name (title and input value), colour (dot style and colour input),
    *  id, the numeric field values (imported strings are not coerced, B-L8), summary (it contains the raw panelCols /
    *  panelRows) and hint; the six swatches stay literal; the 4K warning's canvasWidth / canvasHeight are products of two
-   *  fields, always numbers, and stay unwrapped;
+   *  fields, always numbers, and go through escapeHtml too (a no-op; 08 P2-3a escapes every interpolation);
    *  the delete button only when wall.count > 1; summary = section.summary; hint = section.curveHint;
    *  title ⚠ when section.exceeds4K; append; then the card listeners in legacy order:
    *   1. .section-header click: if (!e.target.closest('.section-delete')) card.classList.toggle('collapsed')
@@ -2274,7 +2276,7 @@ export class SectionListPanel {
    *   4. .color-input-custom input: e.stopPropagation(); remove 'active' from all swatches; dot style.background = e.target.value;
    *      wallController.setSectionColor(section, e.target.value)
    *   5. .section-name-input input: e.stopPropagation(); name = wallController.renameSection(section, e.target.value, index);
-   *      title.innerHTML = legacyHtml(name) + (card.querySelector('.warning-indicator') ? ' <span class="warning-indicator">⚠</span>' : '');
+   *      title.innerHTML = escapeHtml(name) + (card.querySelector('.warning-indicator') ? ' <span class="warning-indicator">⚠</span>' : '');
    *      wallController.commitRename()
    *   6. .section-name-input click: e.stopPropagation()
    *   7. each input[type="number"] change: field = e.target.dataset.field;
@@ -2308,8 +2310,8 @@ export class SectionLogosPanel {
    *  div.style.cssText); template verbatim except the 06 T1 classes of css/99-utilities.css that replaced its inline styles
    *  (the name div logo-row__title, the two labels logo-row__label, the scale input logo-row__input; the file input keeps
    *  its inline display: none), with
-   *  legacyHtml(section.name || 'Wall ' + (index + 1)) (LEGACY(B-M4)) and every raw section.id interpolation
-   *  (the seven data-section-id attributes; imported ids can be arbitrary strings) also through legacyHtml; computed
+   *  escapeHtml(section.name || 'Wall ' + (index + 1)) (B-M4 fixed in 08 P2-3a) and every raw section.id interpolation
+   *  (the seven data-section-id attributes; imported ids can be arbitrary strings) also through escapeHtml; computed
    *  numbers (the scale percentage) and the conditional class / 'selected' strings stay unwrapped; append; then listeners: file inputs change -> #onUpload,
    *  .section-logo-clear click -> #onClear, select[data-field="position"] change -> #onPosition, input[data-field="scale"] change -> #onScale. */
   render()
@@ -2985,7 +2987,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | B-M1 | Safe-distance OBJ throws ReferenceError (K-3) | `ProjectIO.exportSafeDistanceOBJ` (fixed) | Landed in 08 P2-5a (`downloader.saveBlob`; no tag site) |
 | B-M2 | Index-based MTL texture path (R-3) | `PanelNaming.mtlTextureFile` | name-based |
 | B-M3 | ZIP JSON lacks angle offsets (U-1) | `Strategies.zipJsonIncludesAngleOffset` | `true` |
-| B-M4 | Unescaped names/colours/values in innerHTML (V-8) | `legacyHtml` (every template interpolation in `SectionListPanel`, `SectionLogosPanel`) | real escaping + import validation |
+| B-M4 | Unescaped names/colours/values in innerHTML (V-8) | `ui/dom.js escapeHtml` (every template interpolation in `SectionListPanel`, `SectionLogosPanel`; fixed) | Landed in 08 P2-3a (`ui/dom.js escapeHtml` on every template interpolation of `SectionListPanel` and `SectionLogosPanel`, the live rename included; `legacyHtml` deleted; the colour validation is 08 P2-3b's; no tag site) |
 | B-M5 | Combined V full height (E-5) | `Strategies.mesh.viewport.combinedUV` + `LEDMaterialFactory.combined` repeat | new UV strategy (Feature 4) |
 | B-M6 | Overlapping combined OBJ UVs (R-6) | `Strategies.mesh.obj.combinedUV` | atlas UVs |
 | B-M7 | glTF POSITION only (S-2) | `Strategies.mesh.gltf.attributes` | `NORMAL` landed in 08 P2-2d; `TEXCOORD_0` with 08 P2-7c |
@@ -3044,7 +3046,6 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | Site | Ids |
 |---|---|
 | `js/legacy/LegacyCompat.js#orDefault` | B-L9 |
-| `js/legacy/LegacyCompat.js#legacyHtml` | B-M4 |
 | `js/domain/WallSection.js#constructor` | B-L8 |
 | `js/domain/WallSection.js#exceeds4K` | B-L17 |
 | `js/domain/Wall.js#appendLikeLast` | B-L8 |
@@ -3067,7 +3068,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/geometry/PanelNaming.js#zipTextureFileName` | B-L14 |
 | `js/geometry/PanelNaming.js#mtlTextureFile` | B-M2 |
 | `js/io/ProjectSerializer.js#write` | B-M3, B-L31 |
-| `js/io/ProjectSerializer.js#read` | B-L8, B-M4 |
+| `js/io/ProjectSerializer.js#read` | B-L8 |
 | `js/io/ObjExporter.js#write` | B-M6, B-L6, B-L8 |
 | `js/io/GltfExporter.js#write` | B-L6, B-L8 |
 | `js/io/GltfExporter.js#addMesh` | B-M7 |
@@ -3099,15 +3100,14 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/app/CameraController.js#setPreviewEnabled` | B-H4, B-M8 |
 | `js/app/ProjectIO.js#exportOBJ` | B-L7 |
 | `js/app/ProjectIO.js#exportZIP` | B-L14 |
-| `js/ui/SectionListPanel.js#render` | B-M4 |
 | `js/ui/SectionListPanel.js#patchCard` | B-L16 |
-| `js/ui/SectionLogosPanel.js#render` | B-M4, B-L8 |
+| `js/ui/SectionLogosPanel.js#render` | B-L8 |
 | `js/ui/SectionLogosPanel.js#onUpload` | B-L35 |
 | `js/ui/SectionLogosPanel.js#constructor` | B-L21 |
 | `js/ui/WallDisplayPanel.js#bind` | B-L13 |
 | `index.html` (markup, untagged; documentation-only) | B-L36 |
 
-Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14) and B-L5 (08 P2-1b; its only site was the tag in `GltfExporter.addMesh`, which keeps B-H2 and B-M7) and B-L4 (08 P2-1c; its sites were the tags in `ProjectIO.exportPanelIds`, which has no tag left, and `ProjectIO.exportZIP`, which keeps B-L14; its viewport half never had a tag and is fixed by 08 P2-1d) and B-H1 (08 P2-2a; its sites were the tags in `WallMeshBuilder.quadIndices`, which keeps B-H2 until 08 P2-2d, and `LEDMaterialFactory.side`, whose `'double'` value is now a design choice) and B-L3 (08 P2-2b; its only site was the tag in `WallMeshBuilder.sectionGrid`, which keeps B-L15 and B-L8) and B-H2 (08 P2-2c and P2-2d; its sites were the tags in `ObjExporter.write`'s `#stripNormalLine`, which left with P2-2c (`write` keeps B-M6, B-L6 and B-L8), `WallMeshBuilder.quadIndices`, which has no tag left, and `GltfExporter.addMesh`, which keeps B-M7) and B-L11 (08 P2-9b; its sites were the tags in `InputState.isShortcutIgnoredTarget`, now a re-export of `core/typingTarget.js isTypingTarget`, and `ViewportInput.attachShortcuts`, which has no tag left) and B-L15 (08 P2-8a; its sites were the tags in `WallSection.FIELD_RULES`, which has no tag left, and `WallMeshBuilder.sectionGrid`, which keeps B-L8 for unvalidated imported counts); in Phase 3, B-L24 (its `.view-btn.active` half in 01 F1-2, `css/features/debug-view.css`; its badge-overlap half in 06 T4a, `.selection-indicator` at `bottom: 64px` in `css/09-viewport-tools.css`; its two documentation-only entries, the `Legacy note B-L24` paragraphs of the `css/07-viewport.css` and `css/09-viewport-tools.css` header comments, left with 06 T4a, whose header comments now say where it landed).
+Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14) and B-L5 (08 P2-1b; its only site was the tag in `GltfExporter.addMesh`, which keeps B-H2 and B-M7) and B-L4 (08 P2-1c; its sites were the tags in `ProjectIO.exportPanelIds`, which has no tag left, and `ProjectIO.exportZIP`, which keeps B-L14; its viewport half never had a tag and is fixed by 08 P2-1d) and B-H1 (08 P2-2a; its sites were the tags in `WallMeshBuilder.quadIndices`, which keeps B-H2 until 08 P2-2d, and `LEDMaterialFactory.side`, whose `'double'` value is now a design choice) and B-L3 (08 P2-2b; its only site was the tag in `WallMeshBuilder.sectionGrid`, which keeps B-L15 and B-L8) and B-H2 (08 P2-2c and P2-2d; its sites were the tags in `ObjExporter.write`'s `#stripNormalLine`, which left with P2-2c (`write` keeps B-M6, B-L6 and B-L8), `WallMeshBuilder.quadIndices`, which has no tag left, and `GltfExporter.addMesh`, which keeps B-M7) and B-L11 (08 P2-9b; its sites were the tags in `InputState.isShortcutIgnoredTarget`, now a re-export of `core/typingTarget.js isTypingTarget`, and `ViewportInput.attachShortcuts`, which has no tag left) and B-L15 (08 P2-8a; its sites were the tags in `WallSection.FIELD_RULES`, which has no tag left, and `WallMeshBuilder.sectionGrid`, which keeps B-L8 for unvalidated imported counts) and B-M4 (08 P2-3a; its sites were `legacyHtml`, deleted, and the tags in `SectionListPanel.render`, which has no tag left, `SectionLogosPanel.render` and `ProjectSerializer.read`, which keep B-L8); in Phase 3, B-L24 (its `.view-btn.active` half in 01 F1-2, `css/features/debug-view.css`; its badge-overlap half in 06 T4a, `.selection-indicator` at `bottom: 64px` in `css/09-viewport-tools.css`; its two documentation-only entries, the `Legacy note B-L24` paragraphs of the `css/07-viewport.css` and `css/09-viewport-tools.css` header comments, left with 06 T4a, whose header comments now say where it landed).
 
 How rule 6 reads these rows (as implemented in `tests/static/check.mjs`): the comparison is per file, so a tag may sit in a private helper that only the named method calls (for example `ProjectSerializer.#readV1` for `#read`, `ObjExporter.#writeCombined` for `#write`, `GltfExporter.#writeCombined` for `#write`); a tag wrapped across JSDoc continuation lines counts as one tag (placeholders are still rejected); and a row whose `js/` file does not exist is reported, so a typo in a site path cannot bypass the check.
 
@@ -3403,3 +3403,10 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 3.11 (R1/R8 template note, 08 5.5): the card template gains `step="1"` on the four integer inputs, `max="100000"` on panel height, `max="65536"` on Pixels X/Y and `min="-180" max="180"` on the panel angle; the legacy-parity tests apply them, and the rule changes of the number handler, as `TEMPLATE_EDITS` (11 item 6).
 - 8.2: the B-L15 row is kept with a `Landed` fix cell; 8.3: the row `WallSection.js#FIELD_RULES` is deleted and B-L15 leaves `WallMeshBuilder.js#sectionGrid`, so `LEGACY_SITES` no longer lists it.
 - 2.3: `domain.test.mjs` (the 4.4 rule table, `LIMITS`, the reachability property of every card rule over the grid and 10,000 seeded inputs, `rules`); `export-orientation.test.mjs` loses the B-L15 `OPEN_DEFECTS` row (`p2_zero_inputs`' combined OBJ passes).
+
+**08 P2-3a, B-M4 landed** (manifest `tests/regression/expected/P2-3a.json`: `p2_xss_names` (the two card snapshots, the three XSS probes, the two logo lists) and `name_with_panel_ids/name_01_per_keystroke`; = 07 D7):
+- 2.2, 3.11: `ui/dom.js escapeHtml(s)` (08 6.5: `& < > " '` -> `&amp; &lt; &gt; &quot; &#39;` after `String(s)`); every interpolation of a section value in the `SectionListPanel` card template (name, colour, id, the numeric fields, summary, hint, the computed 4K canvas size) and in the `SectionLogosPanel` row template (name, the seven ids), and the live rename's title, go through it. The colour still reaches `style` unvalidated until 08 P2-3b (escaping does not stop `red;outline:...`).
+- 3.3: `legacyHtml` is deleted (`tests/unit/core.test.mjs` asserts it is gone).
+- 3.9: the B-M4 id leaves `ProjectSerializer.read`'s tag (B-L8 stays until 08 P2-3b).
+- 8.2: the B-M4 row is kept with a `Landed` fix cell; 8.3: the rows `LegacyCompat.js#legacyHtml` and `SectionListPanel.js#render` are deleted, and B-M4 leaves `SectionLogosPanel.js#render` and `ProjectSerializer.js#read` (both keep B-L8), so `LEGACY_SITES` no longer lists it.
+- 2.3, 11 item 6: `wall-controller.test.mjs` applies the escaping to the legacy templates and the live rename as `TEMPLATE_EDITS` (escapeHtml is passed into the legacy closure), so the parity tests keep comparing every other byte; `core.test.mjs` tests `escapeHtml`.

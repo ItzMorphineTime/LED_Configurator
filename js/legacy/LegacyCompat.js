@@ -3,13 +3,13 @@
  * The single home of every output-affecting legacy switch and helper of Phase 1:
  * - `Strategies`: deep-frozen switches, each read at exactly one site (ARCHITECTURE.md 8.1);
  * - `LegacyProfiles`: the exact Phase-1 mesh profiles, read only by the oracle tests (ARCHITECTURE.md 3.3);
- * - legacy helpers that reproduce a preserved quirk (`orDefault`, `legacyHtml`);
+ * - legacy helpers that reproduce a preserved quirk (`orDefault`; `legacyHtml` was deleted by 08 P2-3a, B-M4);
  * - `unsupportedStrategy`, thrown by every switch-and-throw reader for a non-legacy value (ARCHITECTURE.md 1.5);
  * - `LEGACY_SITES`, the machine-readable register of every tagged legacy site.
  * The human-readable register is docs/ARCHITECTURE.md section 8 (8.1 switches, 8.2 quirks, 8.3 tag sites).
  * A later fix flips one value (plus its new code branch) or edits one tagged site, updates LEGACY_SITES and
  * re-baselines only the affected golden-master outputs.
- * Legacy source: index.html@cd3fd3f, every `|| default` input rule and every innerHTML template interpolation.
+ * Legacy source: index.html@cd3fd3f, every `|| default` input rule.
  * Layer: legacy (imports no other directory of js/).
  */
 
@@ -111,17 +111,6 @@ export function unsupportedStrategy(key, value) {
 export const orDefault = (v, d) => v || d;
 
 /**
- * Identity "escaper" for user text interpolated into innerHTML templates.
- * LEGACY(B-M4): returns s unchanged; every template interpolation of user text goes through it,
- * so escaping is a one-function fix.
- * Side effects: none.
- * @template S
- * @param {S} s
- * @returns {S} s, unchanged (no coercion either)
- */
-export const legacyHtml = (s) => s;
-
-/**
  * Quirk register (ARCHITECTURE.md 8.2): bug id -> [preserved behaviour, how the fix lands]. Module-private.
  * A fixed quirk keeps its row (its fix text starts with 'Landed') but has no TAG_SITES pair, so LEGACY_SITES
  * no longer lists it.
@@ -145,7 +134,7 @@ const QUIRKS = deepFreeze({
   'B-M3': ['ZIP JSON lacks angle offsets (U-1)',
     '`true`'],
   'B-M4': ['Unescaped names/colours/values in innerHTML (V-8)',
-    'real escaping + import validation'],
+    'Landed in 08 P2-3a (`ui/dom.js escapeHtml` on every template interpolation of `SectionListPanel` and `SectionLogosPanel`, the live rename included; `legacyHtml` deleted; the colour validation is 08 P2-3b\'s; no tag site)'],
   'B-M5': ['Combined V full height (E-5)',
     'new UV strategy (Feature 4)'],
   'B-M6': ['Overlapping combined OBJ UVs (R-6)',
@@ -251,7 +240,6 @@ const QUIRKS = deepFreeze({
  */
 const TAG_SITES = deepFreeze([
   ['js/legacy/LegacyCompat.js#orDefault', ['B-L9']],
-  ['js/legacy/LegacyCompat.js#legacyHtml', ['B-M4']],
   ['js/domain/WallSection.js#constructor', ['B-L8']],
   ['js/domain/WallSection.js#exceeds4K', ['B-L17']],
   ['js/domain/Wall.js#appendLikeLast', ['B-L8']],
@@ -274,7 +262,7 @@ const TAG_SITES = deepFreeze([
   ['js/geometry/PanelNaming.js#zipTextureFileName', ['B-L14']],
   ['js/geometry/PanelNaming.js#mtlTextureFile', ['B-M2']],
   ['js/io/ProjectSerializer.js#write', ['B-M3', 'B-L31']],
-  ['js/io/ProjectSerializer.js#read', ['B-L8', 'B-M4']],
+  ['js/io/ProjectSerializer.js#read', ['B-L8']],
   ['js/io/ObjExporter.js#write', ['B-M6', 'B-L6', 'B-L8']],
   ['js/io/GltfExporter.js#write', ['B-L6', 'B-L8']],
   ['js/io/GltfExporter.js#addMesh', ['B-M7']],
@@ -306,9 +294,8 @@ const TAG_SITES = deepFreeze([
   ['js/app/CameraController.js#setPreviewEnabled', ['B-H4', 'B-M8']],
   ['js/app/ProjectIO.js#exportOBJ', ['B-L7']],
   ['js/app/ProjectIO.js#exportZIP', ['B-L14']],
-  ['js/ui/SectionListPanel.js#render', ['B-M4']],
   ['js/ui/SectionListPanel.js#patchCard', ['B-L16']],
-  ['js/ui/SectionLogosPanel.js#render', ['B-M4', 'B-L8']],
+  ['js/ui/SectionLogosPanel.js#render', ['B-L8']],
   ['js/ui/SectionLogosPanel.js#onUpload', ['B-L35']],
   ['js/ui/SectionLogosPanel.js#constructor', ['B-L21']],
   ['js/ui/WallDisplayPanel.js#bind', ['B-L13']],

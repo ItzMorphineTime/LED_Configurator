@@ -175,6 +175,9 @@ Export and import wall configurations. The JSON file (format version 1.0) contai
 - The mesh mode
 - Totals (sections, panels, pixels)
 
+Release note: a section name is always shown as plain text. A project file shared by someone else could hide HTML or
+script in a section name, which the page used to run on import; such a name is now displayed exactly as written.
+
 Camera settings, scene props, panel ID styling, section logos and display toggles are not saved yet; they will come with the JSON v2 format. The copy of the JSON inside the ZIP package has no angle offsets, so importing it resets every section's offset to 0.
 
 ### OBJ Export
