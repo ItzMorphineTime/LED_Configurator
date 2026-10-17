@@ -7,8 +7,8 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { MM_TO_M, SECTION_FIELDS, WallSection } from '../../js/domain/WallSection.js';
-import { clamp, roundInt, deepFreeze } from '../../js/domain/rules.js';
-import { PivotMode, WallPivot, Wall } from '../../js/domain/Wall.js';
+import { clamp, roundInt, deepFreeze, STAGE_POSITION_LIMIT_M } from '../../js/domain/rules.js';
+import { PivotMode, PIVOT_MODES, PIVOT_OFFSET_LIMIT_M, WallPivot, Wall } from '../../js/domain/Wall.js';
 import { ContentMode, DisplaySettings, PanelIdStyle, Project } from '../../js/domain/Project.js';
 import { LogoLibrary } from '../../js/domain/LogoLibrary.js';
 import { FILMBACK_PRESETS, CineCamera } from '../../js/domain/CineCamera.js';
@@ -556,6 +556,87 @@ describe('Wall', () => {
     assert.equal(pivot.isIdentity, false);
   });
 
+  // 03 T1 (4.1; unit test 7 of 8.1)
+  test('PIVOT_MODES, PIVOT_OFFSET_LIMIT_M and the WallPivot defaults (keep stage layout on, 03 Q4)', () => {
+    assert.deepEqual(PIVOT_MODES, ['bottom-left', 'mesh-center', 'wall-center']);
+    assert.ok(Object.isFrozen(PIVOT_MODES));
+    assert.equal(PIVOT_OFFSET_LIMIT_M, 1000);
+    assert.deepEqual({ ...new WallPivot() }, { mode: 'bottom-left', offset: { x: 0, y: 0, z: 0 }, keepStageLayout: true });
+    const keepOff = new WallPivot();
+    keepOff.setKeepStageLayout(false);
+    assert.equal(keepOff.isIdentity, true, 'keepStageLayout does not count');
+  });
+
+  test('WallPivot.parseOffset: finite -> clamped to +-1000 and rounded to 1 mm, never orDefault, -0 normalised; idempotent', () => {
+    const cases = [['0', 0], ['', null], ['abc', null], ['1e9', 1000], [-0.0004, 0], [1.23456, 1.235], [NaN, null],
+      ['2000', 1000], ['-2000', -1000], ['0.0004', 0], [' 7 ', 7], ['2.5m', 2.5], [Infinity, null], [-Infinity, null],
+      [undefined, null], [null, null], [0.0005, 0.001], [-0.0005, 0], [-0.0006, -0.001], ['-1.2345', -1.234]];
+    for (const [raw, want] of cases) {
+      const got = WallPivot.parseOffset(raw);
+      assert.ok(Object.is(got, want), `parseOffset(${String(raw)}) = ${got}, want ${want}`);
+    }
+    const rand = rng(31);
+    for (let i = 0; i < 2000; i++) {
+      const x = (rand() - 0.5) * (i % 2 ? 3000 : 3);
+      const once = WallPivot.parseOffset(x);
+      assert.ok(Object.is(WallPivot.parseOffset(once), once), `idempotent at ${x}`);
+      assert.ok(Object.is(WallPivot.parseOffset(String(x)), once), `text and number agree at ${x}`);
+    }
+  });
+
+  test('WallPivot.setMode: a known mode stores and reports the change; an unknown mode throws RangeError', () => {
+    const pivot = new WallPivot();
+    assert.equal(pivot.setMode('bottom-left'), false);
+    assert.equal(pivot.setMode('wall-center'), true);
+    assert.equal(pivot.mode, 'wall-center');
+    assert.equal(pivot.setMode('wall-center'), false);
+    assert.throws(() => pivot.setMode('middle'), { name: 'RangeError', message: 'Unknown pivot mode "middle"' });
+    assert.throws(() => pivot.setMode(undefined), RangeError);
+    assert.equal(pivot.mode, 'wall-center', 'nothing stored on a throw');
+  });
+
+  test('WallPivot offsets: setOffsetAxis parses, writes back the stored value, replaces the object; setOffset, resetOffset', () => {
+    const pivot = new WallPivot();
+    const before = pivot.offset;
+    assert.equal(pivot.setOffsetAxis('x', '0.5'), 0.5);
+    assert.notEqual(pivot.offset, before, 'replaced, not mutated');
+    assert.deepEqual(before, { x: 0, y: 0, z: 0 }, 'a snapshot of the old object keeps its values');
+    assert.equal(pivot.setOffsetAxis('y', 'abc'), 0, 'rejected text writes nothing and returns the stored value');
+    const kept = pivot.offset;
+    assert.equal(pivot.setOffsetAxis('z', ''), 0);
+    assert.equal(pivot.offset, kept, 'a rejected value does not replace the object');
+    assert.equal(pivot.setOffsetAxis('z', 2000), 1000);
+    assert.ok(Object.is(pivot.setOffsetAxis('y', '0'), 0), "'0' is a valid offset (no B-L9 fallback)");
+    assert.deepEqual(pivot.offset, { x: 0.5, y: 0, z: 1000 });
+    assert.throws(() => pivot.setOffsetAxis('w', 1), RangeError);
+    assert.deepEqual(pivot.setOffset({ x: -0.0004, y: 0.123, z: 'abc' }), { x: 0, y: 0.123, z: 1000 });
+    pivot.resetOffset();
+    assert.deepEqual(pivot.offset, { x: 0, y: 0, z: 0 });
+    assert.equal(pivot.isIdentity, true);
+  });
+
+  test('WallPivot.setKeepStageLayout rejects non-booleans; clone is deep; equals compares every field', () => {
+    const pivot = new WallPivot();
+    assert.equal(pivot.setKeepStageLayout(true), false);
+    assert.equal(pivot.setKeepStageLayout(false), true);
+    for (const bad of [1, 0, 'true', null, undefined]) assert.throws(() => pivot.setKeepStageLayout(bad), TypeError);
+    assert.equal(pivot.keepStageLayout, false);
+    pivot.setMode('mesh-center');
+    pivot.setOffset({ x: 1, y: 2, z: 3 });
+    const copy = pivot.clone();
+    assert.ok(copy instanceof WallPivot);
+    assert.notEqual(copy.offset, pivot.offset);
+    assert.deepEqual({ ...copy }, { ...pivot });
+    assert.ok(copy.equals(pivot) && pivot.equals(copy));
+    for (const change of [(p) => p.setMode('wall-center'), (p) => p.setOffsetAxis('z', 4), (p) => p.setKeepStageLayout(true)]) {
+      const other = pivot.clone();
+      change(other);
+      assert.equal(other.equals(pivot), false);
+    }
+    copy.setOffsetAxis('x', 9);
+    assert.equal(pivot.offset.x, 1, 'the original is unaffected');
+  });
+
   test('totals equals the legacy updateStats loop and the JSON reduce expressions (fuzzed, Object.is)', () => {
     for (const sections of fuzzWalls(1)) {
       const wall = new Wall({ sections });
@@ -792,7 +873,9 @@ describe('DisplaySettings', () => {
     const d = new DisplaySettings();
     assert.deepEqual({ ...d }, {
       wireframe: false, showFrame: false, content: 'color', ledLayout: 'single-dot', showGrid: true, showSafeDistance: false,
+      showPivotMarker: false,
     });
+    assert.equal(DisplaySettings.DEFAULT_SHOW_PIVOT_MARKER, false, '03 4.1: false until step C (03 T9)');
     assert.equal(d.ledSimEnabled, false);
     assert.equal(d.panelIdsEnabled, false);
     assert.deepEqual({ ...ContentMode }, { COLOR: 'color', LED_SIM: 'ledSim', PANEL_IDS: 'panelIds' });
@@ -1037,6 +1120,61 @@ describe('CineCamera', () => {
     assert.equal(new CineCamera().setField('posY', '0'), 1.5, "B-L9: '0' gives 1.5");
   });
 
+  // 03 T1 (4.1; 8.1 "domain.test.mjs")
+  test('posZ with a context: wallZ +0 and -0 are the legacy rule bit for bit; every other rule ignores the context', () => {
+    for (const wallZ of [0, -0]) {
+      for (const raw of ALL_INPUTS) {
+        same(CineCamera.FIELD_RULES.posZ.parse(raw, { wallZ }), LEGACY_CAMERA_RULES.posZ[0](raw), `posZ(${JSON.stringify(raw)}) at ${Object.is(wallZ, -0) ? '-0' : '+0'}`);
+        same(new CineCamera().setField('posZ', raw, { wallZ }), LEGACY_CAMERA_RULES.posZ[0](raw), 'setField with ctx');
+      }
+    }
+    for (const [field, [legacy]] of Object.entries(LEGACY_CAMERA_RULES)) {
+      if (field === 'posZ') continue;
+      for (const raw of ALL_INPUTS) same(new CineCamera().setField(field, raw, { wallZ: -2.3397 }), legacy(raw), `${field} ignores ctx`);
+    }
+  });
+
+  test('posZ off the wall plane (wallZ = -2.3397): 0 is valid, the floor is r3(wallZ + 0.1), a non-number gives r3(wallZ + 5)', () => {
+    const at = (raw, wallZ) => new CineCamera().setField('posZ', raw, { wallZ });
+    assert.ok(Object.is(at('0', -2.3397), 0));
+    assert.ok(Object.is(at('', -2.3397), 2.66));
+    assert.equal(at('', -2.3397).toFixed(3), '2.660');
+    assert.ok(Object.is(at('abc', -2.3397), 2.66));
+    assert.ok(Object.is(at('-5', -2.3397), -2.24), 'no float noise');
+    assert.ok(Object.is(at('-2.2', -2.3397), -2.2));
+    assert.ok(Object.is(at('-5', -2), -1.9));
+    assert.ok(Object.is(at('1.5', 2), 2.1), 'a wall plane in front of the stage origin floors positive values too');
+    assert.ok(Object.is(at('', 2), 7));
+  });
+
+  test('LIMITS are the 07 C22 writer bounds (+-100,000 m, y >= 0), deep-frozen', () => {
+    assert.equal(STAGE_POSITION_LIMIT_M, 100000);
+    assert.deepEqual(CineCamera.LIMITS, {
+      posX: { min: -100000, max: 100000 }, posY: { min: 0, max: 100000 }, posZ: { min: -100000, max: 100000 },
+    });
+    assert.ok(Object.isFrozen(CineCamera.LIMITS) && Object.isFrozen(CineCamera.LIMITS.posZ));
+  });
+
+  test('translateStage moves posX and posZ only, clamped through LIMITS (03 6.5, 07 C45)', () => {
+    const cam = new CineCamera();
+    cam.setField('posZ', '1.5');
+    Object.assign(cam, { posX: 1.25, posY: 0.75, rotX: 3, rotY: 4, rotZ: 5 });
+    cam.translateStage(-1.25, -0);
+    assert.deepEqual(plainPose(cam), { posX: 0, posY: 0.75, posZ: 1.5, rotX: 3, rotY: 4, rotZ: 5 });
+    const rand = rng(41);
+    for (let i = 0; i < 300; i++) {
+      const c = fuzzCamera(rand);
+      const before = plainPose(c);
+      const dx = (rand() - 0.5) * 50, dz = (rand() - 0.5) * 50;
+      c.translateStage(dx, dz);
+      same(c.posX, before.posX + dx, 'posX');
+      same(c.posZ, before.posZ + dz, 'posZ');
+      for (const k of ['posY', 'rotX', 'rotY', 'rotZ']) same(c[k], before[k], k);
+    }
+    cam.translateStage(2e5, -3e5);
+    assert.deepEqual([cam.posX, cam.posZ], [100000, -100000]);
+  });
+
   test('applyPreset (4252-4259): presets copy the size; custom keeps the current size', () => {
     const cam = new CineCamera();
     assert.equal(cam.applyPreset('super35'), FILMBACK_PRESETS.super35);
@@ -1267,6 +1405,19 @@ describe('Prop', () => {
       same(prop.posZ, legacy.posZ, 'posZ');
       assert.equal(prop.rotY, 0);
     }
+  });
+
+  test('LIMITS (+-100,000 m) and translateStage: posX and posZ only, clamped (03 T1, 6.5; 07 C45)', () => {
+    assert.deepEqual(Prop.LIMITS, { posX: { min: -100000, max: 100000 }, posZ: { min: -100000, max: 100000 } });
+    assert.ok(Object.isFrozen(Prop.LIMITS) && Object.isFrozen(Prop.LIMITS.posX));
+    const person = new PersonProp();
+    person.translateStage(-1.25, 0);
+    assert.deepEqual([person.posX, person.posZ, person.rotY, person.scale], [0.75, 2, 0, 1]);
+    const car = new CarProp();
+    car.translateStage(-1.25, -0);
+    assert.deepEqual([car.posX, car.posZ], [2.75, 3]);
+    car.translateStage(-3e5, 2e5);
+    assert.deepEqual([car.posX, car.posZ], [-100000, 100000]);
   });
 
   test('rotateBy acts only on y and returns whether it did (B-L22)', () => {

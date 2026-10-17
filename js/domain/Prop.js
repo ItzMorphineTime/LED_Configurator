@@ -1,13 +1,15 @@
 /**
  * @module domain/Prop
  * Reference props placed in front of the wall (legacy `showPerson`/`personSettings`, `showCar`/`carSettings`):
- * pose, scale, visibility, the input field rules and the gizmo arithmetic.
+ * pose, scale, visibility, the input field rules and the gizmo arithmetic; since 03 T1 the position LIMITS and the
+ * pivot re-expression translateStage (docs/improvements/03-pivot.md 4.1, 6.5).
  * Legacy source: index.html@cd3fd3f 1336-1351 (state), 3129 / 3131 (gizmo anchor heights), 3347-3360 (gizmo
  * translate), 3388-3399 (gizmo rotate), 4344-4392 (inputs).
  * Layer: domain (may import legacy; THREE-free and DOM-free).
  */
 
 import { orDefault } from '../legacy/LegacyCompat.js';
+import { clamp, deepFreeze, STAGE_POSITION_LIMIT_M } from './rules.js';
 
 /**
  * A reference prop (person or car): pose, scale and visibility, written only through its methods
@@ -59,6 +61,16 @@ export class Prop {
   });
 
   /**
+   * The writer bounds of the floor position (spec 07 C22 and 4.3: x and z within +-100,000 m), shared with the
+   * validator ranges; since 03 T1 translateStage clamps through them (07 C45); 08 P2-13e makes the other writers clamp.
+   * @type {Readonly<{posX: {min: number, max: number}, posZ: {min: number, max: number}}>}
+   */
+  static LIMITS = deepFreeze({
+    posX: { min: -STAGE_POSITION_LIMIT_M, max: STAGE_POSITION_LIMIT_M },
+    posZ: { min: -STAGE_POSITION_LIMIT_M, max: STAGE_POSITION_LIMIT_M },
+  });
+
+  /**
    * Stores the parsed value of a prop input (model only; the caller writes back iff FIELD_RULES[field].writeBack).
    * Ports: index.html@cd3fd3f lines 4345, 4349, 4353, 4358 (car 4376, 4380, 4384, 4389).
    * Side effects: writes this[field].
@@ -83,6 +95,19 @@ export class Prop {
     // LEGACY(B-L22): props move on the floor only; the Y arrow (dy) is inert.
     this.posX += dx;
     this.posZ += dz;
+  }
+
+  /**
+   * Re-expression after a pivot change (03 6.5): the stage origin moved by -(dx, dz), so the prop keeps its place
+   * relative to the wall. Clamped through LIMITS (07 C45); rotY and scale are untouched.
+   * Side effects: writes posX, posZ.
+   * @param {number} dx  metres
+   * @param {number} dz  metres
+   */
+  translateStage(dx, dz) {
+    const { posX, posZ } = Prop.LIMITS;
+    this.posX = clamp(this.posX + dx, posX.min, posX.max);
+    this.posZ = clamp(this.posZ + dz, posZ.min, posZ.max);
   }
 
   /**

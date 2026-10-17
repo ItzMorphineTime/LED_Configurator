@@ -3,7 +3,8 @@
  * The simulated film camera (legacy `cameraSettings` + `cameraPreviewEnabled`): filmback, lens and pose with the
  * legacy field names, the filmback presets, the lens/coverage/safe-distance maths, the input field rules and the
  * gizmo/pilot pose arithmetic. Angles are degrees; the Euler order used by the views is 'YXZ'
- * (tilt = rotX, pan = rotY, roll = rotZ).
+ * (tilt = rotX, pan = rotY, roll = rotZ). Feature 3 (03 T1, 4.1): the pose LIMITS, the pivot re-expression
+ * translateStage and the posZ input rule's wall-plane context.
  * Legacy source: index.html@cd3fd3f 1299, 1306-1331 (state), 2471-2534 (coverage), 2550-2564 (reset),
  * 2597-2612 (safe distance D), 3337-3340 / 3375-3384 (gizmo), 3544-3552 / 3564-3611 (pilot),
  * 3732 (preset short name), 4251-4317 (inputs).
@@ -11,6 +12,7 @@
  */
 
 import { orDefault } from '../legacy/LegacyCompat.js';
+import { clamp, deepFreeze, STAGE_POSITION_LIMIT_M } from './rules.js';
 
 /**
  * Filmback presets (width x height in mm), keyed by the #camera-filmback option values. Deep-frozen.
@@ -33,9 +35,21 @@ export const FILMBACK_PRESETS = Object.freeze({
 
 /**
  * @typedef {object} FieldRule
- * @property {(raw: string) => number} parse  the legacy input expression
+ * @property {(raw: string, ctx?: FieldContext) => number} parse  the legacy input expression (only posZ reads ctx)
  * @property {boolean} writeBack              whether legacy assigned the parsed value back to the input
  */
+
+/**
+ * The context of a camera input rule (03 4.1): wallZ is the stage z of the flat wall plane (`framingBounds().wallZ`,
+ * the negated stage-origin z; 0 at the identity pivot and for every pivot whose stage origin lies on the wall plane).
+ * @typedef {{wallZ: number}} FieldContext
+ */
+
+/** The context of the legacy rules: the wall plane at stage z = 0. */
+const WALL_PLANE_AT_ORIGIN = Object.freeze({ wallZ: 0 });
+
+/** Rounds to 1 mm: the posZ minimum and fallback of a stage origin off the wall plane (03 4.1). */
+const r3 = (v) => Math.round(v * 1000) / 1000;
 
 /**
  * The film camera: legacy `cameraSettings` field names plus the preview flag, with the lens, coverage and
@@ -58,6 +72,11 @@ export class CineCamera {
   /**
    * Lens and pose input rules. writeBack mirrors whether legacy assigned `this.value` afterwards (posX has none).
    * posY: B-L9 via orDefault, so '0' gives 1.5.
+   * posZ takes the FieldContext (03 4.1, T1): while ctx.wallZ === 0 (+0 or -0: the identity pivot and every pivot whose
+   * stage origin lies on the wall plane) it is the legacy expression verbatim, B-L9 included ('0' gives 5); otherwise
+   * (a stage origin off the wall plane, where 0 means "on the stage origin") a finite value is kept, floored at
+   * r3(wallZ + 0.1), and a non-numeric entry gives max(r3(wallZ + 0.1), r3(wallZ + 5)). The other rules ignore ctx.
+   * 08 P2-8b (B-L9) collapses both branches into one finiteOr rule; 08 P2-11c (step F) removes the minimum.
    * Ports: index.html@cd3fd3f lines 4266-4317.
    * @type {Readonly<Record<string, Readonly<FieldRule>>>}
    */
@@ -67,23 +86,63 @@ export class CineCamera {
     focalLength: Object.freeze({ parse: (r) => Math.max(8, Math.min(800, orDefault(parseFloat(r), 35))), writeBack: true }),
     posX: Object.freeze({ parse: (r) => orDefault(parseFloat(r), 0), writeBack: false }),
     posY: Object.freeze({ parse: (r) => Math.max(0, orDefault(parseFloat(r), 1.5)), writeBack: true }),
-    posZ: Object.freeze({ parse: (r) => Math.max(0.1, orDefault(parseFloat(r), 5)), writeBack: true }),
+    posZ: Object.freeze({
+      parse: (r, ctx = WALL_PLANE_AT_ORIGIN) => {
+        // The wall plane at the stage origin (the identity pivot): the legacy rule verbatim (B-L9 kept, '0' gives 5).
+        if (ctx.wallZ === 0) return Math.max(0.1, orDefault(parseFloat(r), 5));
+        // A stage origin off the wall plane (03 4.1): 0 is a valid stage coordinate, so no orDefault here.
+        const v = parseFloat(r);
+        const minZ = r3(ctx.wallZ + 0.1);
+        return Number.isFinite(v) ? Math.max(minZ, v) : Math.max(minZ, r3(ctx.wallZ + 5));
+      },
+      writeBack: true,
+    }),
     rotX: Object.freeze({ parse: (r) => Math.max(-90, Math.min(90, orDefault(parseFloat(r), 0))), writeBack: true }),
     rotY: Object.freeze({ parse: (r) => Math.max(-180, Math.min(360, orDefault(parseFloat(r), 0))), writeBack: true }),
     rotZ: Object.freeze({ parse: (r) => Math.max(-180, Math.min(180, orDefault(parseFloat(r), 0))), writeBack: true }),
   });
 
   /**
+   * The writer bounds of the pose (spec 07 C22 and 4.3: x and z within +-100,000 m, y in [0, 100,000]), shared with the
+   * validator ranges; since 03 T1 translateStage clamps through them (07 C45). They are not the input rules: the posZ
+   * input keeps its own minimum (FIELD_RULES.posZ, until 08 P2-11c), and 08 P2-13e makes every other writer clamp too.
+   * @type {Readonly<{posX: {min: number, max: number}, posY: {min: number, max: number},
+   *                  posZ: {min: number, max: number}}>}
+   */
+  static LIMITS = deepFreeze({
+    posX: { min: -STAGE_POSITION_LIMIT_M, max: STAGE_POSITION_LIMIT_M },
+    posY: { min: 0, max: STAGE_POSITION_LIMIT_M },
+    posZ: { min: -STAGE_POSITION_LIMIT_M, max: STAGE_POSITION_LIMIT_M },
+  });
+
+  /**
    * Stores the parsed value of a lens/pose input (model only; the caller writes back iff FIELD_RULES[field].writeBack).
+   * ctx reaches every rule; only posZ reads it (03 4.1). Without ctx the legacy rules apply unchanged.
    * Ports: index.html@cd3fd3f lines 4267, 4273, 4279, 4285, 4290, 4296, 4302, 4308, 4314.
    * Side effects: writes this[field].
    * @param {string} field  a FIELD_RULES key
    * @param {string} raw    the input's value
+   * @param {FieldContext} [ctx]  defaults to {wallZ: 0}
    * @returns {number} the stored value
    */
-  setField(field, raw) {
-    this[field] = CineCamera.FIELD_RULES[field].parse(raw);
+  setField(field, raw, ctx = WALL_PLANE_AT_ORIGIN) {
+    this[field] = CineCamera.FIELD_RULES[field].parse(raw, ctx);
     return this[field];
+  }
+
+  /**
+   * Re-expression after a pivot change (03 6.5): the stage origin moved by -(dx, dz), so the camera keeps its place
+   * relative to the wall. Each component is clamped through LIMITS (07 C45), so every value written is reachable and a
+   * validator never clamps it on reload; the bound is far beyond any pivot shift, so in practice nothing is clamped.
+   * Y and the rotations are untouched (the stage floor and axes do not change).
+   * Side effects: writes posX, posZ.
+   * @param {number} dx  metres
+   * @param {number} dz  metres
+   */
+  translateStage(dx, dz) {
+    const { posX, posZ } = CineCamera.LIMITS;
+    this.posX = clamp(this.posX + dx, posX.min, posX.max);
+    this.posZ = clamp(this.posZ + dz, posZ.min, posZ.max);
   }
 
   /**

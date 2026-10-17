@@ -1,0 +1,14 @@
+{
+  "commit": "F3-T1",
+  "bugs": [],
+  "expect": [],
+  "mayChange": [
+    { "output": "toggles/15_car_moved.screenshot.png", "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-08 P2-10a runs); this commit changes no pixel of it" },
+    { "output": "large_wall/final__export-zip__morph-led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b); this commit changes no export" },
+    { "output": "ui_visual/00_initial.sidebar.screenshot.png", "change": "modified",
+      "reason": "one sidebar pixel of this DOM-only capture differed by 7 levels in the P2-7e runs (DOM text antialiasing); this commit changes no markup, style rule or sidebar text (three new :root custom properties only)" }
+  ],
+  "notes": "03 T1 (docs/improvements/03-pivot.md 4.1, 10), step A's first commit, invariance (8.4 step A: zero diffs at the identity pivot). New domain members only: the WallPivot API and rules, PIVOT_MODES, PIVOT_OFFSET_LIMIT_M, DisplaySettings.showPivotMarker (false), CineCamera.LIMITS and translateStage, the posZ rule's context (the legacy expression whenever ctx.wallZ === 0, and no caller passes a context yet), Prop.LIMITS and translateStage, SceneTheme.pivot with the --scene-pivot* tokens and COLOR_BINDINGS rows. Nothing in the app reads them yet, so every output must stay identical."
+}

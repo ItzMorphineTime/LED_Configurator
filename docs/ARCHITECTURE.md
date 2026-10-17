@@ -210,17 +210,22 @@ js/
     rules.js                               08 P2-8a  clamp, roundInt, deepFreeze: the shared numeric rules of the UI rule
                                                  tables and (from 08 P2-3b) the import validator (08 4.4; imports nothing);
                                                  08 P2-3b: sanitizeText (stripControls, truncateUnits), MAX_SECTION_ID,
-                                                 isValidSectionId, createIdAllocator (07 6.8), MAX_IMPORT_BYTES and its parts
+                                                 isValidSectionId, createIdAllocator (07 6.8), MAX_IMPORT_BYTES and its parts;
+                                                 03 T1: STAGE_POSITION_LIMIT_M (the +-100,000 m bound of 07 C22)
     WallSection.js                         WP3   WallSection entity (legacy field names, field rules, derived labels), MM_TO_M;
                                                  08 P2-8a: LIMITS, the rounding and capped field rules
     Wall.js                                WP3   Wall (ordered sections, id allocator, totals, legacy flat bounds), WallPivot, PivotMode;
                                                  08 P2-3b: MAX_SECTIONS, canAddSection, the 07 6.8 nextSectionId;
-                                                 08 P2-3b2: allocateId (07 6.8 nextFree over the live ids)
-    Project.js                             WP3   Project aggregate, DisplaySettings (content enum), ContentMode, PanelIdStyle
+                                                 08 P2-3b2: allocateId (07 6.8 nextFree over the live ids);
+                                                 03 T1: the WallPivot API and rules, PIVOT_MODES, PIVOT_OFFSET_LIMIT_M
+    Project.js                             WP3   Project aggregate, DisplaySettings (content enum), ContentMode, PanelIdStyle;
+                                                 03 T1: DisplaySettings.showPivotMarker, DEFAULT_SHOW_PIVOT_MARKER
     LogoLibrary.js                         WP3   Section logos keyed by section id (plain-object key semantics)
     CineCamera.js                          WP3   Film camera: lens, pose, enabled flag, FILMBACK_PRESETS, FOV/coverage/safe-D math,
-                                                 field rules, gizmo/pilot pose arithmetic
-    Prop.js                                WP3   Prop base (pose, visibility, field rules, gizmo arithmetic), PersonProp, CarProp
+                                                 field rules, gizmo/pilot pose arithmetic; 03 T1: LIMITS, translateStage, the posZ
+                                                 rule's wall-plane context
+    Prop.js                                WP3   Prop base (pose, visibility, field rules, gizmo arithmetic), PersonProp, CarProp;
+                                                 03 T1: LIMITS, translateStage
     DebugViewSettings.js                   01 F1-1  DebugShading, SHADING_CYCLE, DebugViewSettings (normals debug view
                                                  preferences; not persisted)
   geometry/
@@ -689,7 +694,7 @@ export const LEGACY_SITES
 
 ### 3.4 `js/theme/Theme.js`
 
-Every scene, canvas and export literal, copied verbatim with its exact type (number vs string), plus the feature keys written as literal keys inside the frozen objects (never assigned afterwards): `SceneTheme.debug` (01 F1-1, 01 4.6: `faceFront: 0x2f6bff`, `faceBack: 0xff3344`, `vertexNormal: 0xb8f03c`, `faceNormal: 0xff4fd8`, `lineBaseFactor: 0.35`; spec 06's ThemeBridge must produce the same keys, 01 CR-8). `SceneTheme.wallBack` follows with 01 F1-5. Since 06 T5 the scene, canvas and status values are the Morph values of docs/improvements/06-morph-branding.md 3.8 and 5.4 (the palette and the brand strings follow in 06 T6a, T6b and T7), with the keys `frameOnLight`, `cameraBody.outlineColor`, `frustumLines.haloColor`, `frustumLines.dashSize` / `gapSize` and `CanvasTheme.preloadFonts`. Since 06 T6a the `Brand` strings name "Morph LED Configurator" (ASCII only, because several OBJ importers read Latin-1), and `Brand.jsonGenerator` is the frozen `{ name }` half of the JSON generator record that spec 07's v2 writer composes as `{ name: brand.jsonGenerator.name, version: appVersion }` (06 4.2; the Phase-1 v1 writer has no generator); `shortName`, `company` and `homepage` are new. Only `App.js` imports this module; every consumer receives `theme` (or one of its parts) by injection, so Feature 6 swaps in a ThemeBridge-built object **of the same shape** in one line (no mutation of these frozen objects); 06 T3 made that swap, and these values are the fallbacks of the tokens of `css/02-tokens.css`, kept equal by the U4 parity test (ThemeBridge below).
+Every scene, canvas and export literal, copied verbatim with its exact type (number vs string), plus the feature keys written as literal keys inside the frozen objects (never assigned afterwards): `SceneTheme.debug` (01 F1-1, 01 4.6: `faceFront: 0x2f6bff`, `faceBack: 0xff3344`, `vertexNormal: 0xb8f03c`, `faceNormal: 0xff4fd8`, `lineBaseFactor: 0.35`; spec 06's ThemeBridge must produce the same keys, 01 CR-8). `SceneTheme.wallBack` follows with 01 F1-5. `SceneTheme.pivot` (03 T1, 03 4.1 with the values of 06 5.12: `color: 0xf7f7f5`, `selectedColor: 0xc51622`, `anchorColor: 0xa3a3a3`, `haloColor: 0x0a0a0a` (the two-tone cores and their Morph Black halo, 06 D15), `opacity: 0.9`, `glyphHalfSize: 0.25`, `coreRadius: 0.06`, `pickRadius: 0.15`, `dash: 0.05`, `minScreenHalfSizePx: 24`; read by 03 T5's `PivotMarkerView`). Since 06 T5 the scene, canvas and status values are the Morph values of docs/improvements/06-morph-branding.md 3.8 and 5.4 (the palette and the brand strings follow in 06 T6a, T6b and T7), with the keys `frameOnLight`, `cameraBody.outlineColor`, `frustumLines.haloColor`, `frustumLines.dashSize` / `gapSize` and `CanvasTheme.preloadFonts`. Since 06 T6a the `Brand` strings name "Morph LED Configurator" (ASCII only, because several OBJ importers read Latin-1), and `Brand.jsonGenerator` is the frozen `{ name }` half of the JSON generator record that spec 07's v2 writer composes as `{ name: brand.jsonGenerator.name, version: appVersion }` (06 4.2; the Phase-1 v1 writer has no generator); `shortName`, `company` and `homepage` are new. Only `App.js` imports this module; every consumer receives `theme` (or one of its parts) by injection, so Feature 6 swaps in a ThemeBridge-built object **of the same shape** in one line (no mutation of these frozen objects); 06 T3 made that swap, and these values are the fallbacks of the tokens of `css/02-tokens.css`, kept equal by the U4 parity test (ThemeBridge below).
 
 ```js
 export const SceneTheme = Object.freeze({
@@ -779,7 +784,7 @@ export function buildTheme(base, readVar, { warn = () => {}, bindFonts = BIND_FO
 
 **Wiring (06 T3):** `App` builds `theme = buildTheme(Theme, (name) => win.getComputedStyle(doc.documentElement).getPropertyValue(name), { warn: (m) => win.console.warn(m) })` (section 7; no `bindFonts` option, so `BIND_FONTS_DEFAULT` applies, as in U4), and every consumer receives that object instead of `Theme`, with unchanged constructor signatures. While the layer-4 tokens hold the legacy values the bridged theme equals `Theme` leaf for leaf (U4), so the switch is not observable. A missing or malformed token keeps the `Theme.js` fallback of its leaves and warns once on the console (06 3.11).
 
-The 06 T2 rows bind the legacy scene, canvas and status colours (`scene.background`, `grid.centerColor`, `grid.color`, `frame`, `cameraBody.color`, `frustumLines.color` and `frustumFill.color` (both `--scene-frustum`), `safeZone.wallColor` / `thresholdColor` (`rgb01`), `safeZone.lineColor`, `safeZone.labelColor`, `canvas.background`, `ui.status.*`); 06 T3 adds spec 01's `scene.debug.faceFront`, `faceBack`, `vertexNormal` and `faceNormal` (01 CR-8; not `UNBRANDED`). The keys that later steps add land with their rows: 06 T5 added `scene.frameOnLight` (`--scene-frame-on-light`), `scene.cameraBody.outlineColor` and `scene.frustumLines.haloColor` (both `--scene-overlay-halo`, which therefore warns once when missing) and flipped `BIND_FONTS_DEFAULT`, so the four `FONT_BINDINGS` leaves come from `--font-mono` / `--font-ui` (equal to the `Theme.js` strings, U4); 01 F1-5 adds `scene.wallBack` with `--scene-wall-back`; 08 P2-5b added `scene.safeZone.clampedColor` (`--scene-safe-clamped` = `--ui-orange-400`, `rgb01`: the amber of the clamped band edge, 06 5.12's 08 row); the sibling specs add their keys of 06 5.12. Tests: `theme.test.mjs` U1-U3 (06 T2), U4 token parity, U10 (every Theme leaf under `scene`, `canvas`, `ui` is bound, `UNBRANDED`, a function or non-colour by its key) and U11 (`UNBRANDED` leaves equal their Phase-1 values in `tests/unit/fixtures/legacy-theme.mjs`) (06 T3).
+The 06 T2 rows bind the legacy scene, canvas and status colours (`scene.background`, `grid.centerColor`, `grid.color`, `frame`, `cameraBody.color`, `frustumLines.color` and `frustumFill.color` (both `--scene-frustum`), `safeZone.wallColor` / `thresholdColor` (`rgb01`), `safeZone.lineColor`, `safeZone.labelColor`, `canvas.background`, `ui.status.*`); 06 T3 adds spec 01's `scene.debug.faceFront`, `faceBack`, `vertexNormal` and `faceNormal` (01 CR-8; not `UNBRANDED`). The keys that later steps add land with their rows: 06 T5 added `scene.frameOnLight` (`--scene-frame-on-light`), `scene.cameraBody.outlineColor` and `scene.frustumLines.haloColor` (both `--scene-overlay-halo`, which therefore warns once when missing) and flipped `BIND_FONTS_DEFAULT`, so the four `FONT_BINDINGS` leaves come from `--font-mono` / `--font-ui` (equal to the `Theme.js` strings, U4); 01 F1-5 adds `scene.wallBack` with `--scene-wall-back`; 08 P2-5b added `scene.safeZone.clampedColor` (`--scene-safe-clamped` = `--ui-orange-400`, `rgb01`: the amber of the clamped band edge, 06 5.12's 08 row); 03 T1 added `scene.pivot.color` (`--scene-pivot` = `--morph-neutral-50`), `selectedColor` (`--scene-pivot-selected` = `--morph-red-600`), `anchorColor` (`--scene-pivot-anchor` = `--ui-grey-400`) and `haloColor` (`--scene-overlay-halo`), with their U5 rows in `contrast.test.mjs` (worst 4.37, 3.31 and 3.31 over the background and every palette colour); the other sibling specs add their keys of 06 5.12. Tests: `theme.test.mjs` U1-U3 (06 T2), U4 token parity, U10 (every Theme leaf under `scene`, `canvas`, `ui` is bound, `UNBRANDED`, a function or non-colour by its key) and U11 (`UNBRANDED` leaves equal their Phase-1 values in `tests/unit/fixtures/legacy-theme.mjs`) (06 T3).
 
 ### 3.5 Domain (pure)
 
@@ -856,10 +861,29 @@ Fields keep the legacy names so ported code reads `section.panelCols` unchanged.
 ```js
 export const PivotMode = Object.freeze({ BOTTOM_LEFT: 'bottom-left', MESH_CENTER: 'mesh-center', WALL_CENTER: 'wall-center' });
 
-export class WallPivot {            // Feature 3 seam; Phase 1 is always the identity
+export const PIVOT_MODES = Object.freeze(['bottom-left', 'mesh-center', 'wall-center']);   // 03 T1: radio order; the validator's enum
+export const PIVOT_OFFSET_LIMIT_M = 1000;                                                      // 03 T1 (4.1, Q11)
+
+export class WallPivot {            // Feature 3 (03 T1, 4.1); session-only until project file v2 (03 header, owner 2026-10-17)
   mode = PivotMode.BOTTOM_LEFT;
-  offset = { x: 0, y: 0, z: 0 };
-  get isIdentity()                 // mode === BOTTOM_LEFT && offset x, y, z all === 0
+  offset = { x: 0, y: 0, z: 0 };    // metres, layout axes; REPLACED (never mutated in place) by every setter
+  keepStageLayout = true;           // re-express camera and props on explicit pivot edits (D6, Q4)
+  get isIdentity()                 // mode === BOTTOM_LEFT && offset x, y, z all === 0 (keepStageLayout does not count)
+  /** PIVOT_MODES.includes(mode) ? (changed = this.mode !== mode, this.mode = mode, changed)
+   *  : throw new RangeError(`Unknown pivot mode ${JSON.stringify(mode)}`)   (the pivotPoint error type) */
+  setMode(mode)
+  /** axis 'x' | 'y' | 'z' (else RangeError); v = WallPivot.parseOffset(raw); v === null ? this.offset[axis]
+   *  : (this.offset = {...this.offset, [axis]: v}, v)   (the stored component, for the input's write-back) */
+  setOffsetAxis(axis, raw)
+  setOffset(vec)                   // setOffsetAxis for x, y, z in order; returns this.offset
+  resetOffset()                    // this.offset = {x: 0, y: 0, z: 0}
+  setKeepStageLayout(on)           // typeof on === 'boolean' ? (changed, store) : throw TypeError
+  /** v = typeof raw === 'number' ? raw : parseFloat(raw); Number.isFinite(v)
+   *  ? Math.max(-1000, Math.min(1000, Math.round(v * 1000) / 1000)) || 0 : null. Never orDefault (0 is valid, B-L9 does not
+   *  apply); -0 is normalised; idempotent. */
+  static parseOffset(raw)
+  clone()                          // deep copy
+  equals(other)                    // mode, the three offset components and keepStageLayout, by ===
 }
 
 export class Wall {
@@ -923,6 +947,8 @@ export class DisplaySettings {
   ledLayout = 'single-dot';          // legacy ledLayout
   showGrid = true;                   // legacy showGrid
   showSafeDistance = false;          // legacy safeDistanceEnabled
+  static DEFAULT_SHOW_PIVOT_MARKER = false;          // 03 T1 (4.1): true from step C (03 T9); the v2 reader's default too
+  showPivotMarker = DisplaySettings.DEFAULT_SHOW_PIVOT_MARKER;   // 03 T1; view-only, session-only
   get ledSimEnabled()                // content === 'ledSim'
   get panelIdsEnabled()              // content === 'panelIds'
   /** on: forced = (content === 'panelIds'); content = 'ledSim'. off: if (content === 'ledSim') content = 'color'.
@@ -1001,12 +1027,23 @@ export class CineCamera {
    *  focalLength:    { parse: r => Math.max(8, Math.min(800, orDefault(parseFloat(r), 35))), writeBack: true }
    *  posX: { parse: r => orDefault(parseFloat(r), 0), writeBack: false }
    *  posY: { parse: r => Math.max(0, orDefault(parseFloat(r), 1.5)), writeBack: true }      (B-L9 via orDefault: '0' gives 1.5)
-   *  posZ: { parse: r => Math.max(0.1, orDefault(parseFloat(r), 5)), writeBack: true }
+   *  posZ: { parse: (r, ctx = {wallZ: 0}) => ctx.wallZ === 0 ? Math.max(0.1, orDefault(parseFloat(r), 5))   (legacy, verbatim)
+   *           : (v = parseFloat(r), minZ = r3(ctx.wallZ + 0.1),
+   *              Number.isFinite(v) ? Math.max(minZ, v) : Math.max(minZ, r3(ctx.wallZ + 5))), writeBack: true }
+   *        (03 T1, 03 4.1: ctx.wallZ is the stage z of the flat wall plane; +0 and -0 take the legacy branch, so the
+   *        identity pivot is unchanged; r3(v) = Math.round(v * 1000) / 1000; 08 P2-8b collapses the branches, P2-11c
+   *        removes the minimum)
    *  rotX: { parse: r => Math.max(-90, Math.min(90, orDefault(parseFloat(r), 0))), writeBack: true }
    *  rotY: { parse: r => Math.max(-180, Math.min(360, orDefault(parseFloat(r), 0))), writeBack: true }
    *  rotZ: { parse: r => Math.max(-180, Math.min(180, orDefault(parseFloat(r), 0))), writeBack: true } */
   static FIELD_RULES
-  setField(field, raw)              // this[field] = FIELD_RULES[field].parse(raw); returns it
+  /** 03 T1: the 07 C22 writer bounds (deep-frozen): posX, posZ {min: -100000, max: 100000}, posY {min: 0, max: 100000}
+   *  (domain/rules.js STAGE_POSITION_LIMIT_M). Read by translateStage; 08 P2-13e makes every other writer clamp too. */
+  static LIMITS
+  setField(field, raw, ctx = {wallZ: 0})   // this[field] = FIELD_RULES[field].parse(raw, ctx); returns it (only posZ reads ctx)
+  /** 03 T1 (6.5, 07 C45): posX = clamp(posX + dx, LIMITS.posX); posZ = clamp(posZ + dz, LIMITS.posZ); y and rotations
+   *  untouched. The pivot re-expression of the stage-anchored camera (CameraController.translateStage). */
+  translateStage(dx, dz)
   /** const preset = FILMBACK_PRESETS[key]; this.filmback = key; if (key !== 'custom') { this.filmbackWidth = preset.width;
    *  this.filmbackHeight = preset.height; } return preset;   (4252-4259) */
   applyPreset(key)
@@ -1060,9 +1097,12 @@ export class Prop {
    *  rotY: { parse: r => Math.max(-180, Math.min(180, orDefault(parseFloat(r), 0))), writeBack: true }
    *  scale: { parse: r => Math.max(0.5, Math.min(2, orDefault(parseFloat(r), 1))), writeBack: true } */
   static FIELD_RULES
+  static LIMITS                       // 03 T1: posX, posZ {min: -100000, max: 100000} (07 C22 writer bounds, deep-frozen)
   setField(field, raw)                // stores and returns FIELD_RULES[field].parse(raw)
   /** posX += dx; posZ += dz; dy ignored. LEGACY(B-L22) (3348-3349) */
   translateBy(dx, dy, dz)
+  /** 03 T1 (6.5, 07 C45): posX = clamp(posX + dx, LIMITS.posX); posZ = clamp(posZ + dz, LIMITS.posZ) */
+  translateStage(dx, dz)
   /** axis === 'y' ? (rotY += deltaDeg, true) : false. LEGACY(B-L22) (3389-3399) */
   rotateBy(axis, deltaDeg)
 }
@@ -2735,12 +2775,12 @@ Writers listed here are the only allowed writers (checked by `tests/static/check
 | `frustumOutline` (1302) | `CameraRigView` private `#fill` (it is the fill mesh) | same |
 | `wallIntersectionPlane` (1303) | **dropped (dead)**: never created, only nulled (2546) and null-checked (2358-2362) | - |
 | `filmbackPresets` (1306) | `domain/CineCamera.js FILMBACK_PRESETS` (frozen) | - |
-| `cameraSettings` (1320) | `Project.camera` (`CineCamera`, same field names) | `CineCamera` methods only (`setField`, `applyPreset`, `resetTo`, `translateBy`, `rotateBy`, `pilotLook`, `pilotFly`), called by `CameraController` and `PilotController` |
+| `cameraSettings` (1320) | `Project.camera` (`CineCamera`, same field names) | `CineCamera` methods only (`setField`, `applyPreset`, `resetTo`, `translateBy`, `rotateBy`, `pilotLook`, `pilotFly`; 03 T1 `translateStage`, the pivot re-expression), called by `CameraController` and `PilotController` |
 | `personMesh` (1334) | `PersonPropView.object3D` | `PropView.create/remove` |
 | `carMesh` (1335) | `CarPropView.object3D` | same |
 | `showPerson` (1336) | `Project.person.visible` | `PropController.setVisible` |
 | `showCar` (1337) | `Project.car.visible` | same |
-| `personSettings` (1339) | `Project.person` (`PersonProp`: posX, posZ, rotY, scale) | `Prop` methods (`setField`, `translateBy`, `rotateBy`) via `PropController` |
+| `personSettings` (1339) | `Project.person` (`PersonProp`: posX, posZ, rotY, scale) | `Prop` methods (`setField`, `translateBy`, `rotateBy`; 03 T1 `translateStage`) via `PropController` |
 | `carSettings` (1346) | `Project.car` (`CarProp`) | same |
 | `previewCamera` (1354) | `PreviewWindow.camera` | `PreviewWindow.updateCamera` |
 | `previewRenderer` (1355) | `PreviewWindow.renderer` (`initialized`); never disposed, as legacy | `PreviewWindow.init` |
@@ -2794,6 +2834,8 @@ Writers listed here are the only allowed writers (checked by `tests/static/check
 | (01 F1-1, not legacy) normals debug view settings | `DebugViewSettings.shading`, `.normals.enabled`, `.normals.vertex`, `.normals.face`, `.normals.lengthScale`, `.normals.onTop` (not persisted) | `DebugViewController` only (its use cases; static rule 10 ALLOWLIST) |
 | (01 F1-1, not legacy) the debug-shading override | `LEDWallView` private `#shading`, `#override` (`MaterialOverride` stash) and the wall meshes' `.material` | `LEDWallView.setDebugShading/rebuild/withContentMaterials` (through `MaterialOverride`) |
 | (01 F1-1, not legacy) the normal lines | `NormalsDebugView.object3D` (its `LineSegments` and buffers), `#last` | `NormalsDebugView` (its `WALL_REBUILT` handler, `sync`, `dispose`) |
+| (03 T1, not legacy) the wall pivot | `Project.wall.pivot` (`WallPivot`: `mode`, `offset`, `keepStageLayout`; session-only until project file v2, the owner's decision of 2026-10-17) | `WallPivot` methods only (`setMode`, `setOffsetAxis`, `setOffset`, `resetOffset`, `setKeepStageLayout`), called from `PivotController` (03 T4); the field `Project.wall.pivot` itself is assigned only by `WallController.applyImport` (03 4.4) |
+| (03 T1, not legacy) the pivot-marker flag | `Project.display.showPivotMarker` (initially `DisplaySettings.DEFAULT_SHOW_PIVOT_MARKER`, `false` until 03 step C) | `PivotController.setMarkerVisible` (03 T4) |
 
 `InteractionState` is a shared read surface; its writers are listed above. `Project` and its parts are read by many modules but written only through the methods listed.
 
@@ -3722,3 +3764,10 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 3.3, 8.1: `Strategies.previewRendersHelpers` is retired (its row deleted). 8.2: B-M11 `Landed`; 8.3: the rows `SceneManager.js#addHelper` and `PreviewWindow.js#render` are deleted (no tag left in either method). 1.6 R6: still no layer.
 - 3.7 `PreviewWindow`: `render(scene, helpers)` saves and clears `visible` on every helper, draws, and restores each flag in order (also when the draw throws), 08 6.14; `unsupportedStrategy` is no longer imported. 3.7 `SceneManager`: `LAYERS`, `addHelper` and `helpers` document the preview's use of the registry. 3.12, 6.12, 7: the App tick passes `sceneManager.helpers`.
 - 2.3: `scene-overlays.test.mjs` (the helpers are hidden during the draw only; a hidden helper stays hidden; a throwing draw restores every flag; nothing changes while the preview is off), `core.test.mjs`.
+
+**03 T1, the pivot domain** (Feature 3 step A, first commit; docs/improvements/03-pivot.md 4.1, 10; manifest `tests/regression/expected/F3-T1.json`, an invariance commit: nothing reads the new members yet, so no output changes; the pivot is session-only until project file v2, the owner's decision of 2026-10-17):
+- 2.2, 3.5 `Wall`: `PIVOT_MODES`, `PIVOT_OFFSET_LIMIT_M = 1000` and the `WallPivot` API (`keepStageLayout = true`, `setMode` with `RangeError`, `setOffsetAxis` / `setOffset` / `resetOffset` replacing the offset object, `setKeepStageLayout` with `TypeError`, `parseOffset`: finite, clamped to ±1000, 1 mm, never `orDefault`, −0 normalised; `clone`, `equals`). `Project`: `DisplaySettings.showPivotMarker` from `DEFAULT_SHOW_PIVOT_MARKER = false`. `CineCamera`: `LIMITS` (the 07 C22 bounds through `rules.js STAGE_POSITION_LIMIT_M`), `translateStage(dx, dz)` clamped through them, `setField(field, raw, ctx = {wallZ: 0})` and the `posZ` rule's wall-plane branch (the legacy expression whenever `ctx.wallZ === 0`). `Prop`: `LIMITS`, `translateStage`.
+- 3.4: `SceneTheme.pivot` (06 5.12's values) with `--scene-pivot`, `--scene-pivot-selected`, `--scene-pivot-anchor` and the four `COLOR_BINDINGS` rows (the halo on `--scene-overlay-halo`); U5 pivot rows in `contrast.test.mjs`.
+- 4: state rows for `Project.wall.pivot` and `display.showPivotMarker` (their writers land in 03 T3 and T4).
+- Deviations from 03 10's T1 row, recorded there: `CineCamera.resetTo` / `coverage` read `minX` / `wallZ` from 03 T3 (the `'flat-pivot'` bounds arrive in T2), and `Events.WALL_PIVOT_CHANGED` lands with its first emitter and subscriber (static rule 7).
+- 2.3: `domain.test.mjs` (the `WallPivot` API and `parseOffset` (03 8.1 test 7), the `posZ` context at ±0 bit-identical to legacy and at `wallZ = -2.3397`, `LIMITS`, both `translateStage`), `core.test.mjs`, `contrast.test.mjs`.

@@ -4,7 +4,7 @@
  * its import can never disagree (docs/improvements/08-bugfix-roadmap.md 4.4; spec 07 C22). 08 P2-8a: `clamp`,
  * `roundInt`, `deepFreeze`. 08 P2-3b: `sanitizeText` (with `stripControls`, `truncateUnits`), the section-id allocator
  * of 07 6.8 (`MAX_SECTION_ID`, `createIdAllocator`) and the size limits (`MAX_IMPORT_BYTES` and its parts; the logo
- * limits are used from 08 P2-13a).
+ * limits are used from 08 P2-13a). 03 T1: `STAGE_POSITION_LIMIT_M`, the +-100,000 m stage-position bound of 07 C22.
  * Legacy source: none (new in Phase 2); `deepFreeze` is a verbatim copy of the module-private helper of
  * js/legacy/LegacyCompat.js, which keeps its own copy because legacy/ may not import domain/ (ARCHITECTURE.md 1.3).
  * Layer: domain (may import legacy; THREE-free and DOM-free; this module imports nothing).
@@ -107,6 +107,13 @@ export function createIdAllocator(used) {
     },
   };
 }
+
+/**
+ * The writer bound of every stage-frame position, in metres (spec 07 C22, 4.3: camera and prop x/z within
+ * +-100,000 m). Read through `CineCamera.LIMITS` and `Prop.LIMITS`; since 03 T1 every `translateStage` (the pivot
+ * re-expression, 03 6.5, 07 C45) clamps through them, so a re-expressed pose is always one the validator accepts.
+ */
+export const STAGE_POSITION_LIMIT_M = 100000;
 
 /** The largest logo, in stored (decoded) bytes after conversion (spec 07 4.5; enforced from 08 P2-13a). */
 export const MAX_LOGO_BYTES = 2 * 1024 * 1024;

@@ -12,7 +12,8 @@
       --status-off-center and --status-within also colour .status-pending and .status-ok, so the initial and the
       runtime status colours come from one token. --scene-face-front, --scene-face-back, --scene-normals and
       --scene-normals-face are spec 01's debug-view tokens with spec 01's values (01 4.6, CR-8; F6 changes none);
-      --scene-wall-back follows with its key in 01 F1-5.
+      --scene-wall-back follows with its key in 01 F1-5. --scene-pivot, --scene-pivot-selected and
+      --scene-pivot-anchor are spec 03's pivot-marker cores (03 T1, 06 5.12); their halo is --scene-overlay-halo.
    Not a slice of the original <style> any more (css-slices.mjs --report-only lists the difference, 07 S7);
    link order = file number. */
 :root {
@@ -86,6 +87,9 @@
     --scene-face-back: #ff3344;
     --scene-normals: #b8f03c;
     --scene-normals-face: #ff4fd8;
+    --scene-pivot: var(--morph-neutral-50);         /* 03 T1: the pivot marker's two-tone cores (06 5.12) */
+    --scene-pivot-selected: var(--morph-red-600);
+    --scene-pivot-anchor: var(--ui-grey-400);
     --canvas-background: var(--morph-black-950);
     --status-within: var(--color-success);       /* also used by .status-ok */
     --status-off-center: var(--color-warning);   /* also used by .status-pending */

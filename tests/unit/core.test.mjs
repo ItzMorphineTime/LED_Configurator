@@ -431,6 +431,8 @@ describe('Theme', () => {
              glass: { color: 0x88ccff, opacity: 0.5 }, lights: 0xffffaa },
       gizmo: { x: 0xff4444, y: 0x44ff44, z: 0x4444ff, idleOpacity: 0.35, hoverOpacity: 1.0, dimmedOpacity: 0.15 },
       debug: { faceFront: 0x2f6bff, faceBack: 0xff3344, vertexNormal: 0xb8f03c, faceNormal: 0xff4fd8, lineBaseFactor: 0.35 },   // 01 F1-1 (4.6)
+      pivot: { color: 0xf7f7f5, selectedColor: 0xc51622, anchorColor: 0xa3a3a3, haloColor: 0x0a0a0a, opacity: 0.9,   // 03 T1 (4.1; 06 5.12)
+               glyphHalfSize: 0.25, coreRadius: 0.06, pickRadius: 0.15, dash: 0.05, minScreenHalfSizePx: 24 },
     });
     assert.equal(typeof SceneTheme.background, 'number');
     assert.equal(typeof SceneTheme.safeZone.labelColor, 'string');

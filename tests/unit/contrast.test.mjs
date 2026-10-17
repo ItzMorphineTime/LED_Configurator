@@ -2,8 +2,9 @@
 // resolved from the parsed tokens of css/02-tokens.css, so a token edit that breaks contrast fails here. This is spec
 // 07's X2 file; 06 T4a creates it with the UI rows (X2 has not landed, so U5 satisfies it). 06 T7 adds the scene rows
 // (adaptive frames, the outlined camera body, the two-tone frustum against the background and every palette colour);
-// the sibling overlay rows (selection, pivot, UV wire, HDRI marker) join with their keys (06 5.12). The forbidden pairs
-// and the rejected designs are asserted below 3:1 as documentation of why the design avoids them.
+// the sibling overlay rows (selection, pivot, UV wire, HDRI marker) join with their keys (06 5.12; the pivot rows since
+// 03 T1). The forbidden pairs and the rejected designs are asserted below 3:1 as documentation of why the design
+// avoids them.
 // Run: node --test tests/unit/contrast.test.mjs   (zero dependencies)
 
 import { test, describe } from 'node:test';
@@ -182,6 +183,18 @@ describe('U5 contrast: scene rows of 06 3.12 (06 T7, D15)', () => {
   test('the two-tone frustum: the better of the light core and the Morph Black halo >= 3 everywhere (worst 4.37, Iris)', () => {
     const worst = betterOfTwo('frustum (core, halo)', rgb('--scene-frustum'), rgb('--scene-overlay-halo'));
     assert.ok(Math.abs(worst - 4.37) < 0.01, `worst ${fmt(worst)}`);
+  });
+
+  test('the two-tone pivot marker (03 T1, 06 5.12): the idle, selected and anchor cores, each with the Morph Black halo, >= 3 everywhere', () => {
+    const halo = rgb('--scene-overlay-halo');
+    const idle = betterOfTwo('pivot (core, halo)', rgb('--scene-pivot'), halo);
+    assert.ok(Math.abs(idle - 4.37) < 0.01, `idle worst ${fmt(idle)} (Iris)`);
+    const selected = betterOfTwo('pivot selected (core, halo)', rgb('--scene-pivot-selected'), halo);
+    assert.ok(Math.abs(selected - 3.31) < 0.01, `selected worst ${fmt(selected)} (on the background, via the core)`);
+    const anchor = betterOfTwo('pivot anchor (core, halo)', rgb('--scene-pivot-anchor'), halo);
+    assert.ok(Math.abs(anchor - 3.31) < 0.01, `anchor worst ${fmt(anchor)} (Signal Red, via the halo)`);
+    assert.ok(ratio(rgb('--scene-pivot-selected'), hexRgb(Palette.defaultSectionColor)) >= 4.23 - 0.005,
+      'the selected core on the default wall (06 5.12: 4.23:1)');
   });
 
   test('rejected designs (documentation): a single #F7F7F5 line at 0.6 over the default wall, a single #616161 frame on Signal Red, Steel and Iris', () => {

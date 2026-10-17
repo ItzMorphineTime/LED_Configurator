@@ -18,8 +18,15 @@ import { PersonProp, CarProp } from './Prop.js';
 /** What the wall shows (Feature 5 adds 'hdri'). */
 export const ContentMode = Object.freeze({ COLOR: 'color', LED_SIM: 'ledSim', PANEL_IDS: 'panelIds' });
 
-/** Viewport display flags (legacy globals 1279-1294). */
+/** Viewport display flags (legacy globals 1279-1294) and the pivot-marker flag (Feature 3). */
 export class DisplaySettings {
+  /**
+   * The default of showPivotMarker (03 4.1): false until step C (03 T9) makes it true. A future v2 reader takes the
+   * same constant as its default for a missing `display.show_pivot_marker`, so the file and in-app defaults agree.
+   * @type {boolean}
+   */
+  static DEFAULT_SHOW_PIVOT_MARKER = false;
+
   /** legacy wireframeEnabled */
   wireframe = false;
   /** legacy showFrame */
@@ -32,6 +39,8 @@ export class DisplaySettings {
   showGrid = true;
   /** legacy safeDistanceEnabled */
   showSafeDistance = false;
+  /** the pivot marker (Feature 3, 03 4.1; view-only, session-only); written by PivotController.setMarkerVisible */
+  showPivotMarker = DisplaySettings.DEFAULT_SHOW_PIVOT_MARKER;
 
   /**
    * Side effects: none.

@@ -1,7 +1,8 @@
 /**
  * @module domain/Wall
  * The ordered list of wall sections (legacy `wallSections`), the section id allocator (legacy `nextSectionId`),
- * the header totals, the legacy flat bounds, and the pivot seam (Feature 3; always the identity in Phase 1).
+ * the header totals, the legacy flat bounds, and the wall pivot (Feature 3, 03 T1: `WallPivot` with its rules; the
+ * identity until the pivot UI lands, docs/improvements/03-pivot.md 4.1).
  * Legacy source: index.html@cd3fd3f 1395-1409 (state), 2307-2313 (totals), 2487-2493 / 2551-2557 / 2597-2603 /
  * 3757-3762 (flat bounds), 4088-4103 (add), 4133 (delete), 4976 + 4989 (import replace + allocator).
  * Layer: domain (may import legacy; THREE-free and DOM-free).
@@ -10,22 +11,140 @@
 import { MM_TO_M, WallSection } from './WallSection.js';
 import { MAX_SECTION_ID, createIdAllocator, isValidSectionId } from './rules.js';
 
-/** Where the wall's local origin sits (Feature 3 seam). */
+/** Where the wall pivot's anchor sits (Feature 3, docs/improvements/03-pivot.md 6.1). */
 export const PivotMode = Object.freeze({ BOTTOM_LEFT: 'bottom-left', MESH_CENTER: 'mesh-center', WALL_CENTER: 'wall-center' });
 
-/** Wall pivot and offset (Feature 3 seam). Phase 1 never changes it, so it is always the identity. */
+/** The pivot modes in display order: the radio list and the validator read it (03 4.1, 6.1 extension point). */
+export const PIVOT_MODES = Object.freeze([PivotMode.BOTTOM_LEFT, PivotMode.MESH_CENTER, PivotMode.WALL_CENTER]);
+
+/** The largest pivot offset magnitude per axis, in metres (03 4.1, Q11). */
+export const PIVOT_OFFSET_LIMIT_M = 1000;
+
+/** The offset axes that setOffsetAxis accepts. */
+const OFFSET_AXES = Object.freeze(['x', 'y', 'z']);
+
+/**
+ * The wall pivot (Feature 3, 03 4.1): P = anchor(mode) + offset (D2). The offset is in metres, in layout axes (X along
+ * the wall start, Y up, Z toward the stage), and moves the pivot relative to the wall. keepStageLayout decides whether
+ * an explicit pivot edit re-expresses the camera and props (D6). The default is the identity (bottom-left, zero offset):
+ * the implicit legacy pivot. Written only through these methods (ARCHITECTURE.md section 4); the pivot is session-only
+ * until the project file v2 lands (03 header, "Sequencing", the owner's decision of 2026-10-17).
+ */
 export class WallPivot {
   /** @type {string} a PivotMode value */
   mode = PivotMode.BOTTOM_LEFT;
-  /** @type {{x: number, y: number, z: number}} metres */
+  /** @type {{x: number, y: number, z: number}} metres; replaced (never mutated in place) by every setter */
   offset = { x: 0, y: 0, z: 0 };
+  /** @type {boolean} re-express the camera and props on explicit pivot edits (D6, Q4: on by default) */
+  keepStageLayout = true;
 
   /**
    * Side effects: none.
-   * @returns {boolean} true when the pivot is bottom-left with a zero offset (the implicit legacy pivot)
+   * @returns {boolean} true when the pivot is bottom-left with a zero offset (the implicit legacy pivot);
+   *   keepStageLayout does not count
    */
   get isIdentity() {
     return this.mode === PivotMode.BOTTOM_LEFT && this.offset.x === 0 && this.offset.y === 0 && this.offset.z === 0;
+  }
+
+  /**
+   * Sets the anchor mode.
+   * Side effects: writes mode.
+   * @param {*} mode  a PIVOT_MODES value
+   * @returns {boolean} whether the mode changed
+   * @throws {RangeError} `Unknown pivot mode ${JSON.stringify(mode)}` for anything else (the error type of
+   *   WallLayout.pivotPoint)
+   */
+  setMode(mode) {
+    if (!PIVOT_MODES.includes(mode)) throw new RangeError(`Unknown pivot mode ${JSON.stringify(mode)}`);
+    const changed = this.mode !== mode;
+    this.mode = mode;
+    return changed;
+  }
+
+  /**
+   * Stores one offset component through parseOffset. A value parseOffset rejects (not finite) writes nothing, and the
+   * stored component is returned for the input's write-back. The offset object is REPLACED, never mutated in place, so
+   * a resolution snapshot that holds the old object keeps its values.
+   * Side effects: replaces offset (only when the value parses).
+   * @param {'x'|'y'|'z'} axis
+   * @param {number|string} raw  a number, or the input's text
+   * @returns {number} the stored component
+   * @throws {RangeError} for an axis other than 'x', 'y' or 'z'
+   */
+  setOffsetAxis(axis, raw) {
+    if (!OFFSET_AXES.includes(axis)) throw new RangeError(`Unknown pivot offset axis ${JSON.stringify(axis)}`);
+    const v = WallPivot.parseOffset(raw);
+    if (v === null) return this.offset[axis];
+    this.offset = { ...this.offset, [axis]: v };
+    return v;
+  }
+
+  /**
+   * setOffsetAxis for each axis of `vec`, in x, y, z order.
+   * Side effects: replaces offset (per parsed component).
+   * @param {{x: number, y: number, z: number}} vec  metres
+   * @returns {{x: number, y: number, z: number}} the stored offset
+   */
+  setOffset(vec) {
+    for (const axis of OFFSET_AXES) this.setOffsetAxis(axis, vec[axis]);
+    return this.offset;
+  }
+
+  /**
+   * Side effects: replaces offset with (0, 0, 0).
+   */
+  resetOffset() {
+    this.offset = { x: 0, y: 0, z: 0 };
+  }
+
+  /**
+   * Side effects: writes keepStageLayout.
+   * @param {boolean} on
+   * @returns {boolean} whether the value changed
+   * @throws {TypeError} when `on` is not a boolean
+   */
+  setKeepStageLayout(on) {
+    if (typeof on !== 'boolean') throw new TypeError(`keepStageLayout must be a boolean, got ${JSON.stringify(on)}`);
+    const changed = this.keepStageLayout !== on;
+    this.keepStageLayout = on;
+    return changed;
+  }
+
+  /**
+   * Number or text -> metres: finite values are rounded to 1 mm and clamped to +-PIVOT_OFFSET_LIMIT_M; anything else
+   * gives null. Never orDefault: 0 is a valid offset (B-L9 does not apply). A rounded -0 is normalised to +0
+   * (`|| 0`). Idempotent: parseOffset(parseOffset(x)) === parseOffset(x) for every finite x.
+   * Side effects: none.
+   * @param {*} raw
+   * @returns {number|null}
+   */
+  static parseOffset(raw) {
+    const v = typeof raw === 'number' ? raw : parseFloat(raw);
+    if (!Number.isFinite(v)) return null;
+    return Math.max(-PIVOT_OFFSET_LIMIT_M, Math.min(PIVOT_OFFSET_LIMIT_M, Math.round(v * 1000) / 1000)) || 0;
+  }
+
+  /**
+   * Side effects: none.
+   * @returns {WallPivot} a deep copy
+   */
+  clone() {
+    const copy = new WallPivot();
+    copy.mode = this.mode;
+    copy.offset = { ...this.offset };
+    copy.keepStageLayout = this.keepStageLayout;
+    return copy;
+  }
+
+  /**
+   * Side effects: none.
+   * @param {WallPivot} other
+   * @returns {boolean} mode, the three offset components and keepStageLayout, each compared with ===
+   */
+  equals(other) {
+    return this.mode === other.mode && this.offset.x === other.offset.x && this.offset.y === other.offset.y &&
+      this.offset.z === other.offset.z && this.keepStageLayout === other.keepStageLayout;
   }
 }
 

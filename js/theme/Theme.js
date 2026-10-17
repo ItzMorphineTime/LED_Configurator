@@ -14,6 +14,7 @@
  * with Brand.jsonGenerator for spec 07's JSON generator record. 06 T6b: every download file name derives from
  * Brand.filePrefix = 'morph-led-wall' (06 D9, Q11). 06 T7 (3.9, D8): the 8-colour Morph section palette with Studio
  * Grey #d9d9d6 as the default first section; the legacy palette stays only to fill colour-less sections of v1 files.
+ * 03 T1 (4.1): SceneTheme.pivot, the pivot marker's two-tone colours and sizes, with the values of 06 5.12.
  * Legacy source: index.html@cd3fd3f 1379-1384, 1406, 1431, 1440-1449, 1563, 1693, 1821, 2009, 2034, 2042, 2064,
  * 2092, 2107, 2110, 2181, 2334, 2407, 2425-2426, 2518-2524, 2698-2751, 2792, 2826, 2840-2841, 2915-2917, 2960,
  * 3010, 3029-3089, 3225, 3264, 3970-3975, 4520-4549, 4557-4561, 4721, 4915-4916, 4923, 4934, 4964 (where each value
@@ -67,6 +68,12 @@ export const SceneTheme = deepFreeze({
     faceFront: 0x2f6bff, faceBack: 0xff3344,                                // face orientation (convention colours; never brand them)
     vertexNormal: 0xb8f03c, faceNormal: 0xff4fd8,                           // normal-line tips (lime, magenta)
     lineBaseFactor: 0.35,                                                   // line base colour = tip x factor
+  },
+  pivot: {                                                                  // 03 T1 (4.1; the values of 06 5.12): the pivot marker
+    color: 0xf7f7f5, selectedColor: 0xc51622, anchorColor: 0xa3a3a3,        // two-tone cores: idle, selected, anchor ghost
+    haloColor: 0x0a0a0a,                                                    // the Morph Black halo (06 D15)
+    opacity: 0.9, glyphHalfSize: 0.25, coreRadius: 0.06, pickRadius: 0.15, dash: 0.05,   // metres (opacity 0..1)
+    minScreenHalfSizePx: 24,                                                // the cross is never shorter than this per arm (3.3)
   },
 });
 

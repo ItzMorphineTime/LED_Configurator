@@ -2238,8 +2238,9 @@ Camera applyTransform(t, phase):
              cine.setPose({ posX: clamp(p.x, ±100000), posY: clamp(p.y, 0, 100000),
                             posZ: clamp(p.z, CineCamera.LIMITS.posZ.min, 100000),
                             rotX: clamp(deg(e.x), -90, 90), rotY: wrapDeg(deg(e.y)), rotZ: wrapDeg(deg(e.z)) })
-             (the ±100,000 m writer bounds are 08 P2-13e's; posZ.min is 0.1 until 08 P2-11c removes the minimum, then
-              -100000, 08 Q13)
+             (the ±100,000 m writer bounds are 08 P2-13e's; CineCamera.LIMITS holds them since 03 T1, with
+              posZ.min = -100000: the Z input's 0.1 minimum belongs to its input rule, not to LIMITS, and 08 P2-11c
+              removes it, 08 Q13; a pivot off the wall plane needs posZ below 0.1, 03 4.1)
    'cancel': cine.setPose(start)
 Prop getTransform:  position = (posX, gizmoAnchorY, posZ); quaternion from Euler(0, rotY·π/180, 0)
 Prop applyTransform: posX = clamp(p.x, ±100000); posZ = clamp(p.z, ±100000);

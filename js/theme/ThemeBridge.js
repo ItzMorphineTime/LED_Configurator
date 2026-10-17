@@ -17,7 +17,8 @@
  * Every path exists in Theme with a leaf of the matching type (U2). The keys that later steps add land with their
  * rows: 06 T5 added scene.frameOnLight (--scene-frame-on-light), scene.cameraBody.outlineColor and
  * scene.frustumLines.haloColor (both --scene-overlay-halo, the halo of every two-tone overlay and edge outline, D15);
- * 01 F1-5 adds scene.wallBack (--scene-wall-back); the sibling specs add their keys of 06 5.12.
+ * 01 F1-5 adds scene.wallBack (--scene-wall-back); the sibling specs add their keys of 06 5.12 (03 T1: scene.pivot.color,
+ * selectedColor, anchorColor and haloColor, the last on --scene-overlay-halo).
  */
 export const COLOR_BINDINGS = Object.freeze([
   ['scene.background',              '--scene-background',     'num'],
@@ -39,6 +40,10 @@ export const COLOR_BINDINGS = Object.freeze([
   ['scene.debug.faceBack',          '--scene-face-back',      'num'],
   ['scene.debug.vertexNormal',      '--scene-normals',        'num'],
   ['scene.debug.faceNormal',        '--scene-normals-face',   'num'],
+  ['scene.pivot.color',             '--scene-pivot',          'num'],   // spec 03's pivot marker (03 T1; 06 5.12)
+  ['scene.pivot.selectedColor',     '--scene-pivot-selected', 'num'],
+  ['scene.pivot.anchorColor',       '--scene-pivot-anchor',   'num'],
+  ['scene.pivot.haloColor',         '--scene-overlay-halo',   'num'],
   ['canvas.background',             '--canvas-background',    'hex'],
   ['ui.status.within',              '--status-within',        'hex'],
   ['ui.status.offCenter',           '--status-off-center',    'hex'],
