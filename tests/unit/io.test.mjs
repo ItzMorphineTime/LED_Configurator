@@ -102,8 +102,9 @@ const GLTF = makeGltf();
 const LEGACY_OBJ = makeObj(LegacyProfiles.mesh.obj, LEGACY_BRAND);
 const LEGACY_GLTF = makeGltf(LegacyProfiles.mesh.gltf, legacySpreadBase64, LEGACY_BRAND);
 // The Phase-1 OBJ profile with the production Brand: for comparisons of the profiles alone (08 P2-2c), where the
-// header strings must not differ.
-const PHASE1_PROFILE_OBJ = makeObj(LegacyProfiles.mesh.obj);
+// header strings must not differ. It keeps the production combinedUV, so that it isolates the P2-2c keys (winding,
+// normals, stripNormals) from the 08 P2-7b UV flip.
+const PHASE1_PROFILE_OBJ = makeObj({ ...LegacyProfiles.mesh.obj, combinedUV: Strategies.mesh.obj.combinedUV });
 
 /** A project whose wall is exactly `sections` (Wall.replaceAll, as the import does) in `meshMode`. */
 function projectOf(sections, meshMode) {
@@ -1710,9 +1711,9 @@ describe('OBJ: stage-facing winding and per-vertex normals (B-H2, 08 P2-2c)', ()
   /** The OBJ text without the lines that P2-2c changes: the orientation header line, `vn` and `f` lines. */
   const unchangedPart = (text) => lines(text).filter((l) => l !== FACE_LINE && !l.startsWith('vn ') && !l.startsWith('f ')).join('\n');
 
-  test("the production profile winds 'ccw' with 'averaged' per-vertex normals; LegacyProfiles keeps the Phase-1 values", () => {
+  test("the production profile winds 'ccw' with 'averaged' per-vertex normals; LegacyProfiles keeps the Phase-1 values (combinedUV: 08 P2-7b)", () => {
     assert.deepEqual({ ...Strategies.mesh.obj }, { winding: 'ccw', normals: 'averaged', stripNormals: 'per-vertex',
-      combinedUV: 'per-section-overlap', panelNormal: 'facing' });
+      combinedUV: 'atlas-pixel-accurate', panelNormal: 'facing' });
     assert.deepEqual({ ...LegacyProfiles.mesh.obj }, { winding: 'legacy-cw', normals: 'none', stripNormals: 'constant-z',
       combinedUV: 'per-section-overlap', panelNormal: 'facing' });
   });
@@ -1910,5 +1911,50 @@ describe('glTF: stage-facing winding and the NORMAL attribute (B-H2, 08 P2-2d)',
     assert.throws(() => noNormals.write(writeArgs(project, 'combined')), expectError('mesh.gltf.normals', 'none'));
     assert.throws(() => noNormals.write(writeArgs(project, 'section')), expectError('mesh.gltf.normals', 'none'));
     assert.throws(() => noNormals.write(writeArgs(project, 'panel')), expectError('mesh.panelNormal', undefined));
+  });
+});
+
+describe('combined OBJ: pixel-accurate atlas vt (B-M6, 08 P2-7b, 08 6.7)', () => {
+  test("the production OBJ profile is 'atlas-pixel-accurate'; LegacyProfiles keeps 'per-section-overlap'", () => {
+    assert.equal(Strategies.mesh.obj.combinedUV, 'atlas-pixel-accurate');
+    assert.equal(LegacyProfiles.mesh.obj.combinedUV, 'per-section-overlap');
+  });
+
+  test('every combined vt equals the viewport combinedGrid UV (toFixed(6)); every other line equals the Phase-1 UV option', () => {
+    const viewport = new WallMeshBuilder(Strategies.mesh.viewport);
+    const OVERLAP = makeObj({ ...Strategies.mesh.obj, combinedUV: 'per-section-overlap' });
+    for (const [label, project] of handPicked()) {
+      if (!project.wall.sections.length) continue;
+      const sections = project.wall.sections;
+      const layout = layoutProject(project);
+      const text = OBJ.write({ sections, meshMode: 'combined', layout }).objContent;
+      const vt = text.split('\n').filter((l) => l.startsWith('vt '));
+      const uvs = viewport.combinedGrid(layout, computeAtlas(sections)).uvs;
+      assert.equal(vt.length, uvs.length / 2, label);
+      vt.forEach((line, k) => assert.equal(line, `vt ${uvs[2 * k].toFixed(6)} ${uvs[2 * k + 1].toFixed(6)}`, `${label} vt[${k}]`));
+      const legacy = OVERLAP.write({ sections, meshMode: 'combined', layout }).objContent;
+      const strip = (t) => t.split('\n').filter((l) => !l.startsWith('vt ')).join('\n');
+      assert.equal(strip(text), strip(legacy), `${label}: only the vt lines change`);
+      if (sections.length === 1) assert.equal(text, legacy, `${label}: a single section keeps its vt (0 + x * 1 === x)`);
+    }
+  });
+
+  test('the mixed config: every section maps exactly its own rect of the combined panel-ID image', () => {
+    const project = projectFromConfig(CONFIGS.mixed);
+    const sections = project.wall.sections;
+    const atlas = computeAtlas(sections);
+    const text = OBJ.write({ sections, meshMode: 'combined', layout: layoutProject(project) }).objContent;
+    const vt = text.split('\n').filter((l) => l.startsWith('vt ')).map((l) => l.split(' ').slice(1).map(Number));
+    let k = 0;
+    sections.forEach((s, i) => {
+      const n = (s.panelCols + 1) * (s.panelRows + 1);
+      const mine = vt.slice(k, k + n);
+      k += n;
+      const e = atlas.entries[i];
+      assert.equal(Math.min(...mine.map((v) => v[0])), Number(e.uvOffsetX.toFixed(6)));
+      assert.equal(Math.max(...mine.map((v) => v[0])), Number((e.uvOffsetX + e.uvWidth).toFixed(6)));
+      assert.equal(Math.min(...mine.map((v) => v[1])), 0);
+      assert.equal(Math.max(...mine.map((v) => v[1])), Number(e.uvHeight.toFixed(6)), `${s.name}: v_max = rows * ledY / totalLedY`);
+    });
   });
 });

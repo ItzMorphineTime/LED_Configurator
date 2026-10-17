@@ -224,6 +224,9 @@ imported the walls without their materials. Export OBJ now downloads one ZIP wit
 nothing it references is missing. (A section texture too large for the browser is left out, with its MTL reference,
 and a message names it.) The button now reads "Export OBJ (ZIP)".
 
+Release note: the Combined-mode OBJ now carries the same texture coordinates as the viewport: each section maps its own
+part of the Panel IDs PNG (the sections used to overlap, each spanning the whole image).
+
 ### glTF Export
 Modern 3D format with embedded materials for:
 - Web viewers

@@ -10,6 +10,8 @@
  */
 
 import { exportSectionName, exportPanelName, mtlTextureFile } from '../geometry/PanelNaming.js';
+import { computeAtlas } from '../geometry/TextureAtlas.js';
+import { atlasUvRect } from '../geometry/WallMeshBuilder.js';
 import { Strategies, unsupportedStrategy } from '../legacy/LegacyCompat.js';
 
 /**
@@ -75,7 +77,8 @@ export class ObjExporter {
    * anything else is written as panels. Strip normals (#stripNormalLines): 'per-vertex' (08 P2-2c) writes one `vn`
    * per vertex from the builder normals and faces `f a/a/a`; 'constant-z' (Phase 1) one `vn 0 0 1` per object.
    *   combined: one object `LED_Wall_Combined` coloured by the first section (B-L6); all `v` lines of all
-   *     sections, then all `vt` lines (0..1 per section, B-M6), then the normals, then the faces;
+   *     sections, then all `vt` lines (since 08 P2-7b the pixel-accurate atlas UVs of the viewport, B-M6 fixed;
+   *     'per-section-overlap', 0..1 per section, for LegacyProfiles), then the normals, then the faces;
    *   section: one material and object per section; per-section `v`, `vt` and normals; `map_Kd` only for a
    *     texture the caller ships (08 P2-6c, B-L7 fixed): textureNames given and textureNames[i] not null. Both archives
    *     pass their texture names, null for a texture they left out (08 P2-1c): Export All (ZIP), and Export OBJ (ZIP)
@@ -135,12 +138,21 @@ export class ObjExporter {
       default:
         throw unsupportedStrategy('exportCombinedColor', Strategies.exportCombinedColor);
     }
-    let uv;
+    let uvFor;
     switch (profile.combinedUV) {
+      case 'atlas-pixel-accurate': {
+        // 08 P2-7b (B-M6 fixed, 08 6.7): the viewport's pixel-accurate atlas UVs (atlasUvRect of each computeAtlas entry),
+        // so the combined OBJ maps the combined panel-ID image (Brand.files.panelIdsPng) exactly; single-section walls
+        // keep the legacy `vt` (0 + x * 1 === x).
+        const atlas = computeAtlas(sections);
+        uvFor = (i) => atlasUvRect(atlas.entries[i]);
+        break;
+      }
       case 'per-section-overlap':
-        // LEGACY(B-M6): every section's `vt` run spans 0..1 on its own, so the sections overlap in UV space and
-        // match neither the viewport atlas nor the combined panel-ID PNG (Brand.files.panelIdsPng).
-        uv = 'unit';
+        // per-section-overlap: Phase-1 behaviour (B-M6: every section's `vt` run spans 0..1 on its own, so the sections
+        // overlap in UV space and match neither the viewport atlas nor the combined panel-ID PNG), kept for the
+        // LegacyProfiles oracle tests.
+        uvFor = () => 'unit';
         break;
       default:
         throw unsupportedStrategy('mesh.obj.combinedUV', profile.combinedUV);
@@ -156,8 +168,8 @@ export class ObjExporter {
 
     const grid = { positions: [], normals: [], uvs: [], indices: [] };
     let vertexOffset = 1;
-    layout.sections.forEach((sl) => {
-      const { vertexAdvance } = this.#builder.sectionGrid(sl, { indexBase: vertexOffset, uv }, grid);
+    layout.sections.forEach((sl, i) => {
+      const { vertexAdvance } = this.#builder.sectionGrid(sl, { indexBase: vertexOffset, uv: uvFor(i) }, grid);
       vertexOffset += vertexAdvance;
     });
 

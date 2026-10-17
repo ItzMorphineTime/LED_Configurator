@@ -1,0 +1,53 @@
+{
+  "commit": "P2-7b",
+  "bugs": [
+    "B-M6"
+  ],
+  "expect": [
+    {
+      "output": "{flat3,concave_offsets,mixed,box_corner,large_wall}/combined__export-obj__*.zip",
+      "change": "modified",
+      "each": true,
+      "reason": "B-M6: the OBJ entry of each multi-section combined Export OBJ ZIP writes the pixel-accurate atlas vt of the viewport (atlasUvRect per section, 08 6.7) instead of 0..1 per section; v, vn, faces and the MTL are unchanged"
+    },
+    {
+      "output": "{flat3,concave_offsets,mixed,box_corner,large_wall}/final__export-zip__*.zip",
+      "change": "modified",
+      "each": true,
+      "reason": "the same combined OBJ vt in the ZIP OBJ entry (Export All runs in combined mode)"
+    },
+    {
+      "output": "ui_sections/edited__export-obj__*.zip",
+      "change": "modified",
+      "reason": "the combined multi-section wall of ui_sections: the same atlas vt"
+    },
+    {
+      "output": "import_edge/i__export-obj__*.zip",
+      "change": "modified",
+      "reason": "added after the first gate run: case (i) keeps the two-section wall that the refused import leaves (since 08 P2-3b its combined Export OBJ downloads), so its OBJ entry gets the atlas vt too; the card listed it with the single-section walls"
+    },
+    {
+      "output": "p2_project_v2/combined__export-zip__*.zip",
+      "change": "modified",
+      "reason": "added after the first gate run: step 3 adds a section, so the step-8 combined ZIP holds a two-section wall and its OBJ entry gets the atlas vt; the card listed p2_project_v2 with the single-section walls"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-08 P2-7a runs); this commit changes no pixel of it"
+    },
+    {
+      "output": "p2_curved_safe_distance/box_corner.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas on the preview footer label row (1 level, 1 px, seen in the 06 T6a-08 P2-7a runs); this commit changes no pixel of it"
+    },
+    {
+      "output": "p2_shortcut_filters/pilot_view_front.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas (1 level, 2 px, seen in the 06 T6b-08 P2-7a runs); this commit changes no pixel of it"
+    }
+  ],
+  "notes": "08 P2-7b (B-M6): mesh.obj.combinedUV = atlas-pixel-accurate; the combined OBJ writer takes atlasUvRect(computeAtlas(sections).entries[i]) per section. Single-section combined OBJs (default, convex, import_edge ii and iii, logos, p2_zero_inputs) keep their vt because 0 + x * 1 === x, so they must stay identical."
+}

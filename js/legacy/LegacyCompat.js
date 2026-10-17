@@ -42,7 +42,7 @@ export const Strategies = deepFreeze({
   mesh: {
     viewport: { winding: 'ccw', normals: 'averaged', combinedUV: 'atlas-pixel-accurate', side: 'double' },
     obj:      { winding: 'ccw', normals: 'averaged', stripNormals: 'per-vertex',
-                combinedUV: 'per-section-overlap', panelNormal: 'facing' },
+                combinedUV: 'atlas-pixel-accurate', panelNormal: 'facing' },
     gltf:     { winding: 'ccw', normals: 'averaged', panelNormal: 'facing', attributes: ['POSITION', 'NORMAL'],
                 indexType: 'auto', doubleSided: 'omit' },  // 'omit' = the material object has NO doubleSided key
   },                                               // gltf.indexType: 'auto' since 08 P2-1b (B-L5), Phase-1 'uint16';
@@ -53,7 +53,8 @@ export const Strategies = deepFreeze({
                                                    // since 08 P2-2d (B-H2), Phase-1 'legacy-cw' / 'none' / ['POSITION'],
                                                    // and the new leaf gltf.panelNormal (08 P2-2d);
                                                    // viewport.combinedUV: 'atlas-pixel-accurate' since 08 P2-7a (B-M5),
-                                                   // Phase-1 'atlas-u-full-v'
+                                                   // Phase-1 'atlas-u-full-v'; obj.combinedUV: 'atlas-pixel-accurate'
+                                                   // since 08 P2-7b (B-M6), Phase-1 'per-section-overlap'
   exportCombinedColor: 'first-section',            // B-L6
   framingBounds: 'flat',                           // B-L2, B-M10
   curveBeforeFirstPanel: true,                     // B-L1
@@ -135,7 +136,7 @@ const QUIRKS = deepFreeze({
   'B-M5': ['Combined V full height (E-5)',
     'Landed in 08 P2-7a (`mesh.viewport.combinedUV = \'atlas-pixel-accurate\'`: v = (row / rows) * `uvHeight`, the section\'s share of the bottom-aligned atlas from `TextureAtlas.computeAtlas`, so combined panel IDs and the LED-sim repeat are pixel-accurate on sections of different heights; no tag site)'],
   'B-M6': ['Overlapping combined OBJ UVs (R-6)',
-    'atlas UVs'],
+    'Landed in 08 P2-7b (`mesh.obj.combinedUV = \'atlas-pixel-accurate\'`: the combined OBJ `vt` are the viewport\'s pixel-accurate atlas UVs, `atlasUvRect` of each `computeAtlas` entry, so they match the combined panel-ID image; no tag site)'],
   'B-M7': ['glTF POSITION only (S-2)',
     '`NORMAL` landed in 08 P2-2d; `TEXCOORD_0` with 08 P2-7c'],
   'B-M8': ['Safe-distance group survives preview off (K-2)',
@@ -249,7 +250,7 @@ const TAG_SITES = deepFreeze([
   ['js/geometry/WallLayout.js#computeWallLayout', ['B-L1']],
   ['js/geometry/WallLayout.js#framingBounds', ['B-L2', 'B-M10']],
   ['js/io/ProjectSerializer.js#write', ['B-L31']],
-  ['js/io/ObjExporter.js#write', ['B-M6', 'B-L6']],
+  ['js/io/ObjExporter.js#write', ['B-L6']],
   ['js/io/GltfExporter.js#write', ['B-L6']],
   ['js/io/GltfExporter.js#addMesh', ['B-M7']],
   ['js/render/SceneManager.js#addHelper', ['B-M11']],
