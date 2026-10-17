@@ -121,11 +121,14 @@ Configs are applied by importing a JSON file through `#import-input`. The harnes
 | `p2_mixed_content` | 7 | Phase 2: LED sim and panel IDs on mixed section heights (B-M5, B-L18). |
 | `p2_shortcut_filters` | 8 | Phase 2: shortcut keys in a focused select, with Ctrl, auto-repeated, and a view preset in pilot mode (B-L11, B-L25). |
 | `p2_project_v2` | 35 | Phase 2: a full project save and restore, a save with the preview off, hostile v2 logos and the stored SVG text; the only scenario with `network.json` (B-L31, B-L35, B-L36). |
+| `preview_compositing` | 9 | 07 R2 and the owner's 2026-10-17 report: preview on, the window enlarged with its handle, two orbit drags; the WebGL canvases, full-page screenshots and the mirrored-rectangle probe. See [The platform scenarios](#the-platform-scenarios-07-r1r2). |
+| `preview_clean` | 13 | 07 8.3: the person selected, preview and Safe Distance on, at Full Frame, RED V-RAPTOR and a 100×10 mm custom filmback dragged widest; canvas and window screenshots and the preview state. |
 
 The eight scenarios after `ui_visual` live in [`scenarios-extra.mjs`](scenarios-extra.mjs) and are
 spread into `SCENARIOS` after the original entries. The eight `p2_*` scenarios live in
 [`scenarios-phase2.mjs`](scenarios-phase2.mjs) and are spread in after them (see
-[The Phase 2 scenarios](#the-phase-2-scenarios)).
+[The Phase 2 scenarios](#the-phase-2-scenarios)). The five `pivot_*` feature scenarios ([`scenarios-features.mjs`](scenarios-features.mjs))
+follow, and the two platform scenarios ([`scenarios-platform.mjs`](scenarios-platform.mjs)) are registered last.
 
 The six config scenarios follow the same steps:
 
@@ -448,6 +451,31 @@ with 03 T7.
 | `pivot_gizmo` | Offset Z 2, top view, `o`; the X arrow (its tip: the right-most gizmo-red pixel, as in `gizmo_drag`) dragged 120 px, OBJ export; Offset Y 0.123 and a Ctrl drag; park, `cancel_before`, a drag with Escape and two more moves before the release, park, `cancel_after`; Escape; `o` then `r`; the checked radio focused, ArrowDown | the gizmo badge and buttons with the panel per step, `*_handle` (`found` or `skipped`), `cancel_postcheck` (`cancel_after` against `cancel_before` with the harness screenshot rule: IDENTICAL or WARN passes, FAIL means an orbit jump or a leftover hover), `focus_*` (03 AC 9-11, 18) |
 | `pivot_roundtrip` | An identity OBJ and glTF; wall-center + (0, 0, 2) with its exports and Export JSON; re-import that JSON; export again | the panel before and after the import, the exports, `rt_postcheck` (no `pivot` key in the v1 JSON, both JSON exports identical, the exports after the import equal the identity ones) |
 | `pivot_validation` | mesh-center, Offset Y 3, keep off; import a v1 `concave_offsets` carrying a hand-written invalid `pivot` block; then Offset X `abc`, empty, `2000`, `0.0004`, `0` | the panel after the import (bottom-left, 0, keep on: the block is not applied), its dialogs, the typed values (03 AC 8) |
+
+## The platform scenarios (07 R1/R2)
+
+[`scenarios-platform.mjs`](scenarios-platform.mjs) adds two scenarios for the camera preview of
+`docs/improvements/07-platform-foundations.md` (R1 render layers, R2 the preview drawn by the main renderer). They were
+captured by the harness-only commit B2-0 on the two-canvas build, so their baselines document it; 07 R2 changes them with
+its own manifest. Same DOM-only rules; `#camera-preview-canvas` is read only through its client rect, because from 07 R2
+on it is a layout placeholder with no WebGL context (the main canvas draws the preview at its place, 07 3.6).
+
+| Scenario | Steps | Records |
+|---|---|---|
+| `preview_compositing` | Preview on; the resize handle dragged 280 px left (600 × 400 at Full Frame); two orbit drags from a free canvas point left of centre (+120 px, then -180 px), each followed by a full-page screenshot | `00_preview_on`, `01_enlarged`, `0{2,3}_orbit` (the WebGL canvases of `window.__glCanvases()`, the rects of `#three-canvas`, the window and `#camera-preview-canvas`, the window's inline size, corner radius and background, the canvas attributes, the three labels; for the orbits also `mirror` and `staleSuspected`), `0{2,3}_orbit.page.screenshot.png` |
+| `preview_clean` | Person on, `g`, the person picked with the preview off; preview on, Safe Distance on; Full Frame; RED V-RAPTOR; Custom 100 × 10 mm and the handle dragged 600 px left | `person_pick`; per filmback `<label>.json` (the same preview state plus `gizmoInPreview`, the gizmo-coloured pixels inside the preview rectangle outside the window bars and the viewport overlays, and the gizmo panel), `<label>.canvas` and `<label>.window` screenshots |
+
+The owner's report (2026-10-17): after enlarging the preview window and orbiting, a rectangle of the main viewport with
+the preview's size, mirrored vertically (top right instead of bottom right), stopped updating. It is a browser
+compositing bug of two overlapping WebGL canvases (the original app has it too). `mirror` counts the pure-black pixels
+(max channel <= 4; the scene background is 0x0a0a0a) of that mirrored rectangle outside every overlay. **Neither headless
+SwiftShader (the harness) nor a one-off headless run on the GPU (ANGLE D3D11, Intel UHD) reproduces it**: `blackFraction`
+is 0 on the two-canvas build, so the scenario guards the structural fix instead: `glCanvases` must list exactly one
+canvas (`three-canvas`) after 07 R2 (07 AC 1).
+
+`window.__glCanvases()` comes from `lib/inject.mjs`: a hook on `HTMLCanvasElement.prototype.getContext` that remembers each
+canvas that received a `webgl`, `webgl2` or `experimental-webgl` context (`{id, type, connected}`, in creation order).
+It never changes the returned context, so every other output is unchanged.
 
 ## Output layout
 
@@ -822,7 +850,9 @@ The harness depends on this markup:
   - `.section-title` inside the cards, `.mesh-mode-option[data-mode]` labels and
     `input[name="mesh-mode"]` radios;
   - `#camera-preview-resize` (drag handle), the inline `style.width` / `style.height` of
-    `#camera-preview-window`, and the `width` / `height` attributes of `#camera-preview-canvas`;
+    `#camera-preview-window`, and the `width` / `height` attributes of `#camera-preview-canvas` (none from 07 R2 on:
+    the canvas is a layout placeholder whose client rect is the preview rectangle; `normals_debug` and
+    `preview_clean` capture that rect from the page, so they read the main canvas's scissor pass there);
   - the children of `.viewport-overlay`, and `#camera-preview-window` itself, as the overlay rects
     that pixel searches skip;
   - the scene colours that pixel searches look for: the person (0x4488ff @ 0.85), the camera body

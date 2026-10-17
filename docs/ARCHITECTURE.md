@@ -337,6 +337,7 @@ During integration only, `js/legacy/monolith.js` (WP10) temporarily holds the ve
 tests/
   regression/                              existing golden-master harness (run.mjs, compare.mjs, lib/...)
     scenarios.mjs                          WP1 (edit: registers the extra scenarios); 08 P2-0 (registers the Phase 2 scenarios);
+                                                 B2-0: registers the platform scenarios last;
                                                  06 T7: the ui_sections swatch click by index (the 4th swatch), the one
                                                  person predicate isPersonPixel for the Studio Grey wall (also gizmo_drag's
                                                  isPerson), debugDump (REGRESSION_DEBUG_DIR) for every person pick
@@ -355,6 +356,8 @@ tests/
     lib/probe.mjs                          01 T8  pixel probes of normals_debug: colorMask, largestComponent, probePoint,
                                                  sampleRGB, classifyFace, diffStats, withinJitter, readProbePalette
     lib/server.mjs                         WP1 (conditional edit: optional port argument for tools/serve.mjs; default unchanged)
+    lib/inject.mjs                         WP1 (downloads, dialogs); B2-0: the HTMLCanvasElement#getContext hook,
+                                                 window.__glCanvases() (each canvas that got a WebGL context; 07 AC 1)
     lib/app.mjs, lib/recorder.mjs          08 P2-0: the opt-in request log (`recordRequests`, network.json), AppPage.reload();
                                                  08 P2-6e: OBJ_ZIP_DOWNLOAD, the one-ZIP download options of every Export OBJ step
                                                  (keeps the dialogs of the page it leaves: dialogs.json lists every page's);
@@ -381,6 +384,8 @@ tests/
     scenarios-features.mjs                 03 T8  the five pivot_* scenarios of 03 8.3 (forward goldens; pivot_roundtrip and
                                                  pivot_validation in their session-only form until 03 T7), with the offset
                                                  and cancel post-checks
+    scenarios-platform.mjs                 B2-0  07 8.3's preview_clean and preview_compositing (the owner's stale-rectangle
+                                                 report of 2026-10-17), captured on the two-canvas build before 07 R2
     expected/                              08 P2-0  <commit-id>.json expected-change manifests (one per golden-changing commit,
                                                  any spec); _nondeterminism.json, the only standing allowance
     README.md                              WP1 (edit: documents the extra scenarios); 08 P2-0 (Phase 2 scenarios and the
@@ -4168,3 +4173,6 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 
 **B1-pivot-floor-b, spec 02's export test with a raised pivot (review follow-up of B1-pivot-floor)** (docs/improvements/02-section-editing-offsets.md AC 20; manifest `tests/regression/expected/B1-pivot-floor-b.json`, an invariance gate: documentation only):
 - Spec 02's AC 20 checks that the exports equal the viewport translated by `(0, −P.y, 0)` with a `bottom-left` and a `mesh-center` pivot. Since `mesh-center` sits on the floor both have `P.y = 0`, so the case now uses `mesh-center` + Offset Y 0.75 to keep exercising the translation.
+
+**B2-0, the camera-preview scenarios before the single renderer** (the owner's report of 2026-10-17: a rectangle of the main viewport, the preview's size mirrored vertically, stops updating after the preview window is enlarged and the view orbited; docs/improvements/07-platform-foundations.md 8.3, AC 1-4; manifest `tests/regression/expected/B2-0.json`: the `preview_compositing` and `preview_clean` outputs added, every existing output identical):
+- 2.3: `tests/regression/lib/inject.mjs` hooks `HTMLCanvasElement.prototype.getContext` and exposes `window.__glCanvases()` (each canvas that received a WebGL context; the returned context is unchanged). `tests/regression/scenarios-platform.mjs` (new, `PLATFORM_SCENARIOS`, registered last): `preview_compositing` (the owner's steps; the WebGL canvases, full-page screenshots, the pure-black share of the mirrored rectangle) and 07 8.3's `preview_clean` (moved from 07 R2's commit to this one, so its baseline documents the two-canvas preview). Neither headless SwiftShader nor a one-off headless GPU run (ANGLE D3D11) reproduces the stale rectangle, so the structural check is the canvas list: two WebGL canvases here, one after 07 R2 (AC 1). `#camera-preview-canvas` is read only through its client rect, which stays the preview rectangle when 07 R2 makes the canvas a layout placeholder. The harness README documents both.

@@ -4,7 +4,9 @@
 //   * HTMLAnchorElement#click        -> record {filename, blob} for <a download> and suppress navigation
 //   * capture-phase 'click' listener -> same, for anchors clicked via dispatchEvent
 //   * window.alert/confirm/prompt    -> record message instead of blocking the page
-// Exposes window.__captured (downloads), window.__dialogs, and window.__readCaptured(i).
+//   * HTMLCanvasElement#getContext   -> remember each canvas that got a WebGL context (07 R2: the app must create
+//                                       exactly one); the returned context is never changed
+// Exposes window.__captured (downloads), window.__dialogs, window.__readCaptured(i) and window.__glCanvases().
 export const INJECT_SOURCE = String.raw`
 (() => {
     if (window.__harnessInstalled) return;
@@ -43,6 +45,21 @@ export const INJECT_SOURCE = String.raw`
         const a = t && t.closest ? t.closest('a[download]') : null;
         if (a) { e.preventDefault(); record(a); }
     }, true);
+
+    // The canvases that received a WebGL context, in creation order. Only a non-null webgl / webgl2 /
+    // experimental-webgl result is recorded, once per canvas; 2D contexts are ignored.
+    const glCanvases = [];
+    const origGetContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type, ...rest) {
+        const context = origGetContext.call(this, type, ...rest);
+        if (context && /webgl/i.test(String(type)) && !glCanvases.some((e) => e.canvas === this)) {
+            glCanvases.push({ canvas: this, type: String(type) });
+        }
+        return context;
+    };
+    Object.defineProperty(window, '__glCanvases', {
+        value: () => glCanvases.map((e) => ({ id: e.canvas.id || null, type: e.type, connected: e.canvas.isConnected })),
+    });
 
     window.alert = function (msg) { dialogs.push({ type: 'alert', message: String(msg) }); };
     window.confirm = function (msg) { dialogs.push({ type: 'confirm', message: String(msg) }); return true; };
