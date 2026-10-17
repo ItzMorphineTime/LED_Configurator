@@ -93,14 +93,6 @@ async function freshPage(ctx, label) {
     });
 }
 
-/** A left-button drag with CDP mouse events: move to the start, press, `steps` moves of (dx, dy), release. */
-async function drag(app, x, y, dx, dy, steps) {
-    await app.mouse('mouseMoved', x, y);
-    await app.mouse('mousePressed', x, y);
-    for (let i = 1; i <= steps; i++) await app.mouse('mouseMoved', x + i * dx, y + i * dy, { button: 'left', buttons: 1 });
-    await app.mouse('mouseReleased', x + steps * dx, y + steps * dy);
-    await app.settle();
-}
 
 /** Mouse press + release at one point (a click as the canvas pointer handlers see it). */
 async function clickAt(app, x, y) {
@@ -529,7 +521,7 @@ async function pilotLookScenario(ctx) {
     await cam('look_00_pilot_on');
     await step(ctx, 'look-drag', async () => {
         const r = await app.canvasRect();
-        await drag(app, r.x + r.w / 2, r.y + r.h / 2, 20, 6, 6);
+        await app.drag(r.x + r.w / 2, r.y + r.h / 2, 20, 6, 6);
     });
     await cam('look_01_after_drag');
     await shot(ctx, 'look_01_after_drag');
@@ -562,7 +554,7 @@ async function dragHandle(ctx, label, match, pick) {
             return;
         }
         rec.state(`${label}_handle`, { found: true });
-        await drag(app, p.x, p.y, 10, 0, 6);
+        await app.drag(p.x, p.y, 10, 0, 6);
     });
 }
 
@@ -630,7 +622,7 @@ async function previewResizeScenario(ctx) {
     const dragHandleBy = (label) => step(ctx, label, async () => {
         const r = await pageCall(app, pageRect, '#camera-preview-resize');
         if (!r) throw new Error('no #camera-preview-resize');
-        await drag(app, Math.round(r.x + r.w / 2), Math.round(r.y + r.h / 2), -20, -10, 5);
+        await app.drag(Math.round(r.x + r.w / 2), Math.round(r.y + r.h / 2), -20, -10, 5);
     });
 
     await step(ctx, 'preview-on', () => app.click('#toggle-camera-preview'));

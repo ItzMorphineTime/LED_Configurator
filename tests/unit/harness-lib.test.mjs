@@ -6,6 +6,9 @@
 // 3. tests/regression/lib/probe.mjs (01 T8, 8.2): colour masks, the largest 4-connected component, the probe point,
 //    the 3x3 median sample, the face classifier, diffStats with excluded rects and the jitter verdict, on synthetic
 //    images (encoded PNGs and decoded {width, height, rgba} objects alike).
+// 4. tests/regression/lib/app.mjs (03 T8): keyPress's repeat option and the o / Tab keys, AppPage.drag (moved from
+//    scenarios-extra.mjs) with its modifiers and beforeRelease options; without options, the former events exactly
+//    (on a recording fake page).
 // The browser halves (AppPage measurements, the page-side reads) run only inside the harness.
 // Run: node --test tests/unit/harness-lib.test.mjs   (zero dependencies)
 
@@ -16,6 +19,7 @@ import { parseMeasure, rectsFromBoxes, formatJson } from '../regression/measure-
 import { toRgb, resolvePalette, SCENE_COLOURS } from '../regression/lib/palette.mjs';
 import { SceneTheme } from '../../js/theme/Theme.js';
 import { encodePNG } from '../regression/lib/formats.mjs';
+import { AppPage, MODIFIERS } from '../regression/lib/app.mjs';
 import {
   NORMAL_COLOURS, MIN_REGION, colorMask, largestComponent, probePoint, sampleRGB, classifyFace, diffStats, withinJitter,
 } from '../regression/lib/probe.mjs';
@@ -191,5 +195,66 @@ describe('lib/probe.mjs: pixel probes of normals_debug (01 8.2)', () => {
     assert.deepEqual(NORMAL_COLOURS, { lavender: [128, 128, 255], teal: [0, 128, 128], olive: [128, 128, 0] });
     assert.ok(Object.isFrozen(NORMAL_COLOURS));
     assert.equal(MIN_REGION, 400);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// lib/app.mjs: the keyboard and drag options of 03 T8 (8.3), identical events without options
+// ---------------------------------------------------------------------------------------------------------------
+
+describe('lib/app.mjs: AppPage.keyPress and AppPage.drag (03 T8)', () => {
+  /** An AppPage on a recording fake page; settle is a no-op. */
+  const fakeApp = () => {
+    const sent = [];
+    const app = new AppPage({ send: async (method, params) => { sent.push([method, params]); return {}; } }, 'http://127.0.0.1:1/index.html');
+    app.settle = async () => { sent.push(['settle']); };
+    return { app, sent };
+  };
+
+  test('keyPress without options sends exactly the Phase-1 events; o and Tab are known keys', async () => {
+    const { app, sent } = fakeApp();
+    await app.keyPress('g');
+    assert.deepEqual(sent, [
+      ['Input.dispatchKeyEvent', { type: 'keyDown', key: 'g', code: 'KeyG', windowsVirtualKeyCode: 71, nativeVirtualKeyCode: 71, text: 'g', unmodifiedText: 'g' }],
+      ['Input.dispatchKeyEvent', { type: 'keyUp', key: 'g', code: 'KeyG', windowsVirtualKeyCode: 71, nativeVirtualKeyCode: 71 }],
+      ['settle'],
+    ]);
+    sent.length = 0;
+    await app.keyPress('o');
+    assert.deepEqual(sent[0][1], { type: 'keyDown', key: 'o', code: 'KeyO', windowsVirtualKeyCode: 79, nativeVirtualKeyCode: 79, text: 'o', unmodifiedText: 'o' });
+    sent.length = 0;
+    await app.keyPress('Tab');
+    assert.deepEqual(sent[0][1], { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 });
+  });
+
+  test('keyPress options: repeat marks the keyDown autoRepeat; Ctrl sends the modifier and no text', async () => {
+    const { app, sent } = fakeApp();
+    await app.keyPress('o', { repeat: true });
+    assert.equal(sent[0][1].autoRepeat, true);
+    assert.equal(sent[1][1].autoRepeat, undefined, 'only the keyDown repeats');
+    sent.length = 0;
+    await app.keyPress('o', { modifiers: MODIFIERS.Ctrl });
+    assert.equal(sent[0][1].modifiers, 2);
+    assert.equal(sent[0][1].text, undefined);
+  });
+
+  test('drag without options: the events of the former scenarios-extra helper (move, press, N moves held, release, settle)', async () => {
+    const { app, sent } = fakeApp();
+    await app.drag(100, 50, 10, -5, 2);
+    const ev = (type, x, y, extra = {}) => ['Input.dispatchMouseEvent', {
+      type, x, y, button: type === 'mouseMoved' ? 'none' : 'left', clickCount: type === 'mouseMoved' ? 0 : 1, ...extra,
+    }];
+    assert.deepEqual(sent, [
+      ev('mouseMoved', 100, 50), ev('mousePressed', 100, 50),
+      ev('mouseMoved', 110, 45, { button: 'left', buttons: 1 }), ev('mouseMoved', 120, 40, { button: 'left', buttons: 1 }),
+      ev('mouseReleased', 120, 40), ['settle'],
+    ]);
+  });
+
+  test('drag options: modifiers on every mouse event; beforeRelease runs after the last move, before the release', async () => {
+    const { app, sent } = fakeApp();
+    await app.drag(0, 0, 10, 0, 1, { modifiers: MODIFIERS.Ctrl, beforeRelease: async () => { sent.push(['beforeRelease']); } });
+    assert.deepEqual(sent.map((s) => s[0] === 'Input.dispatchMouseEvent' ? `${s[1].type}:${s[1].modifiers}` : s[0]),
+      ['mouseMoved:2', 'mousePressed:2', 'mouseMoved:2', 'beforeRelease', 'mouseReleased:2', 'settle']);
   });
 });

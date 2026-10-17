@@ -358,6 +358,13 @@ and `ArrowDown` and `MODIFIERS` (Alt 1, Ctrl 2, Meta 4, Shift 8), `findPersonPix
 `lib/probe.mjs` (`colorMask`, `largestComponent`, `probePoint`, `sampleRGB`, `classifyFace`, `diffStats`,
 `withinJitter`, `readProbePalette`). Without options every existing call sends exactly the events it sent before.
 
+**Library additions (03 T8).** `keyPress(key, {modifiers, noText, repeat})`: `repeat` marks the keyDown as an
+auto-repeat (CDP `autoRepeat`); the keys `o` (the pivot selection) and `Tab`. `AppPage.drag(x, y, dx, dy, steps,
+{modifiers, beforeRelease})`, moved here from `scenarios-extra.mjs` (whose three drags call it with the defaults): move,
+press, `steps` moves with the button held, then `beforeRelease()` (for example Escape and more moves with the button
+still held), then release and settle; `modifiers` is sent on every mouse event (Ctrl-drag snapping). Without options both
+send exactly the events they sent before; the full capture of the change compared identical (03 8.3, T8).
+
 ### Sensitivity
 
 Each extra scenario was run against a scratch copy of the original with one line of its code path

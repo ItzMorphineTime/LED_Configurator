@@ -26,6 +26,8 @@ const KEYS = {
     Escape: { code: 'Escape', vk: 27 },
     Enter: { code: 'Enter', vk: 13, text: '\r' },    // 01 T8: activates a focused button (keyboard open, click detail 0)
     ArrowDown: { code: 'ArrowDown', vk: 40 },         // 01 T8: moves the checked radio of a focused radio group
+    o: { code: 'KeyO', vk: 79, text: 'o' },          // 03 T8: the pivot selection (O)
+    Tab: { code: 'Tab', vk: 9 },                      // 03 T8: keyboard focus order
 };
 
 /** CDP Input.dispatchKeyEvent modifier bits. */
@@ -490,10 +492,11 @@ ${url}`;
      * A real key press through CDP (keyDown with the key's text, then keyUp) and a settle.
      * `modifiers` is a sum of MODIFIERS bits (01 T8): with Shift a letter's `key` and `text` are upper case ('N');
      * with Ctrl, Alt or Meta no text is sent (no character is typed). `noText` sends the keyDown without text, so no
-     * character is inserted into a focused text input while the page's keydown listeners still see the key.
+     * character is inserted into a focused text input while the page's keydown listeners still see the key. `repeat`
+     * (03 T8) marks the keyDown as an auto-repeat (CDP autoRepeat, so the page sees e.repeat === true).
      * Without options the events are exactly those of the Phase 1 harness.
      */
-    async keyPress(key, { modifiers = 0, noText = false } = {}) {
+    async keyPress(key, { modifiers = 0, noText = false, repeat = false } = {}) {
         const k = KEYS[key];
         if (!k) throw new Error('unknown key ' + key);
         const shifted = (modifiers & MODIFIERS.Shift) !== 0 && /^[a-z]$/.test(key);
@@ -501,8 +504,24 @@ ${url}`;
         const text = k.text && shifted ? k.text.toUpperCase() : k.text;
         const typed = text && !noText && (modifiers & (MODIFIERS.Ctrl | MODIFIERS.Alt | MODIFIERS.Meta)) === 0;
         const base = { key: name, code: k.code, windowsVirtualKeyCode: k.vk, nativeVirtualKeyCode: k.vk, ...(modifiers ? { modifiers } : {}) };
-        await this.page.send('Input.dispatchKeyEvent', { type: 'keyDown', ...base, ...(typed ? { text, unmodifiedText: text } : {}) });
+        await this.page.send('Input.dispatchKeyEvent', { type: 'keyDown', ...base, ...(typed ? { text, unmodifiedText: text } : {}), ...(repeat ? { autoRepeat: true } : {}) });
         await this.page.send('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
+        await this.settle();
+    }
+
+    /**
+     * A left-button drag with CDP mouse events (moved here from scenarios-extra.mjs in 03 T8): move to the start, press,
+     * `steps` moves of (dx, dy) with the button held, then `beforeRelease` (if any: e.g. press Escape and move on with the
+     * button still held), then release, then settle. `modifiers` (a sum of MODIFIERS bits, e.g. Ctrl for snapping) is
+     * sent on every mouse event. Without options the events are exactly those of the former scenarios-extra helper.
+     */
+    async drag(x, y, dx, dy, steps, { modifiers = 0, beforeRelease = null } = {}) {
+        const mod = modifiers ? { modifiers } : {};
+        await this.mouse('mouseMoved', x, y, mod);
+        await this.mouse('mousePressed', x, y, mod);
+        for (let i = 1; i <= steps; i++) await this.mouse('mouseMoved', x + i * dx, y + i * dy, { button: 'left', buttons: 1, ...mod });
+        if (beforeRelease) await beforeRelease();
+        await this.mouse('mouseReleased', x + steps * dx, y + steps * dy, mod);
         await this.settle();
     }
 

@@ -1,0 +1,18 @@
+{
+  "commit": "F3-T8a",
+  "bugs": [],
+  "expect": [],
+  "mayChange": [
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-03 T3 runs); this commit changes no rendered byte"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen again in the 03 T2 gate and the 03 T3 review run, textures/L2_PanelIDs.png); this commit changes no texture"
+    }
+  ],
+  "notes": "03 T8 (docs/improvements/03-pivot.md 8.3, 8.4 step E), first commit: the harness library changes, which must capture identically (8.3: \"a lib/ change requires re-capturing both baselines; these changes are additive with identical defaults, so the re-capture must compare identical: that compare is part of T8's proof\"). lib/app.mjs: KEYS gains o (KeyO, 79) and Tab (9); keyPress(key, {modifiers, noText, repeat}) with repeat -> CDP autoRepeat; AppPage.drag(x, y, dx, dy, steps, {modifiers, beforeRelease}) moved from scenarios-extra.mjs, whose three drags (pilot_look, gizmo_drag, preview_resize) now call it with the defaults: the same CDP events in the same order. No app file changes. Every output must stay identical."
+}

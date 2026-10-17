@@ -361,7 +361,9 @@ tests/
                                                  01 T8: screenshotElement, pointerClick, overlayRects, keyPress modifiers / noText
                                                  and the keys n, Enter, ArrowDown (unchanged events for every existing call);
                                                  06 T4a: FONT_PRELOADS + Montserrat (bold, 600, 400); 06 T5: the Outfit
-                                                 entries dropped
+                                                 entries dropped; 03 T8: keyPress repeat (CDP autoRepeat), the keys o and
+                                                 Tab, AppPage.drag(x, y, dx, dy, steps, {modifiers, beforeRelease}) moved
+                                                 from scenarios-extra.mjs (the same events without options)
     ui-spec.mjs, lib/uiprobe.mjs           WP1   the ui_visual probes; 06 T4a: CSS_TOKENS = the layer-3 role tokens,
                                                  page/brand-lockup and page/product-name replace the four logo entries,
                                                  the overlay/company-logo entries deleted, header.logo reads .product-name,
@@ -373,7 +375,8 @@ tests/
                                                  name_with_panel_ids, preview_resize; 01 F1-3: normals_debug (01 8.2: content
                                                  probes on every page, the debug view on the module build); 06 T5: the
                                                  gizmo_drag colour matchers for the Morph scene (isCameraBody for the opaque
-                                                 Signal Red body, isGizmoRed g >= 24 against its anti-aliased edges)
+                                                 Signal Red body, isGizmoRed g >= 24 against its anti-aliased edges); 03 T8:
+                                                 its three drags call AppPage.drag
     scenarios-phase2.mjs                   08 P2-0  the eight p2_* scenarios of 08 8.3, captured against the unfixed code
     expected/                              08 P2-0  <commit-id>.json expected-change manifests (one per golden-changing commit,
                                                  any spec); _nondeterminism.json, the only standing allowance
@@ -476,7 +479,8 @@ tests/
                                                  400 ms announcer, popover placement; F1-2c: imports only core/ and ui/dom.js
     harness-lib.test.mjs                   01 T2  measure-rects.mjs (measure objects, rectangles, formatting) and
                                                  lib/palette.mjs (colour parsing, token / SceneTheme resolution); 01 T8:
-                                                 lib/probe.mjs on synthetic images
+                                                 lib/probe.mjs on synthetic images; 03 T8: AppPage.keyPress (repeat, o, Tab)
+                                                 and AppPage.drag on a recording fake page
     tools.test.mjs                         08 P2-0  tools/check-orientation.mjs and tools/check-gltf.mjs on hand-built files;
                                                  since 01 T1 the ZIP and directory forms, and tools/make-cap-wall.mjs against
                                                  the committed fixture
@@ -4133,3 +4137,6 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 **03 T10, the floor grid centred on the stage origin** (Feature 3 step D; docs/improvements/03-pivot.md 5.2, 5.7, Q8, 8.4; the owner's B6 = Q8 option c; manifest `tests/regression/expected/F3-T10.json`: the `#three-canvas` screenshots that show the floor change, nothing else):
 - 3.4 `Theme`: `SceneTheme.grid = {size: 100, divisions: 100, centerColor, color, position: [0, 0, 0]}` (was 50 x 50 at (12.5, 0, 12.5)): whole-metre lines over +-50 m around the stage origin, the pivot on the floor, so the grid's centre lines cross where the axes and the marker are, in every pivot mode. The grid colours and their tokens are unchanged. 3.7 `SceneManager.init` reads it as before (no API change; not a `Strategies` switch, 03 5.7).
 - 2.3: `core.test.mjs` (the `SceneTheme` snapshot).
+
+**03 T8a, the harness library changes of the pivot scenarios** (Feature 3 step E, first commit; docs/improvements/03-pivot.md 8.3, 10; manifest `tests/regression/expected/F3-T8a.json`, an invariance commit: 03 8.3 asks that the re-capture after a `lib/` change compare identical, and it did):
+- 2.3: `tests/regression/lib/app.mjs`: `KEYS` gains `o` and `Tab`; `keyPress(key, {modifiers, noText, repeat})` (`repeat`: CDP `autoRepeat` on the keyDown); `AppPage.drag(x, y, dx, dy, steps, {modifiers, beforeRelease})`, moved from `scenarios-extra.mjs` (its three drags call it with the defaults: the same CDP events in the same order). `harness-lib.test.mjs` covers both on a recording fake page. The harness README documents them.
