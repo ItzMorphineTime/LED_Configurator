@@ -12,7 +12,7 @@
  */
 
 import { orDefault } from '../legacy/LegacyCompat.js';
-import { clamp, deepFreeze, STAGE_POSITION_LIMIT_M } from './rules.js';
+import { clamp, deepFreeze, finiteOr, STAGE_POSITION_LIMIT_M, wrapDeg } from './rules.js';
 
 /**
  * Filmback presets (width x height in mm), keyed by the #camera-filmback option values. Deep-frozen.
@@ -40,15 +40,15 @@ export const FILMBACK_PRESETS = Object.freeze({
  */
 
 /**
- * The context of a camera input rule (03 4.1): wallZ is the stage z of the flat wall plane (`framingBounds().wallZ`,
- * the negated stage-origin z; 0 at the identity pivot and for every pivot whose stage origin lies on the wall plane).
+ * The context of a camera input rule (03 4.1): wallZ is the stage z of the wall's start plane (`framingBounds().wallZ`,
+ * the negated stage-origin z; 0 at the identity pivot and for every pivot whose stage origin lies on that plane).
  * @typedef {{wallZ: number}} FieldContext
  */
 
 /** The context of the legacy rules: the wall plane at stage z = 0. */
 const WALL_PLANE_AT_ORIGIN = Object.freeze({ wallZ: 0 });
 
-/** Rounds to 1 mm: the posZ minimum and fallback of a stage origin off the wall plane (03 4.1). */
+/** Rounds to 1 mm: the posZ fallback of a stage origin off the wall's start plane (03 4.1). */
 const r3 = (v) => Math.round(v * 1000) / 1000;
 
 /**
@@ -72,11 +72,10 @@ export class CineCamera {
   /**
    * Lens and pose input rules. writeBack mirrors whether legacy assigned `this.value` afterwards (posX has none).
    * posY: B-L9 via orDefault, so '0' gives 1.5.
-   * posZ takes the FieldContext (03 4.1, T1): while ctx.wallZ === 0 (+0 or -0: the identity pivot and every pivot whose
-   * stage origin lies on the wall plane) it is the legacy expression verbatim, B-L9 included ('0' gives 5); otherwise
-   * (a stage origin off the wall plane, where 0 means "on the stage origin") a finite value is kept, floored at
-   * r3(wallZ + 0.1), and a non-numeric entry gives max(r3(wallZ + 0.1), r3(wallZ + 5)). The other rules ignore ctx.
-   * 08 P2-8b (B-L9) collapses both branches into one finiteOr rule; 08 P2-11c (step F) removes the minimum.
+   * posZ takes the FieldContext (03 4.1): since 08 P2-11c (Q13, step F; B-L10's Z half) it has no minimum: any finite
+   * value is kept (0 and negative values included: curved, turned and box walls have stage space at any Z, and the
+   * coverage reports a camera at or behind the wall as 'Not aimed at wall'), and a non-numeric entry gives
+   * r3(ctx.wallZ + 5), 5 m in front of the wall's start plane (5 at the identity). The other rules ignore ctx.
    * Ports: index.html@cd3fd3f lines 4266-4317.
    * @type {Readonly<Record<string, Readonly<FieldRule>>>}
    */
@@ -87,14 +86,7 @@ export class CineCamera {
     posX: Object.freeze({ parse: (r) => orDefault(parseFloat(r), 0), writeBack: false }),
     posY: Object.freeze({ parse: (r) => Math.max(0, orDefault(parseFloat(r), 1.5)), writeBack: true }),
     posZ: Object.freeze({
-      parse: (r, ctx = WALL_PLANE_AT_ORIGIN) => {
-        // The wall plane at the stage origin (the identity pivot): the legacy rule verbatim (B-L9 kept, '0' gives 5).
-        if (ctx.wallZ === 0) return Math.max(0.1, orDefault(parseFloat(r), 5));
-        // A stage origin off the wall plane (03 4.1): 0 is a valid stage coordinate, so no orDefault here.
-        const v = parseFloat(r);
-        const minZ = r3(ctx.wallZ + 0.1);
-        return Number.isFinite(v) ? Math.max(minZ, v) : Math.max(minZ, r3(ctx.wallZ + 5));
-      },
+      parse: (r, ctx = WALL_PLANE_AT_ORIGIN) => finiteOr(parseFloat(r), r3(ctx.wallZ + 5)),
       writeBack: true,
     }),
     rotX: Object.freeze({ parse: (r) => Math.max(-90, Math.min(90, orDefault(parseFloat(r), 0))), writeBack: true }),
@@ -102,10 +94,13 @@ export class CineCamera {
     rotZ: Object.freeze({ parse: (r) => Math.max(-180, Math.min(180, orDefault(parseFloat(r), 0))), writeBack: true }),
   });
 
+  /** How far in front of the wall Reset puts the camera (metres; the legacy 5; 08 P2-11c). */
+  static RESET_DISTANCE_M = 5;
+
   /**
    * The writer bounds of the pose (spec 07 C22 and 4.3: x and z within +-100,000 m, y in [0, 100,000]), shared with the
-   * validator ranges; since 03 T1 translateStage clamps through them (07 C45). They are not the input rules: the posZ
-   * input keeps its own minimum (FIELD_RULES.posZ, until 08 P2-11c), and 08 P2-13e makes every other writer clamp too.
+   * validator ranges; since 03 T1 translateStage clamps through them (07 C45). They are not the input rules (the posZ
+   * rule has no minimum since 08 P2-11c); 08 P2-13e makes every other writer clamp too.
    * @type {Readonly<{posX: {min: number, max: number}, posY: {min: number, max: number},
    *                  posZ: {min: number, max: number}}>}
    */
@@ -192,34 +187,41 @@ export class CineCamera {
   }
 
   /**
-   * The largest distance at which the frame still fits inside the (flat) wall in both dimensions.
+   * The largest distance at which the frame still fits the wall in both dimensions: D = min(width / (2·tx),
+   * height / (2·ty)). Since 08 P2-11c (B-L2) the size is FramingPolicy's stageExtent (the wall seen face-on, the same
+   * measure as the coverage's fits test); it was the flat width sum and the tallest section.
    * Ports: index.html@cd3fd3f lines 2529-2531 (== 2610-2612).
    * Side effects: none.
-   * @param {{totalWidth: number, maxHeight: number}} bounds  flat wall bounds (metres)
+   * @param {{width: number, height: number}} extent  metres (framingBounds(layout).stageExtent)
    * @returns {number} metres
    */
-  maxSafeDistance(bounds) {
+  maxSafeDistance(extent) {
     const hFov = this.hFov();
     const vFov = this.vFov();
-    const maxSafeDistWidth = bounds.totalWidth / (2 * Math.tan(hFov / 2));
-    const maxSafeDistHeight = bounds.maxHeight / (2 * Math.tan(vFov / 2));
+    const maxSafeDistWidth = extent.width / (2 * Math.tan(hFov / 2));
+    const maxSafeDistHeight = extent.height / (2 * Math.tan(vFov / 2));
     return Math.min(maxSafeDistWidth, maxSafeDistHeight);
   }
 
   /**
-   * Centres the camera on the flat wall, 5 m in front of its plane, with zero rotation. Since 03 T3 the 'flat-pivot'
-   * bounds (03 6.6): posX = minX + totalWidth / 2, posZ = wallZ + 5 (at the identity pivot 0 + w / 2 === w / 2 and
-   * 0 + 5 === 5: the legacy pose).
+   * Puts the camera in front of the wall, looking at it (08 6.10, P2-11c; B-L2 fixed; 03 step F): at
+   * wallBox.center + 5·facing, level (rotX = rotZ = 0), panned to face back along the wall's facing:
+   * rotY = wrapDeg(atan2(facing.x, facing.z)·180/π), so its forward (-sin pan, 0, -cos pan) is -facing. Any Z results
+   * (a wall facing -Z puts the camera at negative Z; Q13). For a flat wall along +X this is the legacy (W/2, H/2, 5) with
+   * rotY +0, bit for bit.
    * Ports: index.html@cd3fd3f lines 2559-2564.
    * Side effects: writes the six pose fields.
-   * @param {{totalWidth: number, maxHeight: number, minX: number, wallZ: number}} bounds  'flat-pivot' bounds (metres)
+   * @param {{wallBox: {center: {x: number, y: number, z: number}}, facing: {x: number, z: number}}} framing
+   *   framingBounds(layout) (metres)
    */
-  resetTo(bounds) {
-    this.posX = bounds.minX + bounds.totalWidth / 2;
-    this.posY = bounds.maxHeight / 2;
-    this.posZ = bounds.wallZ + 5;
+  resetTo(framing) {
+    const c = framing.wallBox.center;
+    const f = framing.facing;
+    this.posX = c.x + CineCamera.RESET_DISTANCE_M * f.x;
+    this.posY = c.y;
+    this.posZ = c.z + CineCamera.RESET_DISTANCE_M * f.z;
     this.rotX = 0;
-    this.rotY = 0;
+    this.rotY = wrapDeg(Math.atan2(f.x, f.z) * 180 / Math.PI);
     this.rotZ = 0;
   }
 
@@ -244,7 +246,8 @@ export class CineCamera {
    */
   translateBy(dx, dy, dz) {
     this.posX += dx;
-    // LEGACY(B-L10): the gizmo clamps posY at 0 (pilot clamps at 0.1 per frame); Z is unclamped.
+    // The gizmo clamps posY at the floor and never Z, like the input rules since 08 P2-11c (B-L10's Z half; the pilot's
+    // 0.1 floor is the other half, 08 P2-8c).
     this.posY = Math.max(0, this.posY + dy);
     this.posZ += dz;
   }

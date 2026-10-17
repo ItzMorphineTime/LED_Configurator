@@ -8,7 +8,7 @@
  * Layer: domain (may import legacy; THREE-free and DOM-free).
  */
 
-import { MM_TO_M, WallSection } from './WallSection.js';
+import { WallSection } from './WallSection.js';
 import { MAX_SECTION_ID, createIdAllocator, isValidSectionId } from './rules.js';
 
 /** Where the wall pivot's anchor sits (Feature 3, docs/improvements/03-pivot.md 6.1). */
@@ -304,21 +304,4 @@ export class Wall {
     return { totalPixels, totalPanels, totalSections: this.#sections.length, totalArc };
   }
 
-  /**
-   * The legacy "wall dimensions": the sum of flat section widths and the tallest section, ignoring curvature
-   * and angle offsets. Computed live on every call (== the four legacy copies 2489-2493, 2553-2557, 2598-2603,
-   * 3758-3762).
-   * Ports: index.html@cd3fd3f lines 2489-2493.
-   * Side effects: none.
-   * @returns {{totalWidth: number, maxHeight: number}} metres
-   */
-  flatBounds() {
-    // LEGACY(B-L2, B-M10): flat bounds feed the orbit target, camera reset, the coverage's fits test and safe distance.
-    let totalWidth = 0, maxHeight = 0;
-    this.#sections.forEach(s => {
-      totalWidth += s.panelCols * s.panelWidth * MM_TO_M;
-      maxHeight = Math.max(maxHeight, s.panelRows * s.panelHeight * MM_TO_M);
-    });
-    return { totalWidth, maxHeight };
-  }
 }

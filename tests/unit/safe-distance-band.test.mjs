@@ -41,7 +41,8 @@ function configProject(config) {
   const r = serializer.read(config);
   assert.ok(r.ok, 'the config imports');
   project.wall.replaceAll(sectionsFromProject(r.project));
-  return { project, layout: layoutProject(project), D: project.camera.maxSafeDistance(framingBounds(project)) };
+  const layout = layoutProject(project);
+  return { project, layout, D: project.camera.maxSafeDistance(framingBounds(layout).stageExtent) };
 }
 
 /** One section of `cols` panels of `widthMm`, curve `curve`, offset `offset`. */

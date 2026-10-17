@@ -93,10 +93,11 @@ function setup({ enabled = false, rigExists = false, showSafeDistance = false, p
     isSelected(id) { log.push({ call: 'selection.isSelected', arg: id }); return this.selectedId === id; },
     deselect() { log.push({ call: 'selection.deselect' }); this.selectedId = null; },
   };
-  const frameBounds = () => { log.push({ call: 'frameBounds' }); return framingBounds(project); };
-  // 08 P2-11a: the stage layout of the last rebuild (WallController.currentLayout); here one layout per setup
-  const layout = layoutProject(project);
+  // 08 P2-11a: the stage layout of the last rebuild (WallController.currentLayout); here one layout per setup, replaced by
+  // relayout() (a rebuild) when a test changes the wall; 08 P2-11c: the framing of that layout (App's frameBounds)
+  let layout = layoutProject(project);
   const stageLayout = () => layout;
+  const frameBounds = () => { log.push({ call: 'frameBounds' }); return framingBounds(layout); };
 
   const hub = spyHub
     ? {
@@ -107,7 +108,9 @@ function setup({ enabled = false, rigExists = false, showSafeDistance = false, p
   const controller = new CameraController({ project, rig, preview, hub, pilot, selection, frameBounds, bus });
 
   return {
-    log, project, cine, bus, rig, preview, safeDistance, pilotDriver, pilot, selection, hub, controller, bodyMesh, layout,
+    log, project, cine, bus, rig, preview, safeDistance, pilotDriver, pilot, selection, hub, controller, bodyMesh,
+    get layout() { return layout; },
+    relayout() { layout = layoutProject(project); },
     calls: () => log.map((e) => e.call),
     entry: (call) => log.find((e) => e.call === call),
   };
@@ -143,10 +146,10 @@ describe('CameraHub.refresh (P2, ARCHITECTURE.md 6.3)', () => {
     s.cine.posZ = 7.25;
     s.hub.refresh();
     const payload = s.entry('emit CAMERA_COVERAGE_CHANGED').payload;
-    const b = framingBounds(s.project);
-    const c = analyzeCoverage(s.layout, s.cine, { hFov: s.cine.hFov(), vFov: s.cine.vFov() }, { width: b.totalWidth, height: b.maxHeight });
+    const b = framingBounds(s.layout);
+    const c = analyzeCoverage(s.layout, s.cine, { hFov: s.cine.hFov(), vFov: s.cine.vFov() }, b.stageExtent);
     assert.deepEqual(payload, {
-      frameWidth: c.frameWidth, frameHeight: c.frameHeight, status: c.status, safeDistance: s.cine.maxSafeDistance(b),
+      frameWidth: c.frameWidth, frameHeight: c.frameHeight, status: c.status, safeDistance: s.cine.maxSafeDistance(b.stageExtent),
       distToWall: c.distance,
     });
     assert.deepEqual(Object.keys(payload), ['frameWidth', 'frameHeight', 'status', 'safeDistance', 'distToWall']);
@@ -164,8 +167,8 @@ describe('CameraHub.refresh (P2, ARCHITECTURE.md 6.3)', () => {
     const s = setup({ enabled: true });
     Object.assign(s.cine, { posX: 1.25, posY: 0.75, posZ: 1 });   // 1 m in front of the default wall's centre: every corner hits it
     s.hub.refresh();
-    const b = framingBounds(s.project);
-    const c = analyzeCoverage(s.layout, s.cine, { hFov: s.cine.hFov(), vFov: s.cine.vFov() }, { width: b.totalWidth, height: b.maxHeight });
+    const b = framingBounds(s.layout);
+    const c = analyzeCoverage(s.layout, s.cine, { hFov: s.cine.hFov(), vFov: s.cine.vFov() }, b.stageExtent);
     assert.deepEqual(c.cornerHits, [true, true, true, true]);
     assert.deepEqual(s.entry('rig.create').depths, c.cornerDepths);
     assert.deepEqual(s.entry('rig.rebuildFrustum').depths, c.cornerDepths);
@@ -201,13 +204,13 @@ describe('CameraHub.syncSafeDistance (legacy updateSafeDistance 2778-2784)', () 
     // The bounds (and the layout) are argument expressions: evaluated before create() runs (PR7).
     assert.deepEqual(s.calls(), ['frameBounds', 'safeDistance.create']);
     const args = s.entry('safeDistance.create').arg;
-    assert.deepEqual(Object.keys(args), ['layout', 'cine', 'bounds']);
+    assert.deepEqual(Object.keys(args), ['layout', 'cine', 'extent']);
     assert.ok(args.layout instanceof WallLayout);
     assert.equal(args.layout.sections.length, 1);
     assert.equal(args.layout.sections[0].section, s.project.wall.sections[0]);
     assert.equal(args.layout.flatEdges().length, s.project.wall.sections[0].panelCols + 1);
     assert.equal(args.cine, s.cine);
-    assert.deepEqual(args.bounds, framingBounds(s.project));
+    assert.equal(args.extent, framingBounds(s.layout).stageExtent, '08 P2-11c: the stage extent of the framing');
   });
 
   test('the layout is computed from the live sections on every call', () => {
@@ -309,9 +312,8 @@ describe('CameraController.resetPose (legacy resetCameraPosition 2550-2575)', ()
     Object.assign(s.cine, { posX: 9, posY: 9, posZ: 9, rotX: 9, rotY: 9, rotZ: 9 });
     s.controller.resetPose();
     assert.deepEqual(s.calls(), ['frameBounds', 'emit CAMERA_POSE_CHANGED', ...P2_HEAD, ...P2_TAIL_NO_SAFE]);
-    const b = framingBounds(s.project);
     assert.deepEqual(s.entry('emit CAMERA_POSE_CHANGED').pose,
-      { ...poseOf(s.cine), posX: b.totalWidth / 2, posY: b.maxHeight / 2, posZ: 5, rotX: 0, rotY: 0, rotZ: 0 });
+      { ...poseOf(s.cine), posX: 1.25, posY: 0.75, posZ: 5, rotX: 0, rotY: 0, rotZ: 0 }, '08 P2-11c: the legacy pose on the flat wall');
     assert.deepEqual(s.entry('emit CAMERA_POSE_CHANGED').payload, { source: 'reset' });
   });
 
@@ -373,15 +375,18 @@ describe('CameraController lens/pose inputs and safe-distance toggle', () => {
 
   test('setCameraField passes the wall-plane context {wallZ: frameBounds().wallZ} (03 4.1, T3)', () => {
     const s = setup({ enabled: false, spyHub: true });
-    assert.equal(s.controller.setCameraField('posZ', '0'), 5, 'identity pivot: wallZ +0, the legacy rule (B-L9)');
-    assert.deepEqual(s.calls(), ['frameBounds']);
+    assert.ok(Object.is(s.controller.setCameraField('posZ', '0'), 0), '08 P2-11c (Q13): no minimum, 0 is kept');
+    assert.equal(s.controller.setCameraField('posZ', ''), 5, 'a non-numeric entry: wallZ + 5');
+    assert.deepEqual(s.calls(), ['frameBounds', 'frameBounds']);
     const pivot = new WallPivot();
     pivot.setMode('wall-center');
     pivot.setOffset({ x: 0, y: 0, z: 2 });
     s.project.wall.pivot = pivot;
-    assert.equal(framingBounds(s.project).wallZ, -2);
+    s.relayout();
+    assert.equal(framingBounds(s.layout).wallZ, -2);
     assert.ok(Object.is(s.controller.setCameraField('posZ', '0'), 0), 'a stage origin off the wall plane: 0 is valid');
-    assert.equal(s.controller.setCameraField('posZ', '-5'), -1.9);
+    assert.equal(s.controller.setCameraField('posZ', '-5'), -5, '08 P2-11c: no minimum');
+    assert.equal(s.controller.setCameraField('posZ', 'abc'), 3, 'r3(wallZ + 5)');
     assert.equal(s.controller.setCameraField('posY', '0'), 1.5, 'the other rules ignore the context');
   });
 

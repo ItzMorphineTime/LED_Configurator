@@ -315,7 +315,7 @@ It is linked in the `css/features/*` block of 07 C52's link order (after `css/11
   - The exact clamp stays in the rule: the field never stores less than `minZ` (−2.24 in the example). The only effect of the lower attribute is that the spinner's lowest step (−2.3) is clamped to −2.24 by the rule on `change`, and the write-back shows the clamped value.
   - For `wallZ = −2` (offset z = 2 on the default wall), `minZ = −1.9` lies on the grid and `minAttr = "-1.9"`.
   - `CameraPanel` updates the attribute on `WALL_PIVOT_CHANGED` (`payload.resolution`) and on `WALL_REBUILT` (`layout.pivot.resolution`). A `null` resolution uses `wallZ = 0`.
-  - **Step F (P2-11c) removes the attribute and its update code**, because P2-11c removes the Z minimum (roadmap Q13).
+  - **Step F (P2-11c) removes the attribute and its update code**, because P2-11c removes the Z minimum (roadmap Q13). (As built: removed by 08 P2-11c.)
 - **Typing 0 now works when it matters.** With the stage origin off the wall plane (for example `wall-center` + offset z = 2, so `wallZ = −2`), typing `0` in Z Position stores 0: the camera stands on the stage origin. At `wallZ === 0` the legacy B-L9 behaviour is kept bit-for-bit until the roadmap's P2-8b fixes it everywhere (4.1). After step F, any finite value is stored (4.1).
 
 ### 3.6 Feedback, empty and error states
@@ -1100,6 +1100,8 @@ Worked example (the B-L2 wall: 10 × 500 mm at 18°, layout x ∈ [−0.50, 1.33
 For centred pivots on monotonic walls (6 of the 7 harness configs), `center` in plan is the stage origin, so the view and the Reset aim point centre on the pivot the user just chose.
 
 **One re-baseline.** Every existing scenario has the identity pivot, so step F's expected manifest is exactly the roadmap's P2-11c manifest, restricted to the scenarios that exist (8.4). If P2-11c has already landed, step F is empty and no re-baseline happens here.
+
+**As built (08 P2-11c, 2026-10-17): step F landed as P2-11c.** `framingBounds(layout)` reads the stage layout of the last rebuild and returns the named boxes `{generativeBox, wallBox, stageExtent, facing, wallZ}` (08 10, P2-11 as built), so the sketch's flat-pivot spread is gone: `wallZ` (the posZ context) is the walk start's z in the stage frame (`0 - stageOrigin.z`, as before) and the coverage reads the analyser since P2-11a. The posZ rule is this spec's step-F form. The `#camera-pos-z` `min` attribute and its mirror (3.5) are removed; test 19's "after step F" part and test 21 are unit tests (`frustum-coverage.test.mjs`), and `p2_true_framing` (08 B3-0) covers the half circle in the harness with the identity pivot.
 
 ### 6.7 Gizmo drag and snapping (relative; D9)
 

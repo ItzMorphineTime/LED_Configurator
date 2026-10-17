@@ -1,7 +1,7 @@
 /**
  * @module render/SafeDistanceView
  * The safe-distance floor visualisation (legacy `safeDistanceMesh`): a green-to-red band on the floor from the
- * wall out to the maximum distance D at which the film frame still fits the (flat) wall, the outline along its outer
+ * wall out to the maximum distance D at which the film frame still fits the wall (seen face-on since 08 P2-11c), the outline along its outer
  * edge and a "Max: D m" label sprite. Since 08 P2-5b (B-M15, B-L29 fixed) the band is geometry/SafeDistanceBand's
  * mitred, clamped strip facing +Y; its outer vertices closer than D (near concave features) take the amber 'clamped'
  * colour. The group is a registered helper and is also the source of the safe-distance OBJ export (ProjectIO reads
@@ -62,11 +62,12 @@ export class SafeDistanceView {
   }
 
   /**
-   * Replaces the safe-distance group. D = cine.maxSafeDistance(bounds); band = buildSafeDistanceBand(layout, D)
+   * Replaces the safe-distance group. D = cine.maxSafeDistance(extent) (08 P2-11c: FramingPolicy's stageExtent, the
+   * wall seen face-on; the flat width sum before); band = buildSafeDistanceBand(layout, D)
    * (08 6.9: the mitred, clamped strip over layout.flatEdges(), every triangle +Y; B-M15 and B-L29 fixed in 08 P2-5b);
    * the floor mesh, the outline and the label only when the band has vertices. The group is added to the scene even
    * when the wall has no edges (an empty group, no throw). The legacy inner guard `if (!cameraPreviewEnabled) return`
-   * (2589) is unreachable (the only caller checks the flag) and dropped. `layout` and `bounds` arrive precomputed from
+   * (2589) is unreachable (the only caller checks the flag) and dropped. `layout` and `extent` arrive precomputed from
    * CameraHub.syncSafeDistance (permitted reordering PR7).
    * Ports: index.html@cd3fd3f lines 2586-2762 (2591-2612 and 2614-2647 replaced by the arguments, 2649-2708 by
    *   buildSafeDistanceBand).
@@ -77,10 +78,10 @@ export class SafeDistanceView {
    *   CanvasTexture, SpriteMaterial and Sprite; adds the group to the scene as a helper; keeps the band as lastBand.
    * @param {{layout: import('../geometry/WallLayout.js').WallLayout,
    *          cine: import('../domain/CineCamera.js').CineCamera,
-   *          bounds: {totalWidth: number, maxHeight: number}}} args
+   *          extent: {width: number, height: number}}} args
    * @returns {void}
    */
-  create({ layout, cine, bounds }) {
+  create({ layout, cine, extent }) {
     this.remove();
 
     const group = new THREE.Group();
@@ -91,7 +92,7 @@ export class SafeDistanceView {
     group.userData.stageOrigin = { x: so.x, z: so.z };
 
     // Safe distance = maximum distance where the frame still fits within the wall (MIN over both dimensions)
-    const overallSafeDist = cine.maxSafeDistance(bounds);
+    const overallSafeDist = cine.maxSafeDistance(extent);
 
     // The mitred, clamped band over the wall's floor edges (08 6.9)
     const band = buildSafeDistanceBand(layout, overallSafeDist);

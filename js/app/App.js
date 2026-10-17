@@ -116,8 +116,9 @@ export class App {
     const cine = project.camera;
     const person = project.person;
     const car = project.car;
-    // 03 T3 (5.8): the cached pivot resolution of the last rebuild; evaluated lazily, after wallController exists
-    const frameBounds = () => framingBounds(project, wallController.pivotResolution);
+    // 08 P2-11c (6.10): the framing of the stage layout of the last rebuild (memoised per layout); evaluated lazily,
+    // after wallController exists
+    const frameBounds = () => framingBounds(wallController.currentLayout);
     // 08 P2-11a (6.10): the stage layout of the last rebuild, whose memoised column quads the coverage analyser reads
     const stageLayout = () => wallController.currentLayout;
     const colorToRgb = (s) => new THREE.Color(s);

@@ -89,6 +89,13 @@ corners and the optical axis against the real wall, so a turned camera shows the
 and a camera aimed past the wall, or at its back, shows "Not aimed at wall" (with "—" for the distance and the frame
 size when no wall lies ahead). "Distance to wall plane" is the distance along the camera's optical axis.
 
+Release note: Reset Camera Position now puts the camera 5 m in front of the wall, facing it and looking at its centre,
+whatever the wall's curve, section offsets or direction (it used to stand at Z = 5 facing -Z, which on a curved or
+turned wall could be beside or behind it), and the 3D view orbits around the centre of the real wall. "Max Distance" and
+the frame status measure the wall as seen face-on (a wall along Z or at 45 degrees gets the same value as one along X;
+a strongly curved wall is narrower than the sum of its panels). Z Position has no minimum any more: 0 and negative values
+are kept, as the gizmo and pilot mode always allowed.
+
 Release note: pilot mode is now a clean camera view: the floor grid, the axes, the camera's own frustum (whose fill tinted
 the whole pilot view) and the safe-distance floor are hidden while piloting and come back when you leave it. The
 normal lines of the debug view stay visible in pilot mode.

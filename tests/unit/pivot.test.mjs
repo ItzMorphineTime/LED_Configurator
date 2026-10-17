@@ -354,28 +354,30 @@ describe('03 test 5: export = stage - (0, P.y, 0) for the grids and the panel co
   });
 });
 
-// ---- 6. framingBounds 'flat-pivot' ----------------------------------------------------------------------------------
+// ---- 6. framingBounds 'layout' (step F = 08 P2-11c; the 'flat-pivot' case of step A is deleted) -------------------------
 
-describe("03 test 6: framingBounds 'flat-pivot' (6.6, step A)", () => {
-  test("Strategies.framingBounds is 'flat-pivot'", () => {
-    assert.equal(Strategies.framingBounds, 'flat-pivot');
+describe("03 test 6: framingBounds 'layout' (6.6 step F = 08 P2-11c)", () => {
+  test("Strategies.framingBounds is 'layout'", () => {
+    assert.equal(Strategies.framingBounds, 'layout');
   });
 
-  test('the flat width and height, translated by the stage origin; +0 at the identity', () => {
+  test('the framing of the stage layout follows the stage origin; wallZ is +0 at the identity, 0 - stageOrigin.z otherwise', () => {
     for (const sections of Object.values(WALLS)) {
-      const project = projectOf(sections);
-      const b = framingBounds(project);
-      const flat = project.wall.flatBounds();
-      assert.ok(Object.is(b.totalWidth, flat.totalWidth) && Object.is(b.maxHeight, flat.maxHeight));
-      assert.ok(Object.is(b.minX, 0) && Object.is(b.wallZ, 0), 'never -0 at the identity');
-      assert.deepEqual(Object.keys(b), ['totalWidth', 'maxHeight', 'minX', 'wallZ']);
+      const f = framingBounds(layoutProject(projectOf(sections)));
+      assert.ok(Object.is(f.wallZ, 0), 'never -0 at the identity');
+      assert.deepEqual(Object.keys(f), ['generativeBox', 'wallBox', 'stageExtent', 'facing', 'wallZ']);
     }
-    const project = projectOf(WALLS.concave_offsets, pivotOf('wall-center'));
-    const r = resolvePivot(computeWallLayout(project.wall.sections), project.wall.pivot);
-    const b = framingBounds(project, r);
-    assert.ok(Object.is(b.minX, 0 - r.stageOrigin.x) && Object.is(b.wallZ, 0 - r.stageOrigin.z));
-    assert.deepEqual(framingBounds(project), b, 'the default resolution is the live one');
-    assert.deepEqual(framingBounds(project, null), { ...b, minX: 0, wallZ: 0 }, 'a null resolution counts as the origin');
+    for (const name of ['concave_offsets', 'box_corner', 'mixed']) {
+      const identity = framingBounds(layoutProject(projectOf(WALLS[name])));
+      const project = projectOf(WALLS[name], pivotOf('wall-center'));
+      const r = resolvePivot(computeWallLayout(project.wall.sections), project.wall.pivot);
+      const f = framingBounds(layoutProject(project));
+      assert.ok(Object.is(f.wallZ, 0 - r.stageOrigin.z), name);
+      nearVec(f.generativeBox.center, {
+        x: identity.generativeBox.center.x - r.stageOrigin.x, y: identity.generativeBox.center.y, z: identity.generativeBox.center.z - r.stageOrigin.z,
+      }, 1e-12, `${name} centre`);
+      assert.ok(near(f.stageExtent.width, identity.stageExtent.width, 1e-12), `${name}: a translation keeps the width`);
+    }
   });
 });
 
@@ -433,7 +435,7 @@ describe('03 test 8: composition contract (5.10 #2; spec 02 reruns it as E17)', 
 
 test('03 test 9: the B-L1 between-panels migration (skipped: the owner kept the convention, 6.9; 08 Q10)', { skip: 'no between-panels branch exists (B-L1 decided 2026-10-16: kept)' }, () => {});
 
-// ---- 6 (consumers, 03 T3): 'flat-pivot' at the identity is the legacy 'flat' framing, bit for bit -------------------
+// ---- 6 (consumers, step F = 08 P2-11c): flat walls at the identity keep the legacy 'flat' values ----------------------
 
 /** A minimal THREE for OrbitController (Vector3 with set; the main camera is a plain object). */
 class Vec3 { constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z = z; } set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; } }
@@ -463,62 +465,78 @@ function seededWalls(seed, count) {
 
 /** The Phase-1 'flat' consumer expressions (03 6.6, the oracle of the identity proof). */
 const LEGACY = {
+  flat(sections) {
+    let totalWidth = 0, maxHeight = 0;
+    for (const s of sections) {
+      totalWidth += s.panelCols * s.panelWidth * 0.001;
+      maxHeight = Math.max(maxHeight, s.panelRows * s.panelHeight * 0.001);
+    }
+    return { totalWidth, maxHeight };
+  },
   target: (b, off) => [b.totalWidth / 2 + off.x, b.maxHeight / 2 + off.y, off.z],
   reset: (b) => ({ posX: b.totalWidth / 2, posY: b.maxHeight / 2, posZ: 5 }),
   safeDistance(cam, b) {
     const hFov = cam.hFov(), vFov = cam.vFov();
     return Math.min(b.totalWidth / (2 * Math.tan(hFov / 2)), b.maxHeight / (2 * Math.tan(vFov / 2)));
   },
-  posZ: (raw) => Math.max(0.1, parseFloat(raw) || 5),
 };
 
-describe("03 test 6 (consumers, T3): 'flat-pivot' at the identity equals the legacy 'flat' expressions", () => {
-  // 08 P2-11a: the coverage is the analyser's (frustum-coverage.test.mjs: the legacy numbers on flat walls and the 6.8
-  // re-expression); the flat bounds still feed the safe distance D (and fits) until P2-11c.
-  test('the orbit target (Object.is in x and y, === in z), resetTo, the safe distance and the posZ rule', () => {
+describe("03 test 6 (consumers, step F = 08 P2-11c): flat walls along +X at the identity keep the legacy 'flat' values", () => {
+  // 08 P2-11a: the coverage is the analyser's (frustum-coverage.test.mjs). 08 P2-11c: the orbit target, Reset and D read
+  // the 'layout' framing; for a flat wall along +X at the identity they are the legacy values (bit for bit when the walk's
+  // sums are exact, as for the harness walls; within 1e-12 m for widths such as 333.3 mm).
+  test('the orbit target (x and y, z up to the sign of zero), resetTo and the safe distance', () => {
     const offsets = [{ x: 0, y: 0, z: 0 }, { x: -0, y: -0, z: -0 }, { x: 1.5, y: -2.25, z: 0.75 }, { x: -3, y: 0.5, z: -0 }];
     const poses = [[0, 1.5, 5], [1.25, 0.75, 1.5], [-2, 0, 0.1], [10, 3, 25], [-0, -0, -0]];
-    const raws = ['', '0', '-0', '1.5', '-5', 'abc', '0.05', '7'];
+    // the seeded walls made flat along +X (curve 0, offset 0) with positive counts
+    const flatWalls = [WALLS.default, WALLS.flat3, ...seededWalls(0x3a3a, 300)
+      .map((ss) => ss.map((x) => section({ ...x, curveIntensity: 0, angleOffset: 0 })))
+      .filter((ss) => ss.length > 0 && ss.every((x) => x.panelCols > 0 && x.panelRows > 0))];
     let checks = 0;
-    for (const sections of [...Object.values(WALLS), ...seededWalls(0x3a3a, 300)]) {
-      const project = projectOf(sections);
-      const b = framingBounds(project);
-      const flat = project.wall.flatBounds();
+    for (const sections of flatWalls) {
+      const exact = sections === WALLS.default || sections === WALLS.flat3;
+      const eq = (a, b, label) => assert.ok(exact ? Object.is(a, b) : near(a, b, 1e-12), `${label}: ${a} vs ${b}`);
+      const f = framingBounds(layoutProject(projectOf(sections)));
+      const flat = LEGACY.flat(sections);
       for (const off of offsets) {
-        const orbit = new OrbitController({ sceneManager: null, keyboard: null, interaction: null, frameBounds: () => b });
+        const orbit = new OrbitController({ sceneManager: null, keyboard: null, interaction: null, frameBounds: () => f });
         orbit.offset.set(off.x, off.y, off.z);
         orbit.updateTargetPosition();
         const [x, y, z] = LEGACY.target(flat, off);
-        assert.ok(Object.is(orbit.target.x, x) && Object.is(orbit.target.y, y) && orbit.target.z === z, JSON.stringify([orbit.target, x, y, z]));
+        eq(orbit.target.x, x, 'target x');
+        eq(orbit.target.y, y, 'target y');
+        assert.ok(orbit.target.z === z, 'target z');
         checks++;
       }
       for (const [posX, posY, posZ] of poses) {
         const cam = new CineCamera();
         Object.assign(cam, { posX, posY, posZ });
-        assert.ok(Object.is(cam.maxSafeDistance(b), LEGACY.safeDistance(cam, flat)), 'safeDistance');
-        cam.resetTo(b);
+        eq(cam.maxSafeDistance(f.stageExtent), LEGACY.safeDistance(cam, flat), 'safeDistance');
+        cam.resetTo(f);
         const r = LEGACY.reset(flat);
-        assert.ok(Object.is(cam.posX, r.posX) && Object.is(cam.posY, r.posY) && Object.is(cam.posZ, r.posZ));
+        eq(cam.posX, r.posX, 'posX');
+        eq(cam.posY, r.posY, 'posY');
+        assert.ok(Object.is(cam.posZ, 5) && Object.is(cam.rotY, 0), 'posZ 5, rotY +0');
         checks++;
       }
-      for (const raw of raws) assert.ok(Object.is(new CineCamera().setField('posZ', raw, { wallZ: b.wallZ }), LEGACY.posZ(raw)), raw);
     }
-    assert.ok(checks > 2000);
+    assert.ok(checks > 500, `${checks} checks`);
   });
 
   test("off the identity: the target and Reset follow the stage origin; the analyser's distance is to the moved wall (6.5, 6.8)", () => {
     const project = projectOf(WALLS.default, pivotOf('wall-center', { x: 0, y: 0, z: 2 }));
-    const b = framingBounds(project);
-    assert.deepEqual(b, { totalWidth: 2.5, maxHeight: 1.5, minX: -1.25, wallZ: -2 });
-    const orbit = new OrbitController({ sceneManager: null, keyboard: null, interaction: null, frameBounds: () => b });
+    const layout = layoutProject(project);
+    const f = framingBounds(layout);
+    assert.equal(f.wallZ, -2);
+    const orbit = new OrbitController({ sceneManager: null, keyboard: null, interaction: null, frameBounds: () => f });
     orbit.updateTargetPosition();
     assert.deepEqual([orbit.target.x, orbit.target.y, orbit.target.z], [0, 0.75, -2], 'the centre of the translated flat wall');
     const cam = new CineCamera();
-    cam.resetTo(b);
+    cam.resetTo(f);
     assert.deepEqual([cam.posX, cam.posY, cam.posZ], [0, 0.75, 3], '5 m in front of the wall plane');
-    assert.equal(analyzeCoverage(layoutProject(project), cam, { hFov: cam.hFov(), vFov: cam.vFov() },
-      { width: b.totalWidth, height: b.maxHeight }).distance, 5);
-    assert.ok(Object.is(cam.setField('posZ', '0', { wallZ: b.wallZ }), 0));
-    assert.equal(cam.setField('posZ', '-5', { wallZ: b.wallZ }), -1.9);
+    assert.equal(analyzeCoverage(layout, cam, { hFov: cam.hFov(), vFov: cam.vFov() }, f.stageExtent).distance, 5);
+    assert.ok(Object.is(cam.setField('posZ', '0', { wallZ: f.wallZ }), 0));
+    assert.equal(cam.setField('posZ', '-5', { wallZ: f.wallZ }), -5, 'no minimum since step F (Q13)');
+    assert.equal(cam.setField('posZ', '', { wallZ: f.wallZ }), 3, 'r3(wallZ + 5)');
   });
 });

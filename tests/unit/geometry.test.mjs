@@ -900,11 +900,21 @@ describe('index width (B-L5, 08 6.2)', () => {
 });
 
 describe('framingBounds and the Feature 3 seams', () => {
-  test("framingBounds(project) 'flat-pivot' at the identity pivot == project.wall.flatBounds() plus minX = wallZ = +0 (03 6.6)", (t) => {
+  test("framingBounds(layout) 'layout' (08 P2-11c): the generative box centre, the stage extent's height and no NaN on every wall", (t) => {
     overAllWalls(t, ({ sections }, mm, label) => {
       const project = Project.createDefault();
       project.wall.replaceAll(sections);
-      compareDeep(framingBounds(project), { ...project.wall.flatBounds(), minX: 0, wallZ: 0 }, `${label}.framingBounds`, mm);
+      const layout = layoutProject(project);
+      const f = framingBounds(layout);
+      for (const v of [f.generativeBox.center, f.wallBox.center, f.facing]) {
+        compareDeep(['x', 'y', 'z'].every((k) => Number.isFinite(v[k])), true, `${label}.finite`, mm);
+      }
+      const b = layout.generativeBounds();
+      const finite = b && [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z].every(Number.isFinite);
+      if (!finite) return;
+      compareDeep(f.generativeBox.center, { x: (b.min.x + b.max.x) / 2, y: (b.min.y + b.max.y) / 2, z: (b.min.z + b.max.z) / 2 },
+        `${label}.generativeBox.center`, mm);
+      compareDeep(f.stageExtent.height, b.max.y - b.min.y, `${label}.stageExtent.height`, mm);
     });
   });
 
@@ -976,7 +986,11 @@ describe('framingBounds and the Feature 3 seams', () => {
     project.wall.replaceAll([]);
     assert.ok(project.wall instanceof Wall);
     assert.deepEqual(layoutProject(project).flatEdges(), []);
-    assert.deepEqual(framingBounds(project), { totalWidth: 0, maxHeight: 0, minX: 0, wallZ: 0 });
+    const f = framingBounds(layoutProject(project));   // 08 P2-11c: the empty wall's fallback, no NaN
+    assert.deepEqual(f.generativeBox.center, { x: 0, y: 0, z: 0 });
+    assert.deepEqual(f.stageExtent, { width: 0, height: 0 });
+    assert.deepEqual(f.facing, { x: 0, y: 0, z: 1 });
+    assert.equal(f.wallZ, 0);
   });
 });
 

@@ -1,7 +1,8 @@
 /**
  * @module interaction/OrbitController
  * The custom spherical orbit camera: canvas drag and wheel, WASD/QE target offset (per frame), view presets,
- * the flat-bounds orbit target, and the snapshot/restore used by pilot mode.
+ * the orbit target (the centre of the wall's generative box since 08 P2-11c), and the snapshot/restore used by pilot
+ * mode.
  * Legacy source: index.html@cd3fd3f 3747-3754 (state), 3756-3764 (updateTargetPosition), 3766-3817
  * (handleKeyboardMovement), 3819-3840 (setupControls, canvas part), 3857-3863 (updateCameraPosition),
  * 3865-3875 (setView), 3488-3502 (pilot save/restore of the orbit state).
@@ -43,7 +44,7 @@ export class OrbitController {
   #keyboard;
   /** @type {import('./InputState.js').InteractionState} */
   #interaction;
-  /** @type {() => {totalWidth: number, maxHeight: number, minX: number, wallZ: number}} 'flat-pivot' bounds (03 T3) */
+  /** @type {() => import('../geometry/WallLayout.js').Framing} the framing of the stage layout (08 P2-11c) */
   #frameBounds;
   /** legacy `isDragging` (3747) */
   #dragging = false;
@@ -56,9 +57,9 @@ export class OrbitController {
    * @param {{sceneManager: import('../render/SceneManager.js').SceneManager,
    *          keyboard: import('./InputState.js').KeyboardState,
    *          interaction: import('./InputState.js').InteractionState,
-   *          frameBounds: () => {totalWidth: number, maxHeight: number, minX: number, wallZ: number}}} deps
-   *   frameBounds is the injected `framingBounds(project, wallController.pivotResolution)` (the 'flat-pivot' bounds,
-   *   03 T3; the flat bounds in Phase 1)
+   *          frameBounds: () => import('../geometry/WallLayout.js').Framing}} deps
+   *   frameBounds is the injected `framingBounds(wallController.currentLayout)` (08 P2-11c: the 'layout' framing of the
+   *   stage layout; the flat bounds before)
    */
   constructor({ sceneManager, keyboard, interaction, frameBounds }) {
     this.#sceneManager = sceneManager;
@@ -106,18 +107,17 @@ export class OrbitController {
   }
 
   /**
-   * Recomputes the orbit target: the centre of the framing bounds plus the manual offset. Since 03 T3 the 'flat-pivot'
-   * bounds (03 6.6): x = minX + totalWidth / 2 + offset.x, z = wallZ + offset.z (the flat wall translated by the stage
-   * origin). At the identity pivot minX = wallZ = +0, so x and y are the legacy values bit for bit and z differs only in
-   * the sign of a zero offset.z (0 + -0), which lookAt and the rendering cannot observe.
+   * Recomputes the orbit target: the centre of the wall plus the manual offset. Since 08 P2-11c (B-L2 fixed; 03 step F)
+   * the centre is FramingPolicy's generativeBox centre of the stage layout (07 C34), so the view centres on the real
+   * wall whatever its curve, angle offsets, pivot or direction. For a flat wall along +X at the identity pivot it is the
+   * legacy (W / 2, H / 2, 0), bit for bit in x and y (z differs only in the sign of a zero offset.z, which lookAt and the
+   * rendering cannot observe).
    * Ports: index.html@cd3fd3f lines 3756-3764 (the bounds loop 3757-3762 is the injected frameBounds).
    * Side effects: writes target.
    */
   updateTargetPosition() {
-    // LEGACY(B-L2): the target uses the flat bounds (sum of section widths along +X, max height), via the
-    // injected frameBounds (= framingBounds 'flat-pivot'), whatever the curve or angle of the wall.
-    const b = this.#frameBounds();
-    this.target.set(b.minX + b.totalWidth / 2 + this.offset.x, b.maxHeight / 2 + this.offset.y, b.wallZ + this.offset.z);
+    const c = this.#frameBounds().generativeBox.center;
+    this.target.set(c.x + this.offset.x, c.y + this.offset.y, c.z + this.offset.z);
   }
 
   /**

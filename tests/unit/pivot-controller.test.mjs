@@ -18,7 +18,7 @@ import { WallPivot } from '../../js/domain/Wall.js';
 import { Palette } from '../../js/theme/Theme.js';
 import { WallController } from '../../js/app/WallController.js';
 import { PivotController, PIVOT_SNAP_STEPS_M, dragTarget } from '../../js/app/PivotController.js';
-import { CameraPanel, cameraZMinAttribute } from '../../js/ui/CameraPanel.js';
+import { CameraPanel } from '../../js/ui/CameraPanel.js';
 import { PropControls } from '../../js/ui/PropsPanel.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -411,7 +411,7 @@ describe('test 14: a wall-centre pivot after addSection (03 3.7, D6)', () => {
 });
 
 describe('test 15: a null resolution (a NaN panel width before B-L8)', () => {
-  test('no throw; hasGizmoTarget false; gizmoAnchor finite; the CameraPanel mirror writes min "0.1"; later subscribers still run', () => {
+  test('no throw; hasGizmoTarget false; gizmoAnchor finite; #camera-pos-z gets no min (08 P2-11c); later subscribers still run', () => {
     const r = makeRig({ sections: [fields({ panelWidth: NaN })] });
     const camera = cameraPanelRig(r.bus);
     let later = 0;
@@ -424,10 +424,10 @@ describe('test 15: a null resolution (a NaN panel width before B-L8)', () => {
     assert.equal(r.pc.hasGizmoTarget(), false);
     const out = r.pc.gizmoAnchor(vec());
     assert.deepEqual([out.x, out.y, out.z], [0, 0, 0], 'the preview from the origin, never a null dereference');
-    assert.equal(camera.posZ.attrs.min, '0.1');
+    assert.equal(camera.posZ.attrs.min, undefined);
     r.wc.rebuild();
     assert.equal(later, 1, 'a WALL_REBUILT subscriber after the mirrors still runs');
-    assert.equal(camera.posZ.attrs.min, '0.1');
+    assert.equal(camera.posZ.attrs.min, undefined);
   });
 });
 
@@ -460,27 +460,14 @@ function cameraPanelRig(bus, project = Project.createDefault()) {
   return { project, posX: doc.getElementById('camera-pos-x'), posZ: doc.getElementById('camera-pos-z') };
 }
 
-describe('CameraPanel: the #camera-pos-z min attribute (03 3.5) and the pivot pose mirror (5.5)', () => {
-  test('cameraZMinAttribute: the posZ floor floored to the 0.1 grid; "0.1" at wallZ = +0 and -0', () => {
-    assert.equal(cameraZMinAttribute(-2.3397), '-2.3');
-    assert.equal(cameraZMinAttribute(-2), '-1.9');
-    assert.equal(cameraZMinAttribute(2), '2.1');
-    assert.equal(cameraZMinAttribute(0), '0.1');
-    assert.equal(cameraZMinAttribute(-0), '0.1');
-  });
-
-  test('WALL_PIVOT_CHANGED and WALL_REBUILT set min from the resolution; a null resolution gives "0.1"', () => {
+// 03 T4's #camera-pos-z min attribute and its mirror were removed by 08 P2-11c (Q13: no Z minimum).
+describe('CameraPanel: the pivot pose mirror (5.5) and no Z minimum (08 P2-11c)', () => {
+  test('WALL_PIVOT_CHANGED and WALL_REBUILT no longer touch #camera-pos-z (no min attribute)', () => {
     const bus = new EventBus();
     const c = cameraPanelRig(bus);
-    const so = (z) => ({ stageOrigin: { x: 1.25, y: 0, z } });
-    bus.emit(Events.WALL_PIVOT_CHANGED, { resolution: so(2) });
-    assert.equal(c.posZ.attrs.min, '-1.9', 'AC 19: wall-center + (0, 0, 2) on the default wall');
-    bus.emit(Events.WALL_REBUILT, { layout: { pivot: { resolution: so(2.3397) } } });
-    assert.equal(c.posZ.attrs.min, '-2.3', 'AC 19: concave_offsets with wall-center');
+    bus.emit(Events.WALL_PIVOT_CHANGED, { resolution: { stageOrigin: { x: 1.25, y: 0, z: 2 } } });
     bus.emit(Events.WALL_REBUILT, { layout: { pivot: { resolution: null } } });
-    assert.equal(c.posZ.attrs.min, '0.1');
-    bus.emit(Events.WALL_PIVOT_CHANGED, { resolution: so(0) });
-    assert.equal(c.posZ.attrs.min, '0.1', 'on the wall plane: the markup value');
+    assert.equal(c.posZ.attrs.min, undefined);
   });
 
   test('CAMERA_POSE_CHANGED {source: pivot} writes pos-x and pos-z with toFixed(2) only', () => {

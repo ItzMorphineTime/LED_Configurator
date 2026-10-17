@@ -1,0 +1,94 @@
+{
+  "commit": "P2-11c",
+  "bugs": [
+    "B-L2",
+    "B-M10",
+    "B-L10"
+  ],
+  "expect": [
+    {
+      "output": "{concave_offsets,convex,mixed,box_corner,large_wall}/panel_ids_combined.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "08 6.10 (B-L2): the orbit target is the centre of the wall's generative box, not the centre of the flat bounds (the arc width sum x the tallest section), so the view centres on the real curved, offset or cornered wall"
+    },
+    {
+      "output": "p2_mixed_content/*.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same: the mixed wall (angle offsets and curves) is framed on its real centre"
+    },
+    {
+      "output": "p2_curved_safe_distance/*.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the orbit target, and Reset (turning the preview on) faces each wall's chord, so the camera keeps (3, 1.5, 6) but pans to face the wall; concave30's band and label follow its new D"
+    },
+    {
+      "output": "p2_curved_safe_distance/concave30__export-safe-distance__*.obj",
+      "change": "modified",
+      "each": true,
+      "reason": "08 6.10: D from the stage extent's chord width (the half circle seen face-on, 1.93 m) instead of the 3 m arc: 2.92 -> 1.88 m; the other three walls are height-limited and their OBJs are unchanged"
+    },
+    {
+      "output": "p2_zero_inputs/camera_zero.json",
+      "change": "modified",
+      "each": true,
+      "reason": "Q13 (B-L10's Z half): Z Position 0 is kept (it gave 5, B-L9 with the 0.1 minimum): the camera stands in the wall plane, so no wall plane lies ahead: 'Not aimed at wall' with '—'"
+    },
+    {
+      "output": "pivot_stage/{add_section_wall-center,camera_z_0,camera_z_minus_5,keep_off_bottom-left,keep_off_mesh-center,keep_off_wall-center,keep_on_bottom-left,keep_on_mesh-center,keep_on_wall-center,offset_z2}.json",
+      "change": "modified",
+      "each": true,
+      "reason": "03 3.5 / Q13: #camera-pos-z has no min attribute any more (cameraPosZMin null instead of '0.1' or '-1.9'); camera_z_minus_5 also keeps -5 (it was clamped to -1.9) and the camera, 3 m behind the wall plane facing away from the wall, reads 'Not aimed at wall' with '—'"
+    },
+    {
+      "output": "pivot_modes/{concave_offsets,box_corner,mixed}_*.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the orbit target is the generative box centre of the stage layout of the curved, cornered and mixed walls (a 03 scenario newer than 08's manifest list); the flat default wall's views are unchanged"
+    },
+    {
+      "output": "p2_true_framing/{arc18_reset,arc18_pan_90,offset90_reset,behind_wall}.json",
+      "change": "modified",
+      "each": true,
+      "reason": "B3-0's scenario: Reset faces each wall from 5 m along its chord facing, looking at the wall box centre (the half circle: pan about -99 degrees, the read-outs on the real wall; the wall along +Z: pan -90, 5 m from it), the 90-degree pan from there, and behind_wall keeps Z -3 (no minimum) and reads 'Not aimed at wall'"
+    },
+    {
+      "output": "p2_true_framing/{arc18,offset90}.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the orbit target on the real wall and the Reset pose facing it"
+    },
+    {
+      "output": "import_edge/iii_weird_mode.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the orbit target is the generative box centre of the imported 4-column section curved 5 degrees per panel (not the flat-bounds centre). Corrected after the first gate run: the first draft missed that this import_edge wall is curved"
+    },
+    {
+      "output": "normals_debug/{a3_box_p1,a4_box_p2,b12_box_p1,b13_box_p2}.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the box-corner views orbit around the box-corner wall's generative box centre; their face probes locate sections by colour and are unchanged (01 risk table), as are every other normals_debug view (the flat fixture). Corrected after the first gate run: the first draft had a provisional normals_debug/** mayChange"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-03 T3 runs)"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; textures/L2_PanelIDs.png, L4_PanelIDs.png); this commit changes no texture"
+    },
+    {
+      "output": "ui_visual/{00_initial,07_two_sections}.sidebar.screenshot.png",
+      "change": "modified",
+      "reason": "one sidebar pixel of these DOM-only captures has differed by up to 7 levels between runs (DOM text antialiasing; P2-7e and F3-T8b runs)"
+    }
+  ],
+  "notes": "08 P2-11c (B-L2 fixed, B-M10's fits, B-L10's Z half; 03 step F): framingBounds(layout) is the 'layout' framing of the stage layout of the last rebuild (FramingPolicy's generativeBox for the orbit target, wallBox and the chord facing for Reset, stageExtent for D and fits; memoised per layout); WallLayout.bounds() is the transformed box; Wall.flatBounds is deleted; Reset stands 5 m in front of the wall along its facing and looks at it (rotY through wrapDeg); D and fits read the stage extent; the camera Z rule has no minimum (finiteOr, 03 4.1's step-F form) and #camera-pos-z loses its min attribute and 03 T4's mirror. Every flat wall along +X at the identity keeps its orbit target, Reset pose and D bit for bit. Corrected after the first gate run: import_edge/iii_weird_mode (a curved wall) and the four box-corner normals_debug views are expected changes; the provisional normals_debug/** mayChange is dropped."
+}

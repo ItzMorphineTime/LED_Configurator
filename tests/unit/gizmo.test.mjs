@@ -230,7 +230,7 @@ describe('test 19: gesture swallowing with a real OrbitController and the Viewpo
     const sceneManager = { renderer: { domElement: canvas }, camera };
     const orbit = new OrbitController({
       sceneManager, keyboard: { isDown: () => false }, interaction: g.interaction,
-      frameBounds: () => ({ totalWidth: 2.5, maxHeight: 1.5, minX: 0, wallZ: 0 }),
+      frameBounds: () => ({ generativeBox: { center: { x: 1.25, y: 0.75, z: 0 } } }),   // 08 P2-11c: the framing's box
     });
     orbit.attach();
     const picks = [];

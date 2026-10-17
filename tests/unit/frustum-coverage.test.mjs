@@ -5,7 +5,8 @@
 // box-corner hits pick the nearest quad, the projected-quad overlap catches a frame that crosses a column without a ray
 // hit, the corner depths are camera-space depths (the far corner is the hit point), the quads are memoised and follow a
 // postTransform, and the whole analysis is equivariant under a rotation of wall and camera about the vertical axis (no
-// assumption that the wall runs along +X facing +Z).
+// assumption that the wall runs along +X facing +Z). 08 P2-11c: the 'layout' framing (FramingPolicy's three named boxes),
+// Reset, the safe distance and the camera Z rule (03 step F, test 21; 08 AC 42, 43).
 // Run: node --test tests/unit/frustum-coverage.test.mjs   (zero dependencies)
 
 import { test, describe } from 'node:test';
@@ -14,7 +15,9 @@ import assert from 'node:assert/strict';
 import { WallSection } from '../../js/domain/WallSection.js';
 import { CineCamera } from '../../js/domain/CineCamera.js';
 import { Project } from '../../js/domain/Project.js';
-import { computeWallLayout, layoutProject } from '../../js/geometry/WallLayout.js';
+import { computeWallLayout, layoutProject, framingBounds } from '../../js/geometry/WallLayout.js';
+import { Strategies } from '../../js/legacy/LegacyCompat.js';
+import { finiteOr, wrapDeg } from '../../js/domain/rules.js';
 import {
   analyzeCoverage, cameraBasis, frameDistance, nearestHit, quadOverlapsFrame, FRAME_CORNERS, MAX_FRUSTUM_DEPTH_M,
 } from '../../js/geometry/FrustumCoverage.js';
@@ -368,5 +371,174 @@ describe('08 P2-11a: WallLayout.columnQuads, worldVertices, extentAcross, chordF
     near(frameDistance({ x: 3, y: 0.75, z: 5 }, down, quads), 4, 1e-12, 'no column contains it: the column it passes closest to (S2, 1 m)');
     same(frameDistance({ x: -0.6, y: 0.75, z: 5 }, down, quads), 5, 'left of the step: S0 (0.6 m away) wins over the nearer S2 plane (1.6 m away)');
     assert.equal(frameDistance({ x: 3, y: 0.75, z: 5 }, { x: 0, y: 0, z: 1 }, quads), null, 'no wall plane ahead');
+  });
+});
+
+// ---- 08 P2-11c: the 'layout' framing (FramingPolicy's three named boxes, 07 C34), Reset, D and the Z rule ----------
+
+/** A project with the given sections and pivot mode / offset. */
+function pivotedProject(sections, mode = 'bottom-left', offset = { x: 0, y: 0, z: 0 }) {
+  const project = projectOf(sections);
+  project.wall.pivot.setMode(mode);
+  project.wall.pivot.setOffset(offset);
+  return project;
+}
+
+/** The column-major 4x4 matrix of a rotation by `deg` about +X (pitch: +Z goes to -Y for +90). */
+function rotationX(deg) {
+  const r = deg * Math.PI / 180;
+  const c = Math.cos(r), s = Math.sin(r);
+  return [1, 0, 0, 0, 0, c, s, 0, 0, -s, c, 0, 0, 0, 0, 1];
+}
+
+describe('08 P2-11c: framingBounds (the layout framing), resetTo, the safe distance and the Z rule', () => {
+  test("Strategies.framingBounds is 'layout'; the framing is memoised per layout and frozen", () => {
+    assert.equal(Strategies.framingBounds, 'layout');
+    const layout = layoutProject(projectOf(FLAT3));
+    const f = framingBounds(layout);
+    assert.equal(framingBounds(layout), f, 'the same object');
+    assert.ok(Object.isFrozen(f) && Object.isFrozen(f.generativeBox) && Object.isFrozen(f.stageExtent));
+    assert.deepEqual(Object.keys(f), ['generativeBox', 'wallBox', 'stageExtent', 'facing', 'wallZ']);
+    assert.notEqual(framingBounds(layoutProject(projectOf(FLAT3))), f, 'a new layout, a new framing');
+  });
+
+  test('flat walls along +X at the identity: the legacy orbit centre, Reset pose and D, bit for bit', () => {
+    for (const sections of [[WallSection.createDefault()], FLAT3]) {
+      const f = framingBounds(layoutProject(projectOf(sections)));
+      let W = 0, H = 0;
+      for (const s of sections) { W += s.panelCols * s.panelWidth * 0.001; H = Math.max(H, s.panelRows * s.panelHeight * 0.001); }
+      same(f.generativeBox.center.x, W / 2, 'target x');
+      same(f.generativeBox.center.y, H / 2, 'target y');
+      same(f.generativeBox.center.z, 0, 'target z');
+      same(f.stageExtent.width, W, 'width');
+      same(f.stageExtent.height, H, 'height');
+      same(f.facing.x, -0, 'facing.x');
+      same(f.facing.z, 1, 'facing.z');
+      same(f.wallZ, 0, 'wallZ +0');
+      const cam = new CineCamera();
+      cam.resetTo(f);
+      same(cam.posX, W / 2, 'posX');
+      same(cam.posY, H / 2, 'posY');
+      same(cam.posZ, 5, 'posZ');
+      for (const k of ['rotX', 'rotY', 'rotZ']) same(cam[k], 0, k);
+      const legacyD = Math.min(W / (2 * Math.tan(cam.hFov() / 2)), H / (2 * Math.tan(cam.vFov() / 2)));
+      same(cam.maxSafeDistance(f.stageExtent), legacyD, 'D');
+    }
+  });
+
+  test('a flat wall translated by a pivot: the centre and Reset follow the stage origin (03 6.6 step F)', () => {
+    const f = framingBounds(layoutProject(pivotedProject([WallSection.createDefault()], 'wall-center', { x: 0, y: 0, z: 2 })));
+    assert.deepEqual([f.generativeBox.center.x, f.generativeBox.center.y, f.generativeBox.center.z], [0, 0.75, -2]);
+    same(f.wallZ, -2, 'wallZ = 0 - stageOrigin.z');
+    const cam = new CineCamera();
+    cam.resetTo(f);
+    assert.deepEqual([cam.posX, cam.posY, cam.posZ, cam.rotY], [0, 0.75, 3, 0]);
+  });
+
+  test('03 test 21: the 18-degree half circle with a wall-center pivot', () => {
+    const f = framingBounds(layoutProject(pivotedProject([section(0, { panelCols: 10, curveIntensity: 18 })], 'wall-center')));
+    near(f.generativeBox.center.x, 0.66, 0.01, 'orbit target x');
+    near(f.generativeBox.center.z, 0, 0.01, 'orbit target z');
+    near(f.facing.x, -0.988, 1e-3, 'facing.x');
+    near(f.facing.z, -0.156, 1e-3, 'facing.z');
+    near(f.stageExtent.width, 3.20, 0.01, 'extentAcross(facing), not the 1.83 m axis-aligned width');
+    const cam = new CineCamera();
+    cam.resetTo(f);
+    near(cam.posX, -4.27, 0.01, 'Reset x');
+    near(cam.posZ, -0.78, 0.01, 'Reset z');
+    near(cam.posY, 0.75, 1e-12, 'Reset y: H / 2');
+    near(cam.rotY, -99.0, 0.05, 'pan');
+    // Reset looks at the centre: its forward is -facing
+    const fw = cameraBasis(cam.rotX, cam.rotY, cam.rotZ).forward;
+    near(fw.x, -f.facing.x, 1e-12, 'forward.x');
+    near(fw.z, -f.facing.z, 1e-12, 'forward.z');
+  });
+
+  test('a single 180-degree-offset section: Reset at negative Z, rotY = 180 (atan2 gives -180; wrapDeg maps it)', () => {
+    const f = framingBounds(layoutProject(projectOf([section(0, { panelCols: 5, angleOffset: 180 })])));
+    const cam = new CineCamera();
+    cam.resetTo(f);
+    assert.equal(cam.rotY, 180);
+    near(cam.posZ, -5, 1e-9, 'posZ');
+    near(cam.posX, -1.25, 1e-9, 'posX');
+    const cov = analyzeCoverage(layoutProject(projectOf([section(0, { panelCols: 5, angleOffset: 180 })])), cam, lensOf(cam), f.stageExtent);
+    near(cov.distance, 5, 1e-9, 'the Reset camera is 5 m in front of the LED face');
+  });
+
+  test('the same flat wall along X, along Z and at 45 degrees gets the same D; Reset faces it (08 AC 42, 43)', () => {
+    const cam = new CineCamera();
+    const d = (offset) => {
+      const layout = layoutProject(projectOf([section(0, { panelCols: 5, angleOffset: offset })]));
+      const f = framingBounds(layout);
+      const c = new CineCamera();
+      c.resetTo(f);
+      const cov = analyzeCoverage(layout, c, lensOf(c), f.stageExtent);
+      near(cov.distance, 5, 1e-9, `Reset is 5 m from the wall at ${offset} degrees`);
+      assert.ok(c.rotY > -180 && c.rotY <= 180, 'rotY in (-180, 180]');
+      return cam.maxSafeDistance(f.stageExtent);
+    };
+    const d0 = d(0);
+    for (const offset of [90, 45, -135]) near(d(offset), d0, 1e-12, `D at ${offset} degrees`);
+  });
+
+  test('Reset turns with a wall turned about the vertical axis (a postTransform yaw on every section)', () => {
+    for (const yaw of [37, 90, -150]) {
+      const turned = transformedLayout([WallSection.createDefault()], rotationY(yaw));
+      const f = framingBounds(turned);
+      const cam = new CineCamera();
+      cam.resetTo(f);
+      const r = yaw * Math.PI / 180;
+      // the legacy pose (1.25, 0.75, 5) turned by the yaw about the origin, panned by the yaw
+      near(cam.posX, 1.25 * Math.cos(r) + 5 * Math.sin(r), 1e-9, `x at ${yaw}`);
+      near(cam.posZ, -1.25 * Math.sin(r) + 5 * Math.cos(r), 1e-9, `z at ${yaw}`);
+      near(cam.rotY, yaw, 1e-9, `pan at ${yaw}`);
+      near(cam.maxSafeDistance(f.stageExtent), new CineCamera().maxSafeDistance({ width: 2.5, height: 1.5 }), 1e-12, 'D');
+      assert.equal(analyzeCoverage(turned, cam, lensOf(cam), f.stageExtent).distance !== null, true);
+    }
+  });
+
+  test('stageExtent leaves out a section facing up or down (|n.y| > 0.9); the boxes keep it', () => {
+    const sections = [section(0, { panelCols: 4, panelRows: 3 }), section(1, { panelCols: 2, panelRows: 8 })];
+    const layout = computeWallLayout(sections, { postTransforms: [null, rotationX(90)] });
+    const f = framingBounds(layout);
+    same(f.stageExtent.width, 2, 'only the vertical section counts across');
+    same(f.stageExtent.height, 1.5, 'and up');
+    near(f.wallBox.max.z, 4, 1e-9, 'the wall box (transformed) keeps the floor-lying section');
+    same(f.generativeBox.max.y, 4, 'the generative box is pre-transform (07 C34)');
+  });
+
+  test('a wall without grid vertices falls back to the walk origin with no NaN', () => {
+    for (const sections of [[], [section(0, { panelCols: NaN, panelRows: 3 })], [section(0, { panelWidth: NaN })]]) {
+      const f = framingBounds(layoutProject(projectOf(sections)));
+      for (const v of [f.generativeBox.center, f.wallBox.center, f.facing]) {
+        for (const k of ['x', 'y', 'z']) assert.ok(Number.isFinite(v[k]), JSON.stringify(f));
+      }
+      assert.ok(Number.isFinite(f.stageExtent.width) && Number.isFinite(f.stageExtent.height), JSON.stringify(f.stageExtent));
+    }
+    assert.deepEqual(framingBounds(layoutProject(projectOf([]))).stageExtent, { width: 0, height: 0 }, 'the empty wall');
+  });
+
+  test('wrapDeg and finiteOr (08 4.4)', () => {
+    assert.equal(wrapDeg(-180), 180);
+    assert.equal(wrapDeg(180), 180);
+    assert.equal(wrapDeg(190), -170);
+    same(wrapDeg(0), 0, 'wrapDeg(+0)');
+    same(wrapDeg(-0), 0, 'wrapDeg(-0) is +0');
+    assert.equal(wrapDeg(-540), 180);
+    same(finiteOr(0, 5), 0, '0 is kept');
+    assert.equal(finiteOr(NaN, 5), 5);
+    assert.equal(finiteOr(Infinity, 5), 5);
+  });
+
+  test('the Z rule has no minimum (Q13): 0 and negative values are kept, a non-numeric entry gives wallZ + 5', () => {
+    const at = (raw, wallZ) => new CineCamera().setField('posZ', raw, { wallZ });
+    same(at('0', 0), 0, "'0'");
+    same(at('-5', 0), -5, "'-5'");
+    same(at('0.05', 0), 0.05, "'0.05'");
+    same(at('', 0), 5, "''");
+    same(at('abc', 0), 5, "'abc'");
+    same(at('-5', -2), -5, 'off the wall plane');
+    same(at('', -2.3397), 2.66, 'r3(wallZ + 5)');
+    same(new CineCamera().setField('posZ', ''), 5, 'no context: wallZ 0');
   });
 });

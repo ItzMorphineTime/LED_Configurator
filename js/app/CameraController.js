@@ -35,7 +35,7 @@ export class CameraHub {
   #safeDistance;
   /** @type {import('../interaction/PilotController.js').PilotCameraDriver} */
   #pilotDriver;
-  /** @type {() => {totalWidth: number, maxHeight: number, minX: number, wallZ: number}} */
+  /** @type {() => import('../geometry/WallLayout.js').Framing} */
   #frameBounds;
   /** @type {() => import('../geometry/WallLayout.js').WallLayout} */
   #stageLayout;
@@ -50,11 +50,11 @@ export class CameraHub {
    *          preview: import('../render/PreviewPass.js').PreviewPass,
    *          safeDistance: import('../render/SafeDistanceView.js').SafeDistanceView,
    *          pilotDriver: import('../interaction/PilotController.js').PilotCameraDriver,
-   *          frameBounds: () => {totalWidth: number, maxHeight: number, minX: number, wallZ: number},
+   *          frameBounds: () => import('../geometry/WallLayout.js').Framing,
    *          stageLayout: () => import('../geometry/WallLayout.js').WallLayout,
    *          bus: import('../core/EventBus.js').EventBus}} deps
-   *   frameBounds: the 'flat-pivot' framing bounds (WallLayout.framingBounds of the live project with the cached pivot
-   *   resolution, 03 T3), evaluated per call; stageLayout (08 P2-11a): the stage layout of the last rebuild
+   *   frameBounds: the framing of the stage layout (08 P2-11c: framingBounds(wallController.currentLayout), memoised per
+   *   layout), evaluated per call; stageLayout (08 P2-11a): the stage layout of the last rebuild
    *   (WallController.currentLayout), whose memoised columnQuads() the coverage analyser reads
    */
   constructor({ project, rig, preview, safeDistance, pilotDriver, frameBounds, stageLayout, bus }) {
@@ -107,9 +107,8 @@ export class CameraHub {
   /**
    * The coverage payload (08 6.10, P2-11a, B-M10): FrustumCoverage.analyzeCoverage of the camera against the
    * stage layout of the last rebuild (its memoised column quads; every direction from the pose and the geometry, so a
-   * rotated camera or wall is measured as it is). `fits` still compares the frame with the flat width and height of
-   * the framing bounds (totalWidth, maxHeight), and safeDistance is cine.maxSafeDistance of the same bounds (P2-11c
-   * moves both to FramingPolicy's stageExtent).
+   * rotated camera or wall is measured as it is). `fits` compares the frame with FramingPolicy's stageExtent (08
+   * P2-11c: the wall seen face-on), and safeDistance is cine.maxSafeDistance of the same extent, so they always agree.
    * Side effects: none (reads the layout's memo).
    * @returns {{frameWidth: number|null, frameHeight: number|null, status: 'offWall'|'within'|'offCenter'|'exceeds',
    *            safeDistance: number, distToWall: number|null}}  distToWall is the analyser's D0, the optical-axis distance
@@ -128,12 +127,11 @@ export class CameraHub {
    */
   #analyze() {
     const cine = this.#project.camera;
-    const bounds = this.#frameBounds();
-    const c = analyzeCoverage(this.#stageLayout(), cine, { hFov: cine.hFov(), vFov: cine.vFov() },
-      { width: bounds.totalWidth, height: bounds.maxHeight });
+    const extent = this.#frameBounds().stageExtent;
+    const c = analyzeCoverage(this.#stageLayout(), cine, { hFov: cine.hFov(), vFov: cine.vFov() }, extent);
     return {
       payload: {
-        frameWidth: c.frameWidth, frameHeight: c.frameHeight, status: c.status, safeDistance: cine.maxSafeDistance(bounds),
+        frameWidth: c.frameWidth, frameHeight: c.frameHeight, status: c.status, safeDistance: cine.maxSafeDistance(extent),
         distToWall: c.distance,
       },
       cornerDepths: c.cornerDepths,
@@ -142,8 +140,9 @@ export class CameraHub {
 
   /**
    * Shows the safe-distance overlay iff both the overlay toggle and the preview are on; otherwise removes it.
-   * The layout and the bounds are argument expressions, so they are evaluated before create() removes the old
-   * group and allocates the new one (legacy computed them after both: permitted reordering PR7).
+   * The layout and the extent are argument expressions, so they are evaluated before create() removes the old
+   * group and allocates the new one (legacy computed them after both: permitted reordering PR7). Since 08 P2-11c the
+   * extent is the framing's stageExtent (D from the wall seen face-on).
    * Ports: index.html@cd3fd3f lines 2778-2784.
    * Side effects: safeDistance.create(...) or safeDistance.remove().
    * @returns {void}
@@ -152,7 +151,7 @@ export class CameraHub {
     const project = this.#project;
     const cine = project.camera;
     if (project.display.showSafeDistance && cine.enabled) {
-      this.#safeDistance.create({ layout: layoutProject(project), cine, bounds: this.#frameBounds() });
+      this.#safeDistance.create({ layout: layoutProject(project), cine, extent: this.#frameBounds().stageExtent });
     } else {
       this.#safeDistance.remove();
     }
@@ -182,7 +181,7 @@ export class CameraController {
   #pilot;
   /** @type {import('../interaction/SelectionManager.js').SelectionManager} */
   #selection;
-  /** @type {() => {totalWidth: number, maxHeight: number, minX: number, wallZ: number}} */
+  /** @type {() => import('../geometry/WallLayout.js').Framing} */
   #frameBounds;
   /** @type {import('../core/EventBus.js').EventBus} */
   #bus;
@@ -196,7 +195,7 @@ export class CameraController {
    *          hub: CameraHub,
    *          pilot: import('../interaction/PilotController.js').PilotController,
    *          selection: import('../interaction/SelectionManager.js').SelectionManager,
-   *          frameBounds: () => {totalWidth: number, maxHeight: number, minX: number, wallZ: number},
+   *          frameBounds: () => import('../geometry/WallLayout.js').Framing,
    *          bus: import('../core/EventBus.js').EventBus}} deps
    */
   constructor({ project, rig, preview, hub, pilot, selection, frameBounds, bus }) {
@@ -251,8 +250,8 @@ export class CameraController {
   }
 
   /**
-   * Centres the camera on the flat wall, 5 m in front of its plane, unrotated (03 T3: the 'flat-pivot' bounds); the hub
-   * runs unconditionally (it guards itself). Also the #reset-camera click.
+   * Puts the camera 5 m in front of the wall, looking at its centre (08 P2-11c: CineCamera.resetTo of the framing; B-L2
+   * fixed); the hub runs unconditionally (it guards itself). Also the #reset-camera click.
    * Ports: index.html@cd3fd3f lines 2550-2575.
    * Side effects: writes the camera pose; emits CAMERA_POSE_CHANGED {source: 'reset'} (pose inputs); hub.refresh().
    * @returns {void}
@@ -282,7 +281,7 @@ export class CameraController {
   /**
    * Stores a lens or pose input (model only; the panel writes back iff CineCamera.FIELD_RULES[field].writeBack,
    * then calls commitCameraField()). The rules get the wall-plane context {wallZ: frameBounds().wallZ} (03 4.1, T3):
-   * the posZ rule is the legacy one while the stage origin lies on the wall plane (wallZ = 0, the identity pivot).
+   * since 08 P2-11c the posZ rule has no minimum and falls back to wallZ + 5 for a non-numeric entry.
    * Ports: index.html@cd3fd3f lines 4267, 4273, 4279, 4285, 4290, 4296, 4302, 4308, 4314.
    * Side effects: writes cine[field].
    * @param {string} field  a CineCamera.FIELD_RULES key

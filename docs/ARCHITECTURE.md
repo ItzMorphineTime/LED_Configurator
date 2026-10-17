@@ -215,7 +215,7 @@ js/
                                                  03 T1: STAGE_POSITION_LIMIT_M (the +-100,000 m bound of 07 C22)
     WallSection.js                         WP3   WallSection entity (legacy field names, field rules, derived labels), MM_TO_M;
                                                  08 P2-8a: LIMITS, the rounding and capped field rules
-    Wall.js                                WP3   Wall (ordered sections, id allocator, totals, legacy flat bounds), WallPivot, PivotMode;
+    Wall.js                                WP3   Wall (ordered sections, id allocator, totals; the legacy flat bounds left with 08 P2-11c), WallPivot, PivotMode;
                                                  08 P2-3b: MAX_SECTIONS, canAddSection, the 07 6.8 nextSectionId;
                                                  08 P2-3b2: allocateId (07 6.8 nextFree over the live ids);
                                                  03 T1: the WallPivot API and rules, PIVOT_MODES, PIVOT_OFFSET_LIMIT_M
@@ -224,7 +224,8 @@ js/
     LogoLibrary.js                         WP3   Section logos keyed by section id (plain-object key semantics)
     CineCamera.js                          WP3   Film camera: lens, pose, enabled flag, FILMBACK_PRESETS, FOV/safe-D math,
                                                  field rules, gizmo/pilot pose arithmetic; 03 T1: LIMITS, translateStage, the posZ
-                                                 rule's wall-plane context; 08 P2-11a: coverage() moved to FrustumCoverage
+                                                 rule's wall-plane context; 08 P2-11a: coverage() moved to FrustumCoverage;
+                                                 08 P2-11c: resetTo(framing), the posZ rule without minimum, RESET_DISTANCE_M
     Prop.js                                WP3   Prop base (pose, visibility, field rules, gizmo arithmetic), PersonProp, CarProp;
                                                  03 T1: LIMITS, translateStage
     DebugViewSettings.js                   01 F1-1  DebugShading, SHADING_CYCLE, DebugViewSettings (normals debug view
@@ -233,8 +234,9 @@ js/
     WallLayout.js                          WP4   The single cursor walk: computeWallLayout, layoutProject, framingBounds,
                                                  SectionLayout, WallLayout (flatEdges, firstEdge/lastEdge, bounds, pivotPoint);
                                                  03 T2: baseY, generativeBounds, translated, resolvePivot, stageShift, the
-                                                 frames of layoutProject, framingBounds 'flat-pivot'; 08 P2-11a: columnQuads,
-                                                 worldVertices (memoised per instance), extentAcross, chordFacing
+                                                 frames of layoutProject; 08 P2-11a: columnQuads, worldVertices (memoised per
+                                                 instance), extentAcross, chordFacing; 08 P2-11c: framingBounds 'layout'
+                                                 (FramingPolicy's generativeBox, wallBox, stageExtent; memoised per layout)
     WallMeshBuilder.js                     WP4   quadIndices + WallMeshBuilder: the one owner of winding, normals, UVs, panel quads;
                                                  maxIndexOf, indexWidth (index component width, 08 P2-1b)
     TextureAtlas.js                        WP4   computeAtlas (LED totals, px/LED, start columns, x offsets, UV offsets),
@@ -332,7 +334,7 @@ js/
                                                  upload/clear/position/scale
     WallDisplayPanel.js                    WP9   Mesh-mode labels, wireframe/frame, LED sim + layout, panel IDs + styling inputs
     CameraPanel.js                         WP7   Camera Frustum Preview section: toggles, lens, pose inputs, readouts, reset,
-                                                 safe-distance controls; 03 T4: the #camera-pos-z min; 03 T6: "Distance to wall
+                                                 safe-distance controls; 03 T4: the #camera-pos-z min (removed by 08 P2-11c); 03 T6: "Distance to wall
                                                  plane" (#camera-wall-distance), the "Z Position (m)" label (markup)
     PropsPanel.js                          WP7   PropControls (one instance per prop prefix 'person' | 'car')
     PivotPanel.js                          03 T6  The Wall Pivot section: mode radios, offsets, Reset, Select pivot (O), the
@@ -451,7 +453,8 @@ tests/
     oracle/legacy-geometry.mjs             WP4   verbatim THREE-free copies of the legacy layout walks and grid builders
     pivot.test.mjs                         03 T2  Feature 3's geometry (03 8.1 tests 1-9): the 6.8 anchors, resolvePivot,
                                                  stageShift, the frames of layoutProject, translated(), the export frame of
-                                                 the grids and panel corners, 'flat-pivot', the composition contract with
+                                                 the grids and panel corners, the framing ('flat-pivot', then 'layout' since
+                                                 08 P2-11c: step F), the composition contract with
                                                  spec 02 (a stub offset builder; spec 02's E17); test 9 skipped (B-L1 kept)
     pivot-panel.test.mjs                   03 T6  PivotPanel (03 8.1 test 17: the status from the payloads, twice each; the
                                                  readout texts; the mirrors and listeners with the real controller: the
@@ -524,7 +527,9 @@ tests/
                                                  pick the nearest quad, the projected-quad overlap, camera-space corner depths,
                                                  03 6.8's re-expression, equivariance under a yaw of wall and camera;
                                                  WallLayout.columnQuads (memoised), worldVertices, extentAcross, chordFacing
-                                                 and their postTransform
+                                                 and their postTransform; 08 P2-11c: the layout framing (flat walls bit for
+                                                 bit, 03 test 21, AC 42/43, Reset under a yaw, the stage extent, the
+                                                 fallback), wrapDeg, finiteOr, the Z rule
     safe-distance-band.test.mjs            08 P2-5b  buildSafeDistanceBand (08 6.9, 8.4): flat walls equal the legacy quads,
                                                  the mitre invariant, the worked cases (concave30 at two D, box_corner with
                                                  its documented overlap, concave_offsets, mixed), fold-back splits, facing
@@ -684,7 +689,7 @@ export const Events = Object.freeze({
   PILOT_CHANGED:                'pilot:changed',
   // Feature events, each classified visual or non-visual (07 C47).
   DEBUG_VIEW_CHANGED:           'debug:viewChanged',   // visual (01 F1-2): DebugViewController -> DebugViewControls
-  WALL_PIVOT_CHANGED:           'wall:pivotChanged',   // visual (03 T4): PivotController, WallController.applyImport -> CameraPanel
+  WALL_PIVOT_CHANGED:           'wall:pivotChanged',   // visual (03 T4): PivotController, WallController.applyImport -> PivotPanel, PivotMarkerView
 });
 
 export class EventBus {
@@ -745,7 +750,8 @@ export const Strategies = deepFreeze({
                                                    // since 08 P2-7b (B-M6), Phase-1 'per-section-overlap';
                                                    // gltf.attributes + 'TEXCOORD_0' and the new leaf gltf.combinedUV since
                                                    // 08 P2-7c (B-M7)
-  framingBounds: 'flat-pivot',                     // B-L2, B-M10; Phase-1 'flat' (03 T2: translated by the stage origin)
+  framingBounds: 'layout',                         // since 08 P2-11c (B-L2, B-M10): FramingPolicy's three named boxes of
+                                                   // the stage layout; Phase-1 'flat', 03 T2's 'flat-pivot' (both deleted)
   curveBeforeFirstPanel: true,                     // B-L1
   gizmoRotateSign: -1,                             // B-M12
   pilotForwardYSign: -1,                           // B-M13
@@ -1023,11 +1029,8 @@ export class Wall {
    *  totalPixels += cols*rows*ledX*ledY; totalPanels += cols*rows; totalArc += cols*Math.abs(curveIntensity);
    *  @returns {{totalPixels, totalPanels, totalSections: sections.length, totalArc}} */
   totals()
-
-  /** LEGACY(B-L2, B-M10): totalWidth += s.panelCols * s.panelWidth * MM_TO_M;
-   *  maxHeight = Math.max(maxHeight, s.panelRows * s.panelHeight * MM_TO_M); computed live on every call.
-   *  @returns {{totalWidth, maxHeight}}  (== the four legacy copies 2489-2493, 2553-2557, 2598-2603, 3758-3762) */
-  flatBounds()
+  // flatBounds() (the four legacy copies 2489-2493, 2553-2557, 2598-2603, 3758-3762; LEGACY(B-L2, B-M10)) was deleted
+  // by 08 P2-11c: the framing reads the stage layout (WallLayout.framingBounds, 3.6)
 }
 ```
 
@@ -1122,12 +1125,10 @@ export class CineCamera {
    *  focalLength:    { parse: r => Math.max(8, Math.min(800, orDefault(parseFloat(r), 35))), writeBack: true }
    *  posX: { parse: r => orDefault(parseFloat(r), 0), writeBack: false }
    *  posY: { parse: r => Math.max(0, orDefault(parseFloat(r), 1.5)), writeBack: true }      (B-L9 via orDefault: '0' gives 1.5)
-   *  posZ: { parse: (r, ctx = {wallZ: 0}) => ctx.wallZ === 0 ? Math.max(0.1, orDefault(parseFloat(r), 5))   (legacy, verbatim)
-   *           : (v = parseFloat(r), minZ = r3(ctx.wallZ + 0.1),
-   *              Number.isFinite(v) ? Math.max(minZ, v) : Math.max(minZ, r3(ctx.wallZ + 5))), writeBack: true }
-   *        (03 T1, 03 4.1: ctx.wallZ is the stage z of the flat wall plane; +0 and -0 take the legacy branch, so the
-   *        identity pivot is unchanged; r3(v) = Math.round(v * 1000) / 1000; 08 P2-8b collapses the branches, P2-11c
-   *        removes the minimum)
+   *  posZ: { parse: (r, ctx = {wallZ: 0}) => finiteOr(parseFloat(r), r3(ctx.wallZ + 5)), writeBack: true }
+   *        (08 P2-11c, Q13, 03 4.1 step F: no minimum, so 0 and negative values are kept (B-L10's Z half); a non-numeric
+   *        entry is 5 m in front of the wall's start plane, ctx.wallZ its stage z; r3(v) = Math.round(v * 1000) / 1000;
+   *        03 T1's branch on ctx.wallZ === 0 and its minimum r3(wallZ + 0.1) are gone)
    *  rotX: { parse: r => Math.max(-90, Math.min(90, orDefault(parseFloat(r), 0))), writeBack: true }
    *  rotY: { parse: r => Math.max(-180, Math.min(360, orDefault(parseFloat(r), 0))), writeBack: true }
    *  rotZ: { parse: r => Math.max(-180, Math.min(180, orDefault(parseFloat(r), 0))), writeBack: true } */
@@ -1146,19 +1147,24 @@ export class CineCamera {
   hFov()     // 2 * Math.atan(this.filmbackWidth / (2 * this.focalLength))   radians, the shared legacy expression
   vFov()     // 2 * Math.atan(this.filmbackHeight / (2 * this.focalLength))
   aspect()   // this.filmbackWidth / this.filmbackHeight
-  /** Math.min(bounds.totalWidth / (2 * Math.tan(hFov / 2)), bounds.maxHeight / (2 * Math.tan(vFov / 2)))
-   *  (2529-2531 == 2610-2612; hFov/vFov from the methods above) */
-  maxSafeDistance(bounds)
+  /** Math.min(extent.width / (2 * Math.tan(hFov / 2)), extent.height / (2 * Math.tan(vFov / 2)))
+   *  (2529-2531 == 2610-2612; hFov/vFov from the methods above); since 08 P2-11c extent is the framing's stageExtent
+   *  (the wall seen face-on), it was the flat {totalWidth, maxHeight} */
+  maxSafeDistance(extent)
   // coverage(bounds) (2473-2531, LEGACY(B-M10)) was deleted by 08 P2-11a: the coverage is geometry/FrustumCoverage's
   // analyzeCoverage, called by CameraHub.coverage() (3.6, 3.10)
-  /** 2559-2564 on the 'flat-pivot' bounds (03 T3): posX = bounds.minX + bounds.totalWidth / 2; posY = bounds.maxHeight / 2;
-   *  posZ = bounds.wallZ + 5; rotX = 0; rotY = 0; rotZ = 0   (identity: 0 + w / 2 === w / 2, 0 + 5 === 5) */
-  resetTo(bounds)
+  static RESET_DISTANCE_M = 5;   // 08 P2-11c: how far in front of the wall Reset stands (the legacy 5)
+  /** 2559-2564, since 08 P2-11c (6.10; B-L2 fixed; 03 step F): c = framing.wallBox.center, f = framing.facing;
+   *  posX = c.x + 5 * f.x; posY = c.y; posZ = c.z + 5 * f.z; rotX = 0; rotY = wrapDeg(Math.atan2(f.x, f.z) * 180 / Math.PI);
+   *  rotZ = 0 (forward = -facing: it looks at the centre; any Z; a flat wall along +X gives the legacy (W/2, H/2, 5),
+   *  rotY +0, bit for bit) */
+  resetTo(framing)
   /** LEGACY(B-L34): FILMBACK_PRESETS[this.filmback]?.name.split(' ')[0] || 'Custom' */
   presetShortName()
 
   // Gizmo arithmetic (the Selectable 'camera' is CameraController; it calls these)
-  /** posX += dx; posY = Math.max(0, posY + dy); posZ += dz   LEGACY(B-L10) (3338-3340) */
+  /** posX += dx; posY = Math.max(0, posY + dy); posZ += dz   (3338-3340; untagged since 08 P2-11c: the input rule has no
+   *  Z minimum either, so input and gizmo agree; B-L10 keeps the pilot's 0.1 floor) */
   translateBy(dx, dy, dz)
   /** x: rotX = Math.max(-90, Math.min(90, rotX + deltaDeg)); y: rotY += deltaDeg;
    *  any other axis (the legacy `else`, normally 'z'): rotZ = Math.max(-180, Math.min(180, rotZ + deltaDeg)).  deltaDeg already carries Strategies.gizmoRotateSign,
@@ -1258,13 +1264,18 @@ export function isIdentityResolution(r)
  *  out.pivot = {resolution, frame, translation: t}. Any other frame throws RangeError. */
 export function layoutProject(project, { frame = 'stage' } = {})
 
-/** The single switch for the four flat-bounds consumers (orbit target, camera reset, coverage status, safe-D), injected
- *  as `frameBounds` (from 03 T3 App passes WallController's cached resolution):
- *  switch (Strategies.framingBounds) { case 'flat-pivot':   // LEGACY(B-L2, B-M10): flat bounds, translated by the stage origin
- *    b = project.wall.flatBounds(); so = resolution ? resolution.stageOrigin : {x: 0, z: 0};
- *    return {totalWidth: b.totalWidth, maxHeight: b.maxHeight, minX: 0 - so.x, wallZ: 0 - so.z};   (+0 at the identity)
- *  default: throw unsupportedStrategy(...) }   ('flat' deleted in 03 T2; step F, 08 P2-11c, adds 'layout') */
-export function framingBounds(project, resolution = resolvePivot(computeWallLayout(project.wall.sections), project.wall.pivot))
+/** 08 P2-11c (6.10; B-L2 fixed; 03 step F): the framing of a layout, injected as `frameBounds` (App:
+ *  framingBounds(wallController.currentLayout)); memoised per layout instance (a WeakMap), frozen.
+ *  switch (Strategies.framingBounds) { case 'layout': FramingPolicy's three named boxes (07 C34), each consumer naming
+ *    its box: {generativeBox: framingBox(generativeBounds()) (the orbit target before 07 I4b), wallBox:
+ *    framingBox(bounds()) (Reset's centre), stageExtent: {width: extentAcross(facing, include), height: the y range}
+ *    over every section without a column whose |n.y| > 0.9 (a ceiling or a floor) (D and fits), facing: chordFacing() (Reset stands on it),
+ *    wallZ: 0 + pivot.translation.z (the wall start plane's z: the posZ rule's context)}; framingBox(b) = {min, max,
+ *    center: (min + max) / 2}; a wall without finite grid vertices falls back to a zero box at the walk's start
+ *    (0 + t.x, 0, wallZ), stageExtent {0, 0}, facing (0, 0, 1) (the empty wall's 'flat-pivot' framing; no NaN);
+ *  default: throw unsupportedStrategy(...) }   (Phase-1 'flat' deleted in 03 T2, 'flat-pivot' in P2-11c)
+ *  A flat wall along +X at the identity gives the legacy target (W/2, H/2, 0), Reset and D bit for bit. */
+export function framingBounds(layout)
 
 export class SectionLayout {
   /** One options object (built only by computeWallLayout and translated): postTransform is stored as given
@@ -1301,7 +1312,8 @@ export class WallLayout {
    *  skipped, 0 and -0 are not distinguished, and a wall whose sections have no grid vertex gives
    *  {min: +Infinity x3, max: -Infinity x3}. */
   generativeBounds()
-  bounds()          // generativeBounds() until spec 02 makes bounds() the transformed box (07 C34's wallBox)
+  bounds()          // 08 P2-11c: the transformed box of worldVertices() (07 C34's wallBox; = generativeBounds() while no
+                    // section carries a postTransform, i.e. in Phase 2)
   /** 03 T2 (6.1, the y policy settled, B5; amended by the owner on 2026-10-17, B1-pivot-floor): with y0 =
    *  sections[0].baseY (0 in the layout frame, so the floor modes return the Phase-1 values bit for bit), every mode is
    *  a floor mode: 'bottom-left': {x: firstEdge.x, y: y0, z: firstEdge.z}; 'wall-center': the midpoint of firstEdge and
@@ -1920,7 +1932,8 @@ export class SafeDistanceView {
   get object3D()     // legacy safeDistanceMesh (group or null); read by the safe-distance OBJ export
   get lastBand()     // 08 P2-5b: the SafeBand of the current group (null when none); read by the safe-distance OBJ export
   /** 2586-2762 minus the walk and bounds copies (08 P2-5b: B-M15 and B-L29 fixed, Strategies.safeDistanceBand retired):
-   *  this.remove(); group = new THREE.Group();  D = cine.maxSafeDistance(bounds);  band = buildSafeDistanceBand(layout, D)
+   *  this.remove(); group = new THREE.Group();  D = cine.maxSafeDistance(extent) (08 P2-11c: the framing's stageExtent);
+   *  band = buildSafeDistanceBand(layout, D)
    *  (geometry/SafeDistanceBand, 3.6: the mitred, clamped strip over layout.flatEdges(), every triangle +Y); lastBand = band.
    *  (layout and bounds arrive precomputed from CameraHub.syncSafeDistance: PR7)
    *  if (band.positions.length > 0): mesh (BufferGeometry + position + color (per band colour: 'wall' wallColor,
@@ -1934,8 +1947,9 @@ export class SafeDistanceView {
    *  The legacy inner guard `if (!cameraPreviewEnabled) return` (2589) is unreachable (its only caller checks it) and dropped.
    *  03 T3 (7.1): right after the group is allocated, group.userData.stageOrigin = {x, z} of
    *  layout.pivot?.resolution?.stageOrigin ?? {x: 0, z: 0} (layout frame), read by the safe-distance OBJ.
-   *  @param {{layout: WallLayout, cine: CineCamera, bounds: {totalWidth, maxHeight, minX, wallZ}}} args */
-  create({ layout, cine, bounds })
+   *  @param {{layout: WallLayout, cine: CineCamera, extent: {width, height}}} args   (08 P2-11c: the framing's stageExtent;
+   *  `bounds` with the flat {totalWidth, maxHeight} before) */
+  create({ layout, cine, extent })
   /** Verbatim 2764-2776: if (group) { sceneManager.removeHelper(group); disposeObject3D(group, { maps: true }); group = null };
    *  lastBand = null */
   remove()
@@ -2133,7 +2147,7 @@ export class PointerRay {        // legacy shared `raycaster` + `mouse` (1368-13
 export class OrbitController {
   static MOVE_SPEED = 0.08;                                     // legacy moveSpeed (3754)
   /** @param {{sceneManager, keyboard: KeyboardState, interaction: InteractionState,
-   *          frameBounds: () => {totalWidth, maxHeight, minX, wallZ}}} deps  the 'flat-pivot' bounds (03 T3) */
+   *          frameBounds: () => Framing}} deps  the framing of the stage layout (08 P2-11c) */
   constructor({ sceneManager, keyboard, interaction, frameBounds })
   angle = { theta: 0, phi: Math.PI / 2 };                       // legacy cameraAngle; REPLACED by a new object in setView/restore
   distance = 8;                                                 // legacy cameraDistance
@@ -2144,9 +2158,9 @@ export class OrbitController {
    *  mouseup, mouseleave, wheel (if pilot: return; preventDefault; distance clamped [2, 30] by deltaY * 0.01).
    *  Then calls updateCameraPosition() where legacy did. Registered in the init phase (before ViewportInput). */
   attach()
-  /** LEGACY(B-L2) via the injected frameBounds (framingBounds 'flat-pivot'): b = frameBounds();
-   *  target.set(b.minX + b.totalWidth / 2 + offset.x, b.maxHeight / 2 + offset.y, b.wallZ + offset.z)  (3756-3764;
-   *  03 T3: the flat wall translated by the stage origin; identity-exact except the sign of a zero z, 03 6.6) */
+  /** 3756-3764; since 08 P2-11c (B-L2 fixed; 03 step F): c = frameBounds().generativeBox.center;
+   *  target.set(c.x + offset.x, c.y + offset.y, c.z + offset.z) (the centre of the real wall, whatever its curve, offsets,
+   *  pivot or direction; a flat wall along +X at the identity is legacy-exact except the sign of a zero z) */
   updateTargetPosition()
   /** Verbatim 3857-3863: updateTargetPosition(); spherical placement of sceneManager.camera; camera.lookAt(target). */
   updateCameraPosition()
@@ -2643,14 +2657,15 @@ export class CameraHub {               // legacy updateCameraFrustum + updateSaf
   constructor({ project, rig, preview, safeDistance, pilotDriver, frameBounds, stageLayout, bus })
   /** P2 (section 6.3). */
   refresh()
-  /** 08 P2-11a (6.10): c = analyzeCoverage(stageLayout(), cine, {hFov, vFov}, {width: b.totalWidth, height:
-   *  b.maxHeight}) with b = frameBounds(); returns {frameWidth: c.frameWidth, frameHeight: c.frameHeight, status:
-   *  c.status, safeDistance: cine.maxSafeDistance(b), distToWall: c.distance} (fits and D read the flat bounds until
-   *  P2-11c) */
+  /** 08 P2-11a (6.10): c = analyzeCoverage(stageLayout(), cine, {hFov, vFov}, extent) with extent =
+   *  frameBounds().stageExtent (08 P2-11c; the flat {totalWidth, maxHeight} before); returns {frameWidth: c.frameWidth,
+   *  frameHeight: c.frameHeight, status: c.status, safeDistance: cine.maxSafeDistance(extent), distToWall: c.distance}
+   *  (fits and D read the same extent, so they always agree) */
   coverage()
   /** 2778-2784: if (display.showSafeDistance && cine.enabled) safeDistance.create({layout: layoutProject(project), cine,
-   *  bounds: frameBounds()}) else safeDistance.remove(). The layout and bounds are argument expressions, so they are
-   *  evaluated before create() removes the old group and allocates the new one (legacy: after; PR7).
+   *  extent: frameBounds().stageExtent}) else safeDistance.remove() (08 P2-11c: the stage extent; `bounds` before). The
+   *  layout and extent are argument expressions, so they are evaluated before create() removes the old group and
+   *  allocates the new one (legacy: after; PR7).
    *  LEGACY(B-L30): runs on every pose change via refresh(). */
   syncSafeDistance()
 }
@@ -2661,11 +2676,13 @@ export class CameraController {        // use cases + Selectable 'camera'
   constructor({ project, rig, preview, hub, pilot, selection, frameBounds, bus })
   /** P-PREVIEW (section 6.5). */
   setPreviewEnabled(on)
-  /** 2550-2575: cine.resetTo(frameBounds()); bus.emit(CAMERA_POSE_CHANGED, {source: 'reset'}); hub.refresh() */
+  /** 2550-2575: cine.resetTo(frameBounds()) (08 P2-11c: in front of the wall, looking at it); bus.emit(CAMERA_POSE_CHANGED,
+   *  {source: 'reset'}); hub.refresh() */
   resetPose()
   /** 4251-4264: cine.applyPreset(key); bus.emit(CAMERA_FILMBACK_CHANGED, {key}); if (cine.enabled) hub.refresh() */
   setFilmback(key)
-  /** cine.setField(field, raw, {wallZ: frameBounds().wallZ}) (model only; 03 T3: the posZ rule's wall-plane context).
+  /** cine.setField(field, raw, {wallZ: frameBounds().wallZ}) (model only; 03 T3: the posZ rule's wall-plane context; since
+   *  08 P2-11c the framing's wallZ, used only for a non-numeric Z entry).
    *  @returns the stored value */
   setCameraField(field, raw)
   /** 03 T3 (5.6, StageAnchored): cine.translateStage(dx, dz) (clamped through CineCamera.LIMITS);
@@ -3024,8 +3041,8 @@ export class CameraPanel {
    *  #camera-hfov, #camera-vfov, #camera-aspect, #camera-pos-x/y/z, #camera-rot-x/y/z, #frustum-width, #frustum-height,
    *  #frustum-status-text, #safe-distance, #toggle-safe-distance, #reset-camera, #export-safe-distance).
    *  Subscribes: CAMERA_PREVIEW_CHANGED, CAMERA_FILMBACK_CHANGED, CAMERA_LENS_CHANGED, CAMERA_COVERAGE_CHANGED,
-   *  CAMERA_POSE_CHANGED, CAMERA_SAFE_DISTANCE_TOGGLED, and since 03 T4 WALL_PIVOT_CHANGED and WALL_REBUILT (the
-   *  #camera-pos-z min attribute) (formats below).
+   *  CAMERA_POSE_CHANGED, CAMERA_SAFE_DISTANCE_TOGGLED (formats below). (03 T4's WALL_PIVOT_CHANGED and WALL_REBUILT
+   *  mirrors of the #camera-pos-z min attribute left with 08 P2-11c, which removes the Z minimum and the attribute.)
    *  @param {{doc, project: Project, cameraController: CameraController, projectIO: ProjectIO, bus, theme: {ui: UiColors}}} deps */
   constructor({ doc, project, cameraController, projectIO, bus, theme })
   /** Registers 4230-4329 in legacy order:
@@ -3047,17 +3064,17 @@ Mirror formats (verbatim legacy strings; `cine = project.camera` read at event t
 - `CAMERA_COVERAGE_CHANGED({frameWidth, frameHeight, status, safeDistance, distToWall})`: (03 T6, 3.5) `#camera-wall-distance` = `` `${distToWall.toFixed(2)}m` `` (the "Distance to wall plane" row; since 08 P2-11a the analyser's D0, the optical-axis distance to the wall plane the camera is aimed at); `#frustum-width` = `` `${frameWidth.toFixed(2)}m` ``, `#frustum-height` likewise (08 P2-11a: each of the three reads "—" when its value is null, no wall plane ahead); `#frustum-status-text`: `offWall` (08 P2-11a, M-COV-1) -> 'Not aimed at wall' + `statusEl.style.color = theme.ui.status.exceeds`; `within` -> 'Within bounds' + `statusEl.style.color = theme.ui.status.within`; `offCenter` -> 'Off-center' + `theme.ui.status.offCenter`; `exceeds` -> 'Exceeds wall' + `theme.ui.status.exceeds` (textContent then colour, as 2516-2524; `statusEl.style.color` is a DOM style write, which check rule 10 does not count); `#safe-distance` = `` `≤ ${safeDistance.toFixed(2)}m` `` (2484-2533).
 - `CAMERA_POSE_CHANGED({source, axis})` (input `.value` writes):
   - `'reset'`: pos-x `cine.posX.toFixed(1)`, pos-y `cine.posY.toFixed(1)`, pos-z `cine.posZ`, rot-x/y/z raw values (2567-2572);
+    since 08 P2-11c pos-z `roundTo(cine.posZ, 1000)` and rot-x/y/z `roundTo(v, 10)` (`Math.round(v * k) / k || 0`: 1 mm and 0.1
+    degree without trailing zeros, so the legacy "5" and "0" are unchanged and a Reset facing a curved or turned wall shows
+    no float noise; the model keeps the exact pose);
   - `'gizmo-translate'`: pos-x/y/z `toFixed(2)` (3342-3344);
   - `'gizmo-rotate'`: only `#camera-rot-${axis}` `toFixed(1)` (axis 'x', 'y', else 'z'; 3378/3381/3384);
   - `'pilot-look'`: rot-x then rot-y `toFixed(1)` (3554-3555);
   - `'pilot-move'`: pos-x/y/z `toFixed(2)` (3614-3616);
   - `'pivot'` (03 T4, the re-expression of a pivot edit): pos-x and pos-z `toFixed(2)`.
 - `CAMERA_SAFE_DISTANCE_TOGGLED({enabled})`: `#export-safe-distance` display (4325).
-- `WALL_PIVOT_CHANGED({resolution})` and `WALL_REBUILT({layout})` (03 T4, 03 3.5): `#camera-pos-z.setAttribute('min', cameraZMinAttribute(wallZ))`
-  with `wallZ = resolution ? 0 - resolution.stageOrigin.z : 0` (`layout.pivot.resolution` for the rebuild). The exported helper
-  `cameraZMinAttribute(wallZ)` is `'0.1'` (the markup value) while `wallZ === 0`, else `minZ = r3(wallZ + 0.1)` floored to the 0.1 grid
-  (`(Math.floor(Math.round(minZ * 1000) / 100) / 10).toFixed(1)`: -2.3397 -> "-2.3", -2 -> "-1.9", 2 -> "2.1"). Step F (08 P2-11c)
-  removes the attribute and this mirror.
+- (03 T4's `WALL_PIVOT_CHANGED` / `WALL_REBUILT` mirror of the `#camera-pos-z` `min` attribute and the exported
+  `cameraZMinAttribute` were removed by 08 P2-11c with the attribute itself: the Z input has no minimum, Q13.)
 
 #### `js/ui/PropsPanel.js`
 ```js
@@ -3197,7 +3214,7 @@ export class App {
   start()
 }
 ```
-`App` is the only module that imports `theme/Theme.js` (and, since 06 T3, `theme/ThemeBridge.js`), `vendor/jszip.js` and every class. It defines `colorToRgb = (s) => new THREE.Color(s)`, `frameBounds = () => framingBounds(project, wallController.pivotResolution)` (03 T3: the cached resolution; evaluated lazily, after `wallController` exists) and `stageLayout = () => wallController.currentLayout` (08 P2-11a: the hub's coverage analyser), and the frame tick `() => { orbit.tickKeyboard(); pilot.tickKeyboard(); sceneManager.renderFrame(); }` (legacy animate 3886-3889; since 07 R2 `renderFrame()` draws the main pass and then the injected `previewPass`, `sceneManager.setPasses([previewPass])`, inside `withPassHidden`; 08 P2-10a passed the helper set to the second renderer, which 07 R1 replaced by the preview camera's layer mask and `withPassHidden`, and 07 R2 deleted that renderer).
+`App` is the only module that imports `theme/Theme.js` (and, since 06 T3, `theme/ThemeBridge.js`), `vendor/jszip.js` and every class. It defines `colorToRgb = (s) => new THREE.Color(s)`, `frameBounds = () => framingBounds(wallController.currentLayout)` (08 P2-11c: the framing of the stage layout of the last rebuild, memoised per layout; evaluated lazily, after `wallController` exists) and `stageLayout = () => wallController.currentLayout` (08 P2-11a: the hub's coverage analyser), and the frame tick `() => { orbit.tickKeyboard(); pilot.tickKeyboard(); sceneManager.renderFrame(); }` (legacy animate 3886-3889; since 07 R2 `renderFrame()` draws the main pass and then the injected `previewPass`, `sceneManager.setPasses([previewPass])`, inside `withPassHidden`; 08 P2-10a passed the helper set to the second renderer, which 07 R1 replaced by the preview camera's layer mask and `withPassHidden`, and 07 R2 deleted that renderer).
 
 
 ---
@@ -3319,7 +3336,7 @@ Writers listed here are the only allowed writers (checked by `tests/static/check
 | `wall:sectionsChanged` (`WALL_SECTIONS_CHANGED`) | `{reason: 'add'\|'delete'\|'import', addedId?}` | `WallController.addSection/deleteSection` right after the model change (legacy re-render point 4105 / 4134); `applyImport` (4998) | `SectionListPanel` (snapshot, render, restore; or render + expandFirst for import), `SectionLogosPanel` (render iff panel IDs are on, for every reason; the import since 08 P2-3d, B-L21) |
 | `wall:sectionRenamed` (`WALL_SECTION_RENAMED`) | `{}` | `WallController.commitRename()` only when panel IDs are on (4020) | `SectionLogosPanel` (render) |
 | `wall:meshModeChanged` (`WALL_MESH_MODE_CHANGED`) | `{mode}` | `WallController.setMeshMode` (after the model write, 4160) and `applyImport` iff `meshMode` is truthy (4992-4995) | `WallDisplayPanel` (label `.active` by equality; idempotent after a click) |
-| `wall:rebuilt` (`WALL_REBUILT`) | `{layout: WallLayout, meshMode, view: LEDWallView, cause: 'init'\|'pivot'\|'import'\|'edit', stageShift: {x, z}}` (`cause` and `stageShift` since 03 T3, additive: the stage-origin change against the resolution cached before this rebuild; `layout.pivot` holds `{resolution, frame: 'stage', translation}`) | `WallController.rebuild()` last step (after the hub) | `NormalsDebugView` (01 F1-1: caches `{layout, view}`, re-syncs the lines while they are on); `CameraPanel` (03 T4: the `#camera-pos-z` `min`); `PivotMarkerView` (03 T5: placement) and `TransformGizmo` (03 T5: re-anchors a pivot target); `PivotPanel` (03 T6: readout, status by `cause`); seam for Features 2, 4, 5 |
+| `wall:rebuilt` (`WALL_REBUILT`) | `{layout: WallLayout, meshMode, view: LEDWallView, cause: 'init'\|'pivot'\|'import'\|'edit', stageShift: {x, z}}` (`cause` and `stageShift` since 03 T3, additive: the stage-origin change against the resolution cached before this rebuild; `layout.pivot` holds `{resolution, frame: 'stage', translation}`) | `WallController.rebuild()` last step (after the hub) | `NormalsDebugView` (01 F1-1: caches `{layout, view}`, re-syncs the lines while they are on); `PivotMarkerView` (03 T5: placement) and `TransformGizmo` (03 T5: re-anchors a pivot target); `PivotPanel` (03 T6: readout, status by `cause`); seam for Features 2, 4, 5 |
 | `display:contentChanged` (`DISPLAY_CONTENT_CHANGED`) | `{toggled: 'ledSim'\|'panelIds', on: boolean, forcedOff: boolean}` | `WallController.setLedSim/setPanelIds` after the model update, before cache clear and rebuild (4170-4176, 4190-4197) | `WallDisplayPanel` (option blocks, forced-off toggle), `SectionLogosPanel` (render iff `toggled === 'panelIds' && on`) |
 | `camera:previewChanged` (`CAMERA_PREVIEW_CHANGED`) | `{enabled}` | `CameraController.setPreviewEnabled` after `cine.enabled = on` (4233) | `CameraPanel` (`#camera-preview-options` display) |
 | `camera:filmbackChanged` (`CAMERA_FILMBACK_CHANGED`) | `{key}` | `CameraController.setFilmback` after `cine.applyPreset` (4254-4262) | `CameraPanel` (`#custom-filmback`, size inputs) |
@@ -3334,7 +3351,7 @@ Writers listed here are the only allowed writers (checked by `tests/static/check
 | `gizmo:modeChanged` (`GIZMO_MODE_CHANGED`) | `{mode}` | `TransformGizmo.setMode/clearMode` before `rebuild` (3176-3177, 4428-4429) | `ViewportToolbar` |
 | `gizmo:spaceChanged` (`GIZMO_SPACE_CHANGED`) | `{space}` | `TransformGizmo.toggleSpace` before re-orientation (3184-3188) | `ViewportToolbar` |
 | `pilot:changed` (`PILOT_CHANGED`) | `{active}` | `PilotController.toggle` right after the flip (3484-3485) | `ViewportToolbar` (button + banner), `PivotMarkerView` (03 T9: hidden in pilot) |
-| `wall:pivotChanged` (`WALL_PIVOT_CHANGED`) | `{source: 'mode'\|'offset'\|'reset-offset'\|'gizmo'\|'import'\|'keep-stage'\|'marker', pivot: {mode, offset, keepStageLayout} (a copy), resolution: PivotResolution\|null, stageShift: {x, z}, reexpressed, rebuilds}`; a visual event (07 C47), 03 T4 | `PivotController.#commit` after the model write and the re-expression, before `wallController.commitPivot`; `setKeepStageLayout` / `setMarkerVisible` (`rebuilds: false`, the cached resolution); `WallController.applyImport` after the pivot assignment, before every other import event and the rebuild (`rebuilds: true`, `resolvePivotNow()`) | `CameraPanel` (`#camera-pos-z` `min`; 03 T4); `PivotMarkerView` (placement, visibility; 03 T5); `PivotPanel` (03 T6: radios, offsets, Reset, switches, readout, status) |
+| `wall:pivotChanged` (`WALL_PIVOT_CHANGED`) | `{source: 'mode'\|'offset'\|'reset-offset'\|'gizmo'\|'import'\|'keep-stage'\|'marker', pivot: {mode, offset, keepStageLayout} (a copy), resolution: PivotResolution\|null, stageShift: {x, z}, reexpressed, rebuilds}`; a visual event (07 C47), 03 T4 | `PivotController.#commit` after the model write and the re-expression, before `wallController.commitPivot`; `setKeepStageLayout` / `setMarkerVisible` (`rebuilds: false`, the cached resolution); `WallController.applyImport` after the pivot assignment, before every other import event and the rebuild (`rebuilds: true`, `resolvePivotNow()`) | `PivotMarkerView` (placement, visibility; 03 T5); `PivotPanel` (03 T6: radios, offsets, Reset, switches, readout, status) |
 | `debug:viewChanged` (`DEBUG_VIEW_CHANGED`) | `{shading, normals: {enabled, vertex, face, lengthScale, onTop}}` (a frozen `DebugViewSettings.snapshot()`); a visual event (07 C47) | `DebugViewController` after every settings write, before its render call (01 F1-2) | `DebugViewControls` (buttons, inputs, legend, announcer); added in the same step as the emitter (5.1 rule 7) |
 
 Ordering guarantees per multi-subscriber event: `WALL_SECTIONS_CHANGED` runs `SectionListPanel` then `SectionLogosPanel` (construction order); `DISPLAY_CONTENT_CHANGED` runs `WallDisplayPanel` then `SectionLogosPanel`. Their targets are disjoint, so the order is not observable.
@@ -3356,7 +3373,7 @@ Each flow lists the exact call/emit sequence. "->" is a direct call; "emit X" ru
 | PR4 | Within one handler, model writes are grouped before the DOM writes that legacy interleaved with them (card field write-back, colour dot and custom input, the filmback select's custom block and size inputs, the LED-sim / panel-ID forced-off toggles). | Field assignments, `classList` and `style`/`value` writes cannot throw, and nothing between them reads the other's target (the DOM writes use the same values the model receives). |
 | PR5 | `deselect` resets `hoveredAxis` after (instead of before) the badge update. | No reader of `hoveredAxis` runs in between. |
 | PR6 | The `THREE.Color` used by a section/panel colour material is created inside `LEDMaterialFactory` (after the geometry) instead of before the geometry. | `THREE.Color` carries no id. Boundary: see (a) below the table. |
-| PR7 | Pure precomputation is hoisted ahead of allocations or DOM writes in three more places: (a) `CameraHub.syncSafeDistance` evaluates `layoutProject(project)` and `frameBounds()` as arguments, before `SafeDistanceView.create` runs `remove()` and `new THREE.Group()` (legacy computed the bounds and the walk after both, 2595-2647); (b) `CameraHub.refresh` evaluates `cine.coverage(frameBounds())` (bounds loop and coverage maths) before `CameraPanel` writes `#frustum-width` / `#frustum-height` (legacy wrote those two first, 2484-2485, then computed the bounds, 2487-2493); (c) `ProjectIO.exportZIP` computes the start columns with `computeAtlas(sections)` before the texture loop (legacy accumulated `cumulativeCol` inside it, 4534-4542). | The hoisted code is pure JS over plain objects (the same walk, bounds loop and atlas bookkeeping as PR1): it allocates no THREE ids, touches no DOM, cannot throw, and reads only model state that the skipped-over steps do not change (`remove()`, `new THREE.Group()`, `textContent` writes, canvas creation and `toDataURL` never write the model). |
+| PR7 | Pure precomputation is hoisted ahead of allocations or DOM writes in three more places: (a) `CameraHub.syncSafeDistance` evaluates `layoutProject(project)` and `frameBounds()` (its `stageExtent` since 08 P2-11c) as arguments, before `SafeDistanceView.create` runs `remove()` and `new THREE.Group()` (legacy computed the bounds and the walk after both, 2595-2647); (b) `CameraHub.refresh` evaluates the coverage (`cine.coverage(frameBounds())` until 08 P2-11a, then the analyser, which since 08 P2-11b also runs before the rig is rebuilt, its corner depths shaping the frustum) before `CameraPanel` writes `#frustum-width` / `#frustum-height` (legacy wrote those two first, 2484-2485, then computed the bounds, 2487-2493); (c) `ProjectIO.exportZIP` computes the start columns with `computeAtlas(sections)` before the texture loop (legacy accumulated `cumulativeCol` inside it, 4534-4542). | The hoisted code is pure JS over plain objects (the same walk, bounds loop and atlas bookkeeping as PR1): it allocates no THREE ids, touches no DOM, cannot throw, and reads only model state that the skipped-over steps do not change (`remove()`, `new THREE.Group()`, `textContent` writes, canvas creation and `toDataURL` never write the model). |
 
 Boundaries of these proofs (recorded at WP10 integration from the WP4, WP6 and WP9 reviews). None of them is visible in the golden master; each was weighed and accepted rather than coded around:
 
@@ -3373,7 +3390,7 @@ Boundaries of these proofs (recorded at WP10 integration from the WP4, WP6 and W
 2. view.rebuild({ layout, meshMode: project.meshMode, display })    // 1458-1477 dispose + groups, 1551-1557 dispatch,
                                                                     // 1559-1569 frames, 1571-1572 scene.add
 3. this.publishStats()  -> emit WALL_STATS_CHANGED (HeaderStats)    // 1574
-4. orbit.updateCameraPosition()                                     // 1575  flat target (B-L2, via framingBounds); moves the camera even in pilot
+4. orbit.updateCameraPosition()                                     // 1575  the wall's generative box centre (08 P2-11c, via framingBounds); moves the camera even in pilot
 5. if (project.camera.enabled) hub.refresh()                        // 1576  P2; re-drives the pilot view after step 4
 6. emit WALL_REBUILT { layout, meshMode, view, cause, stageShift: shift }   // new seam; cause and stageShift since 03 T3
 ```
@@ -3495,7 +3512,7 @@ else {
   if (selection.isSelected('camera')) selection.deselect()   // 4245-4247
 }
 ```
-**Reset** (2550-2575, also `#reset-camera`): `cine.resetTo(frameBounds())` -> emit `CAMERA_POSE_CHANGED{reset}` (inputs: X/Y `toFixed(1)`, Z and rotations raw) -> `hub.refresh()`.
+**Reset** (2550-2575, also `#reset-camera`): `cine.resetTo(frameBounds())` (08 P2-11c: 5 m in front of the wall along its facing, looking at the wall box centre) -> emit `CAMERA_POSE_CHANGED{reset}` (inputs: X/Y `toFixed(1)`, Z to 1 mm and the rotations to 0.1 degree since 08 P2-11c) -> `hub.refresh()`.
 **Filmback** (4251-4264): `cine.applyPreset(key)` -> emit `CAMERA_FILMBACK_CHANGED` -> `if (enabled) hub.refresh()`.
 **Lens/pose inputs** (4266-4317): `setCameraField` -> write-back iff `FIELD_RULES[field].writeBack` -> `commitCameraField()`.
 **Safe distance** (4322-4327): toggle class -> `setSafeDistanceEnabled(on)`: model -> emit `CAMERA_SAFE_DISTANCE_TOGGLED` -> `hub.syncSafeDistance()` (create iff both flags, else remove).
@@ -3588,7 +3605,7 @@ theme = buildTheme(Theme, (name) => win.getComputedStyle(doc.documentElement).ge
                    { warn: (m) => win.console.warn(m) });   // 06 T3 (was theme = Theme); bindFonts: BIND_FONTS_DEFAULT (true since 06 T5)
 brand = theme.brand; bus = new EventBus(); dialogs = createDialogs(win)
 project = Project.createDefault({ defaultSectionColor: theme.palette.defaultSectionColor })   // 06 T7
-frameBounds = () => framingBounds(project, wallController.pivotResolution); colorToRgb = (s) => new THREE.Color(s)   // 03 T3
+frameBounds = () => framingBounds(wallController.currentLayout); colorToRgb = (s) => new THREE.Color(s)   // 08 P2-11c
 stageLayout = () => wallController.currentLayout                                // 08 P2-11a
 interaction = new InteractionState(); keyboard = new KeyboardState({ doc, win })
 sceneManager = new SceneManager({ canvas: byId(doc, 'three-canvas'), win, display: project.display, theme })
@@ -3701,7 +3718,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `mesh.gltf.combinedUV = 'atlas-pixel-accurate'` (new leaf in 08 P2-7c; absent from `LegacyProfiles`, whose attributes have no `TEXCOORD_0`) | B-M7 | The combined `TEXCOORD_0`: the viewport's pixel-accurate atlas UVs (`atlasUvRect`, 08 6.7) | `GltfExporter.#combinedUvOption()`, only when the attributes list `TEXCOORD_0`: `profile.combinedUV` | switch | 04 UV-8b later adds `'plan'` and selects it |
 | `mesh.gltf.indexType = 'auto'` (08 P2-1b; Phase-1 value `'uint16'`, kept as a case for `LegacyProfiles`) | B-L5 (fixed) | Landed: Uint32 (5125) as soon as the largest index reaches 65,535 (`indexWidth`, 08 6.2); `'uint16'` always wrote 5123 and wrapped above 65,535 vertices | `GltfExporter.#addMesh`: `profile.indexType` | switch | landed in 08 P2-1b (invariance gate: every harness glTF is unchanged); the viewport index attribute (untagged) landed in 08 P2-1e |
 | `mesh.gltf.doubleSided = 'omit'` | – (correct since 08 P2-2d) | The material object has **no** `doubleSided` key: single-sided, which shows the `'ccw'` wall from the stage and keeps a wrongly facing wall visible as an error (08 Q2) | `GltfExporter.#doubleSided()` (called first by `#addMesh`): `profile.doubleSided` | switch | `case 'true'` (08 P2-2d) writes `doubleSided: true`, for a later export option; no profile uses it |
-| `framingBounds = 'flat-pivot'` (03 T2; Phase-1 value `'flat'`, whose case is deleted: the key has one read site) | B-L2, B-M10 | Orbit target, camera reset, the coverage's fits test (the status rays read the stage layout since 08 P2-11a) and safe-distance D use the flat bounds (the arc width sum x the tallest section), translated by the stage origin: `{totalWidth, maxHeight, minX: 0 - so.x, wallZ: 0 - so.z}` (03 6.6; identity-exact at the default pivot, +0 offsets) | `WallLayout.framingBounds`: `Strategies.framingBounds` (the 4 consumers get it injected as `frameBounds`) | switch | step F = 08 P2-11c: `'layout'` (true bounds of the stage layout, `FramingPolicy`'s named boxes) |
+| `framingBounds = 'layout'` (08 P2-11c; Phase-1 `'flat'` and 03 T2's `'flat-pivot'`, both deleted: the key has one read site) | B-L2, B-M10 (fixed) | Landed: `FramingPolicy`'s three named boxes of the stage layout (07 C34): `generativeBox` for the orbit target, `wallBox` and the chord `facing` for Reset, `stageExtent` for D and the coverage's `fits`; legacy-exact for a flat wall along +X at the identity | `WallLayout.framingBounds`: `Strategies.framingBounds` (memoised per layout; the consumers get it injected as `frameBounds`) | switch | 08 P2-13g moves it to `geometry/FramingPolicy.js` |
 | `curveBeforeFirstPanel = true` | B-L1 | Curve step applied before the first panel's move | `WallLayout.computeWallLayout` (first statement): `Strategies.curveBeforeFirstPanel` | switch (`case true`) | owner decision: **kept** (2026-10-16, 1.4); 08 P2-13f retires the switch with no output change |
 | `gizmoRotateSign = -1` | B-M12 | Rotation opposite to the drag | `TransformGizmo.onMouseMove`: `Strategies.gizmoRotateSign * angle` | value | `+1` |
 | `pilotForwardYSign = -1` | B-M13 | Pilot W/S vertical inverted | `PilotController.tickKeyboard`: `Strategies.pilotForwardYSign * Math.sin(tilt)` | value | `+1` (or `getWorldDirection`) |
@@ -3726,7 +3743,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | B-M7 | glTF POSITION only (S-2) | `Strategies.mesh.gltf.attributes` (fixed) | Landed in 08 P2-7c (`TEXCOORD_0` on every primitive, written (u, 1 - v): combined the pixel-accurate atlas UVs of the new leaf `mesh.gltf.combinedUV = 'atlas-pixel-accurate'`, section 0..1 per section, panel `PANEL_UVS`; `NORMAL` landed in 08 P2-2d; no tag site) |
 | B-M8 | Safe-distance group survives preview off (K-2) | `CameraController.setPreviewEnabled` (fixed) | Landed in 08 P2-4b (`CameraController.setPreviewEnabled(false)` calls `hub.syncSafeDistance()` after `rig.remove()`, which removes the floor; the next enable rebuilds it; no tag site) |
 | B-M9 | Preview 320x180 stretch (L-1) | `PreviewPass.render` (fixed; `Strategies.previewRendererSize` retired) | Landed in 07 R2 (the second renderer is deleted: the main renderer draws the preview into the main canvas by scissor at the client rect of the placeholder `#camera-preview-canvas`, letterboxed to the filmback aspect with black bars, `PreviewPass` and `PreviewFit.letterboxRect`; no window refit; `Strategies.previewRendererSize` retired; no tag site) |
-| B-M10 | Coverage from posZ against a flat rectangle (J-7, J-8) | `framingBounds` (the flat width and height of `fits`) | layout-aware analyser: the ray analysis landed in 08 P2-11a (`FrustumCoverage.analyzeCoverage` over the memoised `WallLayout.columnQuads()`; `CineCamera.coverage` deleted; status `offWall`); the flat width and height that `fits` still reads go with 08 P2-11c |
+| B-M10 | Coverage from posZ against a flat rectangle (J-7, J-8) | `FrustumCoverage.analyzeCoverage` (fixed) | Landed in 08 P2-11a (`FrustumCoverage.analyzeCoverage` over the memoised `WallLayout.columnQuads()`: five rays and the projected-quad overlap; `CineCamera.coverage` deleted; status `offWall`) and 08 P2-11c (`fits` reads `FramingPolicy`'s `stageExtent`, the same measure as D); no tag site |
 | B-M11 | Preview renders helpers and tint (L-4) | `PreviewWindow.render` (fixed; `Strategies.previewRendersHelpers` retired) | Landed in 08 P2-10a (`PreviewWindow.render(scene, helpers)` sets `visible = false` on every helper registered through `SceneManager.addHelper` for the preview render only and restores each flag afterwards (08 6.14), so the preview shows no grid, axes, rig, frustum tint, safe-distance floor or gizmo; no layer is assigned; `Strategies.previewRendersHelpers` retired; no tag site). Mechanism replaced by 07 R1: the preview camera's layer mask `DEFAULT \| ENVIRONMENT` and `SceneManager.withPassHidden` for the gizmo |
 | B-M12 | Rotate gizmo direction inverted (N-9) | `Strategies.gizmoRotateSign` | `+1` |
 | B-M13 | Pilot vertical inverted (O-5) | `Strategies.pilotForwardYSign` | `+1` |
@@ -3734,7 +3751,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | B-M15 | Overlapping/gapped safe-distance quads | `SafeDistanceView.create` + `geometry/SafeDistanceBand.js` (fixed; `Strategies.safeDistanceBand` retired) | Landed in 08 P2-5b (`geometry/SafeDistanceBand.js buildSafeDistanceBand`: a mitred strip over `WallLayout.flatEdges()`, clamped near concave turns and concave curves so it never folds, clamped offset vertices tinted `safeZone.clampedColor` and counted in the OBJ `# Clamped:` line; `Strategies.safeDistanceBand` retired; no tag site) |
 | B-M16 | Panel-mode 4-16 px/LED per panel (E-10) | `LEDWallView.#buildPanels` + `TextureAtlas.panelPxPerLed` (fixed) | Landed in 08 P2-12d (panel mode with panel IDs samples one section canvas per section, shared by its panels through section-space UVs; `TextureAtlas.panelPxPerLed` applies the wall-wide `PANEL_TEXTURE_BUDGET_PX` of `geometry/TextureBudget.js` to the per-panel canvases, which only 04's `uv.panel_uvs = 'panel'` option still reaches; no tag site) |
 | B-L1 | Curve before the first panel (B-5) | `Strategies.curveBeforeFirstPanel` | owner decision |
-| B-L2 | Flat bounds for target/reset/D (H-3, J-1, J-9) | `Strategies.framingBounds` | true bounds / pivot |
+| B-L2 | Flat bounds for target/reset/D (H-3, J-1, J-9) | `Strategies.framingBounds` (fixed) | Landed in 08 P2-11c (`framingBounds = 'layout'`: `FramingPolicy`'s `generativeBox` for the orbit target, `wallBox` and the chord `facing` for Reset (`center + 5·facing`, `rotY` through `wrapDeg`), `stageExtent` for D and `fits`; `Wall.flatBounds` deleted; 03 step F; no tag site) |
 | B-L3 | Right-panel normals | `Strategies.mesh.viewport.normals` (fixed) | Landed in 08 P2-2b (`mesh.viewport.normals = 'averaged'` with the 01 CR-1 flat-section short-circuit; no tag site) |
 | B-L4 | No canvas-size guard (`toBlob` null throws, ZIP `data:,`) | `ProjectIO.exportPanelIds/exportZIP`, `PanelIdRenderer` + `LEDMaterialFactory` (fixed) | Landed in 08 P2-1c (export size guards: `canvasFits`, M-EXP-2/3/4, ZIP pre-check and late skip) and 08 P2-1d (viewport: a null panel-ID canvas falls back to the section colour with a console warning); no tag site |
 | B-L5 | Uint16 glTF indices | `Strategies.mesh.gltf.indexType`, `LEDWallView` index attribute (fixed) | Landed in 08 P2-1b (glTF `mesh.gltf.indexType = 'auto'`, `indexWidth`) and 08 P2-1e (viewport: Uint32 index attribute from a largest index of 65,535); no tag site |
@@ -3742,7 +3759,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | B-L7 | MTL second download, textures missing | `ObjExporter.write` + `ProjectIO.exportOBJ` (fixed; `Strategies.mtlDownloadDelayMs` retired) | Landed in 08 P2-6c (the standalone MTL has no `map_Kd`: `ObjExporter.write` references a texture only when the caller ships it (`textureNames`); `Strategies.mtlDownloadDelayMs` retired as `ProjectIO.MTL_DOWNLOAD_DELAY_MS`; the possibly blocked second download was an ARCHITECTURE 8.4 observation until 08 P2-6e, the owner's decision: Export OBJ downloads one ZIP with the OBJ, the MTL and every texture the MTL references; no tag site) |
 | B-L8 | No import validation; unknown mode renders as panels; raw coercion | `ProjectSerializer.read` + `io/ProjectValidator.js` (fixed) | Landed in 08 P2-3b (`ProjectSerializer.read`: `detectVersion`, `migrateV1toV2` and `validateProject` of `io/ProjectMigrations.js`, `io/ProjectValidator.js`, `io/ProjectSchema.js`; `Strategies.importValidation` retired; `Wall.MAX_SECTIONS` with M-SEC-1; the size limit and the read error; the three-mode dispatch; `WallSection.setName`; no tag site) |
 | B-L9 | `\|\| default` turns 0 into the default (D-7, J-5, V-3) | `orDefault` | change `orDefault` or per rule |
-| B-L10 | Gizmo posY >= 0 vs pilot >= 0.1 per frame; Z unclamped | `CineCamera.translateBy`, `CineCamera.pilotFly` (tags) | validated setter |
+| B-L10 | Gizmo posY >= 0 vs pilot >= 0.1 per frame; Z unclamped | `CineCamera.pilotFly` (tag; the Z half fixed) | validated setter; the Z half landed in 08 P2-11c (no Z minimum in the input rule either, so input, gizmo and pilot agree on Z; `CineCamera.translateBy` untagged); the pilot floor stays for 08 P2-8c |
 | B-L11 | Shortcuts ignore SELECT focus, modifiers, repeat (W-1) | `core/typingTarget.js isTypingTarget` + `ViewportInput.attachShortcuts` (fixed) | Landed in 08 P2-9b (`core/typingTarget.js isTypingTarget` with the 07 3.8 truth table, re-exported by `InputState` as `isShortcutIgnoredTarget`; `ViewportInput.attachShortcuts` also ignores Ctrl, Meta, Alt and auto-repeat; no tag site) |
 | B-L12 | Gizmo resources leak (memory only) | `TransformGizmo.rebuild/detach` (fixed; the switch `Strategies.dispose.gizmo` retired by 08 P2-12a) | Landed in Phase 1C H2 (`dispose.gizmo = true`; the key retired by 08 P2-12a: the replaced or removed gizmo group is always disposed; no tag site) |
 | B-L13 | Mesh-mode handler fires twice (C-4) | `WallDisplayPanel.bind` (tag + warning) | "mode unchanged -> no-op" guard, never radio `change` |
@@ -3780,21 +3797,17 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 |---|---|
 | `js/legacy/LegacyCompat.js#orDefault` | B-L9 |
 | `js/domain/WallSection.js#exceeds4K` | B-L17 |
-| `js/domain/Wall.js#flatBounds` | B-L2, B-M10 |
 | `js/domain/CineCamera.js#presetShortName` | B-L34 |
-| `js/domain/CineCamera.js#translateBy` | B-L10 |
 | `js/domain/CineCamera.js#rotateBy` | B-L28 |
 | `js/domain/CineCamera.js#pilotFly` | B-L10 |
 | `js/domain/Prop.js#translateBy` | B-L22 |
 | `js/domain/Prop.js#rotateBy` | B-L22 |
 | `js/geometry/WallLayout.js#computeWallLayout` | B-L1 |
-| `js/geometry/WallLayout.js#framingBounds` | B-L2, B-M10 |
 | `js/io/ProjectSerializer.js#write` | B-L31 |
 | `js/render/textures/LEDPixelTextureFactory.js#tile` | B-L20 |
 | `js/render/textures/PanelIdRenderer.js#panelCanvas` | B-L19 |
 | `js/render/textures/PanelIdRenderer.js#sectionCanvas` | B-L35 |
 | `js/render/PreviewPass.js#updateCamera` | B-L34 |
-| `js/interaction/OrbitController.js#updateTargetPosition` | B-L2 |
 | `js/interaction/OrbitController.js#tickKeyboard` | B-L27 |
 | `js/interaction/OrbitController.js#setView` | B-L25 |
 | `js/interaction/SelectionManager.js#pickAt` | B-M14 |
@@ -3833,7 +3846,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 |---|---|---|
 | **1. Normals flipped by default + normals debug view** | One winding function (`quadIndices`) and per-consumer profiles in `Strategies.mesh` used by the viewport, OBJ and glTF; `side` in the viewport profile; `LEDWallView.meshes()`; `WALL_REBUILT`; `SceneManager.addHelper` + `LAYERS`; `ResourceTracker`; the toolbar button pattern. | The flips are Phase-2 commits 08 P2-2a–d, one consumer per commit (`docs/improvements/08-bugfix-roadmap.md`): `'ccw'` winding and `'averaged'` normals in `WallMeshBuilder`, OBJ per-vertex `vn` and the glTF `NORMAL` attribute. Feature 1 adds the debug view and options only: `render/NormalsDebugView.js` (LineSegments from attributes x `matrixWorld`, subscribes to `WALL_REBUILT`, registered as a helper, disposed with a tracker); a `#toggle-normals` view button and a `.view-btn.active` rule (B-L24). Landed so far (docs/improvements/01-normals.md 8.4): F1-0a, F1-0b and F1-0c (tooling), F1-1 (the debug core without UI: `NormalLines`, `NormalsDebugView`, `DebugMaterials`, `MaterialOverride`, `LEDWallView.setDebugShading` / `withContentMaterials`, `DebugViewSettings`, `DebugViewController`, `core/renderOrder.js`), F1-2 (the debug UI: `#toggle-normals`, `#debug-view-btn` and its popover, the legend in `#viewport-top-stack`, the announcer, N / Shift+N, `DEBUG_VIEW_CHANGED`, `css/features/debug-view.css` with `.view-btn.active`, the help-badge token ` N=normals`), F1-3 (the `normals_debug` harness scenario), F1-2b and F1-2c (review follow-ups of F1-2: legend legibility, the `DebugViewControls` import-boundary test). |
 | **2. Section selection, property editing, per-section offsets** | `WallSection` with stable ids; `SectionLayout.postTransform` hook (null, never fed back into the cursor); mesh tags `userData.{kind, mode, sectionId, sectionIndex, col, row}` and combined `sectionRanges`; `LEDWallView.sectionNodes()`; the `Selectable` registry and generic gizmo; field rule tables; `WallController` as the single writer of section state; mirror events to cards; `ProjectSerializer.read` version-dispatch point. | `WallSection.offset {position, rotation}` + rules; `layoutProject` builds per-section `postTransforms`; the builder applies them to positions/normals; `LEDWallView` adds per-section groups (section/panel) or bakes (combined) and a transform-only update path; `WallSectionSelectable` (pick by `userData` / `faceIndex` -> `sectionRanges`); select-on-click (B-M14 fix); a `section:changed` event emitted by `WallController` so cards, an inspector and the UV viewer update reactively; safe distance per floor run: `floorRuns()`, each run through 08 P2-5b's `buildSafeDistanceBand` (02 6.12, CR-08-a); schema v2. Exporters follow automatically through the layout. |
-| **3. Configurable pivot + offset** | `WallPivot`/`PivotMode` in `Wall` (identity); `WallLayout.firstEdge/lastEdge/bounds()/pivotPoint(mode)` including "middle of entire wall" = midpoint of the first section's first edge and the last section's last edge on the floor; the single `framingBounds` switch for the four flat-bounds consumers; the single `layoutProject()` entry. | A baked translation in `layoutProject`: stage frame `−(P.x, 0, P.z)`, export frame `−P`, P = anchor + offset (1.4). The raw walk is translated first, and spec 02's `applySectionOffsets(out)` builds its section matrices from the translated layout (07 C32). **No wall root transform, ever:** the identity `wallGroup` transform is a unit-tested invariant (03 §5.1, §5.9 #2). `ui/PivotPanel`; a pivot Selectable + marker view; switch `framingBounds` to pivot/bounds (fixes B-L2); optional re-expression of camera/prop poses; schema v2. Landed so far (docs/improvements/03-pivot.md 10; session-only, the owner's decision of 2026-10-17): T13 (the sign-off of 5.10.1), T1 (the domain: the `WallPivot` API, the pose `LIMITS` and `translateStage`, the `posZ` context, `SceneTheme.pivot`), T2 (the geometry: `baseY`, `generativeBounds`, `translated`, `resolvePivot`, `stageShift`, the frames of `layoutProject`, `framingBounds` `'flat-pivot'`), T3 (the consumers: the orbit target, Reset and coverage on the `'flat-pivot'` bounds, the `posZ` context, `WallController`'s pivot cache, `rebuild({cause})`, `commitPivot` and the import reset, the export frame with the OBJ header lines and glTF `extras`, the safe-distance OBJ `translate`, both `translateStage` participants), T4 (`app/PivotController`: P-PIVOT, rows F3-1 to F3-5, the Selectable 'pivot', `WALL_PIVOT_CHANGED`), T5 (`render/PivotMarkerView` and the shared path-B gizmo hook set: kind, pick priority, `allowedAxes`, `beginGizmoDrag` / `endGizmoDrag({cancel})` / `cancelDrag`, gesture swallowing, the O key, the re-anchor), T6 (`ui/PivotPanel`, `css/features/pivot.css`, "Z Position", "Distance to wall plane", static rules 18-20), T9 (the marker shown by default, hidden in pilot), T10 (the grid centred on the stage origin), T8 (the harness library changes and the five `pivot_*` scenarios) and T12 (the README "Pivot" section); the owner change of 2026-10-17 (B1-pivot-floor: `mesh-center` is the bounding-box centre on the floor). Waiting: T7, schema v2 (and the v2 half of T9), with project file v2 at M7a; step F is 08's P2-11c. |
+| **3. Configurable pivot + offset** | `WallPivot`/`PivotMode` in `Wall` (identity); `WallLayout.firstEdge/lastEdge/bounds()/pivotPoint(mode)` including "middle of entire wall" = midpoint of the first section's first edge and the last section's last edge on the floor; the single `framingBounds` switch for the four flat-bounds consumers; the single `layoutProject()` entry. | A baked translation in `layoutProject`: stage frame `−(P.x, 0, P.z)`, export frame `−P`, P = anchor + offset (1.4). The raw walk is translated first, and spec 02's `applySectionOffsets(out)` builds its section matrices from the translated layout (07 C32). **No wall root transform, ever:** the identity `wallGroup` transform is a unit-tested invariant (03 §5.1, §5.9 #2). `ui/PivotPanel`; a pivot Selectable + marker view; switch `framingBounds` to pivot/bounds (fixes B-L2); optional re-expression of camera/prop poses; schema v2. Landed so far (docs/improvements/03-pivot.md 10; session-only, the owner's decision of 2026-10-17): T13 (the sign-off of 5.10.1), T1 (the domain: the `WallPivot` API, the pose `LIMITS` and `translateStage`, the `posZ` context, `SceneTheme.pivot`), T2 (the geometry: `baseY`, `generativeBounds`, `translated`, `resolvePivot`, `stageShift`, the frames of `layoutProject`, `framingBounds` `'flat-pivot'`), T3 (the consumers: the orbit target, Reset and coverage on the `'flat-pivot'` bounds, the `posZ` context, `WallController`'s pivot cache, `rebuild({cause})`, `commitPivot` and the import reset, the export frame with the OBJ header lines and glTF `extras`, the safe-distance OBJ `translate`, both `translateStage` participants), T4 (`app/PivotController`: P-PIVOT, rows F3-1 to F3-5, the Selectable 'pivot', `WALL_PIVOT_CHANGED`), T5 (`render/PivotMarkerView` and the shared path-B gizmo hook set: kind, pick priority, `allowedAxes`, `beginGizmoDrag` / `endGizmoDrag({cancel})` / `cancelDrag`, gesture swallowing, the O key, the re-anchor), T6 (`ui/PivotPanel`, `css/features/pivot.css`, "Z Position", "Distance to wall plane", static rules 18-20), T9 (the marker shown by default, hidden in pilot), T10 (the grid centred on the stage origin), T8 (the harness library changes and the five `pivot_*` scenarios) and T12 (the README "Pivot" section); the owner change of 2026-10-17 (B1-pivot-floor: `mesh-center` is the bounding-box centre on the floor). Waiting: T7, schema v2 (and the v2 half of T9), with project file v2 at M7a; step F is 08's P2-11c (landed on 2026-10-17). |
 | **4. Clean 0..1 UVs + UV viewer/editor** | UV strategies in one builder function per consumer; `TextureAtlas` as the single source of offsets, widths and start columns (yields per-section `uvRects`); `PanelIdRenderer.sectionCanvas()` for the viewer background; mesh tags; the selection registry; `PreviewWindow`'s resize handle as the floating-panel pattern. | `'per-section'` / `'atlas-pixel-accurate'` strategies (fix B-M5/B-M6) and a baked per-section `uvTransform`; glTF TEXCOORD_0. The `'atlas-pixel-accurate'` strategies (the viewport one landed in 08 P2-7a, the OBJ one in 08 P2-7b, the new `mesh.gltf.combinedUV` leaf with glTF `TEXCOORD_0` in 08 P2-7c) and the per-section combined materials and glTF primitives (08 P2-7d), the combined vertex ranges and `sectionRangeForFace` (08 P2-7a) are Phase 2's; Feature 4 adds `'plan'`; the viewport panel-ID path of panel mode (one section canvas per section, `WallMeshBuilder.panelUvs`, `LEDMaterialFactory.sectionShared`, `geometry/TextureBudget.js`) is 08 P2-12d, and 04 UV-9 adds the panel-mode export UVs and the `uv.panel_uvs` option; `ui/UVViewer.js` (2D canvas; subscribes to `SELECTION_CHANGED` and `WALL_REBUILT`); `ui/FloatingPanel.js` extracted from `PreviewWindow`. |
 | **5. HDRI projection (+ reflective car)** | `DisplaySettings.content` enum (`'color' \| 'ledSim' \| 'panelIds'`, ready for `'hdri'`); `LEDMaterialFactory` as the only wall-material constructor; `ResourceTracker` for HDR/PMREM disposal; `SceneManager` owns the main renderer and the helper registry; the second renderer was encapsulated in `PreviewWindow` until 07 R2 replaced it by `PreviewPass` (one renderer); `PropView` base with `buildMesh()`; `CineCamera` lens math for the default projection point. | `ContentMode.HDRI` + `render/HdriProjectionMaterial.js` (wall and dome); `ui/HdriPanel.js` + the projection-point Selectable (`'hdri-point'`, kind `'projector'`, 07 C36); the second renderer is replaced by spec 07's `PreviewPass` (scissor rendering, R1/R2; `SceneManager` keeps only `setEnvironment` and `setPunctualLightScale`), which excludes `LAYERS.HELPERS` (B-M9/B-M11, first fixed by 08 P2-10 or 07 R1/R2, 07 C31); the backdrop dome on `LAYERS.ENVIRONMENT`; `GltfCarPropView extends CarPropView`; colour management in `render/ColorManagement.js` as per-material patches (Option L on r128; Option G after 07 U3b); loaders from 07's `vendor/three-addons.js` factories (spec 05 §5.11 #17). |
 | **6. Morph branding** | `css/02-tokens.css` holds every `:root` token; `Theme.js` holds every scene/canvas colour, font, palette and export string, and every consumer receives it by injection from `App`; header and watermark markup in one place in `index.html`. | Role-based tokens; `theme/ThemeBridge.js` reading CSS variables into an object of `Theme`'s shape (one line in `App`); new `Brand` strings and filenames (+ a JSON `generator` field in v2); Morph logo SVG, favicon, valid author meta; inline styles -> classes; card swatches from `Palette`; re-baseline `ui_visual` and exports separately. Gizmo axis colours stay XYZ = RGB. Landed so far (docs/improvements/06-morph-branding.md 8.4): T1 (the static inline styles of `index.html` and the two panel templates became the classes of `css/99-utilities.css`, linked last; dead CSS removed; `css-slices.mjs --report-only`; static rule 12; `compare.mjs --ignore-keys`), T2 (`theme/ThemeBridge.js`, pure and not wired, with U1-U3), T3 (layer-4 tokens with the legacy values and spec 01's four debug tokens, ThemeBridge wired in `App`, `.status-*` on `--status-*`, U4/U10/U11), T4a (the ungated Morph chrome: token layers 1-3 with the brand values and every stylesheet on role tokens, static rules 13-15; the text-only `<h1>` header in the three-column grid; the third-party logo deleted; the head metas and Montserrat; the component states of 06 3.5, including the opaque selection badge at `bottom: 64px`, B-L24; U5 in `contrast.test.mjs`, U6), T4b (the owner-approved brand artwork: the six app files in `assets/brand/` with `NOTICE.md`, the favicons, the apple-touch icon and `og:image`, the wordmark lockup with the monogram at <= 520 px, the viewport watermark hidden in pilot mode, static rule 16), T4c (British English in the visible labels and tooltips: "Colour", "Centre", and "Panel Angle (°)" for the one label that wrapped), T5 (the Morph scene and canvas: layer-4 brand values with `--scene-frame-on-light` and `--scene-overlay-halo`, adaptive panel frames, the outlined opaque camera body, the two-tone dashed frustum, JetBrains Mono 700 and Montserrat on the canvases with `BIND_FONTS_DEFAULT` true, the font gate of row F6-1), T6a (the Morph export headers and generator strings, `Brand.jsonGenerator`, `shortName`, `company`, `homepage`; the oracle tests keep the Phase-1 strings through `LEGACY_BRAND`), T6b (every download name derived from `Brand.filePrefix = 'morph-led-wall'`, `Brand.files.hdriPixelMap`, `compare.mjs --rename`, static rule 17), T7 (the 8-colour Morph palette with Studio Grey `#d9d9d6` as the injected default, the card swatches from the palette, the v1 colour fill from `Palette.legacySectionColors`, U5 scene rows, U7, U8), T9 (the README with the Morph lockups via `<picture>`, the product name, the brand badge colours and the Brand and licence section; the two README lockups complete the 8 files of 06 5.8). |
@@ -4360,3 +4373,12 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 3.3, 8.1: `Strategies.frustumDepthM` is retired (its row deleted). 8.2: B-L33 `Landed in 08 P2-11b`; 8.3: the `CameraRigView.js#rebuildFrustum` row is deleted. 08 10: the P2-11b as-built note (the near-plane floor; `#farSlots` and `updateFrustumDepths` stay with P2-12c).
 - `README.md`: the frustum release note.
 - 2.3: `scene-overlays.test.mjs` (the far corners of the lines and of the fill at the depths, on 08 6.10's slot lists, within 1e-6 m; the 15 m default; the near-plane floor), `camera-hub.test.mjs` (the analysis first; the depths passed to the rig; the import list), `core.test.mjs` (the Strategies keys; B-L33 landed).
+
+**08 P2-11c, true framing: B-L2 landed, B-M10 and B-L10's Z half completed (03 step F)** (docs/improvements/08-bugfix-roadmap.md 6.10, 4.4, Q13, AC 42, 43; docs/improvements/03-pivot.md 6.6 step F, 4.1, 3.5, tests 19 and 21; manifest `tests/regression/expected/P2-11c.json`: the orbit target on the curved, cornered and mixed walls (the config screenshots, `p2_mixed_content`, `pivot_modes`, `import_edge/iii_weird_mode`, the box-corner `normals_debug` views), Reset facing the wall (`p2_curved_safe_distance`, `p2_true_framing`), concave30's D (2.92 -> 1.88 m in its safe-distance OBJ), Z 0 and -5 kept (`p2_zero_inputs/camera_zero`, `pivot_stage`), and no `min` attribute (the `pivot_stage` states); every flat wall along +X at the identity is identical; check-orientation, check-gltf and a headless Blender import of the concave30 safe-distance OBJ pass):
+- 3.6 `WallLayout`: `framingBounds(layout)` (the signature takes the stage layout; memoised per layout) returns `FramingPolicy`'s named boxes (07 C34) `{generativeBox, wallBox, stageExtent, facing, wallZ}`; the fallback for a wall without finite grid vertices is a zero box at the walk's start; `bounds()` is the transformed box of `worldVertices()` (07 C34's `wallBox`; equal to `generativeBounds()` in Phase 2). 3.3, 8.1: `Strategies.framingBounds = 'layout'` (`'flat-pivot'` deleted).
+- 3.5: `Wall.flatBounds` is deleted (no reader left). `CineCamera.resetTo(framing)` stands 5 m (`RESET_DISTANCE_M`) in front of the wall along its chord `facing`, level, `rotY = wrapDeg(atan2(facing.x, facing.z))`, looking at `wallBox.center`; `maxSafeDistance(extent)` takes the stage extent `{width, height}`; the posZ rule is `finiteOr(parseFloat(r), r3(ctx.wallZ + 5))` (no minimum, Q13; 03 4.1's step-F form); `translateBy` loses its LEGACY(B-L10) tag. `domain/rules.js` gains `finiteOr` and `wrapDeg` (08 4.4), ahead of P2-8b/c.
+- 3.8 `OrbitController.updateTargetPosition`: `generativeBox.center + offset` (LEGACY(B-L2) removed). 3.10: the hub's `fits` and `safeDistance` and `syncSafeDistance`'s `extent` read `stageExtent`; `resetPose` and `setCameraField` read the framing. 3.7 `SafeDistanceView.create({layout, cine, extent})`. 3.11 `CameraPanel`: 03 T4's `#camera-pos-z` `min` mirror and `cameraZMinAttribute` are removed; the Reset mirror writes Z to 1 mm and the rotations to 0.1 degree (`roundTo`, the legacy "5" and "0" unchanged). `index.html`: `#camera-pos-z` loses `min="0.1"`. 3.12, 7: `frameBounds = () => framingBounds(wallController.currentLayout)`. 5.2: CameraPanel no longer subscribes `WALL_PIVOT_CHANGED` / `WALL_REBUILT`. 6.1 step 4, 6.5 Reset, 6.0 PR7.
+- 8.2: B-L2 and B-M10 `Landed in 08 P2-11c` / `08 P2-11a ... and 08 P2-11c`; B-L10's Z half noted; 8.3: the rows `Wall.js#flatBounds`, `CineCamera.js#translateBy`, `WallLayout.js#framingBounds` and `OrbitController.js#updateTargetPosition` are deleted. 9: the F3 row (step F landed).
+- Deviations from 08 6.10 and 03 6.6, recorded in 08 10 (P2-11 as built) and 03 6.6: the framing returns the named boxes, not the flat `{min, max, center, width, height, facing}` with the flat-pivot fields; `wallZ` is the walk start's z in the layout's frame; the stage extent counts a section without columns; the Reset mirror's display precision. The next unit's whole-wall orientation belongs in the walk, so every box, the facing, the quads and the stage extent follow it.
+- `README.md`: the Reset, orbit, Max Distance and Z Position release note. 03: the step-F as-built note.
+- 2.3: `frustum-coverage.test.mjs` (the framing: memo and keys, flat walls bit for bit, the pivot translation, 03 test 21's half circle, a 180-degree section (rotY 180, negative Z), the same D along X, Z and 45 degrees with Reset 5 m in front (08 AC 42, 43), Reset under a yaw of the wall, the stage extent without a ceiling section, the no-NaN fallback, `wrapDeg`, `finiteOr`, the Z rule); `pivot.test.mjs` (test 6 for step F; the flat consumers bit for bit); `domain.test.mjs` (the posZ rule, `resetTo`, `maxSafeDistance(extent)`; `flatBounds` gone); `geometry.test.mjs`, `camera-hub.test.mjs`, `pivot-controller.test.mjs` (no min attribute), `gizmo.test.mjs`, `safe-distance-band.test.mjs`, `core.test.mjs` (the Strategies value; B-L2 and B-M10 landed).

@@ -205,8 +205,14 @@ function legacyCardValues(section) {
   return { curveType, canvasWidth, canvasHeight, summary, exceeds4K, hint3958, hint4044 };
 }
 
-/** The 'flat-pivot' framing bounds of a wall at the identity pivot (03 6.6): the flat bounds with minX = wallZ = +0. */
-const identityBounds = (wall) => ({ ...wall.flatBounds(), minX: 0, wallZ: 0 });
+/** The legacy flat wall size as a stage extent {width, height} (CineCamera.maxSafeDistance's argument since 08 P2-11c). */
+const flatExtent = (sections) => { const b = legacyFlatBounds(sections); return { width: b.totalWidth, height: b.maxHeight }; };
+
+/** The framing of a flat wall along +X at the identity (08 P2-11c): the wall box centre (W/2, H/2, 0), facing (-0, 0, 1). */
+const flatFraming = (sections) => {
+  const b = legacyFlatBounds(sections);
+  return { wallBox: { center: { x: b.totalWidth / 2, y: b.maxHeight / 2, z: 0 } }, facing: { x: -0, y: 0, z: 1 } };
+};
 
 /** createSafeDistanceMesh 2591-2612 (D only). */
 function legacySafeDistance(cameraSettings, wallSections) {
@@ -627,20 +633,7 @@ describe('Wall', () => {
     assert.deepEqual(new Wall().totals(), { totalPixels: 15360, totalPanels: 15, totalSections: 1, totalArc: 0 });
   });
 
-  test('flatBounds equals the legacy loop (fuzzed, Object.is) and is computed live', () => {
-    for (const sections of fuzzWalls(2)) {
-      const bounds = new Wall({ sections }).flatBounds();
-      const legacy = legacyFlatBounds(sections);
-      assert.deepEqual(Object.keys(bounds), ['totalWidth', 'maxHeight']);
-      same(bounds.totalWidth, legacy.totalWidth, 'totalWidth');
-      same(bounds.maxHeight, legacy.maxHeight, 'maxHeight');
-    }
-    const wall = new Wall();
-    assert.deepEqual(wall.flatBounds(), { totalWidth: 2.5, maxHeight: 1.5 });
-    wall.sections[0].panelCols = 10;
-    assert.equal(wall.flatBounds().totalWidth, 5);
-    assert.deepEqual(new Wall({ sections: [] }).flatBounds(), { totalWidth: 0, maxHeight: 0 });
-  });
+  // Wall.flatBounds was deleted by 08 P2-11c (B-L2): the framing reads the stage layout (frustum-coverage.test.mjs).
 
   test('appendLikeLast equals the legacy addSection literal whenever the allocator is above every live id (fuzzed, Object.is) and pushes onto the live array', () => {
     const palette = ['#00f0ff', '#ff00aa', '#00ff66', '#ff6b35', '#ffdd00', '#aa66ff', '#66ffaa', '#ff6666'];
@@ -1078,6 +1071,7 @@ describe('CineCamera', () => {
     for (const [field, [legacy, writeBack]] of Object.entries(LEGACY_CAMERA_RULES)) {
       assert.equal(CineCamera.FIELD_RULES[field].writeBack, writeBack, `${field}.writeBack`);
       assert.ok(Object.isFrozen(CineCamera.FIELD_RULES[field]));
+      if (field === 'posZ') continue;   // 08 P2-11c (Q13): no minimum, finiteOr (the next test)
       for (const raw of ALL_INPUTS) {
         const expected = legacy(raw);
         same(CineCamera.FIELD_RULES[field].parse(raw), expected, `${field}.parse(${JSON.stringify(raw)})`);
@@ -1090,29 +1084,32 @@ describe('CineCamera', () => {
   });
 
   // 03 T1 (4.1; 8.1 "domain.test.mjs")
-  test('posZ with a context: wallZ +0 and -0 are the legacy rule bit for bit; every other rule ignores the context', () => {
-    for (const wallZ of [0, -0]) {
+  test('posZ (08 P2-11c, Q13): finiteOr(parseFloat(raw), r3(wallZ + 5)), no minimum; every other rule ignores the context', () => {
+    const want = (raw, wallZ) => { const v = parseFloat(raw); return Number.isFinite(v) ? v : Math.round((wallZ + 5) * 1000) / 1000; };
+    for (const wallZ of [0, -0, -2.3397, 2]) {
       for (const raw of ALL_INPUTS) {
-        same(CineCamera.FIELD_RULES.posZ.parse(raw, { wallZ }), LEGACY_CAMERA_RULES.posZ[0](raw), `posZ(${JSON.stringify(raw)}) at ${Object.is(wallZ, -0) ? '-0' : '+0'}`);
-        same(new CineCamera().setField('posZ', raw, { wallZ }), LEGACY_CAMERA_RULES.posZ[0](raw), 'setField with ctx');
+        same(CineCamera.FIELD_RULES.posZ.parse(raw, { wallZ }), want(raw, wallZ), `posZ(${JSON.stringify(raw)}) at ${wallZ}`);
+        same(new CineCamera().setField('posZ', raw, { wallZ }), want(raw, wallZ), 'setField with ctx');
       }
     }
+    for (const raw of ALL_INPUTS) same(new CineCamera().setField('posZ', raw), want(raw, 0), 'no context: wallZ 0');
+    assert.ok(Object.is(new CineCamera().setField('posZ', '0'), 0), "'0' gives 0 (it gave 5, B-L9, floored at 0.1)");
     for (const [field, [legacy]] of Object.entries(LEGACY_CAMERA_RULES)) {
       if (field === 'posZ') continue;
       for (const raw of ALL_INPUTS) same(new CineCamera().setField(field, raw, { wallZ: -2.3397 }), legacy(raw), `${field} ignores ctx`);
     }
   });
 
-  test('posZ off the wall plane (wallZ = -2.3397): 0 is valid, the floor is r3(wallZ + 0.1), a non-number gives r3(wallZ + 5)', () => {
+  test('posZ off the wall plane (wallZ = -2.3397): every finite value is kept, a non-number gives r3(wallZ + 5) (03 4.1 step F)', () => {
     const at = (raw, wallZ) => new CineCamera().setField('posZ', raw, { wallZ });
     assert.ok(Object.is(at('0', -2.3397), 0));
     assert.ok(Object.is(at('', -2.3397), 2.66));
     assert.equal(at('', -2.3397).toFixed(3), '2.660');
     assert.ok(Object.is(at('abc', -2.3397), 2.66));
-    assert.ok(Object.is(at('-5', -2.3397), -2.24), 'no float noise');
+    assert.ok(Object.is(at('-5', -2.3397), -5), 'no minimum since 08 P2-11c (it was -2.24)');
     assert.ok(Object.is(at('-2.2', -2.3397), -2.2));
-    assert.ok(Object.is(at('-5', -2), -1.9));
-    assert.ok(Object.is(at('1.5', 2), 2.1), 'a wall plane in front of the stage origin floors positive values too');
+    assert.ok(Object.is(at('-5', -2), -5));
+    assert.ok(Object.is(at('1.5', 2), 1.5), 'a wall plane in front of the stage origin floors nothing either');
     assert.ok(Object.is(at('', 2), 7));
   });
 
@@ -1179,21 +1176,21 @@ describe('CineCamera', () => {
   // which keeps the legacy-parity and 03 6.8 re-expression cases). maxSafeDistance stays here.
   test('maxSafeDistance of the default camera and wall', () => {
     const cam = new CineCamera();
-    assert.equal(`≤ ${cam.maxSafeDistance(identityBounds(new Wall())).toFixed(2)}m`, '≤ 2.19m');
+    assert.equal(`≤ ${cam.maxSafeDistance(flatExtent(new Wall().sections)).toFixed(2)}m`, '≤ 2.19m');
   });
 
   test('maxSafeDistance equals createSafeDistanceMesh 2610-2612 (fuzzed, Object.is)', () => {
     const rand = rng(23);
     for (const sections of fuzzWalls(24, 400)) {
       const cam = fuzzCamera(rand);
-      same(cam.maxSafeDistance(identityBounds(new Wall({ sections }))), legacySafeDistance(cam, sections), 'maxSafeDistance (2610-2612)');
+      same(cam.maxSafeDistance(flatExtent(sections)), legacySafeDistance(cam, sections), 'maxSafeDistance (2610-2612)');
     }
   });
 
-  test('resetTo equals resetCameraPosition 2559-2564 (fuzzed, Object.is)', () => {
+  test("resetTo of a flat wall's framing equals resetCameraPosition 2559-2564 (fuzzed, Object.is)", () => {
     for (const sections of fuzzWalls(25, 100)) {
       const cam = fuzzCamera(rng(sections.length + 1));
-      cam.resetTo(identityBounds(new Wall({ sections })));
+      cam.resetTo(flatFraming(sections));
       const { totalWidth, maxHeight } = legacyFlatBounds(sections);
       same(cam.posX, totalWidth / 2, 'posX');
       same(cam.posY, maxHeight / 2, 'posY');
@@ -1201,10 +1198,14 @@ describe('CineCamera', () => {
     }
   });
 
-  test("resetTo with 'flat-pivot' bounds: posX = minX + totalWidth / 2, posZ = wallZ + 5 (03 6.6)", () => {
+  test('resetTo (08 P2-11c): wallBox.center + 5·facing, level, rotY = wrapDeg(atan2(facing.x, facing.z)) (looks back along facing)', () => {
     const cam = new CineCamera();
-    cam.resetTo({ totalWidth: 2.5, maxHeight: 1.5, minX: -1.25, wallZ: -2 });
-    assert.deepEqual(plainPose(cam), { posX: 0, posY: 0.75, posZ: 3, rotX: 0, rotY: 0, rotZ: 0 });
+    const at = (center, facing) => { cam.resetTo({ wallBox: { center }, facing }); return plainPose(cam); };
+    assert.deepEqual(at({ x: 0, y: 0.75, z: -2 }, { x: -0, y: 0, z: 1 }), { posX: 0, posY: 0.75, posZ: 3, rotX: 0, rotY: 0, rotZ: 0 });
+    assert.deepEqual(at({ x: 1, y: 2, z: 3 }, { x: -1, y: 0, z: 0 }), { posX: -4, posY: 2, posZ: 3, rotX: 0, rotY: -90, rotZ: 0 });
+    assert.deepEqual(at({ x: 1, y: 2, z: 3 }, { x: 1, y: 0, z: 0 }), { posX: 6, posY: 2, posZ: 3, rotX: 0, rotY: 90, rotZ: 0 });
+    assert.equal(at({ x: 0, y: 1, z: 0 }, { x: -1e-16, y: 0, z: -1 }).rotY, 180, 'atan2 gives -180; wrapDeg maps it to 180');
+    assert.equal(CineCamera.RESET_DISTANCE_M, 5);
   });
 
   test('presetShortName (B-L34: first word of the preset name)', () => {

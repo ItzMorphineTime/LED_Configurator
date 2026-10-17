@@ -2,9 +2,10 @@
  * @module domain/rules
  * The shared numeric rules of the UI rule tables and (from 08 P2-3b) the import validator, so the app's own inputs and
  * its import can never disagree (docs/improvements/08-bugfix-roadmap.md 4.4; spec 07 C22). 08 P2-8a: `clamp`,
- * `roundInt`, `deepFreeze`. 08 P2-3b: `sanitizeText` (with `stripControls`, `truncateUnits`), the section-id allocator
- * of 07 6.8 (`MAX_SECTION_ID`, `createIdAllocator`) and the size limits (`MAX_IMPORT_BYTES` and its parts; the logo
- * limits are used from 08 P2-13a). 03 T1: `STAGE_POSITION_LIMIT_M`, the +-100,000 m stage-position bound of 07 C22.
+ * `roundInt`, `deepFreeze`. 08 P2-11c: `finiteOr` and `wrapDeg` (4.4, ahead of P2-8b/c). 08 P2-3b: `sanitizeText`
+ * (with `stripControls`, `truncateUnits`), the section-id allocator of 07 6.8 (`MAX_SECTION_ID`, `createIdAllocator`)
+ * and the size limits (`MAX_IMPORT_BYTES` and its parts; the logo limits are used from 08 P2-13a). 03 T1:
+ * `STAGE_POSITION_LIMIT_M`, the +-100,000 m stage-position bound of 07 C22.
  * Legacy source: none (new in Phase 2); `deepFreeze` is a verbatim copy of the module-private helper of
  * js/legacy/LegacyCompat.js, which keeps its own copy because legacy/ may not import domain/ (ARCHITECTURE.md 1.3).
  * Layer: domain (may import legacy; THREE-free and DOM-free; this module imports nothing).
@@ -27,6 +28,25 @@ export const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
  * @returns {number} Math.round(v)
  */
 export const roundInt = (v) => Math.round(v);
+
+/**
+ * `v` when it is a finite number, else `d` (08 4.4; delivered by 08 P2-11c for the camera Z rule, Q13, ahead of P2-8b,
+ * which swaps every other `orDefault` rule for it, B-L9). Unlike `orDefault`, 0 is kept.
+ * Side effects: none.
+ * @param {number} v
+ * @param {number} d
+ * @returns {number}
+ */
+export const finiteOr = (v, d) => (Number.isFinite(v) ? v : d);
+
+/**
+ * An angle in degrees wrapped into (-180, 180] (08 4.4; delivered by 08 P2-11c for Reset's pan, ahead of P2-8c):
+ * wrapDeg(-180) = 180, wrapDeg(190) = -170, wrapDeg(+0) = wrapDeg(-0) = +0.
+ * Side effects: none.
+ * @param {number} v
+ * @returns {number}
+ */
+export const wrapDeg = (v) => 180 - ((((180 - v) % 360) + 360) % 360);
 
 /**
  * The characters `sanitizeText` strips (spec 07 C28 and 4.7): the C0 controls U+0000-U+001F, DEL and the C1 controls

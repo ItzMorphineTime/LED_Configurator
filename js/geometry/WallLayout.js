@@ -3,13 +3,15 @@
  * The single cursor walk over the wall sections. It replaces the three arithmetically identical legacy walks
  * (viewport 1482-1549, safe distance 2614-2647, exports 5012-5080) and is the single source of every edge
  * position and panel transform; every consumer reaches it through layoutProject(). Also hosts the single
- * flat-bounds switch (framingBounds) and Feature 3's pivot geometry (03 T2, docs/improvements/03-pivot.md 6.1-6.6):
+ * framing switch (framingBounds) and Feature 3's pivot geometry (03 T2, docs/improvements/03-pivot.md 6.1-6.6):
  * the anchors (firstEdge, lastEdge, generativeBounds, pivotPoint), baseY, translated(), resolvePivot, stageShift and
  * the frames of layoutProject (layout, stage, export). 08 P2-11a adds the world-space geometry that the coverage
  * analyser and the framing read (docs/improvements/08-bugfix-roadmap.md 6.10): columnQuads() and worldVertices()
- * (memoised per instance, after spec 02's postTransform), extentAcross(facing) and chordFacing().
+ * (memoised per instance, after spec 02's postTransform), extentAcross(facing) and chordFacing(); 08 P2-11c makes
+ * framingBounds the 'layout' framing of a layout (FramingPolicy's three named boxes, 07 C34).
  * Legacy source: index.html@cd3fd3f 1479-1549 (walk + panel centres), 2614-2647 (flattened edges),
- * 5012-5038 + 5051-5066 (the export copy of the walk), 2489-2493 / 2553-2557 / 2598-2603 / 3758-3762 (flat bounds).
+ * 5012-5038 + 5051-5066 (the export copy of the walk); the flat bounds of 2489-2493 / 2553-2557 / 2598-2603 / 3758-3762 are
+ * replaced by the 'layout' framing (08 P2-11c).
  * Layer: geometry (may import domain, legacy; THREE-free and DOM-free).
  */
 
@@ -229,13 +231,22 @@ export class WallLayout {
   }
 
   /**
-   * The box of every grid vertex: generativeBounds() until spec 02 makes it the transformed box (after the section
-   * offsets, all sections; FramingPolicy's `wallBox`, 07 C34).
-   * Side effects: none.
+   * The transformed box of every grid vertex (FramingPolicy's `wallBox`, 07 C34; since 08 P2-11c): the box of
+   * worldVertices(), every section after its postTransform (spec 02's offsets; all sections, detached ones included).
+   * While no section carries a postTransform (Phase 2) it equals generativeBounds(). Same conventions: NaN coordinates
+   * are skipped, 0 and -0 are not distinguished, a wall without grid vertices gives the empty box.
+   * Side effects: none (reads the memoised worldVertices()).
    * @returns {{min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}}|null}
+   *   a new object, or null for an empty wall
    */
   bounds() {
-    return this.generativeBounds();
+    if (this.sections.length === 0) return null;
+    const min = { x: Infinity, y: Infinity, z: Infinity };
+    const max = { x: -Infinity, y: -Infinity, z: -Infinity };
+    for (const list of this.worldVertices()) {
+      for (let k = 0; k < list.length; k += 3) includePoint(min, max, list[k], list[k + 1], list[k + 2]);
+    }
+    return { min, max };
   }
 
   /**
@@ -659,40 +670,126 @@ export function layoutProject(project, { frame = 'stage' } = {}) {
 }
 
 /**
- * The 'flat-pivot' framing bounds (03 6.6, step A): the legacy flat rectangle (the flat width sum x the tallest
- * section, at z = 0 from x = 0), translated into the stage frame. `0 - x` (not `-x`) gives +0 at the identity.
- * Module-private; the step-F 'layout' case (08 P2-11c) reuses it.
- * @param {import('../domain/Project.js').Project} project
- * @param {PivotResolution|null} resolution
- * @returns {{totalWidth: number, maxHeight: number, minX: number, wallZ: number}}
+ * An axis-aligned box with its centre, (min + max) / 2 per axis. Frozen.
+ * @typedef {Readonly<{min: Readonly<{x: number, y: number, z: number}>, max: Readonly<{x: number, y: number, z: number}>,
+ *            center: Readonly<{x: number, y: number, z: number}>}>} FramingBox
  */
-function flatPivot(project, resolution) {
-  const b = project.wall.flatBounds();
-  const so = resolution ? resolution.stageOrigin : ZERO;
-  return { totalWidth: b.totalWidth, maxHeight: b.maxHeight, minX: 0 - so.x, wallZ: 0 - so.z };
+
+/**
+ * The framing of a layout (08 6.10, P2-11c; FramingPolicy's three named boxes, 07 C34), in the layout's frame (the
+ * stage frame for the stage layout). Each consumer names the box it reads:
+ *   generativeBox: generativeBounds() (attached sections, pre-offset): the orbit target before 07 I4b;
+ *   wallBox: bounds() (transformed, every section): the centre Reset looks at (07's F / open / new / restore from I4b);
+ *   stageExtent: {width, height} of the sections whose LED normal has |n.y| <= 0.9 (overhead sections excluded, 09
+ *     Q16): width = extentAcross(facing) (the wall seen face-on, invariant under a yaw of the wall), height = the y range
+ *     of their vertices; read by the safe distance D and the coverage's fits test;
+ *   facing: chordFacing(), the direction the wall faces as a whole: Reset stands on it, 5 m from wallBox.center;
+ *   wallZ: the z of the walk's start in this frame (0 + the layout's translation z; 0 for a bare walk): the posZ rule's
+ *     context (03 4.1: a non-numeric Z entry puts the camera 5 m in front of the wall start plane).
+ * On every harness wall (no offsets, no detached or horizontal sections) the boxes coincide with the box of
+ * worldVertices(). Nothing here assumes the wall runs along +X or faces +Z.
+ * @typedef {Readonly<{generativeBox: FramingBox, wallBox: FramingBox,
+ *            stageExtent: Readonly<{width: number, height: number}>,
+ *            facing: Readonly<{x: number, y: number, z: number}>, wallZ: number}>} Framing
+ */
+
+/** The framing memo: one framing per layout instance (a layout is rebuilt once per WALL_REBUILT). */
+const FRAMING_MEMO = new WeakMap();
+
+/** The |n.y| above which a section faces up or down and leaves the stage extent (09 Q16, 07 C34). */
+const STAGE_EXTENT_MAX_NY = 0.9;
+
+/**
+ * The box {min, max} with its centre, frozen; null when the box is null or not finite. Module-private.
+ * @param {{min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}}|null} b
+ * @returns {FramingBox|null}
+ */
+function framingBox(b) {
+  if (!b) return null;
+  const center = { x: (b.min.x + b.max.x) / 2, y: (b.min.y + b.max.y) / 2, z: (b.min.z + b.max.z) / 2 };
+  if (![center.x, center.y, center.z].every(Number.isFinite)) return null;
+  return Object.freeze({ min: Object.freeze({ ...b.min }), max: Object.freeze({ ...b.max }), center: Object.freeze(center) });
 }
 
 /**
- * The single switch for the four flat-bounds consumers (orbit target, camera reset, the coverage's fits test since 08
- * P2-11a, safe-distance D); they receive it injected as `frameBounds` (App passes WallController's cached resolution
- * from 03 T3).
- * 'flat-pivot' (03 T2, step A; the Phase-1 'flat' case is deleted): {totalWidth, maxHeight} as legacy, plus the flat
- * wall's stage placement minX = 0 - stageOrigin.x and wallZ = 0 - stageOrigin.z (both +0 at the identity, so every
- * consumer is identity-exact, 03 6.6). Step F (08 P2-11c) adds the 'layout' case.
- * Ports: index.html@cd3fd3f lines 2489-2493, 2553-2557, 2598-2603, 3758-3762 (via Wall.flatBounds).
- * Side effects: none.
- * @param {import('../domain/Project.js').Project} project
- * @param {PivotResolution|null} [resolution]  defaults to the live resolution of the project's pivot
- * @returns {{totalWidth: number, maxHeight: number, minX: number, wallZ: number}} metres, stage frame
+ * FramingPolicy's stageExtent (07 C34): every section counts except one with a column whose LED normal has
+ * |n.y| > 0.9 (it faces up or down: a ceiling or a floor); width = layout.extentAcross(facing) over them, height = their
+ * y range. null when nothing counts or a value is not finite. Module-private.
+ * @param {WallLayout} layout
+ * @param {{x: number, z: number}} facing
+ * @returns {Readonly<{width: number, height: number}>|null}
+ */
+function stageExtentOf(layout, facing) {
+  const excluded = new Set();
+  for (const q of layout.columnQuads()) {
+    if (!(Math.abs(q.n.y) <= STAGE_EXTENT_MAX_NY)) excluded.add(q.sectionIndex);
+  }
+  const include = (i) => !excluded.has(layout.sections[i].sectionIndex);
+  let lo = Infinity;
+  let hi = -Infinity;
+  layout.worldVertices().forEach((list, i) => {
+    if (!include(i)) return;
+    for (let k = 1; k < list.length; k += 3) {
+      if (list[k] < lo) lo = list[k];
+      if (list[k] > hi) hi = list[k];
+    }
+  });
+  if (!(hi >= lo)) return null;
+  const width = layout.extentAcross(facing, include);
+  const height = hi - lo;
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
+  return Object.freeze({ width, height });
+}
+
+/**
+ * The 'layout' framing of one layout (08 6.10, P2-11c), or the fallback for a wall without finite grid vertices (an
+ * empty wall, or non-finite section values): a zero box at the walk's start in this frame, width = height = 0 and
+ * facing (0, 0, 1), which is the 'flat-pivot' framing of an empty wall (03 6.6). Module-private.
+ * @param {WallLayout} layout
+ * @returns {Framing}
+ */
+function layoutFraming(layout) {
+  const t = layout.pivot ? layout.pivot.translation : ZERO;
+  const wallZ = 0 + t.z;
+  const generativeBox = framingBox(layout.generativeBounds());
+  const wallBox = framingBox(layout.bounds());
+  const facing = layout.chordFacing();
+  const stageExtent = generativeBox && wallBox ? stageExtentOf(layout, facing) : null;
+  if (!generativeBox || !wallBox || !stageExtent) {
+    const origin = { x: 0 + t.x, y: 0, z: wallZ };
+    const box = framingBox({ min: origin, max: origin });
+    return Object.freeze({
+      generativeBox: box, wallBox: box, stageExtent: Object.freeze({ width: 0, height: 0 }),
+      facing: Object.freeze({ x: 0, y: 0, z: 1 }), wallZ,
+    });
+  }
+  return Object.freeze({ generativeBox, wallBox, stageExtent, facing: Object.freeze(facing), wallZ });
+}
+
+/**
+ * The single switch of the framing (FramingPolicy's three named boxes, 07 C34; 08 6.10, P2-11c: B-L2 fixed): the
+ * orbit target, Reset, the safe distance D and the coverage's fits test all read the framing of the stage layout,
+ * injected as `frameBounds` (App: framingBounds(wallController.currentLayout)), each from its named box. Memoised per
+ * layout instance, so the per-frame and per-pose callers (orbit drags, gizmo drags, pilot frames) never re-derive it.
+ *   'layout': layoutFraming(layout) (the Phase-1 'flat' case was deleted by 03 T2, the 'flat-pivot' case by P2-11c).
+ * At the identity pivot a flat wall along +X gives the legacy values bit for bit: generativeBox.center =
+ * (W / 2, H / 2, 0), facing (-0, 0, 1), stageExtent {W, H} (W the walk's last edge x, the legacy flat sum for widths
+ * whose sums are exact).
+ * Side effects: memoises the frozen framing on the layout (WeakMap).
+ * @param {WallLayout} layout  the stage layout (layoutProject's default frame)
+ * @returns {Framing}
  * @throws {Error} unsupportedStrategy if Strategies.framingBounds is not a supported value
  */
-export function framingBounds(project, resolution = resolvePivot(computeWallLayout(project.wall.sections), project.wall.pivot)) {
+export function framingBounds(layout) {
   switch (Strategies.framingBounds) {
-    case 'flat-pivot':
-      // LEGACY(B-L2, B-M10): flat bounds (the arc width sum x the tallest section), translated by the stage origin;
-      // curvature and angle offsets are still ignored by the orbit target, Reset, D and the coverage's fits test (the
-      // coverage rays read the stage layout since 08 P2-11a; step F, 08 P2-11c, fixes the rest).
-      return flatPivot(project, resolution);
+    case 'layout': {
+      let framing = FRAMING_MEMO.get(layout);
+      if (!framing) {
+        framing = layoutFraming(layout);
+        FRAMING_MEMO.set(layout, framing);
+      }
+      return framing;
+    }
     default:
       throw unsupportedStrategy('framingBounds', Strategies.framingBounds);
   }
