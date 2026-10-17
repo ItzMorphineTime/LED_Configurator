@@ -329,14 +329,14 @@ describe('test 20: the WALL_REBUILT re-anchor of a selected pivot (03 5.4)', () 
     assert.deepEqual(r.spies.at(-1), ['after', 0.75], 'a later WALL_REBUILT subscriber already sees the anchor');
   });
 
-  test('an import (which resets the session-only pivot) re-anchors too', () => {
+  test('an import (which keeps the session-only pivot, 03 12.11) re-anchors too', () => {
     const r = anchorRig();
     r.pc.toggleSelect();
     r.pc.setMode('mesh-center');
     r.pc.setOffsetAxis('y', '1.25');
     assert.equal(r.gizmo.group.position.y, 1.25);
     r.wc.applyImport({ sections: [new WallSection({ ...WallSection.createDefault(), panelRows: 7 })], meshMode: null });
-    assert.equal(r.gizmo.group.position.y, 0, 'the identity pivot of the imported (v1) wall');
+    assert.equal(r.gizmo.group.position.y, 1.25, 'the session pivot on the imported (v1) wall');
   });
 
   test('a camera target is left untouched by WALL_REBUILT', () => {

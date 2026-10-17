@@ -109,7 +109,8 @@ export class App {
     const brand = theme.brand;
     const bus = new EventBus();
     const dialogs = createDialogs(win);
-    const project = Project.createDefault({ defaultSectionColor: theme.palette.defaultSectionColor });   // 06 T7
+    // 06 T7; the owner's new-project defaults (03 12.11): section meshes, 'wall-center', Centre on −X
+    const project = Project.createNew({ defaultSectionColor: theme.palette.defaultSectionColor });
     const display = project.display;
     const style = project.panelIdStyle;
     const logos = project.logos;

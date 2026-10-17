@@ -80,13 +80,13 @@
             <div class="global-section mt-16">
                 <div class="global-section-title">Mesh Options</div>
                 <div class="mesh-mode-select" id="mesh-mode-select">
-                    <label class="mesh-mode-option active" data-mode="combined">
-                        <input type="radio" name="mesh-mode" value="combined" checked>
+                    <label class="mesh-mode-option" data-mode="combined">
+                        <input type="radio" name="mesh-mode" value="combined">
                         <span class="mesh-mode-radio"></span>
                         <span class="mesh-mode-label">Single Combined Mesh</span>
                     </label>
-                    <label class="mesh-mode-option" data-mode="section">
-                        <input type="radio" name="mesh-mode" value="section">
+                    <label class="mesh-mode-option active" data-mode="section">
+                        <input type="radio" name="mesh-mode" value="section" checked>
                         <span class="mesh-mode-radio"></span>
                         <span class="mesh-mode-label">Individual Section Meshes</span>
                     </label>
@@ -109,8 +109,8 @@
             <div class="global-section" id="pivot-section">
                 <div class="global-section-title">Wall Pivot</div>
                 <div class="pivot-mode-select" id="pivot-mode-select" role="radiogroup" aria-label="Pivot mode">
-                    <label class="pivot-mode-option active" data-pivot-mode="bottom-left">
-                        <input type="radio" name="pivot-mode" value="bottom-left" checked>
+                    <label class="pivot-mode-option" data-pivot-mode="bottom-left">
+                        <input type="radio" name="pivot-mode" value="bottom-left">
                         <span class="pivot-mode-radio"></span>
                         <span class="pivot-mode-label">Bottom-left corner</span>
                     </label>
@@ -119,8 +119,8 @@
                         <span class="pivot-mode-radio"></span>
                         <span class="pivot-mode-label">Wall mesh centre on floor (bounding box)</span>
                     </label>
-                    <label class="pivot-mode-option" data-pivot-mode="wall-center">
-                        <input type="radio" name="pivot-mode" value="wall-center">
+                    <label class="pivot-mode-option active" data-pivot-mode="wall-center">
+                        <input type="radio" name="pivot-mode" value="wall-center" checked>
                         <span class="pivot-mode-radio"></span>
                         <span class="pivot-mode-label">Wall centre on floor (first ↔ last edge)</span>
                     </label>
@@ -149,13 +149,13 @@
                     <div class="section-row pivot-orientation-row">
                         <div class="input-field"><label for="pivot-align">Alignment</label>
                             <select id="pivot-align" class="ui-select pivot-align" title="Turn the wall about the pivot so the LED face's centre normal points along +X and the wall's centre lies toward −X.">
-                                <option value="center-neg-x">Centre on −X</option>
-                                <option value="none" selected>None</option>
+                                <option value="center-neg-x" selected>Centre on −X</option>
+                                <option value="none">None</option>
                             </select></div>
                         <div class="input-field"><label for="pivot-yaw-offset">Yaw offset (°)</label>
                             <input type="number" id="pivot-yaw-offset" step="0.1" min="-180" max="180" value="0"></div>
                     </div>
-                    <div class="pivot-yaw-readout" id="pivot-yaw-readout" aria-live="polite">Wall yaw 0.0° (no alignment, offset 0.0°)</div>
+                    <div class="pivot-yaw-readout" id="pivot-yaw-readout" aria-live="polite">Wall yaw 90.0° = alignment 90.0° + offset 0.0°</div>
                 </div>
                 <div class="toggle-container">
                     <span class="toggle-label" id="pivot-keep-stage-label">Keep stage layout on pivot change</span>
@@ -167,7 +167,7 @@
                     <div class="toggle active" id="toggle-pivot-marker" role="switch" tabindex="0" aria-checked="true" aria-labelledby="pivot-marker-label"></div>
                 </div>
                 <div class="pivot-readout">
-                    <div id="pivot-readout">Pivot (from wall start): 0.000, 0.000, 0.000 m</div>
+                    <div id="pivot-readout">Pivot (from wall start): 1.250, 0.000, 0.000 m</div>
                     <div class="pivot-hint">Exports: mesh origin = pivot. Viewport: grid origin = pivot on the floor.</div>
                     <div class="pivot-hint">Session only: the pivot and orientation are not saved in project files yet.</div>
                     <div class="pivot-status" id="pivot-status" aria-live="polite"></div>

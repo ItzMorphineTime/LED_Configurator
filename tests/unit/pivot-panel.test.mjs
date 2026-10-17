@@ -236,15 +236,15 @@ describe('PivotPanel mirrors and listeners with the real controller (03 3.2; AC 
     assert.equal(r.interaction.snap.pivotM, 0.5);
   });
 
-  test('an import resets the panel to the identity (the pivot is session-only) and clears the status', () => {
+  test('an import keeps the session pivot in the panel (03 12.11) and clears the status', () => {
     const r = makeRig();
     r.pc.setMode('mesh-center');
     r.pc.setOffsetAxis('y', '2');
     r.wc.applyImport({ sections: r.project.wall.sections.slice(), meshMode: null });
-    assert.equal(r.labels[0].radio.checked, true);
-    assert.equal(r.$('pivot-offset-y').value, '0.000');
+    assert.equal(r.labels[1].radio.checked, true);
+    assert.equal(r.$('pivot-offset-y').value, '2.000');
     assert.equal(r.$('pivot-status').textContent, '');
-    assert.ok(new WallPivot().equals(r.project.wall.pivot));
+    assert.equal(r.project.wall.pivot.mode, 'mesh-center');
   });
 });
 

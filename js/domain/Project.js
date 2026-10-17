@@ -9,7 +9,7 @@
  */
 
 import { orDefault } from '../legacy/LegacyCompat.js';
-import { Wall } from './Wall.js';
+import { Wall, WallPivot } from './Wall.js';
 import { WallSection } from './WallSection.js';
 import { LogoLibrary } from './LogoLibrary.js';
 import { CineCamera } from './CineCamera.js';
@@ -137,6 +137,9 @@ export class PanelIdStyle {
 
 /** The whole configurable state of one LED wall project. */
 export class Project {
+  /** The mesh mode of a NEW project: 'section' ("Individual Section Meshes"), the owner's default of 2026-10-17. */
+  static NEW_PROJECT_MESH_MODE = 'section';
+
   /** @type {Wall} */
   wall;
   /** @type {'combined'|'section'|'panel'} the mesh mode (since 08 P2-3b an import can only set one of the three; legacy kept
@@ -180,6 +183,26 @@ export class Project {
    * @returns {Project}
    */
   static createDefault({ defaultSectionColor } = {}) {
+    return Project.#create({ defaultSectionColor });
+  }
+
+  /**
+   * A NEW project as the app starts it (the owner's defaults of 2026-10-17, 03 12.11): createDefault with the mesh mode
+   * NEW_PROJECT_MESH_MODE ('section') and WallPivot.createForNewProject() ('wall-center', Centre on −X). index.html's
+   * initial radio, select and readout states mirror these.
+   * Side effects: none.
+   * @param {{defaultSectionColor?: string}} [options]
+   * @returns {Project}
+   */
+  static createNew({ defaultSectionColor } = {}) {
+    const project = Project.#create({ defaultSectionColor });
+    project.meshMode = Project.NEW_PROJECT_MESH_MODE;
+    project.wall.pivot = WallPivot.createForNewProject();
+    return project;
+  }
+
+  /** @param {{defaultSectionColor?: string}} options @returns {Project} */
+  static #create({ defaultSectionColor }) {
     return new Project({
       wall: new Wall({ sections: [WallSection.createDefault({ color: defaultSectionColor })] }),
       display: new DisplaySettings(),

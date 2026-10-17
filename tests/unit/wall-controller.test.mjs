@@ -226,26 +226,27 @@ describe('the pivot cache, WALL_REBUILT cause and stageShift, commitPivot (03 5.
     assert.equal(r.wc.pivotResolution, null);
   });
 
-  test('applyImport resets the pivot to the identity (a v1 file, 03 4.4, Q14) before the rebuild, which has cause import', () => {
+  test('applyImport keeps the session pivot for a v1 file (the owner rule of 03 12.11); the rebuild has cause import', () => {
     const r = makeRig();
-    r.project.wall.pivot = pivotOf('wall-center', { x: 0, y: 0, z: 2 });
+    const session = pivotOf('wall-center', { x: 0, y: 0, z: 2 });
+    r.project.wall.pivot = session;
     r.wc.rebuild({ cause: 'init' });
     r.project.camera.posX = 0.5;
     let pivotAtRebuild;
     r.view.rebuild = () => { pivotAtRebuild = r.project.wall.pivot; r.trace.push('view.rebuild'); };
     r.wc.applyImport({ sections: [new WallSection(fields())], meshMode: 'combined' });
-    assert.ok(pivotAtRebuild.isIdentity && pivotAtRebuild.keepStageLayout);
+    assert.equal(pivotAtRebuild, session, 'the session pivot is kept');
     const rebuilt = r.emitted('WALL_REBUILT').at(-1);
     assert.equal(rebuilt.cause, 'import');
-    assert.deepEqual(rebuilt.stageShift, { x: -1.25, z: -2 });
+    const expectedShift = rebuilt.stageShift;
     assert.equal(r.project.camera.posX, 0.5, 'an import is a load: nothing is re-expressed');
     // 03 T4 (4.4, 5.5): WALL_PIVOT_CHANGED {import} after the assignment, before every other import mirror and the rebuild
     const [changed] = r.emitted('WALL_PIVOT_CHANGED');
     assert.deepEqual(Object.keys(changed), ['source', 'pivot', 'resolution', 'stageShift', 'yawShiftDeg', 'reexpressed', 'rebuilds']);
     assert.equal(changed.source, 'import');
-    assert.ok(changed.pivot.isIdentity && changed.pivot !== pivotAtRebuild, 'a copy of the assigned pivot');
-    assert.deepEqual(changed.resolution, resolvePivot(computeWallLayout(r.project.wall.sections), new WallPivot()));
-    assert.deepEqual(changed.stageShift, { x: -1.25, z: -2 }, 'against the cache, as the rebuild that follows');
+    assert.ok(changed.pivot.equals(session) && changed.pivot !== pivotAtRebuild, 'a copy of the kept pivot');
+    assert.deepEqual(changed.resolution, resolvePivot(computeWallLayout(r.project.wall.sections), session));
+    assert.deepEqual(changed.stageShift, expectedShift, 'against the cache, as the rebuild that follows');
     assert.equal(changed.reexpressed, false);
     assert.equal(changed.rebuilds, true);
     assert.ok(r.trace.lastIndexOf('WALL_PIVOT_CHANGED') < r.trace.lastIndexOf('WALL_MESH_MODE_CHANGED'));

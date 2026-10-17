@@ -545,3 +545,25 @@ describe('03 12.12 test 8: the export metadata of a turned wall', () => {
     assert.doesNotMatch(obj0, /# Orientation:/);
   });
 });
+
+describe('03 12.11: the new-project defaults (the owner request of 2026-10-17)', () => {
+  test('Project.createNew: section meshes, wall-center, Centre on -X; createDefault stays the legacy aggregate', () => {
+    const p = Project.createNew();
+    assert.equal(p.meshMode, 'section');
+    assert.equal(p.wall.pivot.mode, 'wall-center');
+    assert.deepEqual(p.wall.pivot.orientation, { align: 'center-neg-x', yawOffsetDeg: 0 });
+    assert.equal(p.wall.pivot.keepStageLayout, true);
+    const legacy = Project.createDefault();
+    assert.equal(legacy.meshMode, 'combined');
+    assert.ok(legacy.wall.pivot.isIdentity);
+  });
+
+  test('index.html starts with the same states: the section radio, the wall-center radio, Centre on -X selected', async () => {
+    const { readFileSync } = await import('node:fs');
+    const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+    assert.match(html, /<label class="mesh-mode-option active" data-mode="section">\s*<input type="radio" name="mesh-mode" value="section" checked>/);
+    assert.match(html, /<label class="pivot-mode-option active" data-pivot-mode="wall-center">\s*<input type="radio" name="pivot-mode" value="wall-center" checked>/);
+    assert.match(html, /<option value="center-neg-x" selected>/);
+    assert.doesNotMatch(html, /value="combined" checked|value="bottom-left" checked/);
+  });
+});

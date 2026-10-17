@@ -53,7 +53,7 @@
  */
 import { Events } from '../core/EventBus.js';
 import { computeWallLayout, layoutProject, resolvePivot, stageShift, yawShift } from '../geometry/WallLayout.js';
-import { Wall, WallPivot } from '../domain/Wall.js';
+import { Wall } from '../domain/Wall.js';
 
 /**
  * Wall use cases and the P1 rebuild pipeline.
@@ -423,9 +423,9 @@ export class WallController {
    * logos given (08 P2-3d, B-L21 fixed: legacy kept every entry, so logos keyed by old ids reattached to imported
    * sections that reused those ids; a v1 import passes none), replace the sections (and the id allocator), adopt a
    * truthy mesh mode (label mirror), re-render the cards (first expanded) and, with panel IDs on, the logo list, rebuild.
-   * Feature 3 (03 4.4, Q14): the file's pivot replaces the session's, the identity for a file without one (every file
-   * until project file v2: the pivot is session-only, the owner's decision of 2026-10-17), after the sections and before
-   * the rebuild, which runs with cause 'import'. An import is a load: nothing is re-expressed. Since 03 T4 the pivot
+   * Feature 3 (03 4.4, Q14; 12.11): the file's pivot replaces the session's; a file without one (every file until project
+   * file v2: the pivot is session-only, the owner's decision of 2026-10-17) keeps the session's pivot and orientation
+   * (the owner's rule of 2026-10-17). Either way after the sections and before the rebuild, which runs with cause 'import'. An import is a load: nothing is re-expressed. Since 03 T4 the pivot
    * mirrors hear of it at once (WALL_PIVOT_CHANGED {source: 'import'}, 03 5.5), before the other import mirrors.
    * Ports: index.html@cd3fd3f lines 4976 + 4989 (via Wall.replaceAll), 4991-4996, 4998-5002.
    * Side effects: model (logos, wall, wall.pivot, project.meshMode iff truthy); emits WALL_PIVOT_CHANGED {source:
@@ -444,7 +444,8 @@ export class WallController {
     project.logos.clear();
     if (logos) for (const [sectionId, entry] of logos) project.logos.set(sectionId, entry);
     project.wall.replaceAll(sections);
-    project.wall.pivot = pivot ?? new WallPivot();
+    // Owner rule (03 12.11): a file without a pivot (every v1 file) keeps the session's pivot and orientation
+    if (pivot) project.wall.pivot = pivot;
     // 03 T4 (4.4, 5.5): the pivot mirrors follow the file's pivot before the rebuild; nothing is re-expressed.
     const resolution = this.resolvePivotNow();
     this.#bus.emit(Events.WALL_PIVOT_CHANGED, {

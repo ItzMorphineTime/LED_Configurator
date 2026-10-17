@@ -54,6 +54,27 @@ export class WallPivot {
    */
   static DEFAULT_ALIGN = OrientationAlign.NONE;
 
+  /**
+   * The pivot of a NEW project (the owner's defaults of 2026-10-17, 03 12.11): 'wall-center' ("Wall centre on floor")
+   * with Centre on −X. The class defaults stay the identity (the implicit legacy pivot, which the legacy-parity oracles
+   * and `new WallPivot()` mean); App's Project.createNew installs these.
+   */
+  static NEW_PROJECT_MODE = PivotMode.WALL_CENTER;
+  static NEW_PROJECT_ALIGN = OrientationAlign.CENTER_NEG_X;
+
+  /**
+   * A pivot with the new-project defaults (NEW_PROJECT_MODE, NEW_PROJECT_ALIGN, zero offset and yaw offset, keep stage
+   * layout on).
+   * Side effects: none.
+   * @returns {WallPivot}
+   */
+  static createForNewProject() {
+    const p = new WallPivot();
+    p.setMode(WallPivot.NEW_PROJECT_MODE);
+    p.setAlign(WallPivot.NEW_PROJECT_ALIGN);
+    return p;
+  }
+
   /** @type {string} a PivotMode value */
   mode = PivotMode.BOTTOM_LEFT;
   /** @type {{x: number, y: number, z: number}} metres; replaced (never mutated in place) by every setter */
