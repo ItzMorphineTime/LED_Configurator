@@ -79,6 +79,7 @@
     --scene-overlay-halo: var(--morph-black-950);   /* halo of every two-tone overlay and edge outline (06 D15) */
     --scene-safe-wall: var(--ui-green-400);
     --scene-safe-threshold: var(--morph-red-600);
+    --scene-safe-clamped: var(--ui-orange-400);     /* 08 P2-5b: band vertices closer than D (the off-centre amber) */
     --scene-safe-line: var(--ui-red-400);
     --scene-safe-label: var(--ui-red-400);
     --scene-face-front: #2f6bff;

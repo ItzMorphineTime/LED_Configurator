@@ -210,7 +210,6 @@ describe('Strategies', () => {
       zipJsonIncludesAngleOffset: false,
       framingBounds: 'flat',
       curveBeforeFirstPanel: true,
-      safeDistanceBand: 'per-column-own-normal',
       frustumDepthM: 15,
       previewRendererSize: [320, 180],
       previewRendersHelpers: true,
@@ -330,9 +329,10 @@ describe('LEGACY_SITES', () => {
     }
   });
 
-  test('the contract tables parse (57 register rows; at least one 8.3 pair per bug id)', () => {
+  test('the contract tables parse (57 register rows; at least one 8.3 pair per open bug id)', () => {
     assert.equal(register.size, 57, '5 high + 16 medium + 36 low');
-    assert.ok(expectedPairs.length >= 57, `only ${expectedPairs.length} pairs parsed from 8.3`);
+    // A landed fix has no 8.3 pair (below); 08 P2-5b took the count of pairs below 57.
+    assert.ok(expectedPairs.length >= 57 - landed.length, `only ${expectedPairs.length} pairs parsed from 8.3`);
   });
 
   test('(id, site) pairs equal the ARCHITECTURE.md 8.3 table exactly, in table order', () => {
@@ -349,7 +349,8 @@ describe('LEGACY_SITES', () => {
   // The Phase 2 fixes landed so far (docs/improvements/08-bugfix-roadmap.md section 10, merge order), each with the
   // 08 commit its 8.2 fix cell names. Every landing commit adds its id here.
   const PHASE2_LANDED = { 'B-M1': 'P2-5a', 'B-H3': 'P2-1a', 'B-L5': 'P2-1b', 'B-L4': 'P2-1c', 'B-H1': 'P2-2a', 'B-L3': 'P2-2b', 'B-H2': 'P2-2c',
-    'B-L11': 'P2-9b', 'B-L15': 'P2-8a', 'B-M4': 'P2-3a', 'B-L8': 'P2-3b', 'B-L16': 'P2-3c', 'B-L21': 'P2-3d', 'B-H4': 'P2-4a', 'B-M8': 'P2-4b' };
+    'B-L11': 'P2-9b', 'B-L15': 'P2-8a', 'B-M4': 'P2-3a', 'B-L8': 'P2-3b', 'B-L16': 'P2-3c', 'B-L21': 'P2-3d', 'B-H4': 'P2-4a', 'B-M8': 'P2-4b',
+    'B-M15': 'P2-5b', 'B-L29': 'P2-5b' };
   // The quirks a Phase 3 feature step fixed (its spec and step, as its 8.2 fix cell names them): B-L24's badge overlap in
   // 06 T4a (its .view-btn.active half had landed in 01 F1-2; its two CSS documentation entries are gone).
   const PHASE3_LANDED = { 'B-L24': '06 T4a' };
@@ -424,7 +425,8 @@ describe('Theme', () => {
       cameraBody: { color: 0xc51622, opacity: 1.0, outlineColor: 0x0a0a0a },
       frustumLines: { color: 0xf7f7f5, haloColor: 0x0a0a0a, opacity: 1.0, dashSize: 0.15, gapSize: 0.10 },
       frustumFill: { color: 0xf7f7f5, opacity: 0.05 },
-      safeZone: { wallColor: [61 / 255, 214 / 255, 140 / 255], thresholdColor: [197 / 255, 22 / 255, 34 / 255], floorOpacity: 0.5,
+      safeZone: { wallColor: [61 / 255, 214 / 255, 140 / 255], thresholdColor: [197 / 255, 22 / 255, 34 / 255],
+                  clampedColor: [255 / 255, 134 / 255, 64 / 255], floorOpacity: 0.5,   // clampedColor: 08 P2-5b
                   lineColor: 0xf2555a, lineOpacity: 0.9, labelColor: '#f2555a', labelFont: "600 32px 'Montserrat', system-ui, sans-serif" },
       person: { body: 0x4488ff, dark: 0x2244aa, opacity: 0.85 },
       car: { body: { color: 0xff4444, opacity: 0.85 }, dark: { color: 0x222222, opacity: 0.9 },

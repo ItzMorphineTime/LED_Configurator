@@ -38,8 +38,7 @@ const MODES = ['combined', 'section', 'panel'];
  * download file name is matched by any name (06 T6b renamed the exports), so the patterns follow Brand.files.
  */
 const OPEN_DEFECTS = Object.freeze([
-  { pattern: /(^|\/|__)export-safe-distance__[^/ ]+\.obj :: /, bug: 'B-L29', fixedBy: '08 P2-5b',
-    why: 'the safe-distance floor OBJ has no vn lines (and its triangles face -Y)' },
+  // Empty since 08 P2-5b (B-L29: the safe-distance floor OBJ has vn lines and +Y faces), the last of the rows.
 ]);
 
 /** Deterministic PRNG (mulberry32), the generator of the other unit tests. */

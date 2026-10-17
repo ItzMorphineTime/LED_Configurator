@@ -576,7 +576,7 @@ describe('WP7 module imports follow the layer table', () => {
     'js/ui/PropsPanel.js': ['../core/EventBus.js', '../domain/Prop.js', './dom.js'],
     'js/render/CameraRigView.js': ['../vendor/three.js', '../core/EventBus.js', '../legacy/LegacyCompat.js', './ResourceTracker.js',
       '../core/renderOrder.js'],
-    'js/render/SafeDistanceView.js': ['../vendor/three.js', '../legacy/LegacyCompat.js', './ResourceTracker.js'],
+    'js/render/SafeDistanceView.js': ['../vendor/three.js', '../geometry/SafeDistanceBand.js', './ResourceTracker.js'],
     'js/render/PreviewWindow.js': ['../vendor/three.js', '../legacy/LegacyCompat.js'],
     'js/render/PropViews.js': ['../vendor/three.js', './ResourceTracker.js'],
   };

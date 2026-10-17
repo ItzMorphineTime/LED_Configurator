@@ -32,6 +32,7 @@ export const COLOR_BINDINGS = Object.freeze([
   ['scene.frustumFill.color',       '--scene-frustum',        'num'],
   ['scene.safeZone.wallColor',      '--scene-safe-wall',      'rgb01'],
   ['scene.safeZone.thresholdColor', '--scene-safe-threshold', 'rgb01'],
+  ['scene.safeZone.clampedColor',   '--scene-safe-clamped',   'rgb01'],   // 08 P2-5b (the clamped band edge, 6.9)
   ['scene.safeZone.lineColor',      '--scene-safe-line',      'num'],
   ['scene.safeZone.labelColor',     '--scene-safe-label',     'hex'],
   ['scene.debug.faceFront',         '--scene-face-front',     'num'],   // spec 01's debug view (01 4.6, CR-8; 06 T3)

@@ -224,7 +224,12 @@ High-resolution texture map showing:
 ### Safe Distance OBJ
 Export the calculated safe camera zone as 3D geometry (`morph-led-wall-safe-distance.obj`).
 
-Release note: this export used to fail without downloading anything; it now downloads the file. Until the next update the floor's faces point down (-Y), and on curved or cornered walls the band is still built from separate per-column quads.
+Release note: this export used to fail without downloading anything; it now downloads the file. The floor faces up (+Y) and carries
+normals, so it imports the right way up. On curved and cornered walls the band is one continuous strip with mitred
+corners (it used to overlap itself on concave walls and leave gaps on convex ones). Near concave curves and corners the
+band is narrower than the safe distance so that it never folds over itself: there its outer edge is drawn amber
+instead of red, and the exported file's header says how many of its points were pulled in. Where the bands of
+opposite walls of a U-shaped stage overlap, they still overlap (a darker region in the view).
 
 ---
 

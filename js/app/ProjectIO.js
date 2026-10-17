@@ -340,7 +340,8 @@ export class ProjectIO {
   /**
    * Export Safe Distance OBJ: alerts when there is no safe-distance group; otherwise builds the text and Blob
    * and downloads it (B-M1 fixed in 08 P2-5a: legacy called a download helper that was never defined, so every
-   * click threw a ReferenceError). The band keeps its legacy per-column geometry until 08 P2-5b.
+   * click threw a ReferenceError). Since 08 P2-5b the band is mitred, clamped and faces +Y (B-M15, B-L29), the OBJ
+   * carries `vn` lines, and the band's clamp count (safeDistance.lastBand) adds the `# Clamped:` header line.
    * Ports: index.html@cd3fd3f lines 2786-2827 (the download call of 2826 is the Downloader's).
    * Side effects: an alert, or one download (brand.files.safeDistanceObj, text/plain), or the M-EXP-1 alert.
    */
@@ -352,7 +353,7 @@ export class ProjectIO {
         return;
       }
 
-      const objContent = this.#objExporter.writeSafeDistance(safeDistanceMesh);
+      const objContent = this.#objExporter.writeSafeDistance(safeDistanceMesh, this.#safeDistance.lastBand);
 
       const blob = new Blob([objContent], { type: 'text/plain' });
       this.#downloader.saveBlob(blob, this.#brand.files.safeDistanceObj);

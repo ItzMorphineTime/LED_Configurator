@@ -1,0 +1,23 @@
+{
+  "commit": "P2-5b",
+  "bugs": ["B-L29", "B-M15"],
+  "expect": [
+    { "output": "camera/export-safe-distance__*.obj", "change": "modified",
+      "reason": "the flat default wall's floor OBJ becomes a shared-vertex strip (one wall and one offset vertex per edge, the legacy positions) with +Y faces f a//a and vn 0 1 0 lines (B-L29); no # Clamped: line on a flat wall (08 6.9)" },
+    { "output": "p2_curved_safe_distance/*__export-safe-distance__*.obj", "change": "modified", "each": true,
+      "reason": "the four walls' bands are mitred and clamped (B-M15) with +Y faces and vn lines (B-L29); concave_offsets (3 of 16), box_corner (6 of 19) and concave30 (7 of 7) carry the # Clamped: header line, convex none" },
+    { "output": "p2_curved_safe_distance/*.screenshot.png", "change": "modified", "each": true,
+      "reason": "the mitred band replaces the per-column quads: no double-blended overlaps on concave walls (concave_offsets, concave30, box_corner's corners), no wedge gaps on the convex wall; clamped outer edges amber (08 3.2)" }
+  ],
+  "mayChange": [
+    { "output": "camera/13_safe_distance.screenshot.png", "change": "modified",
+      "reason": "the flat default wall: the band keeps the legacy positions (to the last floating-point bit or so) and the legacy quad diagonal, so the capture is expected identical up to a WARN (08 P2-5b card); its allowlisted preview-label jitter applies as before" },
+    { "output": "p2_shortcut_filters/pilot_view_front.screenshot.png", "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas (1 level, 2 px, seen in the 06 T6b-08 P2-3b2 runs); this commit changes no rendered pixel of it" },
+    { "output": "toggles/15_car_moved.screenshot.png", "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-08 P2-3b2 runs)" },
+    { "output": "large_wall/final__export-zip__morph-led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b); this commit changes no export of it" }
+  ],
+  "notes": "08 P2-5b (B-L29, B-M15): geometry/SafeDistanceBand.js buildSafeDistanceBand (08 6.9) replaces the legacy per-column quads in SafeDistanceView; ObjExporter.writeSafeDistance writes vn, f a//a and the # Clamped: line from SafeDistanceView.lastBand; Strategies.safeDistanceBand retired. No other scenario turns the safe distance on with the preview showing a curved or cornered wall: p2_project_v2's walls are flat and its restored pages keep the preview off."
+}

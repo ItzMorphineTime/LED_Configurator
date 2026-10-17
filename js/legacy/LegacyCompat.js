@@ -58,7 +58,6 @@ export const Strategies = deepFreeze({
   zipJsonIncludesAngleOffset: false,               // B-M3
   framingBounds: 'flat',                           // B-L2, B-M10
   curveBeforeFirstPanel: true,                     // B-L1
-  safeDistanceBand: 'per-column-own-normal',       // B-M15, B-L29
   frustumDepthM: 15,                               // B-L33
   previewRendererSize: [320, 180],                 // B-M9
   previewRendersHelpers: true,                     // B-M11
@@ -155,7 +154,7 @@ const QUIRKS = deepFreeze({
   'B-M14': ['Select on mousedown; misses deselect (N-5)',
     'select on click under 4 px travel'],
   'B-M15': ['Overlapping/gapped safe-distance quads',
-    'mitred band'],
+    'Landed in 08 P2-5b (`geometry/SafeDistanceBand.js buildSafeDistanceBand`: a mitred strip over `WallLayout.flatEdges()`, clamped near concave turns and concave curves so it never folds, clamped offset vertices tinted `safeZone.clampedColor` and counted in the OBJ `# Clamped:` line; `Strategies.safeDistanceBand` retired; no tag site)'],
   'B-M16': ['Panel-mode 4-16 px/LED per panel (E-10)',
     'atlas UVs or budget'],
   'B-L1': ['Curve before the first panel (B-5)',
@@ -215,7 +214,7 @@ const QUIRKS = deepFreeze({
   'B-L28': ['World rings write Euler channels',
     'quaternion composition'],
   'B-L29': ['Safe-distance floor faces -Y',
-    'swap order'],
+    'Landed in 08 P2-5b (every band triangle wound to face +Y; the safe-distance OBJ writes `vn` and `f a//a` faces; no tag site)'],
   'B-L30': ['Pose changes rebuild frustum + safe distance',
     'pose-only refresh'],
   'B-L31': ['JSON v1 saves only sections + mesh_mode (Q-3)',
@@ -249,7 +248,6 @@ const TAG_SITES = deepFreeze([
   ['js/domain/Prop.js#translateBy', ['B-L22']],
   ['js/domain/Prop.js#rotateBy', ['B-L22']],
   ['js/geometry/WallLayout.js#computeWallLayout', ['B-L1']],
-  ['js/geometry/WallLayout.js#flatEdges', ['B-M15']],
   ['js/geometry/WallLayout.js#framingBounds', ['B-L2', 'B-M10']],
   ['js/geometry/WallMeshBuilder.js#combinedGrid', ['B-M5']],
   ['js/geometry/TextureAtlas.js#panelPxPerLed', ['B-M16']],
@@ -265,7 +263,6 @@ const TAG_SITES = deepFreeze([
   ['js/render/textures/PanelIdRenderer.js#panelCanvas', ['B-L19', 'B-M16']],
   ['js/render/textures/PanelIdRenderer.js#sectionCanvas', ['B-L35']],
   ['js/render/CameraRigView.js#rebuildFrustum', ['B-L33']],
-  ['js/render/SafeDistanceView.js#create', ['B-M15', 'B-L29']],
   ['js/render/PreviewWindow.js#init', ['B-M9']],
   ['js/render/PreviewWindow.js#updateCamera', ['B-L34']],
   ['js/render/PreviewWindow.js#render', ['B-M11']],

@@ -662,10 +662,11 @@ then the summary.
   Since 01 T1 a directory is walked recursively for `*.obj`, `*.gltf` and `*.zip`, and each archive's
   `.obj` and `.gltf` entries are checked (reported as `<archive>!<entry>`), so
   `node tools/check-orientation.mjs --failures-only tests/regression/output/baseline` checks every
-  export of a capture. Since 08 P2-2 every wall export passes; what still fails is owned by later 08
-  commits and listed in `tests/unit/export-orientation.test.mjs` (`OPEN_DEFECTS`): the safe-distance
-  floor OBJs (no `vn`, B-L29, 08 P2-5b); `p2_zero_inputs`' combined OBJ passes since 08 P2-8a (Columns 2.5 is rounded
-  to 3) and `import_edge`'s `ii_combined` and `ii_section` OBJ and glTF since 08 P2-3b (the string counts are coerced).
+  export of a capture. Since 08 P2-2 every wall export passes, and since 08 P2-5b every export: the
+  safe-distance floor OBJs (no `vn`, B-L29), the last row of `OPEN_DEFECTS` in
+  `tests/unit/export-orientation.test.mjs`, now carry `vn` lines and +Y faces. `p2_zero_inputs`' combined OBJ passes
+  since 08 P2-8a (Columns 2.5 is rounded to 3) and `import_edge`'s `ii_combined` and `ii_section` OBJ and glTF since
+  08 P2-3b (the string counts are coerced).
   That test runs the same check over `GOLDEN_DIR` and over 500 seeded integer walls in every mesh mode.
 - `node tools/check-gltf.mjs <file.gltf ...>`: buffer, bufferView and accessor bounds, component and
   4-byte alignment, index values below the vertex count and never the primitive-restart value,
@@ -806,7 +807,8 @@ These were observed in the original app and are part of the golden master until 
 in parentheses changes them:
 
 - `camera`: Export Safe Distance OBJ throws `ReferenceError: downloadBlob is not defined`, so no file is
-  produced (08 P2-5a: the OBJ downloads, with the legacy per-column band until P2-5b). `14_preview_off` still shows
+  produced (08 P2-5a: the OBJ downloads; 08 P2-5b: a shared-vertex strip facing +Y with `vn` lines, no `# Clamped:`
+  line on this flat wall). `14_preview_off` still shows
   the safe-distance floor after the preview is turned off (B-M8) (08 P2-4b: the floor is removed with the preview;
   `cam_15` shows it again).
 - `large_wall`: Export glTF in panel mode throws `RangeError: Maximum call stack size exceeded`
@@ -830,7 +832,9 @@ in parentheses changes them:
   both probes are `false`, the cards and the logo list show the names as text and the input keeps `Say "hi"`; the
   injected outline stays until the colour rule of 08 P2-3b).
 - `p2_curved_safe_distance`: each of the four exports throws the B-M1 `ReferenceError`, so no OBJ is
-  produced (08 P2-5a: the four OBJs download); the `concave30` screenshot shows the folded band (B-M15).
+  produced (08 P2-5a: the four OBJs download); the `concave30` screenshot shows the folded band (B-M15) (08 P2-5b:
+  the mitred, clamped band; the clamped stretches are amber, and the OBJs of `concave_offsets`, `box_corner` and
+  `concave30` carry the `# Clamped:` header line).
 - `p2_oversize_canvas`: Export Panel IDs throws `TypeError: Failed to execute 'createObjectURL' on
   'URL': Overload resolution failed.` and downloads nothing; the ZIP holds a 0-byte texture (B-L4)
   (08 P2-1a: the TypeError is an M-EXP-1 alert; 08 P2-1c: Export Panel IDs alerts M-EXP-2 and creates no

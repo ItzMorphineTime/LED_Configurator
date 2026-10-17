@@ -1100,7 +1100,7 @@ function fakeIO(project, log, extra = {}) {
     console: { warn: (err) => log.push(['warn', err]) },
   };
   const dialogs = { alert: (msg) => log.push(['alert', msg]) };
-  const safeDistance = { object3D: extra.group ?? null };
+  const safeDistance = { object3D: extra.group ?? null, lastBand: extra.band ?? null };
   return new ProjectIO({ project, wallController, serializer: extra.serializer ?? serializer, objExporter: OBJ,
     gltfExporter: GLTF, panelIds, safeDistance, downloader, JSZip: FakeZip, dialogs, brand: Brand, win, sectionsFromProject });
 }
@@ -1312,6 +1312,13 @@ describe('ProjectIO use cases', () => {
     assert.equal(blobs.length, 1);
     assert.deepEqual([blobs[0].parts, blobs[0].options], [[OBJ.writeSafeDistance(group)], { type: 'text/plain' }]);
     assert.deepEqual(log2, [['saveBlob', FILES.safeDistanceObj, blobs[0]]], 'one download, no alert');
+
+    // 08 P2-5b: the view's lastBand reaches the writer, so a clamped band adds the # Clamped: header line.
+    const band = { clampedVertices: 3, totalSafeVertices: 16, distance: 2.916666 };
+    const log3 = [];
+    await withGlobals([[globalThis, 'Blob', FakeBlob]], () => fakeIO(Project.createDefault(), log3, { group, band }).exportSafeDistanceOBJ());
+    assert.deepEqual(blobs[1].parts, [OBJ.writeSafeDistance(group, band)]);
+    assert.match(blobs[1].parts[0], /\n# Clamped: 3 of 16 offset vertices are closer than D = 2\.92 m \(concave features\)\n\nv /);
   });
 
   test('#runExport: every export reports a failure as M-EXP-1 with its label, then warns; nothing escapes', async () => {

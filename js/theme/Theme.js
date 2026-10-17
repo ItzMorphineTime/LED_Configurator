@@ -55,6 +55,7 @@ export const SceneTheme = deepFreeze({
                                                                             // 2407; haloColor, dashSize, gapSize 06 T5
   frustumFill: { color: 0xf7f7f5, opacity: 0.05 },                          // 2425-2426
   safeZone: { wallColor: [0x3d / 255, 0xd6 / 255, 0x8c / 255], thresholdColor: [0xc5 / 255, 0x16 / 255, 0x22 / 255],
+              clampedColor: [0xff / 255, 0x86 / 255, 0x40 / 255],   // 08 P2-5b: an outer vertex closer than D (6.9)
               floorOpacity: 0.5, lineColor: 0xf2555a, lineOpacity: 0.9, labelColor: '#f2555a',
               labelFont: "600 32px 'Montserrat', system-ui, sans-serif" },   // 2698-2749
   person: { body: 0x4488ff, dark: 0x2244aa, opacity: 0.85 },                // 2840-2841 (unchanged, 06 D12)

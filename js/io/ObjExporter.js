@@ -5,7 +5,7 @@
  * panel facing normal come from the injected WallMeshBuilder (Strategies.mesh.obj profile), colours from the
  * injected colorToRgb, header strings and the MTL file name from the injected brand.
  * Legacy source: index.html@cd3fd3f 4556-4717 (generateOBJContent; its unused `scale` parameter is dropped),
- * 2792-2823 (exportSafeDistanceOBJ text).
+ * 2792-2823 (exportSafeDistanceOBJ text; `vn`, `f a//a` and the `# Clamped:` line since 08 P2-5b).
  * Layer: io (may import domain, geometry, legacy; THREE-free and DOM-free).
  */
 
@@ -30,13 +30,14 @@ const FACE_CONVENTION_LINE = '# Faces: counter-clockwise front faces; vn point o
  */
 
 /**
- * Duck-typed THREE.BufferAttribute (position or index) of the safe-distance meshes.
+ * Duck-typed THREE.BufferAttribute (position, normal or index) of the safe-distance meshes.
  * @typedef {{count: number, getX(i: number): number, getY(i: number): number, getZ(i: number): number}} AttributeLike
  */
 
 /**
  * Duck-typed child visited by the safe-distance traverse: only children with `isMesh` and a `geometry` are written.
- * @typedef {{isMesh?: boolean, geometry?: {attributes: {position: AttributeLike}, index: AttributeLike|null}}} MeshLike
+ * @typedef {{isMesh?: boolean, geometry?: {attributes: {position: AttributeLike, normal?: AttributeLike},
+ *            index: AttributeLike|null}}} MeshLike
  */
 
 /**
@@ -309,22 +310,35 @@ export class ObjExporter {
   }
 
   /**
-   * The OBJ text of the safe-distance floor group, verbatim 2792-2823: the brand header, then per mesh child (in
-   * traverse order) its `v` lines (toFixed(6)), a blank line and its `f a b c` lines (1-based, running offset).
-   * Duck-typed (traverse / isMesh / geometry.attributes.position / geometry.index): no THREE import.
+   * The OBJ text of the safe-distance floor group (2792-2823; 08 P2-5b, B-L29 fixed): the brand header, plus, when the
+   * band clamped any offset vertex, the line `# Clamped: ${n} of ${total} offset vertices are closer than D =
+   * ${D.toFixed(2)} m (concave features)` before the header's blank line; then per mesh child (in traverse order) its
+   * `v` lines (toFixed(6)), its `vn` lines from geometry.attributes.normal (toFixed(6); (0, 1, 0) for the +Y band), a
+   * blank line and its faces `f a//a b//b c//c` (1-based; running vertex and normal offsets, equal while every mesh has
+   * one normal per vertex). A mesh without a normal attribute writes no `vn` and faces `f a b c` (the Phase-1 form).
+   * Duck-typed (traverse / isMesh / geometry.attributes.position, .normal / geometry.index): no THREE import.
    * Ports: index.html@cd3fd3f lines 2792-2823.
    * Side effects: none.
    * @param {Object3DLike} group  SafeDistanceView.object3D
+   * @param {{clampedVertices: number, totalSafeVertices: number, distance: number}|null} [band]
+   *   SafeDistanceView.lastBand (geometry/SafeDistanceBand); null or absent writes no `# Clamped:` line
    * @returns {string}
    */
-  writeSafeDistance(group) {
+  writeSafeDistance(group, band = null) {
     let objContent = this.#brand.safeDistanceObjHeader;
+    if (band && band.clampedVertices > 0) {
+      const line = `# Clamped: ${band.clampedVertices} of ${band.totalSafeVertices} offset vertices are closer than ` +
+        `D = ${band.distance.toFixed(2)} m (concave features)\n`;
+      objContent = objContent.endsWith('\n\n') ? `${objContent.slice(0, -1)}${line}\n` : objContent + line;
+    }
 
     let vertexOffset = 1;
+    let normalOffset = 1;
 
     group.traverse((child) => {
       if (child.isMesh && child.geometry) {
         const positions = child.geometry.attributes.position;
+        const normals = child.geometry.attributes.normal ?? null;
         const indices = child.geometry.index;
 
         // Export vertices
@@ -335,6 +349,13 @@ export class ObjExporter {
           objContent += `v ${x.toFixed(6)} ${y.toFixed(6)} ${z.toFixed(6)}\n`;
         }
 
+        // Export normals, one per vertex (08 P2-5b)
+        if (normals) {
+          for (let i = 0; i < normals.count; i++) {
+            objContent += `vn ${normals.getX(i).toFixed(6)} ${normals.getY(i).toFixed(6)} ${normals.getZ(i).toFixed(6)}\n`;
+          }
+        }
+
         objContent += '\n';
 
         // Export faces
@@ -343,11 +364,19 @@ export class ObjExporter {
             const a = indices.getX(i) + vertexOffset;
             const b = indices.getX(i + 1) + vertexOffset;
             const c = indices.getX(i + 2) + vertexOffset;
-            objContent += `f ${a} ${b} ${c}\n`;
+            if (normals) {
+              const na = indices.getX(i) + normalOffset;
+              const nb = indices.getX(i + 1) + normalOffset;
+              const nc = indices.getX(i + 2) + normalOffset;
+              objContent += `f ${a}//${na} ${b}//${nb} ${c}//${nc}\n`;
+            } else {
+              objContent += `f ${a} ${b} ${c}\n`;
+            }
           }
         }
 
         vertexOffset += positions.count;
+        if (normals) normalOffset += normals.count;
       }
     });
 

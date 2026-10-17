@@ -57,7 +57,7 @@ Phase 1 turns the 3,800-line inline script and the 860-line inline stylesheet in
         +-------------------------------------+---------------------------------------------------+
                                               v
       io/        pure writers/readers: ProjectSerializer (v1), ObjExporter, GltfExporter, ProjectValidator (THREE-free, DOM-free)
-      geometry/  pure: WallLayout, WallMeshBuilder, TextureAtlas, PanelNaming, NormalLines        (THREE-free, DOM-free)
+      geometry/  pure: WallLayout, WallMeshBuilder, TextureAtlas, PanelNaming, NormalLines, SafeDistanceBand (THREE-free, DOM-free)
       domain/    pure entities: Project, Wall, WallSection, CineCamera, Prop, LogoLibrary, ...     (THREE-free, DOM-free)
       core/ EventBus + Events, typingTarget, renderOrder     legacy/ LegacyCompat (Strategies, legacy helpers, LEGACY_SITES)     theme/ Theme constants, ThemeBridge (pure)
       vendor/ three.js, jszip.js shims (window.THREE / window.JSZip)
@@ -233,6 +233,8 @@ js/
     PanelNaming.js                         WP4   Column letters, panel labels, export object names, filename sanitising, texture names
     NormalLines.js                         01 F1-1  Normal-line arithmetic: auto length, cap + decimation stride, line counts,
                                                  vertex / face line writers (no allocation), upload size, stats text
+    SafeDistanceBand.js                    08 P2-5b  buildSafeDistanceBand: the mitred, clamped safe-distance band of one
+                                                 polyline (every triangle +Y, clamped offsets counted); bandRunOfLayout
   render/
     ResourceTracker.js                     WP6   disposeObject3D(root, {maps}) + ResourceTracker
     SceneManager.js                        WP6   Scene, main camera, renderer, lights, grid, axes (explicit init()), helper registry,
@@ -427,6 +429,11 @@ tests/
                                                  validateProject row by row with the 07 issue shape and the 3.3 texts, ids
                                                  (07 6.8), idempotence over 2,000 seeded documents, the harness configs (no
                                                  correction), the reachability of every card-rule value, no prototype pollution
+    safe-distance-band.test.mjs            08 P2-5b  buildSafeDistanceBand (08 6.9, 8.4): flat walls equal the legacy quads,
+                                                 the mitre invariant, the worked cases (concave30 at two D, box_corner with
+                                                 its documented overlap, concave_offsets, mixed), fold-back splits, facing
+                                                 -1, 10,000 random walls with no -Y triangle, and the OBJ text of a band
+                                                 (vn, f a//a, the # Clamped: line, the orientation check)
     materials.test.mjs                     08 P2-1d  PanelIdRenderer sizes and null canvases, LEDMaterialFactory's colour
                                                  fallback and its warning, LEDWallView's index attribute (08 P2-1e)
                                                  (fake THREE installed as window.THREE)
@@ -625,7 +632,6 @@ export const Strategies = deepFreeze({
   zipJsonIncludesAngleOffset: false,               // B-M3
   framingBounds: 'flat',                           // B-L2, B-M10
   curveBeforeFirstPanel: true,                     // B-L1
-  safeDistanceBand: 'per-column-own-normal',       // B-M15, B-L29
   frustumDepthM: 15,                               // B-L33
   previewRendererSize: [320, 180],                 // B-M9
   previewRendersHelpers: true,                     // B-M11
@@ -662,7 +668,7 @@ export const orDefault = (v, d) => v || d;
  *  Entries whose site is not under js/ (CSS, markup) are documentation-only. */
 export const LEGACY_SITES
 ```
-`deepFreeze` is module-private. `LegacyProfiles` is not a switch: it has no read site in `js/` and is not covered by the `Strategies` rule of the static check; when a Phase-2 commit flips a `Strategies.mesh.*` key, the builder keeps the legacy case for it (08 5.1 rule 3), and global keys (`exportCombinedColor`, ...) cannot be injected, so the oracle cases that depend on a retired global key become explicit expected-value tests in that commit (08 P2-1a retired `gltfBase64` and deleted `legacySpreadBase64`; `tests/unit/io.test.mjs` injects a verbatim copy of that encoder into its oracle exporter). The `behaviour` and `fix` strings of each `LEGACY_SITES` entry are the 8.2 cell texts with only the markdown escape `\|` unescaped to `|` (inline backticks are kept as written); the 8.2 register is stored once and expanded per 8.3 site. Phase 1 implements only the legacy value of every key, except the `dispose.*` keys flipped by the non-observable Phase 1C clean-ups (8.1; a landed fix keeps its 8.2 row and loses its 8.3 rows, so `LEGACY_SITES` no longer lists it). Phase 2 retires keys as 08 4.1 lists them (the key, its switch and its 8.1 row are deleted in the fixing commit); retired so far: `gltfBase64` (08 P2-1a); flipped so far: `mesh.gltf.indexType` (`'auto'`, 08 P2-1b), `mesh.viewport.winding` (`'ccw'`, 08 P2-2a), `mesh.viewport.normals` (`'averaged'`, 08 P2-2b), `mesh.obj.winding` / `.normals` / `.stripNormals` (`'ccw'` / `'averaged'` / `'per-vertex'`, 08 P2-2c), `mesh.gltf.winding` / `.normals` / `.attributes` (`'ccw'` / `'averaged'` / `['POSITION', 'NORMAL']`, 08 P2-2d); added: `mesh.gltf.panelNormal` (`'facing'`, 08 P2-2d). Every leaf key (arrays such as `mesh.gltf.attributes` and `previewRendererSize` are leaves) has the read site given in section 8.1 and spelled out in that module's entry below; how it is read (switch-and-throw, value, array comparison) follows section 1.5.
+`deepFreeze` is module-private. `LegacyProfiles` is not a switch: it has no read site in `js/` and is not covered by the `Strategies` rule of the static check; when a Phase-2 commit flips a `Strategies.mesh.*` key, the builder keeps the legacy case for it (08 5.1 rule 3), and global keys (`exportCombinedColor`, ...) cannot be injected, so the oracle cases that depend on a retired global key become explicit expected-value tests in that commit (08 P2-1a retired `gltfBase64` and deleted `legacySpreadBase64`; `tests/unit/io.test.mjs` injects a verbatim copy of that encoder into its oracle exporter). The `behaviour` and `fix` strings of each `LEGACY_SITES` entry are the 8.2 cell texts with only the markdown escape `\|` unescaped to `|` (inline backticks are kept as written); the 8.2 register is stored once and expanded per 8.3 site. Phase 1 implements only the legacy value of every key, except the `dispose.*` keys flipped by the non-observable Phase 1C clean-ups (8.1; a landed fix keeps its 8.2 row and loses its 8.3 rows, so `LEGACY_SITES` no longer lists it). Phase 2 retires keys as 08 4.1 lists them (the key, its switch and its 8.1 row are deleted in the fixing commit); retired so far: `gltfBase64` (08 P2-1a), `importValidation` (08 P2-3b), `safeDistanceBand` (08 P2-5b); flipped so far: `mesh.gltf.indexType` (`'auto'`, 08 P2-1b), `mesh.viewport.winding` (`'ccw'`, 08 P2-2a), `mesh.viewport.normals` (`'averaged'`, 08 P2-2b), `mesh.obj.winding` / `.normals` / `.stripNormals` (`'ccw'` / `'averaged'` / `'per-vertex'`, 08 P2-2c), `mesh.gltf.winding` / `.normals` / `.attributes` (`'ccw'` / `'averaged'` / `['POSITION', 'NORMAL']`, 08 P2-2d); added: `mesh.gltf.panelNormal` (`'facing'`, 08 P2-2d). Every leaf key (arrays such as `mesh.gltf.attributes` and `previewRendererSize` are leaves) has the read site given in section 8.1 and spelled out in that module's entry below; how it is read (switch-and-throw, value, array comparison) follows section 1.5.
 
 ### 3.4 `js/theme/Theme.js`
 
@@ -681,6 +687,7 @@ export const SceneTheme = Object.freeze({
   frustumLines: { color: 0xf7f7f5, haloColor: 0x0a0a0a, opacity: 1.0, dashSize: 0.15, gapSize: 0.10 },   // 2407
   frustumFill: { color: 0xf7f7f5, opacity: 0.05 },                          // 2425-2426
   safeZone: { wallColor: [0x3d / 255, 0xd6 / 255, 0x8c / 255], thresholdColor: [0xc5 / 255, 0x16 / 255, 0x22 / 255],
+              clampedColor: [0xff / 255, 0x86 / 255, 0x40 / 255],   // 08 P2-5b: an outer vertex closer than D (08 6.9)
               floorOpacity: 0.5, lineColor: 0xf2555a, lineOpacity: 0.9, labelColor: '#f2555a',
               labelFont: "600 32px 'Montserrat', system-ui, sans-serif" },   // 2698-2749
   person: { body: 0x4488ff, dark: 0x2244aa, opacity: 0.85 },                // 2840-2841
@@ -754,7 +761,7 @@ export function buildTheme(base, readVar, { warn = () => {}, bindFonts = BIND_FO
 
 **Wiring (06 T3):** `App` builds `theme = buildTheme(Theme, (name) => win.getComputedStyle(doc.documentElement).getPropertyValue(name), { warn: (m) => win.console.warn(m) })` (section 7; no `bindFonts` option, so `BIND_FONTS_DEFAULT` applies, as in U4), and every consumer receives that object instead of `Theme`, with unchanged constructor signatures. While the layer-4 tokens hold the legacy values the bridged theme equals `Theme` leaf for leaf (U4), so the switch is not observable. A missing or malformed token keeps the `Theme.js` fallback of its leaves and warns once on the console (06 3.11).
 
-The 06 T2 rows bind the legacy scene, canvas and status colours (`scene.background`, `grid.centerColor`, `grid.color`, `frame`, `cameraBody.color`, `frustumLines.color` and `frustumFill.color` (both `--scene-frustum`), `safeZone.wallColor` / `thresholdColor` (`rgb01`), `safeZone.lineColor`, `safeZone.labelColor`, `canvas.background`, `ui.status.*`); 06 T3 adds spec 01's `scene.debug.faceFront`, `faceBack`, `vertexNormal` and `faceNormal` (01 CR-8; not `UNBRANDED`). The keys that later steps add land with their rows: 06 T5 added `scene.frameOnLight` (`--scene-frame-on-light`), `scene.cameraBody.outlineColor` and `scene.frustumLines.haloColor` (both `--scene-overlay-halo`, which therefore warns once when missing) and flipped `BIND_FONTS_DEFAULT`, so the four `FONT_BINDINGS` leaves come from `--font-mono` / `--font-ui` (equal to the `Theme.js` strings, U4); 01 F1-5 adds `scene.wallBack` with `--scene-wall-back`; the sibling specs add their keys of 06 5.12. Tests: `theme.test.mjs` U1-U3 (06 T2), U4 token parity, U10 (every Theme leaf under `scene`, `canvas`, `ui` is bound, `UNBRANDED`, a function or non-colour by its key) and U11 (`UNBRANDED` leaves equal their Phase-1 values in `tests/unit/fixtures/legacy-theme.mjs`) (06 T3).
+The 06 T2 rows bind the legacy scene, canvas and status colours (`scene.background`, `grid.centerColor`, `grid.color`, `frame`, `cameraBody.color`, `frustumLines.color` and `frustumFill.color` (both `--scene-frustum`), `safeZone.wallColor` / `thresholdColor` (`rgb01`), `safeZone.lineColor`, `safeZone.labelColor`, `canvas.background`, `ui.status.*`); 06 T3 adds spec 01's `scene.debug.faceFront`, `faceBack`, `vertexNormal` and `faceNormal` (01 CR-8; not `UNBRANDED`). The keys that later steps add land with their rows: 06 T5 added `scene.frameOnLight` (`--scene-frame-on-light`), `scene.cameraBody.outlineColor` and `scene.frustumLines.haloColor` (both `--scene-overlay-halo`, which therefore warns once when missing) and flipped `BIND_FONTS_DEFAULT`, so the four `FONT_BINDINGS` leaves come from `--font-mono` / `--font-ui` (equal to the `Theme.js` strings, U4); 01 F1-5 adds `scene.wallBack` with `--scene-wall-back`; 08 P2-5b added `scene.safeZone.clampedColor` (`--scene-safe-clamped` = `--ui-orange-400`, `rgb01`: the amber of the clamped band edge, 06 5.12's 08 row); the sibling specs add their keys of 06 5.12. Tests: `theme.test.mjs` U1-U3 (06 T2), U4 token parity, U10 (every Theme leaf under `scene`, `canvas`, `ui` is bound, `UNBRANDED`, a function or non-colour by its key) and U11 (`UNBRANDED` leaves equal their Phase-1 values in `tests/unit/fixtures/legacy-theme.mjs`) (06 T3).
 
 ### 3.5 Domain (pure)
 
@@ -1107,7 +1114,8 @@ export class WallLayout {
   sections;         // SectionLayout[]
   /** Legacy safe-distance `allEdges` (2619-2647): [] when there are no sections; otherwise sections[0].edges[0]
    *  followed by every section's edges.slice(1), in order. MUST return [] (not throw) for an empty wall:
-   *  legacy imports of `sections: []` with preview + safe distance on add an empty group and do not throw. */
+   *  legacy imports of `sections: []` with preview + safe distance on add an empty group and do not throw. The one
+   *  polyline of the safe-distance band (SafeDistanceBand.bandRunOfLayout; B-M15 fixed in 08 P2-5b, no tag left). */
   flatEdges()
   get firstEdge()   // sections[0].edges[0] or null when empty            (Feature 3)
   get lastEdge()    // last section's last edge or null when empty         (Feature 3)
@@ -1271,6 +1279,27 @@ export function formatCount(n)                          // '3,444' (fixed regex,
 export function formatNormalStats({ vertexLines, faceLines, total, stride, lengthM, vertex, face, empty })   // {text, warning} (01 3.5)
 ```
 Matrices arrive as plain column-major arrays (`Matrix4.elements`, `Matrix3.elements`); `out = {positions, colors, count, seen}` holds the caller's reused `Float32Array`s.
+
+#### `js/geometry/SafeDistanceBand.js` (08 P2-5b, 08 6.9; B-M15 and B-L29 fixed; imports nothing)
+```js
+export const SAFE_BAND_EPS = 0.001;   // the clamp margin (m)
+/** The single run of a WallLayout: {points: layout.flatEdges(), facing: all +1 (01's flatEdgeFacing() later),
+ *  sectionOfVertex: per vertex its sections as {curveDeg, panelW} (a section's own edges; a join vertex in both)}. */
+export function bandRunOfLayout(layout)
+/** 08 6.9 over one run {points, facing?, sectionOfVertex?} (02 6.12, CR-08-a) or a WallLayout (wrapped by
+ *  bandRunOfLayout): consecutive coincident points merge; per segment t, L, m = σ(-t.z, 0, t.x); per interior vertex the
+ *  signed turn θ, split = σ changes || 1 + m[k-1]·m[k] < 0.03, τ = split ? 0 : max(0, tan(σθ/2)); lim[j] = max(0, L - eps)
+ *  / (τ[j] + τ[j+1]) (+∞ for 0); d[k] = max(0, min(D, lim[k-1], lim[k], r_s - eps over the concave sections of k)),
+ *  r_s = panelW / (2 tan(c/2)); offset vertices w + d·m at the ends, two at a split, else the mitre
+ *  w + d·(m[k-1] + m[k]) / (1 + m[k-1]·m[k]). Vertices: the wall points, then the offset vertices, all at y = lift; colours
+ *  'wall', 'threshold' (d === D) or 'clamped' (counted); per segment (w[j], E, w[j+1]), (w[j], S, E) for σ > 0 (mirrored
+ *  for σ < 0), a triangle with doubled area < 1e-12 m² dropped: every triangle faces +Y. outline = the offset vertices,
+ *  labelAnchor = outline[floor(n / 2)] (the legacy label index).
+ *  @returns {{positions, colors, indices, outline, labelAnchor, clampedVertices, totalSafeVertices, distance: D, lift,
+ *            lineLift}} empty arrays and labelAnchor null for fewer than two distinct points */
+export function buildSafeDistanceBand(input, D, { lift = 0.005, lineLift = 0.02, eps = SAFE_BAND_EPS } = {})
+```
+Flat walls give the legacy quad positions (deduplicated: one wall and one offset vertex per edge) with the legacy diagonal, so `camera/13_safe_distance` is unchanged. The clamp is local: overlaps between non-adjacent segments (a U-shaped stage narrower than 2 D, `box_corner`) are documented and not removed (08 6.9, Q18).
 
 ### 3.7 Render (THREE views and canvases)
 
@@ -1583,25 +1612,24 @@ export class SafeDistanceView {
   /** @param {{sceneManager: SceneManager, doc: Document, theme: {scene: SceneTheme}}} deps */
   constructor({ sceneManager, doc, theme })
   get object3D()     // legacy safeDistanceMesh (group or null); read by the safe-distance OBJ export
-  /** Verbatim 2586-2762 minus the walk and bounds copies:
-   *  switch (Strategies.safeDistanceBand) { case 'per-column-own-normal': break;
-   *    default: throw unsupportedStrategy('safeDistanceBand', Strategies.safeDistanceBand) }   (first statement)
-   *  this.remove(); group = new THREE.Group();  D = cine.maxSafeDistance(bounds);  allEdges = layout.flatEdges();
+  get lastBand()     // 08 P2-5b: the SafeBand of the current group (null when none); read by the safe-distance OBJ export
+  /** 2586-2762 minus the walk and bounds copies (08 P2-5b: B-M15 and B-L29 fixed, Strategies.safeDistanceBand retired):
+   *  this.remove(); group = new THREE.Group();  D = cine.maxSafeDistance(bounds);  band = buildSafeDistanceBand(layout, D)
+   *  (geometry/SafeDistanceBand, 3.6: the mitred, clamped strip over layout.flatEdges(), every triangle +Y); lastBand = band.
    *  (layout and bounds arrive precomputed from CameraHub.syncSafeDistance: PR7)
-   *  for i < allEdges.length - 1: per-column quad (wallLeft, wallRight, safeRight, safeLeft) offset along that column's
-   *  own normal (-dz/len, dx/len) by D, y = 0.005; colours wallColor x2, thresholdColor x2; indices (v, v+1, v+2, v, v+2, v+3)
-   *  LEGACY(B-M15, B-L29); safeLinePoints = [safeLeft of i = 0, then every safeRight].
-   *  if (vertices.length > 0): mesh (BufferGeometry + position + color + setIndex + computeVertexNormals +
+   *  if (band.positions.length > 0): mesh (BufferGeometry + position + color (per band colour: 'wall' wallColor,
+   *  'threshold' thresholdColor, 'clamped' clampedColor) + setIndex + computeVertexNormals ((0, 1, 0)) +
    *  MeshBasicMaterial{vertexColors, transparent, opacity 0.5, DoubleSide, depthWrite false}); line (LineBasicMaterial{color,
-   *  transparent, opacity 0.8, linewidth 2} created BEFORE its BufferGeometry, y = 0.02); label sprite: 256x64 canvas,
-   *  fillStyle labelColor, font labelFont, textAlign center, fillText(`Max: ${D.toFixed(2)}m`, 128, 40), CanvasTexture,
-   *  SpriteMaterial({map, transparent: true}), Sprite at (labelPos.x, 0.5, labelPos.z) with labelPos =
-   *  safeLinePoints[Math.floor(safeLinePoints.length / 2)], scale (2, 0.5, 1).
+   *  transparent, opacity 0.8, linewidth 2} created BEFORE its BufferGeometry, the band outline at y = band.lineLift = 0.02);
+   *  label sprite: 256x64 canvas, fillStyle labelColor, font labelFont, textAlign center, fillText(`Max: ${D.toFixed(2)}m`,
+   *  128, 40), CanvasTexture, SpriteMaterial({map, transparent: true}), Sprite at (labelPos.x, 0.5, labelPos.z) with
+   *  labelPos = band.labelAnchor (the legacy middle index), scale (2, 0.5, 1).
    *  ALWAYS sceneManager.addHelper(group), even when there are no edges (empty wall: [] edges, empty group, no throw).
    *  The legacy inner guard `if (!cameraPreviewEnabled) return` (2589) is unreachable (its only caller checks it) and dropped.
    *  @param {{layout: WallLayout, cine: CineCamera, bounds: {totalWidth, maxHeight}}} args */
   create({ layout, cine, bounds })
-  /** Verbatim 2764-2776: if (group) { sceneManager.removeHelper(group); disposeObject3D(group, { maps: true }); group = null } */
+  /** Verbatim 2764-2776: if (group) { sceneManager.removeHelper(group); disposeObject3D(group, { maps: true }); group = null };
+   *  lastBand = null */
   remove()
 }
 ```
@@ -2016,9 +2044,13 @@ export class ObjExporter {
    *    offsets += 4, normalOffset += 1; '\n'.
    *  @returns {{objContent: string, mtlContent: string}} */
   write({ sections, meshMode, layout, skipped = null })
-  /** Verbatim 2792-2823: brand.safeDistanceObjHeader; group.traverse(child => child.isMesh && child.geometry): `v` lines from
-   *  position.getX/Y/Z(i).toFixed(6), '\n', `f a b c` from index.getX + running vertexOffset (starts 1). Duck-typed: no THREE import. */
-  writeSafeDistance(group)
+  /** 2792-2823 (08 P2-5b: B-L29 fixed): brand.safeDistanceObjHeader, with `# Clamped: ${n} of ${total} offset vertices are
+   *  closer than D = ${D.toFixed(2)} m (concave features)` inserted before its blank line when band.clampedVertices > 0;
+   *  group.traverse(child => child.isMesh && child.geometry): `v` lines from position.getX/Y/Z(i).toFixed(6), `vn` lines from
+   *  geometry.attributes.normal (toFixed(6); (0, 1, 0)), a blank line, faces `f a//a b//b c//c` from index.getX + the running
+   *  vertex and normal offsets (both start 1). A mesh without a normal attribute writes no `vn` and `f a b c` (the Phase-1
+   *  text). Duck-typed: no THREE import. band: SafeDistanceView.lastBand, or null. */
+  writeSafeDistance(group, band = null)
 }
 ```
 
@@ -2252,9 +2284,10 @@ export class ProjectIO {
    *  run by #runExport (08 P2-1a: a failure is the M-EXP-1 alert instead of an unhandled rejection). */
   async exportZIP()
   /** 2786-2827: group = safeDistance.object3D; if (!group) { dialogs.alert('Enable Safe Distance 3D visualization first'); return }
-   *  text = objExporter.writeSafeDistance(group); blob = new Blob([text], {type: 'text/plain'});
+   *  text = objExporter.writeSafeDistance(group, safeDistance.lastBand); blob = new Blob([text], {type: 'text/plain'});
    *  downloader.saveBlob(blob, brand.files.safeDistanceObj)   (B-M1 fixed in 08 P2-5a: legacy called the undefined
-   *  `downloadBlob` and threw a ReferenceError; the band keeps its legacy per-column geometry until 08 P2-5b) */
+   *  `downloadBlob` and threw a ReferenceError; since 08 P2-5b the band is mitred, clamped and +Y, with `vn` lines and the
+   *  `# Clamped:` header line: B-M15 and B-L29 fixed) */
   exportSafeDistanceOBJ()
   /** P-IMPORT (section 6.10), legacy importJSON 4967-5010. The parameter keeps the legacy name `e`, because the
    *  FileReader onload callback inside it names its own argument `event` (legacy importJSON(e) / reader.onload = (event) => ...). */
@@ -3039,7 +3072,6 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `zipJsonIncludesAngleOffset = false` | B-M3 | ZIP JSON lacks `angle_offset_degrees` | `ProjectSerializer.write`, `'zip'` variant: `Strategies.zipJsonIncludesAngleOffset` | switch (`case false`) | `true` |
 | `framingBounds = 'flat'` | B-L2, B-M10 | Orbit target, camera reset, coverage status and safe-distance D use flat bounds | `WallLayout.framingBounds`: `Strategies.framingBounds` (the 4 consumers get it injected as `frameBounds`) | switch | true bounds or the pivot (Feature 3) |
 | `curveBeforeFirstPanel = true` | B-L1 | Curve step applied before the first panel's move | `WallLayout.computeWallLayout` (first statement): `Strategies.curveBeforeFirstPanel` | switch (`case true`) | owner decision: **kept** (2026-10-16, 1.4); 08 P2-13f retires the switch with no output change |
-| `safeDistanceBand = 'per-column-own-normal'` | B-M15, B-L29 | Un-mitred per-column quads; faces point -Y; outline = first safeLeft + every safeRight | `SafeDistanceView.create` (first statement): `Strategies.safeDistanceBand` | switch | mitred offsets, flipped index order |
 | `frustumDepthM = 15` | B-L33 | Frustum drawn to 15 m | `CameraRigView.rebuildFrustum`: `frustumDepth = Strategies.frustumDepthM` | value | clip at the wall |
 | `previewRendererSize = [320, 180]` | B-M9 | Fixed 320x180 outer size, filmback-aspect stretch | `PreviewWindow.init`: `renderer.setSize(...Strategies.previewRendererSize)` | value | size from the client box, refit per lens |
 | `previewRendersHelpers = true` | B-M11 | Preview renders grid, axes, gizmo, rig fill tint | `PreviewWindow.render`, after the guard: `Strategies.previewRendersHelpers` (helpers stay on layer 0) | switch (`case true`) | put helpers on `LAYERS.HELPERS`, exclude from the preview camera |
@@ -3074,7 +3106,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | B-M12 | Rotate gizmo direction inverted (N-9) | `Strategies.gizmoRotateSign` | `+1` |
 | B-M13 | Pilot vertical inverted (O-5) | `Strategies.pilotForwardYSign` | `+1` |
 | B-M14 | Select on mousedown; misses deselect (N-5) | `ViewportInput.attachPointer` (tag) | select on click under 4 px travel |
-| B-M15 | Overlapping/gapped safe-distance quads | `Strategies.safeDistanceBand` | mitred band |
+| B-M15 | Overlapping/gapped safe-distance quads | `SafeDistanceView.create` + `geometry/SafeDistanceBand.js` (fixed; `Strategies.safeDistanceBand` retired) | Landed in 08 P2-5b (`geometry/SafeDistanceBand.js buildSafeDistanceBand`: a mitred strip over `WallLayout.flatEdges()`, clamped near concave turns and concave curves so it never folds, clamped offset vertices tinted `safeZone.clampedColor` and counted in the OBJ `# Clamped:` line; `Strategies.safeDistanceBand` retired; no tag site) |
 | B-M16 | Panel-mode 4-16 px/LED per panel (E-10) | `TextureAtlas.panelPxPerLed` (tag) | atlas UVs or budget |
 | B-L1 | Curve before the first panel (B-5) | `Strategies.curveBeforeFirstPanel` | owner decision |
 | B-L2 | Flat bounds for target/reset/D (H-3, J-1, J-9) | `Strategies.framingBounds` | true bounds / pivot |
@@ -3104,7 +3136,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | B-L26 | Gizmo visible in pilot | `PilotController.toggle` (tag) | hide/detach |
 | B-L27 | Frame-rate-dependent movement (I-3) | `OrbitController.tickKeyboard`, `PilotController.tickKeyboard` (tags) | `dt` from `startLoop` |
 | B-L28 | World rings write Euler channels | `CineCamera.rotateBy` (tag) | quaternion composition |
-| B-L29 | Safe-distance floor faces -Y | `Strategies.safeDistanceBand` | swap order |
+| B-L29 | Safe-distance floor faces -Y | `geometry/SafeDistanceBand.js` + `ObjExporter.writeSafeDistance` (fixed) | Landed in 08 P2-5b (every band triangle wound to face +Y; the safe-distance OBJ writes `vn` and `f a//a` faces; no tag site) |
 | B-L30 | Pose changes rebuild frustum + safe distance | `CameraHub.refresh` (tag) | pose-only refresh |
 | B-L31 | JSON v1 saves only sections + mesh_mode (Q-3) | `ProjectSerializer.write` (tag) | v2 writer |
 | B-L32 | Preview resize clamp blow-out | `PreviewWindow` resize handler (tag) | clamp both axes |
@@ -3132,7 +3164,6 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/domain/Prop.js#translateBy` | B-L22 |
 | `js/domain/Prop.js#rotateBy` | B-L22 |
 | `js/geometry/WallLayout.js#computeWallLayout` | B-L1 |
-| `js/geometry/WallLayout.js#flatEdges` | B-M15 |
 | `js/geometry/WallLayout.js#framingBounds` | B-L2, B-M10 |
 | `js/geometry/WallMeshBuilder.js#combinedGrid` | B-M5 |
 | `js/geometry/TextureAtlas.js#panelPxPerLed` | B-M16 |
@@ -3148,7 +3179,6 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/render/textures/PanelIdRenderer.js#panelCanvas` | B-L19, B-M16 |
 | `js/render/textures/PanelIdRenderer.js#sectionCanvas` | B-L35 |
 | `js/render/CameraRigView.js#rebuildFrustum` | B-L33 |
-| `js/render/SafeDistanceView.js#create` | B-M15, B-L29 |
 | `js/render/PreviewWindow.js#init` | B-M9 |
 | `js/render/PreviewWindow.js#updateCamera` | B-L34 |
 | `js/render/PreviewWindow.js#render` | B-M11 |
@@ -3171,7 +3201,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/ui/WallDisplayPanel.js#bind` | B-L13 |
 | `index.html` (markup, untagged; documentation-only) | B-L36 |
 
-Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14) and B-L5 (08 P2-1b; its only site was the tag in `GltfExporter.addMesh`, which keeps B-H2 and B-M7) and B-L4 (08 P2-1c; its sites were the tags in `ProjectIO.exportPanelIds`, which has no tag left, and `ProjectIO.exportZIP`, which keeps B-L14; its viewport half never had a tag and is fixed by 08 P2-1d) and B-H1 (08 P2-2a; its sites were the tags in `WallMeshBuilder.quadIndices`, which keeps B-H2 until 08 P2-2d, and `LEDMaterialFactory.side`, whose `'double'` value is now a design choice) and B-L3 (08 P2-2b; its only site was the tag in `WallMeshBuilder.sectionGrid`, which keeps B-L15 and B-L8) and B-H2 (08 P2-2c and P2-2d; its sites were the tags in `ObjExporter.write`'s `#stripNormalLine`, which left with P2-2c (`write` keeps B-M6, B-L6 and B-L8), `WallMeshBuilder.quadIndices`, which has no tag left, and `GltfExporter.addMesh`, which keeps B-M7) and B-L11 (08 P2-9b; its sites were the tags in `InputState.isShortcutIgnoredTarget`, now a re-export of `core/typingTarget.js isTypingTarget`, and `ViewportInput.attachShortcuts`, which has no tag left) and B-L15 (08 P2-8a; its sites were the tags in `WallSection.FIELD_RULES`, which has no tag left, and `WallMeshBuilder.sectionGrid`, which keeps B-L8 for unvalidated imported counts) and B-M4 (08 P2-3a; its sites were `legacyHtml`, deleted, and the tags in `SectionListPanel.render`, which has no tag left, `SectionLogosPanel.render` and `ProjectSerializer.read`, which kept B-L8 until 08 P2-3b) and B-H4 (08 P2-4a; its sites were the tags in `PilotController.toggle`, which keeps B-L26, and `CameraController.setPreviewEnabled`, which kept B-M8 until 08 P2-4b) and B-M8 (08 P2-4b; its only site was the tag in `CameraController.setPreviewEnabled`, which has no tag left) and B-L21 (08 P2-3d; its sites were the tags in `WallController.applyImport` and `SectionLogosPanel`'s constructor, which have no tag left) and B-L16 (08 P2-3c; its only site was the tag in `SectionListPanel.patchCard`, now `setTitleWithWarning`) and B-L8 (08 P2-3b; its sites were `Strategies.importValidation`, retired, and the tags in `WallSection`'s constructor, `Wall.appendLikeLast` and `replaceAll`, `LogoLibrary.get`, `WallMeshBuilder.sectionGrid`, `ProjectSerializer.read`, `LEDWallView.rebuild` and `SectionLogosPanel.render`, which have no tag left, and `ObjExporter.write` and `GltfExporter.write`, which keep B-M6 / B-L6); in Phase 3, B-L24 (its `.view-btn.active` half in 01 F1-2, `css/features/debug-view.css`; its badge-overlap half in 06 T4a, `.selection-indicator` at `bottom: 64px` in `css/09-viewport-tools.css`; its two documentation-only entries, the `Legacy note B-L24` paragraphs of the `css/07-viewport.css` and `css/09-viewport-tools.css` header comments, left with 06 T4a, whose header comments now say where it landed).
+Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14) and B-L5 (08 P2-1b; its only site was the tag in `GltfExporter.addMesh`, which keeps B-H2 and B-M7) and B-L4 (08 P2-1c; its sites were the tags in `ProjectIO.exportPanelIds`, which has no tag left, and `ProjectIO.exportZIP`, which keeps B-L14; its viewport half never had a tag and is fixed by 08 P2-1d) and B-H1 (08 P2-2a; its sites were the tags in `WallMeshBuilder.quadIndices`, which keeps B-H2 until 08 P2-2d, and `LEDMaterialFactory.side`, whose `'double'` value is now a design choice) and B-L3 (08 P2-2b; its only site was the tag in `WallMeshBuilder.sectionGrid`, which keeps B-L15 and B-L8) and B-H2 (08 P2-2c and P2-2d; its sites were the tags in `ObjExporter.write`'s `#stripNormalLine`, which left with P2-2c (`write` keeps B-M6, B-L6 and B-L8), `WallMeshBuilder.quadIndices`, which has no tag left, and `GltfExporter.addMesh`, which keeps B-M7) and B-L11 (08 P2-9b; its sites were the tags in `InputState.isShortcutIgnoredTarget`, now a re-export of `core/typingTarget.js isTypingTarget`, and `ViewportInput.attachShortcuts`, which has no tag left) and B-L15 (08 P2-8a; its sites were the tags in `WallSection.FIELD_RULES`, which has no tag left, and `WallMeshBuilder.sectionGrid`, which keeps B-L8 for unvalidated imported counts) and B-M4 (08 P2-3a; its sites were `legacyHtml`, deleted, and the tags in `SectionListPanel.render`, which has no tag left, `SectionLogosPanel.render` and `ProjectSerializer.read`, which kept B-L8 until 08 P2-3b) and B-H4 (08 P2-4a; its sites were the tags in `PilotController.toggle`, which keeps B-L26, and `CameraController.setPreviewEnabled`, which kept B-M8 until 08 P2-4b) and B-M8 (08 P2-4b; its only site was the tag in `CameraController.setPreviewEnabled`, which has no tag left) and B-M15 and B-L29 (08 P2-5b; their sites were `Strategies.safeDistanceBand`, retired, and the tags in `SafeDistanceView.create` (both ids) and `WallLayout.flatEdges` (B-M15), which have no tag left) and B-L21 (08 P2-3d; its sites were the tags in `WallController.applyImport` and `SectionLogosPanel`'s constructor, which have no tag left) and B-L16 (08 P2-3c; its only site was the tag in `SectionListPanel.patchCard`, now `setTitleWithWarning`) and B-L8 (08 P2-3b; its sites were `Strategies.importValidation`, retired, and the tags in `WallSection`'s constructor, `Wall.appendLikeLast` and `replaceAll`, `LogoLibrary.get`, `WallMeshBuilder.sectionGrid`, `ProjectSerializer.read`, `LEDWallView.rebuild` and `SectionLogosPanel.render`, which have no tag left, and `ObjExporter.write` and `GltfExporter.write`, which keep B-M6 / B-L6); in Phase 3, B-L24 (its `.view-btn.active` half in 01 F1-2, `css/features/debug-view.css`; its badge-overlap half in 06 T4a, `.selection-indicator` at `bottom: 64px` in `css/09-viewport-tools.css`; its two documentation-only entries, the `Legacy note B-L24` paragraphs of the `css/07-viewport.css` and `css/09-viewport-tools.css` header comments, left with 06 T4a, whose header comments now say where it landed).
 
 How rule 6 reads these rows (as implemented in `tests/static/check.mjs`): the comparison is per file, so a tag may sit in a private helper that only the named method calls (for example `ProjectSerializer.#readV1` for `#read`, `ObjExporter.#writeCombined` for `#write`, `GltfExporter.#writeCombined` for `#write`); a tag wrapped across JSDoc continuation lines counts as one tag (placeholders are still rejected); and a row whose `js/` file does not exist is reported, so a typo in a site path cannot bypass the check.
 
@@ -3193,7 +3223,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 | Feature | What exists after Phase 1 | What the feature adds |
 |---|---|---|
 | **1. Normals flipped by default + normals debug view** | One winding function (`quadIndices`) and per-consumer profiles in `Strategies.mesh` used by the viewport, OBJ and glTF; `side` in the viewport profile; `LEDWallView.meshes()`; `WALL_REBUILT`; `SceneManager.addHelper` + `LAYERS`; `ResourceTracker`; the toolbar button pattern. | The flips are Phase-2 commits 08 P2-2a–d, one consumer per commit (`docs/improvements/08-bugfix-roadmap.md`): `'ccw'` winding and `'averaged'` normals in `WallMeshBuilder`, OBJ per-vertex `vn` and the glTF `NORMAL` attribute. Feature 1 adds the debug view and options only: `render/NormalsDebugView.js` (LineSegments from attributes x `matrixWorld`, subscribes to `WALL_REBUILT`, registered as a helper, disposed with a tracker); a `#toggle-normals` view button and a `.view-btn.active` rule (B-L24). Landed so far (docs/improvements/01-normals.md 8.4): F1-0a, F1-0b and F1-0c (tooling), F1-1 (the debug core without UI: `NormalLines`, `NormalsDebugView`, `DebugMaterials`, `MaterialOverride`, `LEDWallView.setDebugShading` / `withContentMaterials`, `DebugViewSettings`, `DebugViewController`, `core/renderOrder.js`), F1-2 (the debug UI: `#toggle-normals`, `#debug-view-btn` and its popover, the legend in `#viewport-top-stack`, the announcer, N / Shift+N, `DEBUG_VIEW_CHANGED`, `css/features/debug-view.css` with `.view-btn.active`, the help-badge token ` N=normals`), F1-3 (the `normals_debug` harness scenario), F1-2b and F1-2c (review follow-ups of F1-2: legend legibility, the `DebugViewControls` import-boundary test). |
-| **2. Section selection, property editing, per-section offsets** | `WallSection` with stable ids; `SectionLayout.postTransform` hook (null, never fed back into the cursor); mesh tags `userData.{kind, mode, sectionId, sectionIndex, col, row}` and combined `sectionRanges`; `LEDWallView.sectionNodes()`; the `Selectable` registry and generic gizmo; field rule tables; `WallController` as the single writer of section state; mirror events to cards; `ProjectSerializer.read` version-dispatch point. | `WallSection.offset {position, rotation}` + rules; `layoutProject` builds per-section `postTransforms`; the builder applies them to positions/normals; `LEDWallView` adds per-section groups (section/panel) or bakes (combined) and a transform-only update path; `WallSectionSelectable` (pick by `userData` / `faceIndex` -> `sectionRanges`); select-on-click (B-M14 fix); a `section:changed` event emitted by `WallController` so cards, an inspector and the UV viewer update reactively; safe distance per section instead of `flatEdges()`; schema v2. Exporters follow automatically through the layout. |
+| **2. Section selection, property editing, per-section offsets** | `WallSection` with stable ids; `SectionLayout.postTransform` hook (null, never fed back into the cursor); mesh tags `userData.{kind, mode, sectionId, sectionIndex, col, row}` and combined `sectionRanges`; `LEDWallView.sectionNodes()`; the `Selectable` registry and generic gizmo; field rule tables; `WallController` as the single writer of section state; mirror events to cards; `ProjectSerializer.read` version-dispatch point. | `WallSection.offset {position, rotation}` + rules; `layoutProject` builds per-section `postTransforms`; the builder applies them to positions/normals; `LEDWallView` adds per-section groups (section/panel) or bakes (combined) and a transform-only update path; `WallSectionSelectable` (pick by `userData` / `faceIndex` -> `sectionRanges`); select-on-click (B-M14 fix); a `section:changed` event emitted by `WallController` so cards, an inspector and the UV viewer update reactively; safe distance per floor run: `floorRuns()`, each run through 08 P2-5b's `buildSafeDistanceBand` (02 6.12, CR-08-a); schema v2. Exporters follow automatically through the layout. |
 | **3. Configurable pivot + offset** | `WallPivot`/`PivotMode` in `Wall` (identity); `WallLayout.firstEdge/lastEdge/bounds()/pivotPoint(mode)` including "middle of entire wall" = midpoint of the first section's first edge and the last section's last edge on the floor; the single `framingBounds` switch for the four flat-bounds consumers; the single `layoutProject()` entry. | A baked translation in `layoutProject`: stage frame `−(P.x, 0, P.z)`, export frame `−P`, P = anchor + offset (1.4). The raw walk is translated first, and spec 02's `applySectionOffsets(out)` builds its section matrices from the translated layout (07 C32). **No wall root transform, ever:** the identity `wallGroup` transform is a unit-tested invariant (03 §5.1, §5.9 #2). `ui/PivotPanel`; a pivot Selectable + marker view; switch `framingBounds` to pivot/bounds (fixes B-L2); optional re-expression of camera/prop poses; schema v2. |
 | **4. Clean 0..1 UVs + UV viewer/editor** | UV strategies in one builder function per consumer; `TextureAtlas` as the single source of offsets, widths and start columns (yields per-section `uvRects`); `PanelIdRenderer.sectionCanvas()` for the viewer background; mesh tags; the selection registry; `PreviewWindow`'s resize handle as the floating-panel pattern. | `'per-section'` / `'atlas-pixel-accurate'` strategies (fix B-M5/B-M6) and a baked per-section `uvTransform`; glTF TEXCOORD_0; `ui/UVViewer.js` (2D canvas; subscribes to `SELECTION_CHANGED` and `WALL_REBUILT`); `ui/FloatingPanel.js` extracted from `PreviewWindow`. |
 | **5. HDRI projection (+ reflective car)** | `DisplaySettings.content` enum (`'color' \| 'ledSim' \| 'panelIds'`, ready for `'hdri'`); `LEDMaterialFactory` as the only wall-material constructor; `ResourceTracker` for HDR/PMREM disposal; `SceneManager` owns the main renderer and the helper registry; the second renderer is encapsulated in `PreviewWindow`; `PropView` base with `buildMesh()`; `CineCamera` lens math for the default projection point. | `ContentMode.HDRI` + `render/HdriProjectionMaterial.js` (wall and dome); `ui/HdriPanel.js` + the projection-point Selectable (`'hdri-point'`, kind `'projector'`, 07 C36); the second renderer is replaced by spec 07's `PreviewPass` (scissor rendering, R1/R2; `SceneManager` keeps only `setEnvironment` and `setPunctualLightScale`), which excludes `LAYERS.HELPERS` (B-M9/B-M11, first fixed by 08 P2-10 or 07 R1/R2, 07 C31); the backdrop dome on `LAYERS.ENVIRONMENT`; `GltfCarPropView extends CarPropView`; colour management in `render/ColorManagement.js` as per-material patches (Option L on r128; Option G after 07 U3b); loaders from 07's `vendor/three-addons.js` factories (spec 05 §5.11 #17). |
@@ -3513,3 +3543,10 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 3.5, 4: `Wall.allocateId()` (07 4.1, delivered early; 07 6.8 `nextFree` over the live ids) gives `appendLikeLast` its id. P2-3b's `replaceAll` falls back to the smallest unused id when `max + 1` would pass 2^31 - 1; that id can lie below live ids, and the legacy `nextSectionId++` then handed out ids that live sections already used (an import of ids `[2147483647, 1]` followed by two adds gave `0, 1`: a duplicate 1, which Delete removed together with the imported section and which the next import renumbered). `allocateId` steps over live ids, takes the smallest unused id above the range, and equals the legacy `nextSectionId++` whenever `nextSectionId` is above every live id (every other state). A `nextSectionId` that is not a valid id (unreachable since 08 P2-3b) is handed out as legacy did while unused and otherwise takes the fallback, so the call always ends.
 - 6.0 (boundary (c)): marked as a Phase 1 record that 08 P2-3b made unreachable.
 - 2.3: `domain.test.mjs` (the legacy fuzz of `appendLikeLast` now starts the allocator above every live id; `allocateId` at the top of the range, after a delete, from odd values, and a 300-run add/delete property: every id stays a unique valid id); `wall-controller.test.mjs` (an import of `[2147483647, 1]`, two adds give `0, 2`, the saved file re-imports with no correction, Delete removes one section).
+
+**08 P2-5b, B-M15 and B-L29 landed** (manifest `tests/regression/expected/P2-5b.json`: the safe-distance OBJs of `camera` and `p2_curved_safe_distance` and the four `p2_curved_safe_distance` screenshots; `camera/13_safe_distance` may change, flat walls give the legacy positions):
+- 1.3, 2.2, 3.6: `geometry/SafeDistanceBand.js` (new, pure): `buildSafeDistanceBand(input, D, opts)` over one run `{points, facing, sectionOfVertex}` or a `WallLayout` (`bandRunOfLayout`, the single run of `flatEdges()`; 02 6.12, CR-08-a): the 08 6.9 mitred strip, clamped near concave turns and concave curves (inradius) so it never folds, every triangle +Y, offset vertices closer than D marked `'clamped'` and counted.
+- 3.7: `SafeDistanceView.create` draws the band (vertex colours wall / threshold / clamped; the outline along the offset vertices; the label at `band.labelAnchor`, the legacy middle index) and keeps it as `lastBand`; `remove()` clears it. 3.4: `SceneTheme.safeZone.clampedColor` with `--scene-safe-clamped` (`--ui-orange-400`, the F6 off-centre amber; 08 named the key `scene.safeDistanceClamped` with `#ffaa00`, which 06 5.12 rule 2 rejects as gold-like, so the key follows the `safeZone` group and the F6 amber, recorded in 06 5.12 and 08 5.2).
+- 3.9, 3.10: `ObjExporter.writeSafeDistance(group, band)` writes `vn` and `f a//a` faces and, when the band clamped any vertex, the `# Clamped:` header line; `ProjectIO.exportSafeDistanceOBJ` passes `safeDistance.lastBand`.
+- 3.3, 8.1: `Strategies.safeDistanceBand` is retired; 8.2 keeps the B-M15 and B-L29 rows with `Landed` fix cells; 8.3: the rows `WallLayout.js#flatEdges` and `SafeDistanceView.js#create` are deleted, so `LEGACY_SITES` no longer lists either id. 9: the Feature 2 row calls the band builder once per floor run.
+- 2.3: `safe-distance-band.test.mjs` (new); `io.test.mjs` (the export passes `lastBand`); `core.test.mjs`, `camera-hub.test.mjs` (the import list); `export-orientation.test.mjs` loses its last `OPEN_DEFECTS` row (B-L29): every golden OBJ and glTF now passes the orientation check.

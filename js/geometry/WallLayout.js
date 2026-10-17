@@ -84,14 +84,13 @@ export class WallLayout {
    * The legacy safe-distance `allEdges` (2619-2647): [] when there are no sections; otherwise sections[0].edges[0]
    * followed by every section's edges.slice(1), in order (the same edge objects; do not mutate them). Returns []
    * (does not throw) for an empty wall: legacy imports of `sections: []` with preview + safe distance on add an
-   * empty group and do not throw.
+   * empty group and do not throw. It is the one polyline of the safe-distance band (geometry/SafeDistanceBand's
+   * bandRunOfLayout; since 08 P2-5b the band is mitred and clamped across section joins, B-M15 fixed).
    * Ports: index.html@cd3fd3f lines 2619-2647 (the `allEdges.length === 0` first-edge rule and the per-column pushes).
    * Side effects: none.
    * @returns {LayoutEdge[]} a new array
    */
   flatEdges() {
-    // LEGACY(B-M15): one flattened edge list across section joins; the safe-distance band builds un-mitred
-    // per-column quads from it (overlaps on concave joins, wedge gaps on convex ones).
     const allEdges = [];
     if (this.sections.length === 0) return allEdges;
     allEdges.push(this.sections[0].edges[0]);
