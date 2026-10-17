@@ -1,0 +1,112 @@
+{
+  "commit": "P2-11b",
+  "bugs": [
+    "B-L33"
+  ],
+  "expect": [
+    {
+      "output": "camera/{01_camera_enabled,08_camera_moved,13_safe_distance}.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "08 6.10 (B-L33): the frustum lines and fill end at the wall (each far corner at the analyser's depth: the corner ray's hit, else D0) instead of reaching 15 m through it"
+    },
+    {
+      "output": "gizmo_drag/camera_0{1_translated,2_rotated}.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same: the rig is shown (camera_02's camera looks past the wall, so its frustum ends at D0 on the wall plane)"
+    },
+    {
+      "output": "preview_resize/resize_0{1_dragged,3_blow_out}.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same: the rig is shown"
+    },
+    {
+      "output": "import_edge/i_empty.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same: preview and Safe Distance on"
+    },
+    {
+      "output": "p2_curved_safe_distance/*.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same: the four walls with the preview on; the corners end on the curved columns they hit"
+    },
+    {
+      "output": "pivot_stage/*.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same: 03's pivot_stage runs with the preview on (a scenario newer than 08's manifest list)"
+    },
+    {
+      "output": "p2_true_framing/arc18.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "B3-0's scenario: the frustum ends at the plane of the half circle's column the optical axis passes closest to (D0 = 3.37 m) instead of 15 m (offset90 looks past its wall with no wall plane ahead, so its frustum stays at 15 m and its screenshot is unchanged)"
+    },
+    {
+      "output": "preview_compositing/0{2,3}_orbit.page.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same: full-page captures with the rig in the main view"
+    },
+    {
+      "output": "keyboard/final_view.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the rig is in view after pilot mode is left (it is hidden while piloting since 07 R1): its frustum ends at the wall. Corrected after the first gate run: a mayChange entry of 08's P2-11b row"
+    },
+    {
+      "output": "pilot_look/look_03_pilot_off.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same: the rig is back in view after pilot mode. Corrected after the first gate run (mayChange in 08's row)"
+    },
+    {
+      "output": "preview_clean/0{0_full_frame,1_red_v_raptor,2_custom_100x10_widest}.canvas.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the canvas captures show the rig in the main view: its frustum ends at the wall. Corrected after the first gate run (the first draft had preview_clean as mayChange; its window captures are unchanged)"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "keyboard/pilot_view.screenshot.png",
+      "change": "modified",
+      "reason": "08 P2-11b row: the rig may be out of view (hidden in pilot mode since 07 R1)"
+    },
+    {
+      "output": "pilot_look/look_0{1_after_drag,2_after_wheel}.screenshot.png",
+      "change": "modified",
+      "reason": "08 P2-11b row: the rig may be out of view"
+    },
+    {
+      "output": "preview_off_in_pilot/*.screenshot.png",
+      "change": "modified",
+      "reason": "08 P2-11b row: the rig may be out of view"
+    },
+    {
+      "output": "p2_shortcut_filters/*.screenshot.png",
+      "change": "modified",
+      "reason": "08 P2-11b row: the rig may be out of view"
+    },
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-03 T3 runs)"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen again in the B3-0 self-consistency run, textures/L4_PanelIDs.png); this commit changes no texture"
+    },
+    {
+      "output": "ui_visual/{00_initial,07_two_sections}.sidebar.screenshot.png",
+      "change": "modified",
+      "reason": "one sidebar pixel of these DOM-only captures has differed by up to 7 levels between runs (DOM text antialiasing; P2-7e and F3-T8b runs)"
+    }
+  ],
+  "notes": "08 P2-11b (B-L33): CameraRigView builds each far corner of the frustum lines and fill at the camera-space depth FrustumCoverage resolved (the corner ray's hit, else D0, else MAX_FRUSTUM_DEPTH_M = 15 m), floored at the near plane; CameraHub analyses first and passes the depths to create and rebuildFrustum; Strategies.frustumDepthM is retired. Only screenshots that show the rig change; every state, export and label is identical. Corrected after the first gate run: p2_project_v2 has one screenshot, 06_restored, taken after a v1 restore with the preview off (no rig), so it is unchanged and its entry is dropped; keyboard/final_view, pilot_look/look_03_pilot_off and the three preview_clean canvas captures show the rig and are expected changes."
+}

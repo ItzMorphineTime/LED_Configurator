@@ -266,6 +266,51 @@ describe('U12 closed dashed outlines and the two-tone frustum (06 6.6, D15)', ()
     assert.equal(linesOf(view.group).length, 2, 'no stale line stays in the group');
   });
 
+  // 08 P2-11b (B-L33, 08 6.10, AC 41): each far corner at its own camera-space depth, in the lines and in the fill
+  test('the far corners of the lines and the fill sit at the analyser\'s depths (TL, TR, BR, BL); near corners unchanged', () => {
+    const { view, cine } = rig();
+    const depths = [2, 3, 4, 5];
+    view.create(cine, depths);
+    const tx = Math.tan(cine.hFov() / 2);
+    const ty = Math.tan(cine.vFov() / 2);
+    const far = [[-1, 1], [1, 1], [1, -1], [-1, -1]].map(([sx, sy], c) => [sx * tx * depths[c], sy * ty * depths[c], -depths[c]]);
+    // 08 AC 41: within 1e-6 m (the fill's vertices are Float32)
+    const close = (a, b, label) => a.forEach((v, k) => assert.ok(Math.abs(v - b[k]) <= 1e-6, `${label}: ${a} vs ${b}`));
+    const at = (attr, i) => [attr.array[3 * i], attr.array[3 * i + 1], attr.array[3 * i + 2]];
+    // 08 6.10's slot lists (the legacy construction order)
+    const slots = {
+      lines: { 0: [8, 15, 17], 1: [9, 10, 19], 2: [11, 12, 23], 3: [13, 14, 21] },
+      fill: { 0: [11, 19], 1: [13, 20, 22], 2: [14, 16, 26, 28], 3: [8, 10, 29] },
+    };
+    const [, core] = linesOf(view.group);
+    const fill = view.group.children.find((o) => o.kind === 'Mesh' && o !== view.bodyMesh);
+    for (const [name, attr] of [['lines', core.geometry.attributes.position], ['fill', fill.geometry.attributes.position]]) {
+      const farSlots = new Set();
+      for (const [c, list] of Object.entries(slots[name])) {
+        for (const i of list) {
+          close(at(attr, i), far[c], `${name} vertex ${i} is far corner ${c}`);
+          farSlots.add(i);
+        }
+      }
+      for (let i = 0; i < attr.count; i++) {
+        if (!farSlots.has(i)) assert.ok(Math.abs(attr.array[3 * i + 2] + 0.2) <= 1e-6, `${name} vertex ${i} is a near corner`);
+      }
+    }
+  });
+
+  test('without depths every far corner is at MAX_FRUSTUM_DEPTH_M (15 m, the legacy rig); a depth below the near plane is floored', () => {
+    const { view, cine } = rig();
+    view.create(cine);
+    const [, core] = linesOf(view.group);
+    const z = (attr, i) => attr.array[3 * i + 2];
+    assert.equal(CameraRigView.MAX_FRUSTUM_DEPTH_M, 15);
+    for (const i of [8, 9, 11, 13, 17, 19, 21, 23]) assert.equal(z(core.geometry.attributes.position, i), -15);
+    view.rebuildFrustum(cine, [0.05, 1, 1, 1]);
+    const [, core2] = linesOf(view.group);
+    assert.equal(z(core2.geometry.attributes.position, 8), -0.2, 'TL floored at the near plane');
+    assert.equal(z(core2.geometry.attributes.position, 9), -1);
+  });
+
   test('remove() drops the group and nulls bodyMesh (08 P2-4a; legacy kept a stale cameraBodyMesh)', () => {
     const { view, cine, helpers } = rig();
     view.create(cine);

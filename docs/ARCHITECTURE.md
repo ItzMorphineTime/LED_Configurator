@@ -274,7 +274,9 @@ js/
     textures/PanelIdRenderer.js            WP6   Panel / section / atlas panel-ID canvases (styling, section names, logos);
                                                  06 T5: takePendingFonts (the font gate's (font, text) pairs)
     CameraRigView.js                       WP7   Film-camera rig: body (pick target), frustum lines + fill, transform; lens event;
-                                                 06 T5: the body's edge outline, the two-tone frustum (halo + dashed core)
+                                                 06 T5: the body's edge outline, the two-tone frustum (halo + dashed core);
+                                                 08 P2-11b: each far corner at the analyser's depth (the frustum ends at the
+                                                 wall), MAX_FRUSTUM_DEPTH_M
     SafeDistanceView.js                    WP7   Safe-distance floor band, outline, "Max" sprite; exposes its group for OBJ export
     PreviewWindow.js                       WP7   The preview window's DOM: display, inline size, resize handle (07 R2: per-axis
                                                  clamps), the labels, the placeholder's client rect (no renderer since 07 R2)
@@ -745,7 +747,6 @@ export const Strategies = deepFreeze({
                                                    // 08 P2-7c (B-M7)
   framingBounds: 'flat-pivot',                     // B-L2, B-M10; Phase-1 'flat' (03 T2: translated by the stage origin)
   curveBeforeFirstPanel: true,                     // B-L1
-  frustumDepthM: 15,                               // B-L33
   gizmoRotateSign: -1,                             // B-M12
   pilotForwardYSign: -1,                           // B-M13
 });                                                // dispose.wallTextures / dispose.gizmo (B-H5, B-L12: true since
@@ -753,7 +754,9 @@ export const Strategies = deepFreeze({
                                                    // exportCombinedColor (B-L6) retired by 08 P2-7d: per-section materials;
                                                    // combinedLedSimColor (B-L18) retired by 08 P2-7e: white tile x vertex colours;
                                                    // previewRendersHelpers (B-M11) retired by 08 P2-10a: the preview hides helpers;
-                                                   // previewRendererSize (B-M9) retired by 07 R2: one renderer, a scissor pass
+                                                   // previewRendererSize (B-M9) retired by 07 R2: one renderer, a scissor pass;
+                                                   // frustumDepthM (B-L33) retired by 08 P2-11b: the frustum ends at the wall
+                                                   // (CameraRigView.MAX_FRUSTUM_DEPTH_M = 15 is the analyser's fallback)
 
 /** The exact Phase-1 mesh profiles (08 P2-0, docs/improvements/08-bugfix-roadmap.md 4.2). Production code never
  *  reads these; the oracle tests inject them into WallMeshBuilder / ObjExporter / GltfExporter so that the
@@ -1869,6 +1872,7 @@ export class PanelIdRenderer {   // pure 2D canvas; creates no THREE objects; sh
 #### `js/render/CameraRigView.js`
 ```js
 export class CameraRigView {
+  static MAX_FRUSTUM_DEPTH_M = 15;   // 08 P2-11b: FrustumCoverage.MAX_FRUSTUM_DEPTH_M, the depth of a corner without one
   /** @param {{sceneManager: SceneManager, bus: EventBus, theme: {scene: SceneTheme}}} deps */
   constructor({ sceneManager, bus, theme })
   get exists()       // !!group   (legacy previewCameraGroup truthiness)
@@ -1879,22 +1883,24 @@ export class CameraRigView {
    *  bodyMesh = new THREE.Mesh(bodyGeom, bodyMat); bodyMesh.position.z = 0.15;
    *  (06 T5, D15) bodyMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(bodyGeom),
    *    new THREE.LineBasicMaterial({ color: cameraBody.outlineColor })))   (the edge outline; never picked); group.add(bodyMesh);
-   *  this.rebuildFrustum(cine)   (first build: emits CAMERA_LENS_CHANGED, the duplicate legacy write is kept);
+   *  this.rebuildFrustum(cine, cornerDepths)   (first build: emits CAMERA_LENS_CHANGED, the duplicate legacy write is kept);
    *  sceneManager.addHelper(group); this.updateTransform(cine) */
-  create(cine)
+  create(cine, cornerDepths = null)
   /** Verbatim 2346-2429 minus the dead wallIntersectionPlane branch:
    *  remove + dispose the previous lines (halo and core: the shared geometry, both materials) and fill (if any);
    *  hFov = cine.hFov(); vFov = cine.vFov();
    *  bus.emit(CAMERA_LENS_CHANGED, { hFov, vFov, filmbackWidth: cine.filmbackWidth, filmbackHeight: cine.filmbackHeight })
    *    (exactly at the legacy readout point 2369-2371);
-   *  frustumDepth = Strategies.frustumDepthM (15, LEGACY(B-L33)); nearPlane = 0.2; corners and the 24 line vertices in
-   *  legacy push order; lines (06 T5, two-tone, 06 6.6): one BufferGeometry + Float32BufferAttribute, drawn by the halo
+   *  08 P2-11b (B-L33 fixed): nearPlane = 0.2; depths = (cornerDepths ?? [MAX_FRUSTUM_DEPTH_M x 4]) each floored at
+   *  nearPlane; far corner c (TL, TR, BR, BL) = (sx * tx * d_c, sy * ty * d_c, -d_c) with tx = tan(hFov / 2),
+   *  ty = tan(vFov / 2) (the analyser's camera-space depths: the corner ray's hit, so neither lines nor fill poke
+   *  through the wall; all 15 is the legacy rig bit for bit); corners and the 24 line vertices in legacy push order; lines (06 T5, two-tone, 06 6.6): one BufferGeometry + Float32BufferAttribute, drawn by the halo
    *  LineSegments(LineBasicMaterial{haloColor, transparent: opacity < 1, opacity}) at renderOrder RENDER_ORDER.DEFAULT
    *  and the core LineSegments(LineDashedMaterial{color, dashSize, gapSize, transparent, opacity}) at
    *  RENDER_ORDER.RIG_CORE, with core.computeLineDistances() (each segment its own distance range; never a LineLoop);
    *  fill: BufferGeometry + BufferAttribute(Float32Array of the 30 vertices) + Mesh(MeshBasicMaterial{color, transparent,
    *  opacity 0.08, side: DoubleSide, depthWrite: false}); both added to group. */
-  rebuildFrustum(cine)
+  rebuildFrustum(cine, cornerDepths = null)
   /** Verbatim 2431-2449: if (!group) return; position.set(posX, posY, posZ); rotation.order = 'YXZ';
    *  rotation.set(rotX * Math.PI / 180, rotY * Math.PI / 180, rotZ * Math.PI / 180) */
   updateTransform(cine)
@@ -3422,10 +3428,11 @@ No other path calls `rebuild()` (rows F6-1 and `commitPivot`'s rows F3-1 to F3-4
 
 ```
 if (!cine.enabled) return                                            // 2452
-if (!rig.exists) rig.create(cine)                                    // 2454-2456: builds the frustum once (emits CAMERA_LENS_CHANGED)
-rig.rebuildFrustum(cine)                                             // 2458: emits CAMERA_LENS_CHANGED again (kept, as legacy)
+{payload, cornerDepths} = analysis                                    // 08 P2-11b: analyzeCoverage first (pure; PR7)
+if (!rig.exists) rig.create(cine, cornerDepths)                      // 2454-2456: builds the frustum once (emits CAMERA_LENS_CHANGED)
+rig.rebuildFrustum(cine, cornerDepths)                               // 2458: emits CAMERA_LENS_CHANGED again (kept, as legacy)
 rig.updateTransform(cine)                                            // 2459
-emit CAMERA_COVERAGE_CHANGED this.coverage()                         // 2460  08 P2-11a: analyzeCoverage on stageLayout(); PR7
+emit CAMERA_COVERAGE_CHANGED payload                                  // 2460  08 P2-11a: analyzeCoverage on stageLayout(); PR7
 preview.updateCamera()                                               // 2461  (preview camera and labels; PreviewPass since 07 R2)
 this.syncSafeDistance()                                              // 2462  LEGACY(B-L30) rebuilt on every call
 pilotDriver.refresh()                                                // 2463  re-drives the main camera iff pilot
@@ -3696,7 +3703,6 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `mesh.gltf.doubleSided = 'omit'` | – (correct since 08 P2-2d) | The material object has **no** `doubleSided` key: single-sided, which shows the `'ccw'` wall from the stage and keeps a wrongly facing wall visible as an error (08 Q2) | `GltfExporter.#doubleSided()` (called first by `#addMesh`): `profile.doubleSided` | switch | `case 'true'` (08 P2-2d) writes `doubleSided: true`, for a later export option; no profile uses it |
 | `framingBounds = 'flat-pivot'` (03 T2; Phase-1 value `'flat'`, whose case is deleted: the key has one read site) | B-L2, B-M10 | Orbit target, camera reset, the coverage's fits test (the status rays read the stage layout since 08 P2-11a) and safe-distance D use the flat bounds (the arc width sum x the tallest section), translated by the stage origin: `{totalWidth, maxHeight, minX: 0 - so.x, wallZ: 0 - so.z}` (03 6.6; identity-exact at the default pivot, +0 offsets) | `WallLayout.framingBounds`: `Strategies.framingBounds` (the 4 consumers get it injected as `frameBounds`) | switch | step F = 08 P2-11c: `'layout'` (true bounds of the stage layout, `FramingPolicy`'s named boxes) |
 | `curveBeforeFirstPanel = true` | B-L1 | Curve step applied before the first panel's move | `WallLayout.computeWallLayout` (first statement): `Strategies.curveBeforeFirstPanel` | switch (`case true`) | owner decision: **kept** (2026-10-16, 1.4); 08 P2-13f retires the switch with no output change |
-| `frustumDepthM = 15` | B-L33 | Frustum drawn to 15 m | `CameraRigView.rebuildFrustum`: `frustumDepth = Strategies.frustumDepthM` | value | clip at the wall |
 | `gizmoRotateSign = -1` | B-M12 | Rotation opposite to the drag | `TransformGizmo.onMouseMove`: `Strategies.gizmoRotateSign * angle` | value | `+1` |
 | `pilotForwardYSign = -1` | B-M13 | Pilot W/S vertical inverted | `PilotController.tickKeyboard`: `Strategies.pilotForwardYSign * Math.sin(tilt)` | value | `+1` (or `getWorldDirection`) |
 
@@ -3759,7 +3765,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | B-L30 | Pose changes rebuild frustum + safe distance | `CameraHub.refresh` (tag) | pose-only refresh |
 | B-L31 | JSON v1 saves only sections + mesh_mode (Q-3) | `ProjectSerializer.write` (tag) | v2 writer |
 | B-L32 | Preview resize clamp blow-out | `PreviewWindow` resize handler (fixed) | Landed in 07 R2 (the resize drag keeps the legacy width clamp and aspect, then clamps each axis on its own to 200-800 x 120-600 with `PreviewFit.clampPreviewSize`; no tag site) |
-| B-L33 | Frustum fixed 15 m | `Strategies.frustumDepthM` | clip at wall |
+| B-L33 | Frustum fixed 15 m | `CameraRigView.rebuildFrustum` (fixed; `Strategies.frustumDepthM` retired) | Landed in 08 P2-11b (each far corner of the frustum lines and fill at the camera-space depth `FrustumCoverage.analyzeCoverage` resolves: the corner ray's hit on the wall, else D0, else `MAX_FRUSTUM_DEPTH_M` = 15 m; `Strategies.frustumDepthM` retired; no tag site) |
 | B-L34 | Preview header first word; fake resolution (L-3) | `CineCamera.presetShortName` + `PreviewPass.updateCamera` (tags; `PreviewWindow.updateCamera` until 07 R2) | short names |
 | B-L35 | Logo load: no error / zero-size guard | `SectionLogosPanel` upload + `PanelIdRenderer` logo drawing (tags) | guards |
 | B-L36 | Toggles not keyboard accessible | `index.html` markup (documentation entry; markup is untagged) | markup + `flipToggle` keys |
@@ -3787,7 +3793,6 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/render/textures/LEDPixelTextureFactory.js#tile` | B-L20 |
 | `js/render/textures/PanelIdRenderer.js#panelCanvas` | B-L19 |
 | `js/render/textures/PanelIdRenderer.js#sectionCanvas` | B-L35 |
-| `js/render/CameraRigView.js#rebuildFrustum` | B-L33 |
 | `js/render/PreviewPass.js#updateCamera` | B-L34 |
 | `js/interaction/OrbitController.js#updateTargetPosition` | B-L2 |
 | `js/interaction/OrbitController.js#tickKeyboard` | B-L27 |
@@ -4349,3 +4354,9 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - Deviations from 08 6.10, recorded in 08 10 (P2-11 as built): the fourth argument `extent` and the `cornerHits` result; only front-facing quads count for the overlap; s and v accept 1e-9 at column joints; D0's second rule takes the plane of the column the optical axis passes closest to, not the nearest plane of any column (the first gate run showed the nearest plane, of a far column of the half circle, passing 0.07 m in front of the camera and giving a 0.07 m frame).
 - `README.md`: the coverage release note and the two "Distance to wall plane" sentences. 03 3.5 and 6.6: as-built notes.
 - 2.3: `frustum-coverage.test.mjs` (new); `camera-hub.test.mjs` (the hub's `stageLayout`, the analyser payload, a 90-degree pan, the import list); `domain.test.mjs` (the `coverage()` tests leave; `maxSafeDistance` stays); `pivot.test.mjs` (test 6's consumers without `coverage()`, the analyser's distance to the moved wall).
+
+**08 P2-11b, the frustum ends at the wall (B-L33 landed)** (docs/improvements/08-bugfix-roadmap.md 6.10, AC 41; manifest `tests/regression/expected/P2-11b.json`: the canvas screenshots that show the camera rig change; every state, export and label is identical):
+- 3.7 `CameraRigView`: `create(cine, cornerDepths)` and `rebuildFrustum(cine, cornerDepths)` build each far corner (TL, TR, BR, BL) of the lines and the fill at its camera-space depth, `(sx * tx * d, sy * ty * d, -d)`, floored at the near plane; without depths every corner is at `MAX_FRUSTUM_DEPTH_M` (15 m, the legacy rig bit for bit). `CameraRigView.MAX_FRUSTUM_DEPTH_M` is `FrustumCoverage.MAX_FRUSTUM_DEPTH_M`. 3.10, 6.3: the hub analyses first (pure, PR7) and passes the analyser's `cornerDepths` to `create` and `rebuildFrustum`; the payload is the same analysis.
+- 3.3, 8.1: `Strategies.frustumDepthM` is retired (its row deleted). 8.2: B-L33 `Landed in 08 P2-11b`; 8.3: the `CameraRigView.js#rebuildFrustum` row is deleted. 08 10: the P2-11b as-built note (the near-plane floor; `#farSlots` and `updateFrustumDepths` stay with P2-12c).
+- `README.md`: the frustum release note.
+- 2.3: `scene-overlays.test.mjs` (the far corners of the lines and of the fill at the depths, on 08 6.10's slot lists, within 1e-6 m; the 15 m default; the near-plane floor), `camera-hub.test.mjs` (the analysis first; the depths passed to the rig; the import list), `core.test.mjs` (the Strategies keys; B-L33 landed).

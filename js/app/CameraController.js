@@ -69,30 +69,33 @@ export class CameraHub {
   }
 
   /**
-   * P2 (ARCHITECTURE.md 6.3), legacy updateCameraFrustum. No-op while the preview is off. The rig is created
-   * only when missing (its own frustum build publishes the lens readout once), then the frustum is rebuilt
-   * again (second readout, as legacy), the rig placed, the coverage published (coverage(): the analyser of 08 P2-11a
-   * on the stage layout; bounds and coverage are computed before the panel writes: PR7), the preview camera and
-   * labels updated, the safe-distance overlay synced, the pilot view re-driven and the gizmo told to follow.
+   * P2 (ARCHITECTURE.md 6.3), legacy updateCameraFrustum. No-op while the preview is off. The coverage is analysed
+   * first (pure; 08 P2-11b: its corner depths end the frustum at the wall; PR7), then the rig is created only when
+   * missing (its own frustum build publishes the lens readout once), the frustum is rebuilt again (second readout, as
+   * legacy), the rig placed, the coverage published (the analyser of 08 P2-11a on the stage layout), the preview camera
+   * and labels updated, the safe-distance overlay synced, the pilot view re-driven and the gizmo told to follow.
    * Ports: index.html@cd3fd3f lines 2451-2469 (2460: the coverage readout).
-   * Side effects: rig.create (iff missing), rig.rebuildFrustum (emits CAMERA_LENS_CHANGED), rig.updateTransform;
-   *   emits CAMERA_COVERAGE_CHANGED coverage(); preview.updateCamera();
-   *   syncSafeDistance(); pilotDriver.refresh(); emits SELECTABLE_MOVED {id: 'camera'}.
+   * Side effects: rig.create(cine, cornerDepths) (iff missing), rig.rebuildFrustum(cine, cornerDepths) (emits
+   *   CAMERA_LENS_CHANGED), rig.updateTransform; emits CAMERA_COVERAGE_CHANGED (the coverage() payload);
+   *   preview.updateCamera(); syncSafeDistance(); pilotDriver.refresh(); emits SELECTABLE_MOVED {id: 'camera'}.
    * @returns {void}
    */
   refresh() {
     const cine = this.#project.camera;
     if (!cine.enabled) return;
 
+    // 08 P2-11b: the analysis first (pure, PR7); its corner depths shape the frustum
+    const { payload, cornerDepths } = this.#analyze();
+
     if (!this.#rig.exists) {
-      this.#rig.create(cine);
+      this.#rig.create(cine, cornerDepths);
     }
 
     // LEGACY(B-L30): every call (each gizmo mousemove, each pilot frame, each input) rebuilds the
-    // pose-independent frustum geometry and the whole safe-distance group (new canvas and texture).
-    this.#rig.rebuildFrustum(cine);
+    // frustum geometry and the whole safe-distance group (new canvas and texture).
+    this.#rig.rebuildFrustum(cine, cornerDepths);
     this.#rig.updateTransform(cine);
-    this.#bus.emit(Events.CAMERA_COVERAGE_CHANGED, this.coverage());
+    this.#bus.emit(Events.CAMERA_COVERAGE_CHANGED, payload);
     this.#preview.updateCamera();
     this.syncSafeDistance();
     this.#pilotDriver.refresh();
@@ -114,13 +117,26 @@ export class CameraHub {
    *   null when no wall plane lies ahead
    */
   coverage() {
+    return this.#analyze().payload;
+  }
+
+  /**
+   * One analysis of the camera against the stage layout: the coverage payload and the frustum's far-corner depths
+   * (08 P2-11b, camera-space metres, TL, TR, BR, BL).
+   * Side effects: none.
+   * @returns {{payload: ReturnType<CameraHub['coverage']>, cornerDepths: number[]}}
+   */
+  #analyze() {
     const cine = this.#project.camera;
     const bounds = this.#frameBounds();
     const c = analyzeCoverage(this.#stageLayout(), cine, { hFov: cine.hFov(), vFov: cine.vFov() },
       { width: bounds.totalWidth, height: bounds.maxHeight });
     return {
-      frameWidth: c.frameWidth, frameHeight: c.frameHeight, status: c.status, safeDistance: cine.maxSafeDistance(bounds),
-      distToWall: c.distance,
+      payload: {
+        frameWidth: c.frameWidth, frameHeight: c.frameHeight, status: c.status, safeDistance: cine.maxSafeDistance(bounds),
+        distToWall: c.distance,
+      },
+      cornerDepths: c.cornerDepths,
     };
   }
 

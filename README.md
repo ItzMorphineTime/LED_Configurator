@@ -80,6 +80,9 @@ The image keeps the filmback's proportions, with black bars instead of a stretch
 corners, and dragging its resize handle with an extreme custom filmback no longer blows the window up beyond
 800 x 600 px.
 
+Release note: the camera's frustum in the 3D view now ends where its rays meet the wall (it used to run 15 m, straight
+through the wall); a corner that misses the wall ends at the distance of the wall plane in front of the camera.
+
 Release note: the frame status now looks where the camera looks. It used to measure the frame straight ahead along Z
 against a flat rectangle, whatever the pan, tilt and roll and the shape of the wall; now it traces the four frame
 corners and the optical axis against the real wall, so a turned camera shows the frame size on the wall it is aimed at,

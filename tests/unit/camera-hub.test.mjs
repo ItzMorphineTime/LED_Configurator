@@ -28,9 +28,11 @@ const poseOf = (cine) => ({
   filmback: cine.filmback, filmbackWidth: cine.filmbackWidth, filmbackHeight: cine.filmbackHeight,
 });
 
-/** The P2 steps after the optional rig.create, when the safe-distance overlay is off. */
+/** The P2 steps after the optional rig.create, when the safe-distance overlay is off (the analysis, which reads
+ *  frameBounds, comes first since 08 P2-11b: P2_HEAD). */
+const P2_HEAD = ['frameBounds'];
 const P2_TAIL_NO_SAFE = [
-  'rig.rebuildFrustum', 'rig.updateTransform', 'frameBounds', 'emit CAMERA_COVERAGE_CHANGED', 'preview.updateCamera',
+  'rig.rebuildFrustum', 'rig.updateTransform', 'emit CAMERA_COVERAGE_CHANGED', 'preview.updateCamera',
   'safeDistance.remove', 'pilotDriver.refresh', 'emit SELECTABLE_MOVED',
 ];
 
@@ -59,8 +61,8 @@ function setup({ enabled = false, rigExists = false, showSafeDistance = false, p
   const rig = {
     exists: rigExists,
     bodyMesh: rigExists ? bodyMesh : null,
-    create(c) { log.push({ call: 'rig.create', arg: c }); this.exists = true; this.bodyMesh = bodyMesh; },
-    rebuildFrustum(c) { log.push({ call: 'rig.rebuildFrustum', arg: c }); },
+    create(c, depths) { log.push({ call: 'rig.create', arg: c, depths }); this.exists = true; this.bodyMesh = bodyMesh; },
+    rebuildFrustum(c, depths) { log.push({ call: 'rig.rebuildFrustum', arg: c, depths }); },
     updateTransform(c) { log.push({ call: 'rig.updateTransform', arg: c }); },
     remove() { log.push({ call: 'rig.remove' }); this.exists = false; this.bodyMesh = null; },  // nulled since 08 P2-4a
     pickMeshes() { return [this.bodyMesh]; },
@@ -127,10 +129,10 @@ describe('CameraHub.refresh (P2, ARCHITECTURE.md 6.3)', () => {
     assert.deepEqual(s.log, []);
   });
 
-  test('first refresh: create, rebuild, transform, coverage, preview, safe distance, pilot, gizmo follow (in order)', () => {
+  test('first refresh: analysis, create, rebuild, transform, coverage, preview, safe distance, pilot, gizmo follow', () => {
     const s = setup({ enabled: true });
     s.hub.refresh();
-    assert.deepEqual(s.calls(), ['rig.create', ...P2_TAIL_NO_SAFE]);
+    assert.deepEqual(s.calls(), [...P2_HEAD, 'rig.create', ...P2_TAIL_NO_SAFE]);
     for (const call of ['rig.create', 'rig.rebuildFrustum', 'rig.updateTransform']) {
       assert.equal(s.entry(call).arg, s.cine, `${call} receives the project's CineCamera`);
     }
@@ -158,10 +160,22 @@ describe('CameraHub.refresh (P2, ARCHITECTURE.md 6.3)', () => {
       'a 90-degree pan: no wall plane ahead (M-COV-1)');
   });
 
+  test('08 P2-11b: the frustum is built with the analyser\'s corner depths (it ends at the wall)', () => {
+    const s = setup({ enabled: true });
+    Object.assign(s.cine, { posX: 1.25, posY: 0.75, posZ: 1 });   // 1 m in front of the default wall's centre: every corner hits it
+    s.hub.refresh();
+    const b = framingBounds(s.project);
+    const c = analyzeCoverage(s.layout, s.cine, { hFov: s.cine.hFov(), vFov: s.cine.vFov() }, { width: b.totalWidth, height: b.maxHeight });
+    assert.deepEqual(c.cornerHits, [true, true, true, true]);
+    assert.deepEqual(s.entry('rig.create').depths, c.cornerDepths);
+    assert.deepEqual(s.entry('rig.rebuildFrustum').depths, c.cornerDepths);
+    for (const d of c.cornerDepths) assert.ok(Math.abs(d - 1) < 1e-12, 'the wall plane, 1 m ahead');
+  });
+
   test('creates the rig only when it is missing', () => {
     const s = setup({ enabled: true, rigExists: true });
     s.hub.refresh();
-    assert.deepEqual(s.calls(), P2_TAIL_NO_SAFE);
+    assert.deepEqual(s.calls(), [...P2_HEAD, ...P2_TAIL_NO_SAFE]);
 
     const t = setup({ enabled: true });
     t.hub.refresh();
@@ -174,7 +188,7 @@ describe('CameraHub.refresh (P2, ARCHITECTURE.md 6.3)', () => {
     const s = setup({ enabled: true, rigExists: true, showSafeDistance: true });
     s.hub.refresh();
     s.hub.refresh();
-    const one = ['rig.rebuildFrustum', 'rig.updateTransform', 'frameBounds', 'emit CAMERA_COVERAGE_CHANGED',
+    const one = ['frameBounds', 'rig.rebuildFrustum', 'rig.updateTransform', 'emit CAMERA_COVERAGE_CHANGED',
       'preview.updateCamera', 'frameBounds', 'safeDistance.create', 'pilotDriver.refresh', 'emit SELECTABLE_MOVED'];
     assert.deepEqual(s.calls(), [...one, ...one]);
   });
@@ -231,7 +245,7 @@ describe('CameraController.setPreviewEnabled (P-PREVIEW, ARCHITECTURE.md 6.5)', 
     assert.deepEqual(s.calls(), [
       'emit CAMERA_PREVIEW_CHANGED', 'preview.setVisible', 'preview.init',
       'frameBounds', 'emit CAMERA_POSE_CHANGED',
-      'rig.create', ...P2_TAIL_NO_SAFE,
+      ...P2_HEAD, 'rig.create', ...P2_TAIL_NO_SAFE,
     ]);
     const previewEvent = s.entry('emit CAMERA_PREVIEW_CHANGED');
     assert.deepEqual(previewEvent.payload, { enabled: true });
@@ -294,7 +308,7 @@ describe('CameraController.resetPose (legacy resetCameraPosition 2550-2575)', ()
     const s = setup({ enabled: true, rigExists: true });
     Object.assign(s.cine, { posX: 9, posY: 9, posZ: 9, rotX: 9, rotY: 9, rotZ: 9 });
     s.controller.resetPose();
-    assert.deepEqual(s.calls(), ['frameBounds', 'emit CAMERA_POSE_CHANGED', ...P2_TAIL_NO_SAFE]);
+    assert.deepEqual(s.calls(), ['frameBounds', 'emit CAMERA_POSE_CHANGED', ...P2_HEAD, ...P2_TAIL_NO_SAFE]);
     const b = framingBounds(s.project);
     assert.deepEqual(s.entry('emit CAMERA_POSE_CHANGED').pose,
       { ...poseOf(s.cine), posX: b.totalWidth / 2, posY: b.maxHeight / 2, posZ: 5, rotX: 0, rotY: 0, rotZ: 0 });
@@ -481,7 +495,7 @@ describe("CameraController as the Selectable 'camera'", () => {
   test('a gizmo drag with the real hub refreshes P2 and ends with the gizmo follow event', () => {
     const s = setup({ enabled: true, rigExists: true });
     s.controller.applyGizmoTranslate({ x: 0, y: 0.1, z: 0 });
-    assert.deepEqual(s.calls(), ['emit CAMERA_POSE_CHANGED', ...P2_TAIL_NO_SAFE]);
+    assert.deepEqual(s.calls(), ['emit CAMERA_POSE_CHANGED', ...P2_HEAD, ...P2_TAIL_NO_SAFE]);
   });
 });
 
@@ -630,8 +644,8 @@ describe('WP7 module imports follow the layer table', () => {
     'js/app/PropController.js': ['../core/EventBus.js'],
     'js/ui/CameraPanel.js': ['../core/EventBus.js', '../domain/CineCamera.js', './dom.js'],
     'js/ui/PropsPanel.js': ['../core/EventBus.js', '../domain/Prop.js', './dom.js'],
-    'js/render/CameraRigView.js': ['../vendor/three.js', '../core/EventBus.js', '../legacy/LegacyCompat.js', './ResourceTracker.js',
-      '../core/renderOrder.js'],
+    'js/render/CameraRigView.js': ['../vendor/three.js', '../core/EventBus.js', '../geometry/FrustumCoverage.js',
+      './ResourceTracker.js', '../core/renderOrder.js'],
     'js/render/SafeDistanceView.js': ['../vendor/three.js', '../geometry/SafeDistanceBand.js', './ResourceTracker.js'],
     'js/render/PreviewWindow.js': ['../geometry/PreviewFit.js'],
     'js/render/PreviewPass.js': ['../vendor/three.js', '../geometry/PreviewFit.js', './SceneManager.js'],
