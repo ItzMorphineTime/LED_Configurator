@@ -251,6 +251,20 @@ describe('toggleSelect (the O key and #pivot-select, 03 3.4)', () => {
     r.pc.toggleSelect();
     assert.deepEqual(r.trace, []);
   });
+
+  test('a no-op in pilot mode, for the #pivot-select button too (the O key\'s guard, 03 3.2, 3.4, AC 12)', () => {
+    const r = makeRig();
+    r.interaction.pilotMode = true;
+    r.pc.toggleSelect();
+    assert.deepEqual(r.trace, [], 'not selected in pilot mode');
+    r.selection.id = 'pivot';
+    r.pc.toggleSelect();
+    assert.deepEqual(r.trace, [], 'not deselected in pilot mode either');
+    r.interaction.pilotMode = false;
+    r.selection.id = null;
+    r.pc.toggleSelect();
+    assert.deepEqual(r.trace, ['select:pivot', 'gizmo.setMode:translate'], 'after pilot mode it works again');
+  });
 });
 
 describe('Selectable \'pivot\' (the path-B hook set of 03 5.4, 07 C33)', () => {

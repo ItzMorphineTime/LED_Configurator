@@ -199,12 +199,14 @@ export class PivotController {
 
   /**
    * The O key and #pivot-select (03 3.4): select the pivot (and switch the gizmo to translate unless it already is), or
-   * deselect it. A no-op while a gizmo drag is active or a cancelled drag's button is still held.
+   * deselect it. A no-op in pilot mode (the marker is hidden and unpickable there, 03 3.3, AC 12; the button is "the same
+   * as the O key", 3.2, whose guards include pilot mode), while a gizmo drag is active or while a cancelled drag's button
+   * is still held.
    * Side effects: selection.select('pivot') and maybe gizmo.setMode('translate'), or selection.deselect().
    */
   toggleSelect() {
     const interaction = this.#interaction;
-    if (interaction.isDraggingGizmo || interaction.gestureCancelled) return;
+    if (interaction.pilotMode || interaction.isDraggingGizmo || interaction.gestureCancelled) return;
     if (this.#selection.isSelected(this.id)) {
       this.#selection.deselect();
       return;

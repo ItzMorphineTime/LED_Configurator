@@ -2581,7 +2581,7 @@ export class PivotController {        // Selectable 'pivot': id 'pivot', label '
   /** display.showPivotMarker = on; emit WALL_PIVOT_CHANGED {source: 'marker', ... rebuilds: false}   row F3-5 */
   setMarkerVisible(on)
   setSnapStep(m)                      // m in PIVOT_SNAP_STEPS_M (else RangeError); gizmo.setSnapIncrements({pivotM: m})
-  /** O key / #pivot-select: no-op while interaction.isDraggingGizmo || interaction.gestureCancelled; selected ?
+  /** O key / #pivot-select: no-op while interaction.pilotMode || interaction.isDraggingGizmo || interaction.gestureCancelled; selected ?
    *  selection.deselect() : (selection.select('pivot'); if (gizmo.mode !== 'translate') gizmo.setMode('translate')) */
   toggleSelect()
   // Selectable (the path-B hook set of 03 5.4, 07 C33; the gizmo calls the hooks from 03 T5)
@@ -4146,6 +4146,10 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 
 **03 T8b, the pivot scenarios** (Feature 3 step E; docs/improvements/03-pivot.md 8.3, 8.4, 10; manifest `tests/regression/expected/F3-T8b.json`: 148 added `pivot_*` outputs, every existing output identical):
 - 2.3: `tests/regression/scenarios-features.mjs` (new, `FEATURE_SCENARIOS`, registered after the Phase 2 scenarios): `pivot_modes` (each mode and an offset on four walls, the export-frame OBJ and glTF, the offset post-check of AC 7 on x, y and z), `pivot_stage` (keep stage layout on and off, AC 5, 6, 13, 19), `pivot_gizmo` (O, the X-arrow drag, Ctrl snapping, the Escape cancel with the `cancel_after` / `cancel_before` post-check, translate only, the radio focus), `pivot_roundtrip` and `pivot_validation` in their session-only form until 03 T7. `scenarios-extra.mjs` exports `pageMeshModes`, `isGizmoRed`, `locate` and `parkMouse` for it. The harness README documents the scenarios.
+
+**03 T6b, Select pivot ignored in pilot mode (review follow-up of 03 T4/T6)** (docs/improvements/03-pivot.md 3.2, 3.4, 5.3; AC 9, 12; manifest `tests/regression/expected/F3-T6b.json`, an invariance gate: no scenario clicks `#pivot-select` in pilot mode):
+- 3.10 `PivotController.toggleSelect` (the use case of the `O` key and of `#pivot-select`) is also a no-op in pilot mode. `ViewportInput` already ignored the `O` key there, but the button, "the same as the O key" (03 3.2), selected the pivot in pilot mode and built its translate gizmo around the marker that pilot mode hides (03 T9).
+- 2.3: `pivot-controller.test.mjs` (pilot mode: no select, no deselect; it works again afterwards).
 
 **03 T12, the README "Pivot" section** (docs/improvements/03-pivot.md 5.9, 10; manifest `tests/regression/expected/F3-T12.json`, an invariance gate: documentation only):
 - Every 5.9 amendment landed with its code commit (03 T1-T6, T9, T10, T8; the entries above). 9: the Feature 3 row lists the landed tasks and what waits (T7 and the v2 half of T9 with project file v2 at M7a; step F is 08's P2-11c).
