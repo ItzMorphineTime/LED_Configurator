@@ -43,7 +43,7 @@ export class OrbitController {
   #keyboard;
   /** @type {import('./InputState.js').InteractionState} */
   #interaction;
-  /** @type {() => {totalWidth: number, maxHeight: number}} */
+  /** @type {() => {totalWidth: number, maxHeight: number, minX: number, wallZ: number}} 'flat-pivot' bounds (03 T3) */
   #frameBounds;
   /** legacy `isDragging` (3747) */
   #dragging = false;

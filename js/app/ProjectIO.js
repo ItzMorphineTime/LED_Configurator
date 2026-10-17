@@ -3,9 +3,10 @@
  * The export and import use cases (JSON, the OBJ ZIP (OBJ + MTL + the textures the MTL references: section textures in
  * section mode, the combined atlas in combined mode since 08 P2-7f), glTF, panel-ID
  * PNG, ZIP bundle, safe-distance OBJ, JSON import) and the Downloader, the single owner of the legacy anchor-download
- * sequence. Every export reads the live project and a fresh layout (WallController.layout()); only the safe-distance
- * OBJ reads a scene group. Sync/async shape is legacy (R13): exportZIP and exportPanelIds stay async; exportOBJ is
- * async since 08 P2-6e (it builds an archive). Every export runs inside #runExport (08 P2-1a, B-H3), which reports a
+ * sequence. Every export reads the live project and a fresh layout (WallController.layout({frame: 'export'}) since
+ * 03 T3: the file origin is the pivot); only the safe-distance OBJ reads a scene group, which it re-expresses into the
+ * export frame. Sync/async shape is legacy (R13): exportZIP and exportPanelIds stay async; exportOBJ is async since
+ * 08 P2-6e (it builds an archive). Every export runs inside #runExport (08 P2-1a, B-H3), which reports a
  * failure as the M-EXP-1 alert instead of an uncaught exception or an unhandled rejection; its try/catch and the legacy
  * one around the import parse are the only ones (R13 amendment).
  * Since 08 P2-3b (B-L8 fixed) the import is validated (io/ProjectValidator through the injected serializer) and every

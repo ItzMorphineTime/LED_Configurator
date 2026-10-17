@@ -1895,7 +1895,8 @@ export class PointerRay {        // legacy shared `raycaster` + `mouse` (1368-13
 ```js
 export class OrbitController {
   static MOVE_SPEED = 0.08;                                     // legacy moveSpeed (3754)
-  /** @param {{sceneManager, keyboard: KeyboardState, interaction: InteractionState, frameBounds: () => {totalWidth, maxHeight}}} deps */
+  /** @param {{sceneManager, keyboard: KeyboardState, interaction: InteractionState,
+   *          frameBounds: () => {totalWidth, maxHeight, minX, wallZ}}} deps  the 'flat-pivot' bounds (03 T3) */
   constructor({ sceneManager, keyboard, interaction, frameBounds })
   angle = { theta: 0, phi: Math.PI / 2 };                       // legacy cameraAngle; REPLACED by a new object in setView/restore
   distance = 8;                                                 // legacy cameraDistance
@@ -3860,3 +3861,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 3.12, 7: `frameBounds = () => framingBounds(project, wallController.pivotResolution)`; the bootstrap rebuild is `rebuild({cause: 'init'})`. 5.2: the `WALL_REBUILT`, `CAMERA_COVERAGE_CHANGED`, `CAMERA_POSE_CHANGED` and `PROP_POSE_CHANGED` payload rows. 6.1, 6.2 (rows 1 and 24), 6.13. 9: the F3 row.
 - 10 (static rule 10): `pivot` joins the domain fields, and `WallController` (receiver `wall`) is its one allowed writer outside `js/domain/` (03 8.2, the field half; the rest of 8.2 lands with 03 T6).
 - 2.3: `pivot.test.mjs` (test 6's consumer part: the orbit target, Reset, every coverage output and the `posZ` rule `Object.is`-equal to the Phase-1 `'flat'` expressions at the identity over seeded walls, poses and orbit offsets; the off-identity values), `domain.test.mjs`, `camera-hub.test.mjs`, `wall-controller.test.mjs` (the cache, the cause and shift, `commitPivot`, the import reset), `io.test.mjs` (identity bytes, the 6.8 export table, the header, the glTF float32 y values and `extras`, the safe-distance `translate`, the export frame of `ProjectIO`), `led-wall-view.test.mjs` (no wall root transform in any mode and pivot, 07 C32).
+
+**03 T3b, the 'flat-pivot' type of the orbit's frame bounds (review follow-up of 03 T3)** (manifest `tests/regression/expected/F3-T3b.json`, an invariance gate: empty `expect`; comments and documentation only):
+- 3.8 `OrbitController`: the `frameBounds` dependency is typed `{totalWidth, maxHeight, minX, wallZ}` here and on the `#frameBounds` field, the `'flat-pivot'` fields `updateTargetPosition` reads since 03 T3 (both still named the Phase-1 `{totalWidth, maxHeight}`).
+- The module header of `ProjectIO` says the wall exports read `WallController.layout({frame: 'export'})` and the safe-distance OBJ re-expresses its group into the export frame (it still named the argument-less `layout()`).
