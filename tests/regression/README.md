@@ -432,6 +432,23 @@ it. The wall is made wider than 65,535 px so that the unfixed Export Panel IDs (
 `URL.createObjectURL`), the ZIP texture (0 bytes) and the viewport texture fail in the harness too.
 08 P2-1's guard uses the stricter 32,767 px limit of other browsers.
 
+## The feature scenarios (03 pivot)
+
+[`scenarios-features.mjs`](scenarios-features.mjs) adds the five scenarios of
+`docs/improvements/03-pivot.md` section 8.3 (03 T8, step E of its 8.4). They are **forward goldens**, captured from the
+feature build after its acceptance criteria were checked, and registered after the Phase 2 scenarios. They follow the
+same DOM-only rules. The pivot is session-only until project file v2 (the owner's decision of 2026-10-17), so
+`pivot_roundtrip` and `pivot_validation` record that behaviour; the v2 round trip and validator rows of 03 8.3 come
+with 03 T7.
+
+| Scenario | Steps | Records |
+|---|---|---|
+| `pivot_modes` | For the default wall and the imported `concave_offsets`, `mixed`, `box_corner`: each pivot mode (radio card click), then Offset (0.5, 1, 2) in wall-center; per state the panel, `<state>_combined__export-obj` (ZIP), `<state>_section__export-gltf`, a screenshot; `mixed` also in every mesh mode for mesh-center and wall-center; then the mesh-mode cards and `final__export-json` | `<wall>_<state>_pivot`, the exports, screenshots, `<wall>_offset_postcheck` (every OBJ `v` moves by -delta within 1e-6 and every glTF POSITION within 2^-22 * max(1, abs(old), abs(delta)): 03 AC 7), `mesh_modes` |
+| `pivot_stage` | Preview on, Z Position 1.5, person and car on; bottom-left, wall-center, mesh-center with keep stage layout on; the same on a fresh page with it off; then wall-center, Add Section, Offset Z 2, Z Position 0 and -5 | per step the camera and prop inputs, the coverage read-outs, Distance to wall plane, the pivot status and readout, the `#camera-pos-z` `min`, screenshots (03 AC 5, 6, 13, 19) |
+| `pivot_gizmo` | Offset Z 2, top view, `o`; the X arrow (its tip: the right-most gizmo-red pixel, as in `gizmo_drag`) dragged 120 px, OBJ export; Offset Y 0.123 and a Ctrl drag; park, `cancel_before`, a drag with Escape and two more moves before the release, park, `cancel_after`; Escape; `o` then `r`; the checked radio focused, ArrowDown | the gizmo badge and buttons with the panel per step, `*_handle` (`found` or `skipped`), `cancel_postcheck` (`cancel_after` against `cancel_before` with the harness screenshot rule: IDENTICAL or WARN passes, FAIL means an orbit jump or a leftover hover), `focus_*` (03 AC 9-11, 18) |
+| `pivot_roundtrip` | An identity OBJ and glTF; wall-center + (0, 0, 2) with its exports and Export JSON; re-import that JSON; export again | the panel before and after the import, the exports, `rt_postcheck` (no `pivot` key in the v1 JSON, both JSON exports identical, the exports after the import equal the identity ones) |
+| `pivot_validation` | mesh-center, Offset Y 3, keep off; import a v1 `concave_offsets` carrying a hand-written invalid `pivot` block; then Offset X `abc`, empty, `2000`, `0.0004`, `0` | the panel after the import (bottom-left, 0, keep on: the block is not applied), its dialogs, the typed values (03 AC 8) |
+
 ## Output layout
 
 ```

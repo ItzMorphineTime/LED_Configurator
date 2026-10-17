@@ -8,6 +8,7 @@ import * as ui from './lib/uiprobe.mjs';
 import { OBJ_ZIP_DOWNLOAD } from './lib/app.mjs';
 import { EXTRA_SCENARIOS } from './scenarios-extra.mjs';
 import { PHASE2_SCENARIOS } from './scenarios-phase2.mjs';
+import { FEATURE_SCENARIOS } from './scenarios-features.mjs';
 
 const MODES = ['combined', 'section', 'panel'];
 const card = (i) => `#wall-sections > :nth-child(${i + 1})`;
@@ -604,4 +605,6 @@ export const SCENARIOS = {
     ...EXTRA_SCENARIOS,
     // The Phase 2 scenarios of scenarios-phase2.mjs (08 section 8.3), registered after the extra scenarios.
     ...PHASE2_SCENARIOS,
+    // The feature scenarios of scenarios-features.mjs (03 section 8.3: the wall pivot), registered last.
+    ...FEATURE_SCENARIOS,
 };

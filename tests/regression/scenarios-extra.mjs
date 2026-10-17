@@ -9,7 +9,8 @@
 // run unchanged against the original single-file app and the ES-module refactor.
 //
 // Exported as EXTRA_SCENARIOS ({ name: { description, run } }) and spread into SCENARIOS after the
-// original entries (see scenarios.mjs).
+// original entries (see scenarios.mjs). pageMeshModes, isGizmoRed, locate and parkMouse are also exported for the
+// feature scenarios (scenarios-features.mjs, 03 T8).
 //
 // normals_debug (docs/improvements/01-normals.md 8.2, T8, step F1-3) is the Feature 1 scenario: Part A runs on every
 // page (the original included), Part B drives the debug view and is skipped (debug_skipped.json) on a page without
@@ -158,7 +159,7 @@ function pageLogoTexts() {
     return [...document.querySelectorAll('#section-logos-container > *')].map((el) => el.textContent.replace(/\s+/g, ' ').trim());
 }
 
-function pageMeshModes() {
+export function pageMeshModes() {
     return {
         options: [...document.querySelectorAll('.mesh-mode-option')].map((o) => ({ mode: o.getAttribute('data-mode'), active: o.classList.contains('active') })),
         radios: [...document.querySelectorAll('input[name="mesh-mode"]')].map((i) => ({ value: i.value, checked: i.checked })),
@@ -288,7 +289,7 @@ const readPreviewSize = (app) => pageCall(app, pagePreviewSize);
 // (~(36, 112, 75), b > 60); the gizmo_drag scenario never shows the safe band. The frustum lines (a #f7f7f5 dashed core
 // over a #0a0a0a halo) and the adaptive panel frames (#d4d4d4 / #0a0a0a) are neutral greys that no matcher accepts.
 // The ranges also accept the same blends over the floor grid lines and the 0.05 frustum tint.
-const isGizmoRed = (r, g, b) => r >= 78 && r <= 128 && g >= 24 && g <= 56 && b <= 60 && r - Math.max(g, b) >= 40;
+export const isGizmoRed = (r, g, b) => r >= 78 && r <= 128 && g >= 24 && g <= 56 && b <= 60 && r - Math.max(g, b) >= 40;
 const isGizmoGreen = (r, g, b) => g >= 78 && g <= 128 && r <= 56 && b <= 60 && g - Math.max(r, b) >= 40;
 const isCameraBody = (r, g, b) => r >= 150 && g <= 50 && b <= 60;
 const isPerson = isPersonPixel;
@@ -339,7 +340,7 @@ function findRegionPixel(png, match, { pick = 'centroid', radius = 2, minCount =
  * Screenshot the canvas, find a region by colour, and return its page coordinates (or null).
  * Set REGRESSION_DEBUG_DIR to keep each searched screenshot and the chosen pixel for inspection.
  */
-async function locate(app, match, opts = {}) {
+export async function locate(app, match, opts = {}) {
     const exclude = await pageCall(app, pageOverlayRects);
     const png = await app.screenshotCanvas();
     const hit = findRegionPixel(png, match, { ...opts, exclude });
@@ -350,7 +351,7 @@ async function locate(app, match, opts = {}) {
 }
 
 /** Move the mouse onto a free spot of the canvas, so the gizmo hover state is reset before a screenshot. */
-async function parkMouse(app) {
+export async function parkMouse(app) {
     const p = await pageCall(app, pageCanvasParkPoint);
     if (p) { await app.mouse('mouseMoved', p.x, p.y); await app.settle(); }
 }

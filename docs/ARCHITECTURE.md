@@ -378,6 +378,9 @@ tests/
                                                  Signal Red body, isGizmoRed g >= 24 against its anti-aliased edges); 03 T8:
                                                  its three drags call AppPage.drag
     scenarios-phase2.mjs                   08 P2-0  the eight p2_* scenarios of 08 8.3, captured against the unfixed code
+    scenarios-features.mjs                 03 T8  the five pivot_* scenarios of 03 8.3 (forward goldens; pivot_roundtrip and
+                                                 pivot_validation in their session-only form until 03 T7), with the offset
+                                                 and cancel post-checks
     expected/                              08 P2-0  <commit-id>.json expected-change manifests (one per golden-changing commit,
                                                  any spec); _nondeterminism.json, the only standing allowance
     README.md                              WP1 (edit: documents the extra scenarios); 08 P2-0 (Phase 2 scenarios and the
@@ -4140,3 +4143,6 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 
 **03 T8a, the harness library changes of the pivot scenarios** (Feature 3 step E, first commit; docs/improvements/03-pivot.md 8.3, 10; manifest `tests/regression/expected/F3-T8a.json`, an invariance commit: 03 8.3 asks that the re-capture after a `lib/` change compare identical, and it did):
 - 2.3: `tests/regression/lib/app.mjs`: `KEYS` gains `o` and `Tab`; `keyPress(key, {modifiers, noText, repeat})` (`repeat`: CDP `autoRepeat` on the keyDown); `AppPage.drag(x, y, dx, dy, steps, {modifiers, beforeRelease})`, moved from `scenarios-extra.mjs` (its three drags call it with the defaults: the same CDP events in the same order). `harness-lib.test.mjs` covers both on a recording fake page. The harness README documents them.
+
+**03 T8b, the pivot scenarios** (Feature 3 step E; docs/improvements/03-pivot.md 8.3, 8.4, 10; manifest `tests/regression/expected/F3-T8b.json`: 148 added `pivot_*` outputs, every existing output identical):
+- 2.3: `tests/regression/scenarios-features.mjs` (new, `FEATURE_SCENARIOS`, registered after the Phase 2 scenarios): `pivot_modes` (each mode and an offset on four walls, the export-frame OBJ and glTF, the offset post-check of AC 7 on x, y and z), `pivot_stage` (keep stage layout on and off, AC 5, 6, 13, 19), `pivot_gizmo` (O, the X-arrow drag, Ctrl snapping, the Escape cancel with the `cancel_after` / `cancel_before` post-check, translate only, the radio focus), `pivot_roundtrip` and `pivot_validation` in their session-only form until 03 T7. `scenarios-extra.mjs` exports `pageMeshModes`, `isGizmoRed`, `locate` and `parkMouse` for it. The harness README documents the scenarios.
