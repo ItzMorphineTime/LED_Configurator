@@ -1,0 +1,84 @@
+{
+  "commit": "P2-10a",
+  "bugs": ["B-M11"],
+  "expect": [
+    {
+      "output": "camera/{01_camera_enabled,08_camera_moved,13_safe_distance}.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "B-M11: the preview window hides every registered helper during its render, so it loses the grid, the axes, the camera rig with the orange frustum-fill tint over the whole frame, and in 13 the safe-distance floor; the main viewport is unchanged"
+    },
+    {
+      "output": "gizmo_drag/camera_0{1_translated,2_rotated}.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same: no grid, rig, tint or gizmo in the preview window"
+    },
+    {
+      "output": "pilot_look/look_0{1_after_drag,2_after_wheel,3_pilot_off}.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same: no helper and no tint in the preview window (pilot mode and after it)"
+    },
+    {
+      "output": "preview_off_in_pilot/pilot_0{0_on,5_exited}.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same: the two captures with the preview on (pilot_01_preview_off has no preview window and is unchanged)"
+    },
+    {
+      "output": "preview_resize/resize_0{1_dragged,3_blow_out}.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same: no helper and no tint in the resized preview window (the window sizes are P2-10b's)"
+    },
+    {
+      "output": "keyboard/{pilot_view,final_view}.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same: no helper and no tint in the preview window (the person-gizmo captures are taken before the preview is on and are unchanged)"
+    },
+    {
+      "output": "import_edge/i_empty.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the preview and Safe Distance on (the empty-sections import is rejected since 08 P2-3b, so the default wall stays): the preview loses the grid, axes, rig tint, the safe-distance floor and its label"
+    },
+    {
+      "output": "p2_curved_safe_distance/*.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the four walls with the preview and Safe Distance on: the preview loses the grid, the rig tint and the safe-distance floor"
+    },
+    {
+      "output": "p2_shortcut_filters/*.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "pilot_view_front: no helper and no tint in the preview window"
+    },
+    {
+      "output": "normals_debug/b10_preview_lines_on.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the preview-canvas capture of the 01 F1-3 isolation step loses the grid, axes, rig and tint (the scenario postdates the 08 PREVIEW_SHOTS list; its preview_isolation state, lines on vs off, must still pass)"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-08 P2-7f runs); this commit changes no pixel of it"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b); this commit changes no export"
+    },
+    {
+      "output": "ui_visual/00_initial.sidebar.screenshot.png",
+      "change": "modified",
+      "reason": "one sidebar pixel of this DOM-only capture differed by 7 levels in the P2-7e runs (DOM text antialiasing); this commit changes no markup, style or sidebar text"
+    }
+  ],
+  "notes": "08 P2-10a (B-M11): Strategies.previewRendersHelpers retired; PreviewWindow.render(scene, helpers) sets visible = false on every registered helper (SceneManager.helpers: grid, axes, camera rig, safe-distance group, gizmo, normal lines) for the preview render only and restores each flag afterwards (08 6.14), so the main view, picking and the gizmo are unchanged. The expect list is the 08 PREVIEW_SHOTS list re-checked against the P2-7f baseline (R10): p2_project_v2/06_restored is left out, because it is captured on a fresh page restored from the v1 file, which saves no camera (B-L31), so the preview is off there (its camera state shows '--' readouts); project v2 is deferred by the owner. normals_debug/b10_preview_lines_on is added (a preview-canvas capture). ui_visual masks both canvases, so no ui_visual output changes."
+}

@@ -12,8 +12,9 @@ import THREE from '../vendor/three.js';
 
 /**
  * Render layers (Feature 1/5 seam). The existing helpers are not moved (R6): grid, axes, rig, safe distance and gizmo
- * stay on layer 0, so the camera preview keeps rendering them (B-M11, tagged at addHelper). Since 01 F1-1 the main
- * camera also sees HELPERS, the layer of the normal lines (NormalsDebugView), which the preview camera never sees.
+ * stay on layer 0; since 08 P2-10a (B-M11 fixed) the camera preview hides every registered helper during its own
+ * render instead (PreviewWindow.render). Since 01 F1-1 the main camera also sees HELPERS, the layer of the normal lines
+ * (NormalsDebugView), which the preview camera never sees.
  */
 export const LAYERS = Object.freeze({ DEFAULT: 0, HELPERS: 1 });
 
@@ -162,14 +163,14 @@ export class SceneManager {
   }
 
   /**
-   * Adds a helper (grid, axes, camera rig, safe-distance group, gizmo) to the scene and records its membership
-   * in the helper registry. No extra parent, no layer (R6).
+   * Adds a helper (grid, axes, camera rig, safe-distance group, gizmo, normal lines) to the scene and records its
+   * membership in the helper registry, whose members the camera preview hides during its render (08 P2-10a, B-M11).
+   * No extra parent, no layer (R6).
    * Side effects: scene.add(object3D).
    * @param {THREE.Object3D} object3D
    * @returns {void}
    */
   addHelper(object3D) {
-    // LEGACY(B-M11): no layer is assigned in Phase 1, so the preview still renders helpers.
     this.#helpers.add(object3D);
     this.#scene.add(object3D);
   }
@@ -186,7 +187,8 @@ export class SceneManager {
   }
 
   /**
-   * The registered helpers (Feature 1/5 seam: a later phase moves them to LAYERS.HELPERS).
+   * The registered helpers, hidden by the camera preview during its render (08 P2-10a; Feature 1/5 seam: 07 R1 moves
+   * them to LAYERS.HELPERS for its single-renderer pass).
    * Side effects: none.
    * @returns {ReadonlySet<THREE.Object3D>}
    */

@@ -208,7 +208,7 @@ export class App {
       orbit.tickKeyboard();
       pilot.tickKeyboard();
       sceneManager.render();
-      preview.render(sceneManager.scene);
+      preview.render(sceneManager.scene, sceneManager.helpers);   // 08 P2-10a: the preview hides the helpers (B-M11)
     };
 
     // ---- legacy init() (1426-1455) ----

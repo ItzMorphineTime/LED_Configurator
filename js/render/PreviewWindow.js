@@ -9,7 +9,7 @@
  */
 
 import THREE from '../vendor/three.js';
-import { Strategies, unsupportedStrategy } from '../legacy/LegacyCompat.js';
+import { Strategies } from '../legacy/LegacyCompat.js';
 
 /**
  * @typedef {object} PreviewElements  the six preview elements, looked up by App
@@ -167,23 +167,33 @@ export class PreviewWindow {
   }
 
   /**
-   * Draws the scene through the preview camera (every frame, after the main render).
-   * Ports: index.html@cd3fd3f lines 3742-3745.
-   * Side effects: draws into the preview canvas.
+   * Draws the scene through the preview camera (every frame, after the main render) without the helpers, so the
+   * preview shows only what the film camera would see. Every registered helper (grid, axes, camera rig with its
+   * frustum fill, safe-distance floor, gizmo, normal lines) is hidden for this render only and its own `visible`
+   * flag is restored afterwards, in order (08 P2-10a, B-M11 fixed; 08 6.14). No layer is assigned, so the main
+   * view, picking of the gizmo handles and the camera body, and a helper hidden by the user (the grid toggle) are
+   * unaffected.
+   * Ports: index.html@cd3fd3f lines 3742-3745, minus the helpers (legacy rendered the whole scene, so the frustum
+   *   fill's near quad tinted the full frame orange).
+   * Side effects: draws into the preview canvas; sets `visible = false` on each helper during the draw and
+   *   restores each saved flag afterwards (also when the draw throws).
    * @param {THREE.Scene} scene
+   * @param {Iterable<THREE.Object3D>} helpers  the registered helpers (`SceneManager.helpers`)
    * @returns {void}
-   * @throws {Error} unsupportedStrategy for a Strategies.previewRendersHelpers other than true
    */
-  render(scene) {
+  render(scene, helpers) {
     if (!this.#cine.enabled || !this.#renderer || !this.#camera) return;
-    // LEGACY(B-M11): the whole scene is rendered, helpers included (grid, axes, gizmo, safe-distance overlay and
-    // the frustum fill, whose near quad tints the full frame): helpers stay on layer 0 in Phase 1.
-    switch (Strategies.previewRendersHelpers) {
-      case true:
-        this.#renderer.render(scene, this.#camera);
-        break;
-      default:
-        throw unsupportedStrategy('previewRendersHelpers', Strategies.previewRendersHelpers);
+    const hidden = [];
+    const saved = [];
+    for (const helper of helpers) {
+      hidden.push(helper);
+      saved.push(helper.visible);
+      helper.visible = false;
+    }
+    try {
+      this.#renderer.render(scene, this.#camera);
+    } finally {
+      for (let i = 0; i < hidden.length; i++) hidden[i].visible = saved[i];
     }
   }
 

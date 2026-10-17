@@ -62,13 +62,13 @@ export const Strategies = deepFreeze({
   curveBeforeFirstPanel: true,                     // B-L1
   frustumDepthM: 15,                               // B-L33
   previewRendererSize: [320, 180],                 // B-M9
-  previewRendersHelpers: true,                     // B-M11
   gizmoRotateSign: -1,                             // B-M12
   pilotForwardYSign: -1,                           // B-M13
 });                                                // dispose.wallTextures / dispose.gizmo (B-H5, B-L12: true since
                                                    // Phase 1C H1 / H2) retired by 08 P2-12a: always dispose;
                                                    // exportCombinedColor (B-L6) retired by 08 P2-7d: per-section materials;
-                                                   // combinedLedSimColor (B-L18) retired by 08 P2-7e: white tile x vertex colours
+                                                   // combinedLedSimColor (B-L18) retired by 08 P2-7e: white tile x vertex colours;
+                                                   // previewRendersHelpers (B-M11) retired by 08 P2-10a: the preview hides helpers
 
 /**
  * The exact Phase-1 mesh profiles (docs/improvements/08-bugfix-roadmap.md 4.2). Production code never reads these;
@@ -149,7 +149,7 @@ const QUIRKS = deepFreeze({
   'B-M10': ['Coverage from posZ against a flat rectangle (J-7, J-8)',
     'layout-aware analyser'],
   'B-M11': ['Preview renders helpers and tint (L-4)',
-    'helpers layer'],
+    'Landed in 08 P2-10a (`PreviewWindow.render(scene, helpers)` sets `visible = false` on every helper registered through `SceneManager.addHelper` for the preview render only and restores each flag afterwards (08 6.14), so the preview shows no grid, axes, rig, frustum tint, safe-distance floor or gizmo; no layer is assigned; `Strategies.previewRendersHelpers` retired; no tag site)'],
   'B-M12': ['Rotate gizmo direction inverted (N-9)',
     '`+1`'],
   'B-M13': ['Pilot vertical inverted (O-5)',
@@ -253,14 +253,12 @@ const TAG_SITES = deepFreeze([
   ['js/geometry/WallLayout.js#computeWallLayout', ['B-L1']],
   ['js/geometry/WallLayout.js#framingBounds', ['B-L2', 'B-M10']],
   ['js/io/ProjectSerializer.js#write', ['B-L31']],
-  ['js/render/SceneManager.js#addHelper', ['B-M11']],
   ['js/render/textures/LEDPixelTextureFactory.js#tile', ['B-L20']],
   ['js/render/textures/PanelIdRenderer.js#panelCanvas', ['B-L19']],
   ['js/render/textures/PanelIdRenderer.js#sectionCanvas', ['B-L35']],
   ['js/render/CameraRigView.js#rebuildFrustum', ['B-L33']],
   ['js/render/PreviewWindow.js#init', ['B-M9']],
   ['js/render/PreviewWindow.js#updateCamera', ['B-L34']],
-  ['js/render/PreviewWindow.js#render', ['B-M11']],
   ['js/render/PreviewWindow.js#setupResize', ['B-L32']],
   ['js/interaction/OrbitController.js#updateTargetPosition', ['B-L2']],
   ['js/interaction/OrbitController.js#tickKeyboard', ['B-L27']],

@@ -2,8 +2,9 @@
 // U13 render/frameColor.js (the adaptive panel frames, and LEDWallView giving each section's frames its colour) and
 // U12 for the frustum of render/CameraRigView.js (a dashed outline is LineSegments or a closed Line, never a LineLoop
 // with a LineDashedMaterial; the closing segment's line distances increase), plus the rest of the two-tone frustum and
-// the camera body's edge outline. A recording fake THREE is installed as window.THREE before the render modules are
-// imported (js/vendor/three.js reads window.THREE when it is evaluated); its computeLineDistances follow three r128.
+// the camera body's edge outline; and 08 P2-10a (B-M11): render/PreviewWindow.js hides every registered helper for the
+// preview render only. A recording fake THREE is installed as window.THREE before the render modules are imported
+// (js/vendor/three.js reads window.THREE when it is evaluated); its computeLineDistances follow three r128.
 // Run: node --test tests/unit/scene-overlays.test.mjs   (zero dependencies)
 
 import { test, describe } from 'node:test';
@@ -26,7 +27,7 @@ const disposed = [];
 let nextId = 0;
 class FakeObject3D {
   constructor() {
-    this.isObject3D = true; this.children = []; this.parent = null; this.userData = {}; this.renderOrder = 0;
+    this.isObject3D = true; this.children = []; this.parent = null; this.userData = {}; this.renderOrder = 0; this.visible = true;
     this.position = { x: 0, y: 0, z: 0, set(x, y, z) { Object.assign(this, { x, y, z }); } };
     this.rotation = { order: 'XYZ', set() {} };
   }
@@ -88,10 +89,22 @@ const FakeTHREE = {
   LineDashedMaterial: class extends FakeMaterial { constructor(p) { super('LineDashedMaterial', p); } },
   Color: class { constructor() { this.r = 0; this.g = 0; this.b = 0; } },
   DoubleSide: 2,
+  // The preview's second renderer and camera (PreviewWindow.init / updateCamera). render() calls the hook of the test.
+  WebGLRenderer: class {
+    constructor(params) { this.params = params; this.onRender = null; }
+    setSize(w, h) { this.size = [w, h]; }
+    setPixelRatio(r) { this.pixelRatio = r; }
+    render(scene, camera) { if (this.onRender) this.onRender(scene, camera); }
+  },
+  PerspectiveCamera: class extends FakeObject3D {
+    constructor(fov, aspect, near, far) { super(); Object.assign(this, { fov, aspect, near, far }); }
+    updateProjectionMatrix() {}
+  },
 };
 globalThis.window = { THREE: FakeTHREE };
 const { CameraRigView } = await import('../../js/render/CameraRigView.js');
 const { LEDWallView } = await import('../../js/render/LEDWallView.js');
+const { PreviewWindow } = await import('../../js/render/PreviewWindow.js');
 
 // ---- U13: frameColorFor (06 6.7) ----------------------------------------------------------------------------------
 
@@ -298,5 +311,70 @@ describe('U12 closed dashed outlines and the two-tone frustum (06 6.6, D15)', ()
       assert.ok(disposed.includes(name), `remove() disposes ${name}`);
     }
     assert.equal(helpers.size, 0);
+  });
+});
+
+// ---- 08 P2-10a (B-M11): the preview hides the registered helpers (08 6.14) ------------------------------------------
+
+/** An initialised PreviewWindow over fake elements, with the real CineCamera of a default project. */
+function preview() {
+  const listener = { addEventListener() {} };
+  const label = () => ({ textContent: '' });
+  const elements = { windowEl: { style: {} }, canvas: {}, resizeHandle: listener, info: label(), fov: label(), res: label() };
+  const cine = Project.createDefault().camera;
+  const win = new PreviewWindow({ doc: { ...listener, body: { style: {} } }, win: { devicePixelRatio: 1 }, cine, elements });
+  win.init();
+  return { win, cine };
+}
+
+describe('PreviewWindow.render hides every registered helper for the preview render only (08 P2-10a, B-M11)', () => {
+  /** The helpers of the live app: the grid, the axes (hidden here, as the grid toggle hides the grid), the rig, a gizmo. */
+  function helperSet() {
+    const { view, cine, helpers } = rig();
+    view.create(cine);
+    const grid = new FakeTHREE.Group();
+    const axes = new FakeTHREE.Group();
+    axes.visible = false;
+    const gizmo = new FakeTHREE.Group();
+    for (const h of [grid, axes, gizmo]) helpers.add(h);
+    return { helpers, rigGroup: view.group, grid, axes, gizmo };
+  }
+
+  test('every helper is invisible during the draw, and each keeps its own flag afterwards', () => {
+    const { win, cine } = preview();
+    const { helpers, rigGroup, axes } = helperSet();
+    const scene = new FakeTHREE.Group();
+    const seen = [];
+    win.renderer.onRender = (s, camera) => seen.push({ s, camera, visible: [...helpers].map((h) => h.visible) });
+    cine.enabled = true;
+    win.render(scene, helpers);
+    assert.equal(seen.length, 1, 'one preview draw');
+    assert.equal(seen[0].s, scene);
+    assert.equal(seen[0].camera, win.camera, 'through the preview camera');
+    assert.deepEqual(seen[0].visible, [false, false, false, false], 'rig, grid, axes and gizmo hidden during the draw');
+    assert.deepEqual([...helpers].map((h) => h.visible), [true, true, false, true], 'restored: the hidden axes stay hidden');
+    assert.ok(helpers.has(rigGroup) && rigGroup.visible, 'the rig with its frustum fill is visible again for the main view');
+    assert.equal(axes.visible, false);
+  });
+
+  test('nothing is drawn or touched while the preview is off', () => {
+    const { win, cine } = preview();
+    const { helpers } = helperSet();
+    let draws = 0;
+    win.renderer.onRender = () => { draws++; };
+    cine.enabled = false;
+    const before = [...helpers].map((h) => h.visible);
+    win.render(new FakeTHREE.Group(), helpers);
+    assert.equal(draws, 0);
+    assert.deepEqual([...helpers].map((h) => h.visible), before);
+  });
+
+  test('a draw that throws still restores every flag', () => {
+    const { win, cine } = preview();
+    const { helpers } = helperSet();
+    win.renderer.onRender = () => { throw new Error('context lost'); };
+    cine.enabled = true;
+    assert.throws(() => win.render(new FakeTHREE.Group(), helpers), /context lost/);
+    assert.deepEqual([...helpers].map((h) => h.visible), [true, true, false, true]);
   });
 });

@@ -69,6 +69,10 @@ The hosted version on [GitHub Pages](https://itzmorphinetime.github.io/LED_Confi
 Release note: the safe-distance floor is now removed when the camera preview is turned off (it used to stay in the
 scene), and it returns when the preview is turned back on with Safe Distance still enabled.
 
+Release note: the live camera view window now shows only what the film camera sees. The floor grid, the axes, the
+camera's own frustum (which tinted the whole image orange), the safe-distance floor and the gizmo no longer appear in
+it; the main viewport still shows them.
+
 ### 3D Gizmo Controls
 - **Translate Mode (G)**: Move objects along X/Y/Z axes
 - **Rotate Mode (R)**: Rotate objects around X/Y/Z axes
