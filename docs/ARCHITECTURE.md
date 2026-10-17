@@ -931,7 +931,7 @@ export class Project {
 ```
 
 #### `js/domain/LogoLibrary.js`
-Logos are deliberately **not** stored on `WallSection`: legacy keys them by id across deletes and imports (B-L21), so they outlive section objects.
+Logos are deliberately **not** stored on `WallSection`: legacy keys them by id across deletes (and across imports until 08 P2-3d, B-L21), so they outlive section objects.
 ```js
 export class LogoLibrary {
   // #entries = {} : a plain object; every method indexes it with the given key unchanged, so keys follow
@@ -945,6 +945,8 @@ export class LogoLibrary {
   remove(sectionId)                 // delete this.#entries[sectionId]       (2282, 4131)
   setPosition(sectionId, position)  // if (entries[id]) { entries[id].position = position; return true } return false   (2290-2291)
   setScale(sectionId, fraction)     // same shape for .scale                                                    (2301-2302)
+  clear()                           // this.#entries = {}   (08 P2-3d, B-L21: an import resets the logos)
+  set(sectionId, entry)             // this.#entries[sectionId] = { ...entry }   (08 P2-3d: the logos an import installs after clear())
   /** Math.max(5, Math.min(100, orDefault(parseInt(raw), 30)))  (2298) */
   static parseScalePercent(raw)
 }
@@ -2105,10 +2107,11 @@ export class WallController {
   setPanelIdStyle(key, rawOrValue)
   /** if (project.display.panelIdsEnabled) rebuild()  (style inputs 4203-4226 and logo handlers 2272-2303) */
   rebuildIfPanelIds()
-  /** P-IMPORT tail (section 6.10): wall.replaceAll(sections); if (meshMode) { project.meshMode = meshMode;
-   *  bus.emit(WALL_MESH_MODE_CHANGED, {mode: meshMode}) } bus.emit(WALL_SECTIONS_CHANGED, {reason: 'import'}); rebuild().
-   *  LEGACY(B-L21): logos are neither reset nor re-rendered. */
-  applyImport({ sections, meshMode })
+  /** P-IMPORT tail (section 6.10): project.logos.clear(); if (logos) for ([id, entry] of logos) project.logos.set(id, entry)
+   *  (08 P2-3d, B-L21 fixed; a v1 import passes logos: null); wall.replaceAll(sections); if (meshMode) { project.meshMode =
+   *  meshMode; bus.emit(WALL_MESH_MODE_CHANGED, {mode: meshMode}) } bus.emit(WALL_SECTIONS_CHANGED, {reason: 'import'});
+   *  rebuild(). With panel IDs on, SectionLogosPanel re-renders the logo list on that event. */
+  applyImport({ sections, meshMode, logos = null })
 }
 ```
 
@@ -2356,7 +2359,7 @@ Private:
 ```js
 export class SectionLogosPanel {
   /** Owns #section-logos-container. Subscribes:
-   *   WALL_SECTIONS_CHANGED: if (reason !== 'import' && project.display.panelIdsEnabled) render()   (4106, 4135; LEGACY(B-L21) for import)
+   *   WALL_SECTIONS_CHANGED: if (project.display.panelIdsEnabled) render()   (4106, 4135; every reason, the import included since 08 P2-3d, B-L21)
    *   WALL_SECTION_RENAMED: render()                                                              (4020; the controller already gated it)
    *   DISPLAY_CONTENT_CHANGED: if (toggled === 'panelIds' && on) render()                          (4197)
    *  @param {{doc, project: Project, wallController: WallController, bus}} deps */
@@ -2658,7 +2661,7 @@ Writers listed here are the only allowed writers (checked by `tests/static/check
 | Event (constant) | Payload | Emitted by (exact point) | Phase-1 subscribers (mirror) |
 |---|---|---|---|
 | `wall:statsChanged` (`WALL_STATS_CHANGED`) | `{totalPixels, totalPanels, totalSections, totalArc}` | `WallController.publishStats()`: P1 step 3 (legacy 1574) and `commitSectionEdit` (4073) | `HeaderStats` |
-| `wall:sectionsChanged` (`WALL_SECTIONS_CHANGED`) | `{reason: 'add'\|'delete'\|'import', addedId?}` | `WallController.addSection/deleteSection` right after the model change (legacy re-render point 4105 / 4134); `applyImport` (4998) | `SectionListPanel` (snapshot, render, restore; or render + expandFirst for import), `SectionLogosPanel` (render iff `reason !== 'import'` and panel IDs are on) |
+| `wall:sectionsChanged` (`WALL_SECTIONS_CHANGED`) | `{reason: 'add'\|'delete'\|'import', addedId?}` | `WallController.addSection/deleteSection` right after the model change (legacy re-render point 4105 / 4134); `applyImport` (4998) | `SectionListPanel` (snapshot, render, restore; or render + expandFirst for import), `SectionLogosPanel` (render iff panel IDs are on, for every reason; the import since 08 P2-3d, B-L21) |
 | `wall:sectionRenamed` (`WALL_SECTION_RENAMED`) | `{}` | `WallController.commitRename()` only when panel IDs are on (4020) | `SectionLogosPanel` (render) |
 | `wall:meshModeChanged` (`WALL_MESH_MODE_CHANGED`) | `{mode}` | `WallController.setMeshMode` (after the model write, 4160) and `applyImport` iff `meshMode` is truthy (4992-4995) | `WallDisplayPanel` (label `.active` by equality; idempotent after a click) |
 | `wall:rebuilt` (`WALL_REBUILT`) | `{layout: WallLayout, meshMode, view: LEDWallView}` | `WallController.rebuild()` last step (after the hub) | `NormalsDebugView` (01 F1-1: caches `{layout, view}`, re-syncs the lines while they are on); seam for Features 2, 4, 5 |
@@ -2879,12 +2882,12 @@ reader.onload = (event) => {
     data = JSON.parse(event.target.result)          // a parse error keeps the legacy alert text (V-5)
     r = serializer.read(data)                       // 08 P2-3b: detectVersion -> migrateV1toV2 -> validateProject
     if (!r.ok) { dialogs.alert(first error issue's message); return }   // M-IMP-1..4; nothing changes (atomic)
-    wallController.applyImport({ sections: sectionsFromProject(r.project), meshMode: r.project.mesh_mode })
+    wallController.applyImport({ sections: sectionsFromProject(r.project), meshMode: r.project.mesh_mode, logos: null })
                                                     // replaceAll (+ nextSectionId, 07 6.8) -> [meshMode iff not null: model +
                                                     // emit WALL_MESH_MODE_CHANGED] -> emit WALL_SECTIONS_CHANGED{import} -> P1
     if (r has warnings) dialogs.alert(M-IMP-5)      // up to 10 correction lines, then "…and n more"
   } catch (err) { dialogs.alert('Error parsing JSON file: ' + err.message) }
-}                                                  // B-L21 (tagged at WallController.applyImport): logos neither reset nor re-rendered
+}                                                  // applyImport resets the logos (logos: null for v1; B-L21 fixed in 08 P2-3d)
 reader.onerror = () => dialogs.alert(M-IMP-7)      // 08 P2-3b (legacy had no handler)
 reader.readAsText(file)
 e.target.value = ''                                // synchronous reset (5009)
@@ -3081,7 +3084,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | B-L18 | Combined LED sim white (E-4) | `Strategies.combinedLedSimColor` + `LEDPixelTextureFactory.tile` cache key (tag) | colour + key fix |
 | B-L19 | Panel mode: no logos, fixed label size (F-4, G-4) | `PanelIdRenderer.panelCanvas` (tag) | shared drawer / atlas UVs |
 | B-L20 | Unbounded LED tile cache | `LEDPixelTextureFactory.tile` (tag) | LRU or one shared tile |
-| B-L21 | Import keeps logos; no logo-list re-render (G-8) | `WallController.applyImport` + `SectionLogosPanel` import exclusion (tags) | reset + render |
+| B-L21 | Import keeps logos; no logo-list re-render (G-8) | `WallController.applyImport` + `SectionLogosPanel` (fixed) | Landed in 08 P2-3d (`WallController.applyImport` resets the logo library (`LogoLibrary.clear`) and installs only the logos it is given; `SectionLogosPanel` re-renders on import with panel IDs on; no tag site) |
 | B-L22 | Prop Y arrow and X/Z rings inert (N-7) | `Prop.translateBy/rotateBy` + `TransformGizmo.rebuild` (tags) | `Selectable.allowedAxes()` |
 | B-L23 | Local gizmo orientation stale (N-10) | `TransformGizmo.updatePosition` / `SELECTABLE_MOVED` handler (tag) | also re-orient |
 | B-L24 | Badge overlaps help badge (the `.view-btn.active` half landed in 01 F1-2) | `css/09-viewport-tools.css` `.selection-indicator` (fixed; CSS is untagged) | Landed in 06 T4a (`.selection-indicator` at `bottom: 64px`, stacked above `.viewport-info`; the `.view-btn.active` half in 01 F1-2; no tag site) |
@@ -3149,17 +3152,15 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/interaction/PilotController.js#tickKeyboard` | B-M13, B-L27 |
 | `js/interaction/ViewportInput.js#attachPointer` | B-M14 |
 | `js/app/WallController.js#setMeshMode` | B-L13 |
-| `js/app/WallController.js#applyImport` | B-L21 |
 | `js/app/CameraController.js#CameraHub.refresh` | B-L30 |
 | `js/app/CameraController.js#setPreviewEnabled` | B-H4, B-M8 |
 | `js/app/ProjectIO.js#exportOBJ` | B-L7 |
 | `js/app/ProjectIO.js#exportZIP` | B-L14 |
 | `js/ui/SectionLogosPanel.js#onUpload` | B-L35 |
-| `js/ui/SectionLogosPanel.js#constructor` | B-L21 |
 | `js/ui/WallDisplayPanel.js#bind` | B-L13 |
 | `index.html` (markup, untagged; documentation-only) | B-L36 |
 
-Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14) and B-L5 (08 P2-1b; its only site was the tag in `GltfExporter.addMesh`, which keeps B-H2 and B-M7) and B-L4 (08 P2-1c; its sites were the tags in `ProjectIO.exportPanelIds`, which has no tag left, and `ProjectIO.exportZIP`, which keeps B-L14; its viewport half never had a tag and is fixed by 08 P2-1d) and B-H1 (08 P2-2a; its sites were the tags in `WallMeshBuilder.quadIndices`, which keeps B-H2 until 08 P2-2d, and `LEDMaterialFactory.side`, whose `'double'` value is now a design choice) and B-L3 (08 P2-2b; its only site was the tag in `WallMeshBuilder.sectionGrid`, which keeps B-L15 and B-L8) and B-H2 (08 P2-2c and P2-2d; its sites were the tags in `ObjExporter.write`'s `#stripNormalLine`, which left with P2-2c (`write` keeps B-M6, B-L6 and B-L8), `WallMeshBuilder.quadIndices`, which has no tag left, and `GltfExporter.addMesh`, which keeps B-M7) and B-L11 (08 P2-9b; its sites were the tags in `InputState.isShortcutIgnoredTarget`, now a re-export of `core/typingTarget.js isTypingTarget`, and `ViewportInput.attachShortcuts`, which has no tag left) and B-L15 (08 P2-8a; its sites were the tags in `WallSection.FIELD_RULES`, which has no tag left, and `WallMeshBuilder.sectionGrid`, which keeps B-L8 for unvalidated imported counts) and B-M4 (08 P2-3a; its sites were `legacyHtml`, deleted, and the tags in `SectionListPanel.render`, which has no tag left, `SectionLogosPanel.render` and `ProjectSerializer.read`, which kept B-L8 until 08 P2-3b) and B-L16 (08 P2-3c; its only site was the tag in `SectionListPanel.patchCard`, now `setTitleWithWarning`) and B-L8 (08 P2-3b; its sites were `Strategies.importValidation`, retired, and the tags in `WallSection`'s constructor, `Wall.appendLikeLast` and `replaceAll`, `LogoLibrary.get`, `WallMeshBuilder.sectionGrid`, `ProjectSerializer.read`, `LEDWallView.rebuild` and `SectionLogosPanel.render`, which have no tag left, and `ObjExporter.write` and `GltfExporter.write`, which keep B-M6 / B-L6); in Phase 3, B-L24 (its `.view-btn.active` half in 01 F1-2, `css/features/debug-view.css`; its badge-overlap half in 06 T4a, `.selection-indicator` at `bottom: 64px` in `css/09-viewport-tools.css`; its two documentation-only entries, the `Legacy note B-L24` paragraphs of the `css/07-viewport.css` and `css/09-viewport-tools.css` header comments, left with 06 T4a, whose header comments now say where it landed).
+Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14) and B-L5 (08 P2-1b; its only site was the tag in `GltfExporter.addMesh`, which keeps B-H2 and B-M7) and B-L4 (08 P2-1c; its sites were the tags in `ProjectIO.exportPanelIds`, which has no tag left, and `ProjectIO.exportZIP`, which keeps B-L14; its viewport half never had a tag and is fixed by 08 P2-1d) and B-H1 (08 P2-2a; its sites were the tags in `WallMeshBuilder.quadIndices`, which keeps B-H2 until 08 P2-2d, and `LEDMaterialFactory.side`, whose `'double'` value is now a design choice) and B-L3 (08 P2-2b; its only site was the tag in `WallMeshBuilder.sectionGrid`, which keeps B-L15 and B-L8) and B-H2 (08 P2-2c and P2-2d; its sites were the tags in `ObjExporter.write`'s `#stripNormalLine`, which left with P2-2c (`write` keeps B-M6, B-L6 and B-L8), `WallMeshBuilder.quadIndices`, which has no tag left, and `GltfExporter.addMesh`, which keeps B-M7) and B-L11 (08 P2-9b; its sites were the tags in `InputState.isShortcutIgnoredTarget`, now a re-export of `core/typingTarget.js isTypingTarget`, and `ViewportInput.attachShortcuts`, which has no tag left) and B-L15 (08 P2-8a; its sites were the tags in `WallSection.FIELD_RULES`, which has no tag left, and `WallMeshBuilder.sectionGrid`, which keeps B-L8 for unvalidated imported counts) and B-M4 (08 P2-3a; its sites were `legacyHtml`, deleted, and the tags in `SectionListPanel.render`, which has no tag left, `SectionLogosPanel.render` and `ProjectSerializer.read`, which kept B-L8 until 08 P2-3b) and B-L21 (08 P2-3d; its sites were the tags in `WallController.applyImport` and `SectionLogosPanel`'s constructor, which have no tag left) and B-L16 (08 P2-3c; its only site was the tag in `SectionListPanel.patchCard`, now `setTitleWithWarning`) and B-L8 (08 P2-3b; its sites were `Strategies.importValidation`, retired, and the tags in `WallSection`'s constructor, `Wall.appendLikeLast` and `replaceAll`, `LogoLibrary.get`, `WallMeshBuilder.sectionGrid`, `ProjectSerializer.read`, `LEDWallView.rebuild` and `SectionLogosPanel.render`, which have no tag left, and `ObjExporter.write` and `GltfExporter.write`, which keep B-M6 / B-L6); in Phase 3, B-L24 (its `.view-btn.active` half in 01 F1-2, `css/features/debug-view.css`; its badge-overlap half in 06 T4a, `.selection-indicator` at `bottom: 64px` in `css/09-viewport-tools.css`; its two documentation-only entries, the `Legacy note B-L24` paragraphs of the `css/07-viewport.css` and `css/09-viewport-tools.css` header comments, left with 06 T4a, whose header comments now say where it landed).
 
 How rule 6 reads these rows (as implemented in `tests/static/check.mjs`): the comparison is per file, so a tag may sit in a private helper that only the named method calls (for example `ProjectSerializer.#readV1` for `#read`, `ObjExporter.#writeCombined` for `#write`, `GltfExporter.#writeCombined` for `#write`); a tag wrapped across JSDoc continuation lines counts as one tag (placeholders are still rejected); and a row whose `js/` file does not exist is reported, so a typo in a site path cannot bypass the check.
 
@@ -3478,3 +3479,10 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 6.4: the field-edit flow's title ⚠ follows the model.
 - 8.2: the B-L16 row is kept with a `Landed` fix cell; 8.3: the row `SectionListPanel.js#patchCard` is deleted, so `LEGACY_SITES` no longer lists it.
 - 2.3, 11 item 6: `core.test.mjs` tests `setTitleWithWarning`; `wall-controller.test.mjs` applies it to the legacy rename and patch as `TEMPLATE_EDITS` (passed into the legacy closure; the fake document gains `ownerDocument` and `createTextNode`).
+
+**08 P2-3d, B-L21 landed** (manifest `tests/regression/expected/P2-3d.json`, an invariance gate: empty `expect`; no harness step imports while panel IDs are on or logos are loaded):
+- 3.5: `LogoLibrary.clear()` and `set(sectionId, entry)` (a fresh copy).
+- 3.10, 6.10: `WallController.applyImport({sections, meshMode, logos = null})` resets the logo library first and installs only the logos it is given (a v1 import gives none: `ProjectIO` passes `logos: null`), then replaces the sections; 07 D5's `ProjectSession` later removes the `logos` argument (08 5.6).
+- 3.11, 5.2: `SectionLogosPanel` re-renders on `WALL_SECTIONS_CHANGED` for every reason when panel IDs are on, the import included.
+- 8.2: the B-L21 row is kept with a `Landed` fix cell; 8.3: the rows `WallController.js#applyImport` and `SectionLogosPanel.js#constructor` are deleted, so `LEGACY_SITES` no longer lists it.
+- 2.3: `wall-controller.test.mjs` (the reset and the installed logos, the legacy import tail edited as `IMPORT_EDITS` so the parity scenario's import, made with panel IDs on and a logo loaded, compares the reset and the logo-list render); `domain.test.mjs` (`clear`, `set`).

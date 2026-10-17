@@ -1,0 +1,16 @@
+{
+  "commit": "P2-3d",
+  "bugs": ["B-L21"],
+  "expect": [],
+  "mayChange": [
+    { "output": "p2_curved_safe_distance/box_corner.screenshot.png", "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas on the preview footer label row (1 level, 1 px at (920, 912), seen in the 06 T6a-08 P2-3b runs); this commit changes no rendered pixel of it" },
+    { "output": "p2_shortcut_filters/pilot_view_front.screenshot.png", "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas (1 level, 2 px, seen in the 06 T6b-08 P2-3b runs); this commit changes no rendered pixel of it" },
+    { "output": "toggles/15_car_moved.screenshot.png", "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-08 P2-3c runs)" },
+    { "output": "large_wall/final__export-zip__morph-led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b); this commit changes no export" }
+  ],
+  "notes": "08 P2-3d (B-L21), an invariance gate as built: WallController.applyImport resets the logo library and installs only the logos it is given (none for v1), and SectionLogosPanel re-renders on import with panel IDs on. The 08 P2-3d card expected the p2_xss_names logo list to change, but that scenario imports with panel IDs off and no logo loaded (its logo list is rendered later by the panel-ID toggle, as before); no harness step imports while panel IDs are on or a logo is loaded (logos/* never imports; p2_project_v2's step-8 import is refused since 08 P2-3b; its v1 re-imports run on fresh pages). The reset and the re-render are covered by wall-controller.test.mjs (unit and legacy parity)."
+}

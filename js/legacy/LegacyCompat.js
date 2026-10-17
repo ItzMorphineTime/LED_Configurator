@@ -199,7 +199,7 @@ const QUIRKS = deepFreeze({
   'B-L20': ['Unbounded LED tile cache',
     'LRU or one shared tile'],
   'B-L21': ['Import keeps logos; no logo-list re-render (G-8)',
-    'reset + render'],
+    'Landed in 08 P2-3d (`WallController.applyImport` resets the logo library (`LogoLibrary.clear`) and installs only the logos it is given; `SectionLogosPanel` re-renders on import with panel IDs on; no tag site)'],
   'B-L22': ['Prop Y arrow and X/Z rings inert (N-7)',
     '`Selectable.allowedAxes()`'],
   'B-L23': ['Local gizmo orientation stale (N-10)',
@@ -281,13 +281,11 @@ const TAG_SITES = deepFreeze([
   ['js/interaction/PilotController.js#tickKeyboard', ['B-M13', 'B-L27']],
   ['js/interaction/ViewportInput.js#attachPointer', ['B-M14']],
   ['js/app/WallController.js#setMeshMode', ['B-L13']],
-  ['js/app/WallController.js#applyImport', ['B-L21']],
   ['js/app/CameraController.js#CameraHub.refresh', ['B-L30']],
   ['js/app/CameraController.js#setPreviewEnabled', ['B-H4', 'B-M8']],
   ['js/app/ProjectIO.js#exportOBJ', ['B-L7']],
   ['js/app/ProjectIO.js#exportZIP', ['B-L14']],
   ['js/ui/SectionLogosPanel.js#onUpload', ['B-L35']],
-  ['js/ui/SectionLogosPanel.js#constructor', ['B-L21']],
   ['js/ui/WallDisplayPanel.js#bind', ['B-L13']],
   ['index.html', ['B-L36']],                   // markup, untagged; documentation-only
 ]);

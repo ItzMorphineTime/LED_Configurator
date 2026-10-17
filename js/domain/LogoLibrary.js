@@ -1,7 +1,7 @@
 /**
  * @module domain/LogoLibrary
  * Section logos keyed by section id (legacy `sectionLogos`). Logos are deliberately not stored on WallSection:
- * legacy keys them by id across deletes and imports (B-L21), so they outlive section objects.
+ * legacy keys them by id across deletes (and, until 08 P2-3d, across imports, B-L21), so they outlive section objects.
  * The store is a plain object indexed with the given key unchanged, so keys follow JS property-key coercion
  * exactly like legacy `sectionLogos[id]` (UI handlers pass parseInt(dataset.sectionId), the renderer and delete
  * pass section.id).
@@ -70,6 +70,24 @@ export class LogoLibrary {
    */
   setImage(sectionId, image) {
     this.ensure(sectionId).image = image;
+  }
+
+  /**
+   * Removes every entry (08 P2-3d, B-L21 fixed: an import resets the logos; legacy kept them).
+   * Side effects: replaces the store with an empty plain object.
+   */
+  clear() {
+    this.#entries = {};
+  }
+
+  /**
+   * Installs an entry as a fresh object (08 P2-3d: the logos an import restores after clear(); a v1 import has none).
+   * Side effects: writes the entry for `sectionId`.
+   * @param {*} sectionId  used as a property key unchanged
+   * @param {LogoEntry} entry
+   */
+  set(sectionId, entry) {
+    this.#entries[sectionId] = { ...entry };
   }
 
   /**

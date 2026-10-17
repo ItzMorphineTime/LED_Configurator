@@ -37,7 +37,7 @@
  * | 21 | 2285   | logo clear                       | rebuildIfPanelIds                    | iff panel IDs                           | entry deleted, logo list render                         |
  * | 22 | 2292   | logo position change             | rebuildIfPanelIds                    | iff the entry exists and panel IDs      | -                                                       |
  * | 23 | 2303   | logo scale change                | rebuildIfPanelIds                    | iff the entry exists and panel IDs      | write-back always                                       |
- * | 24 | 5002   | import FileReader.onload         | applyImport                          | always, inside the import `try`         | labels iff mesh_mode, WALL_SECTIONS_CHANGED{import}     |
+ * | 24 | 5002   | import FileReader.onload         | applyImport                          | always, inside the import `try`         | logos reset, labels iff mesh_mode, WALL_SECTIONS_CHANGED{import} |
  * | F6-1 | -    | web fonts settled (App.start, runFontGate) | rebuildIfPanelIds          | iff a panel-ID canvas was drawn with a pending (font, text) and panel IDs are on | none |
  *
  * No other path calls rebuild() (row F6-1, the font gate of 06 5.6, calls rebuildIfPanelIds at most once after the
@@ -339,15 +339,22 @@ export class WallController {
   }
 
   /**
-   * The tail of P-IMPORT (ARCHITECTURE.md 6.10), inside the import `try`: replace the sections (and the id
-   * allocator), adopt a truthy mesh mode (label mirror), re-render the cards (first expanded), rebuild.
+   * The tail of P-IMPORT (ARCHITECTURE.md 6.10), inside the import `try`: reset the logo library and install only the
+   * logos given (08 P2-3d, B-L21 fixed: legacy kept every entry, so logos keyed by old ids reattached to imported
+   * sections that reused those ids; a v1 import passes none), replace the sections (and the id allocator), adopt a
+   * truthy mesh mode (label mirror), re-render the cards (first expanded) and, with panel IDs on, the logo list, rebuild.
    * Ports: index.html@cd3fd3f lines 4976 + 4989 (via Wall.replaceAll), 4991-4996, 4998-5002.
-   * Side effects: model (wall, project.meshMode iff truthy); emits WALL_MESH_MODE_CHANGED {mode} iff meshMode is
+   * Side effects: model (logos, wall, project.meshMode iff truthy); emits WALL_MESH_MODE_CHANGED {mode} iff meshMode is
    *   truthy, then WALL_SECTIONS_CHANGED {reason: 'import'}; rebuild().
-   * @param {{sections: import('../domain/WallSection.js').WallSection[], meshMode: *}} parsed  ProjectSerializer.read()
+   * @param {{sections: import('../domain/WallSection.js').WallSection[], meshMode: *,
+   *          logos?: Array<[*, import('../domain/LogoLibrary.js').LogoEntry]>|null}} parsed
+   *   sections and meshMode from the validated read; logos: [sectionId, entry] pairs to install after the reset (the
+   *   later v2 restore, 08 6.17), null for a v1 import
    */
-  applyImport({ sections, meshMode }) {
+  applyImport({ sections, meshMode, logos = null }) {
     const project = this.#project;
+    project.logos.clear();
+    if (logos) for (const [sectionId, entry] of logos) project.logos.set(sectionId, entry);
     project.wall.replaceAll(sections);
 
     if (meshMode) {
@@ -355,8 +362,6 @@ export class WallController {
       this.#bus.emit(Events.WALL_MESH_MODE_CHANGED, { mode: meshMode });
     }
 
-    // LEGACY(B-L21): logos are neither reset nor re-rendered on import; entries keyed by old ids reattach to
-    // imported sections that reuse those ids (SectionLogosPanel skips reason 'import').
     this.#bus.emit(Events.WALL_SECTIONS_CHANGED, { reason: 'import' });
     this.rebuild();
   }

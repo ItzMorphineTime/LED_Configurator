@@ -406,8 +406,8 @@ export class ProjectIO {
    * otherwise the validated wall is applied (wall scope: sections, and the mesh mode when the file names one) and, if
    * the validator corrected anything, M-IMP-5 lists the corrections. The parse, read and apply steps stay inside the
    * legacy try/catch, so any other error still becomes the legacy alert. The input is reset synchronously so the same
-   * file can be chosen again. Logos are neither reset nor re-rendered until 08 P2-3d (B-L21, tagged at
-   * WallController.applyImport).
+   * file can be chosen again. A v1 import resets the logos (no logo is in a v1 file; B-L21 fixed in 08 P2-3d) and the
+   * logo list re-renders when panel IDs are on.
    * Ports: index.html@cd3fd3f lines 4967-5010.
    * Side effects: one alert (M-IMP-6), or starts a FileReader; resets the input's value; later (on load or error) the
    * wall import pipeline and at most one alert (M-IMP-5), or one alert (an error message).
@@ -433,7 +433,7 @@ export class ProjectIO {
           return;
         }
         this.#wallController.applyImport({
-          sections: this.#sectionsFromProject(result.project), meshMode: result.project.mesh_mode,
+          sections: this.#sectionsFromProject(result.project), meshMode: result.project.mesh_mode, logos: null,
         });
         const corrections = result.issues.filter((issue) => issue.severity === 'warning');
         if (corrections.length) this.#dialogs.alert(ImportAlerts.corrections(corrections));

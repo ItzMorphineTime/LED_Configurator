@@ -397,8 +397,26 @@ describe('rebuild policy (ARCHITECTURE.md 6.2): run counts and tile-cache clears
     assert.equal(r.project.wall.sections, sections);
     assert.equal(r.project.wall.nextSectionId, 6);
     assert.equal(r.project.meshMode, 'panel');
-    assert.equal(r.project.logos.get(0).position, 'top-left', 'B-L21: logos are not reset');
+    assert.equal(r.project.logos.get(0), undefined, 'B-L21 fixed in 08 P2-3d: the logo library is reset');
     assert.equal(r.rebuilds(), 1);
+  });
+
+  test('row 24 applyImport resets the logos first and installs only the given ones (08 P2-3d, B-L21)', () => {
+    const r = makeRig();
+    r.project.logos.ensure(0).position = 'top-left';
+    r.project.logos.ensure(7).scale = 0.5;
+    const seen = [];
+    r.bus.on(Events.WALL_SECTIONS_CHANGED, () => seen.push([r.project.logos.get(0), r.project.logos.get(3)?.position]));
+    const entry = { position: 'bottom-right', scale: 0.4 };
+    r.wc.applyImport({ sections: [new WallSection(fields({ id: 3 }))], meshMode: null, logos: [[3, entry]] });
+    assert.equal(r.project.logos.get(7), undefined);
+    assert.deepEqual(r.project.logos.get(3), entry);
+    assert.notEqual(r.project.logos.get(3), entry, 'a fresh object');
+    assert.deepEqual(seen, [[undefined, 'bottom-right']], 'the logos are in place before the mirrors run');
+    const v1 = makeRig();
+    v1.project.logos.ensure(0);
+    v1.wc.applyImport({ sections: [new WallSection(fields())], meshMode: 'combined' });
+    assert.equal(v1.project.logos.get(0), undefined, 'logos omitted (a v1 import): none');
   });
 
   test('row 24 applyImport without a (truthy) mesh mode keeps the mode and emits no label event', () => {
@@ -743,9 +761,9 @@ const TEMPLATE_EDITS = Object.freeze([
 ]);
 
 /** `src` with every TEMPLATE_EDITS row applied; throws when a row does not occur exactly its declared number of times. */
-function withTemplateEdits(src) {
+function withTemplateEdits(src, edits = TEMPLATE_EDITS) {
   let out = src;
-  for (const [from, to, count] of TEMPLATE_EDITS) {
+  for (const [from, to, count] of edits) {
     const parts = out.split(from);
     if (parts.length - 1 !== count) throw new Error(`template edit found ${parts.length - 1} times, expected ${count}: ${from}`);
     out = parts.join(to);
@@ -755,6 +773,18 @@ function withTemplateEdits(src) {
 
 /** Builds the legacy UI functions over `doc` (verbatim source with the TEMPLATE_EDITS; the legacy globals become
  *  closure variables). */
+/**
+ * The declared edits of the legacy import tail (index.html@cd3fd3f 4975-5003), applied like TEMPLATE_EDITS. 08 P2-3d
+ * (B-L21): the import resets the logos before the sections are replaced, and with panel IDs on the logo list renders
+ * after the cards (the order of the SectionListPanel and SectionLogosPanel mirrors of WALL_SECTIONS_CHANGED).
+ */
+const IMPORT_EDITS = Object.freeze([
+  ['if (data.sections && Array.isArray(data.sections)) {\n                        wallSections = data.sections.map(',
+    'if (data.sections && Array.isArray(data.sections)) {\n                        sectionLogos = {};\n                        wallSections = data.sections.map(', 1],
+  ["if (firstSection) firstSection.classList.remove('collapsed');\n                        createLEDWall();",
+    "if (firstSection) firstSection.classList.remove('collapsed');\n                        if (panelIdsEnabled) renderSectionLogosUI();\n                        createLEDWall();", 1],
+]);
+
 function buildLegacy(doc, initialSections) {
   const expectStart = (n, text) => {
     if (!LEGACY_LINES[n - 1].trimStart().startsWith(text)) throw new Error(`index.html line ${n} is not "${text}"`);
@@ -784,7 +814,7 @@ ${lines(3892, 4146)}`)}
 ${lines(4149, 4227)}
     }
     function importTail(data) {
-${lines(4975, 5003)}
+${withTemplateEdits(lines(4975, 5003), IMPORT_EDITS)}
     }
     return {
       createLEDWall, setupUIWall, importTail, addSection,
@@ -1044,7 +1074,8 @@ describe('legacy parity: panels + WallController vs index.html@cd3fd3f', { skip:
       el.fire('change');
     });
 
-    // ---- import (labels iff mesh_mode, cards re-rendered with the first expanded, logos untouched: B-L21)
+    // ---- import (labels iff mesh_mode, cards re-rendered with the first expanded, logos reset and the logo list
+    //      re-rendered with panel IDs on: B-L21 fixed in 08 P2-3d)
     const importData = {
       mesh_mode: 'combined',
       sections: [

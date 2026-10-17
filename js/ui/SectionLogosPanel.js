@@ -83,7 +83,7 @@ export class SectionLogosPanel {
 
   /**
    * Looks up #section-logos-container and subscribes the three re-render mirrors:
-   *  WALL_SECTIONS_CHANGED: render() iff reason !== 'import' and panel IDs are on   (4106, 4135)
+   *  WALL_SECTIONS_CHANGED: render() iff panel IDs are on, for every reason (4106, 4135; the import since 08 P2-3d)
    *  WALL_SECTION_RENAMED: render()   (4020; WallController already gated it on panel IDs)
    *  DISPLAY_CONTENT_CHANGED: render() iff toggled === 'panelIds' && on   (4197)
    * Construct it after SectionListPanel and WallDisplayPanel, so its mirrors run after theirs (legacy order).
@@ -99,9 +99,9 @@ export class SectionLogosPanel {
     this.#container = byId(doc, 'section-logos-container');
 
     bus.on(Events.WALL_SECTIONS_CHANGED, ({ reason }) => {
-      // LEGACY(B-L21): an import does not re-render the logo list (and does not reset the logos), so with panel
-      // IDs on the list keeps showing the pre-import sections.
-      if (reason !== 'import' && this.#project.display.panelIdsEnabled) this.render();
+      // Every reason, import included (B-L21 fixed in 08 P2-3d: legacy skipped the import, so with panel IDs on the
+      // list kept showing the pre-import sections and their logos).
+      if (this.#project.display.panelIdsEnabled) this.render();
     });
     bus.on(Events.WALL_SECTION_RENAMED, () => this.render());
     bus.on(Events.DISPLAY_CONTENT_CHANGED, ({ toggled, on }) => {

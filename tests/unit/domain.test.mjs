@@ -863,6 +863,20 @@ describe('Project', () => {
 // ---------------------------------------------------------------------------------------------------------------
 
 describe('LogoLibrary', () => {
+  test('clear removes every entry and set installs a fresh copy (08 P2-3d, B-L21)', () => {
+    const lib = new LogoLibrary();
+    lib.ensure(0).position = 'top-left';
+    lib.setImage(4, { w: 1 });
+    lib.clear();
+    assert.equal(lib.get(0), undefined);
+    assert.equal(lib.hasImage(4), undefined);
+    const entry = { position: 'center', scale: 0.5, image: { w: 2 } };
+    lib.set(3, entry);
+    assert.deepEqual(lib.get(3), entry);
+    assert.notEqual(lib.get(3), entry);
+    assert.equal(lib.get('3'), lib.get(3), 'plain-object key semantics, as every other method');
+  });
+
   test('parseScalePercent equals the legacy expression over the input grid (Object.is)', () => {
     for (const raw of ALL_INPUTS) {
       same(LogoLibrary.parseScalePercent(raw), legacyScalePercent(raw), `parseScalePercent(${JSON.stringify(raw)})`);
