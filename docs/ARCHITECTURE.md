@@ -3126,7 +3126,7 @@ export class App {
   start()
 }
 ```
-`App` is the only module that imports `theme/Theme.js` (and, since 06 T3, `theme/ThemeBridge.js`), `vendor/jszip.js` and every class. It defines `colorToRgb = (s) => new THREE.Color(s)` and `frameBounds = () => framingBounds(project, wallController.pivotResolution)` (03 T3: the cached resolution; evaluated lazily, after `wallController` exists), and the frame tick `() => { orbit.tickKeyboard(); pilot.tickKeyboard(); sceneManager.render(); sceneManager.withPassHidden(() => preview.render(sceneManager.scene)); }` (legacy animate 3886-3889; 08 P2-10a passed the helper set, which 07 R1 replaced by the preview camera's layer mask and `withPassHidden`).
+`App` is the only module that imports `theme/Theme.js` (and, since 06 T3, `theme/ThemeBridge.js`), `vendor/jszip.js` and every class. It defines `colorToRgb = (s) => new THREE.Color(s)` and `frameBounds = () => framingBounds(project, wallController.pivotResolution)` (03 T3: the cached resolution; evaluated lazily, after `wallController` exists), and the frame tick `() => { orbit.tickKeyboard(); pilot.tickKeyboard(); sceneManager.renderFrame(); }` (legacy animate 3886-3889; since 07 R2 `renderFrame()` draws the main pass and then the injected `previewPass`, `sceneManager.setPasses([previewPass])`, inside `withPassHidden`; 08 P2-10a passed the helper set to the second renderer, which 07 R1 replaced by the preview camera's layer mask and `withPassHidden`, and 07 R2 deleted that renderer).
 
 
 ---
@@ -3498,7 +3498,7 @@ e.target.value = ''                                // synchronous reset (5009)
 
 ### 6.12 P3: frame tick
 
-`SceneManager.startLoop(tick)`: `requestAnimationFrame(frame)` first, then `orbit.tickKeyboard()` -> `pilot.tickKeyboard()` (may run P2) -> `sceneManager.render()` (07 R1: the helper layers re-tagged first) -> `sceneManager.withPassHidden(() => preview.render(scene))` (guarded; the preview camera's mask leaves out HELPERS and DEBUG, and `withPassHidden` the gizmo: B-M11, fixed by 08 P2-10a, mechanism since 07 R1) (3884-3890). The first frame runs synchronously inside the init phase.
+`SceneManager.startLoop(tick)`: `requestAnimationFrame(frame)` first, then `orbit.tickKeyboard()` -> `pilot.tickKeyboard()` (may run P2) -> `sceneManager.renderFrame()` (3884-3890): the helper layers re-tagged first (07 R1), the pre-render hooks, the main pass, then `previewPass.render(scene)` (07 R2: the scissor pass of the main renderer into the main canvas; guarded by `cine.enabled`, the window's visibility and its 50 x 30 CSS px minimum; the preview camera's mask leaves out HELPERS and DEBUG, and `withPassHidden` the gizmo: B-M11, fixed by 08 P2-10a, mechanism since 07 R1). The first frame runs synchronously inside the init phase.
 
 ### 6.13 Exports
 
@@ -4269,3 +4269,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - Deviations from 07 5.2.2, recorded there: `PreviewPass`'s window dependency is named `previewWindow` (check rule 3 forbids a `window` identifier); it takes no `win`; `PreviewFit.previewDeviceRects` holds 6.1's arithmetic so it is unit-tested without a renderer; `invalidate('preview-resize')` and `setSize` wait for R3 and D5.
 - `README.md`: the camera-view window release note. 07 5.2.2 and 08 P2-10: the as-built notes.
 - 2.3: `preview-pass.test.mjs` (new), `core.test.mjs` (the Strategies keys; B-M9 and B-L32 landed in 07 R2), `render-layers.test.mjs` (the pass draws inside `withPassHidden`), `camera-hub.test.mjs` (the imports of `PreviewWindow` and `PreviewPass`), `scene-overlays.test.mjs` (its preview section moved to `preview-pass.test.mjs`).
+
+**07 R2-b, the frame tick after 07 R2 (review follow-up of 07 R2)** (manifest `tests/regression/expected/07-R2-b.json`, an invariance gate: documentation, a comment and a unit test):
+- 3.12 and 6.12 still described the 07 R1 tick (`sceneManager.render()`, then `sceneManager.withPassHidden(() => preview.render(scene))`); they now name `sceneManager.renderFrame()`, which draws the main pass and then the injected preview pass, as 7 already did. `CameraController.setPreviewEnabled`'s comment no longer says a preview renderer is created on the first enable (it registers the resize handle).
+- 2.3: `preview-pass.test.mjs`'s fake renderer starts with a non-black clear colour and alpha, so the restore of the clear colour after the pass is asserted (the bars' black made it unobservable).

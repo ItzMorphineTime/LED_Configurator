@@ -47,8 +47,9 @@ class FakeRenderer {
     this.viewport = [0, 0, Math.floor(width * dpr), Math.floor(height * dpr)];
     this.scissor = [...this.viewport];
     this.scissorTest = false;
-    this.clearColor = new Color(0x000000);
-    this.clearAlpha = 1;
+    // a clear colour other than the bars' black, so the restore after the pass is observable
+    this.clearColor = new Color(0x2a3b4c);
+    this.clearAlpha = 0.75;
     this.log = [];
     this.onRender = null;
   }
@@ -181,8 +182,8 @@ describe('PreviewPass.render: the scissor pass in device pixels (07 6.1, AC 3)',
           assert.deepEqual(vps.at(-1), [0, 0, Math.floor(1199 * dpr), Math.floor(941 * dpr)],
             'the main viewport is restored to exactly renderer.getSize() (no device pixel lost)');
           assert.equal(renderer.scissorTest, false);
-          assert.equal(renderer.clearColor.v, 0x000000);
-          assert.equal(renderer.clearAlpha, 1);
+          assert.equal(renderer.clearColor.v, 0x2a3b4c, 'the clear colour before the pass is restored');
+          assert.equal(renderer.clearAlpha, 0.75, 'the clear alpha before the pass is restored');
         });
       }
     }
@@ -203,7 +204,8 @@ describe('PreviewPass.render: the scissor pass in device pixels (07 6.1, AC 3)',
     assert.throws(() => p.render({}), /context lost/);
     assert.equal(renderer.scissorTest, false);
     assert.deepEqual(renderer.viewport, [0, 0, 1200, 940]);
-    assert.equal(renderer.clearColor.v, 0x000000);
+    assert.equal(renderer.clearColor.v, 0x2a3b4c);
+    assert.equal(renderer.clearAlpha, 0.75);
   });
 
   test('the camera aspect follows a filmback change made without a hub refresh', () => {

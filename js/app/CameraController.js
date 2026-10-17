@@ -166,8 +166,9 @@ export class CameraController {
   }
 
   /**
-   * P-PREVIEW (ARCHITECTURE.md 6.5), after CameraPanel flipped the toggle class. On: the preview renderer is
-   * created on the first enable, then the pose is reset (which runs P2). Off: the rig and the safe-distance floor are
+   * P-PREVIEW (ARCHITECTURE.md 6.5), after CameraPanel flipped the toggle class. On: the preview window's resize
+   * handle is registered on the first enable (07 R2: no second renderer; the main renderer's preview pass draws the
+   * image), then the pose is reset (which runs P2). Off: the rig and the safe-distance floor are
    * removed (the floor since 08 P2-4b, B-M8), pilot mode is left (cleanly since 08 P2-4a, B-H4: the pilot guard applies
    * only on entry) and the camera is deselected.
    * Ports: index.html@cd3fd3f lines 4232-4248.
