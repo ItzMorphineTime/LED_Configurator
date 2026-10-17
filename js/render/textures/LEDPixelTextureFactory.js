@@ -232,7 +232,8 @@ export class LEDPixelTextureFactory {
   #display;
   /** @type {{canvas: object}} */
   #theme;
-  /** @type {Record<string, THREE.CanvasTexture>} master tiles keyed `${color}-${layout}` (legacy plain object) */
+  /** @type {Record<string, THREE.CanvasTexture>} master tiles keyed `${hex}-${layout}` (legacy plain object; the colour
+   *  normalised to THREE.Color#getHexString since 08 P2-7e) */
   #cache = {};
 
   /**
@@ -248,7 +249,9 @@ export class LEDPixelTextureFactory {
   }
 
   /**
-   * One LED tile texture for `color` in the current layout: a clone of the cached master (created on a miss).
+   * One LED tile texture for `color` in the current layout: a clone of the cached master (created on a miss). The cache
+   * key is `${new THREE.Color(color).getHexString()}-${layout}` (08 P2-7e, B-L18: legacy stringified the argument, so
+   * every THREE.Color gave "[object Object]" and shared one tile; latent while the only Color caller passed white).
    * Ports: index.html@cd3fd3f lines 1807-1856.
    * Side effects: on a miss, a 64x64 canvas and a master CanvasTexture are created and cached; every call
    * allocates the returned clone (a new THREE texture id).
@@ -256,14 +259,13 @@ export class LEDPixelTextureFactory {
    * @returns {THREE.CanvasTexture} a fresh clone of the master tile
    */
   tile(color) {
-    // LEGACY(B-L18, B-L20): the key stringifies the argument verbatim (a THREE.Color gives "[object Object]",
-    // latent because the only Color caller always passes white) and the cache is never bounded or evicted.
-    const cacheKey = `${color}-${this.#display.ledLayout}`;
+    // LEGACY(B-L20): the cache is never bounded or evicted (one master per colour and layout seen).
+    const ledColor = new THREE.Color(color);
+    const cacheKey = `${ledColor.getHexString()}-${this.#display.ledLayout}`;
     if (this.#cache[cacheKey]) {
       return this.#cache[cacheKey].clone();
     }
 
-    const ledColor = new THREE.Color(color);
     const canvas = this.#doc.createElement('canvas');
     const size = 64; // Small texture that will be repeated
     canvas.width = size;

@@ -1,0 +1,53 @@
+{
+  "commit": "P2-7e",
+  "bugs": [
+    "B-L18"
+  ],
+  "expect": [
+    {
+      "output": "toggles/03_ledsim_single-dot.screenshot.png",
+      "change": "modified",
+      "reason": "B-L18: the combined LED sim multiplies the white tile by the section colour (vertexColors), so the default wall's LEDs take its Studio Grey instead of white"
+    },
+    {
+      "output": "toggles/04_ledsim_{rgb-triangle,rgb-stripe,rgb-horizontal,square,single-dot}.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same section colour on the combined LED sim of every layout"
+    },
+    {
+      "output": "p2_mixed_content/ledsim_{combined,square}.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the four section colours of the mixed wall on its combined LED sim (legacy: one flat white-grey for all sections)"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-08 P2-7d runs); this commit changes no pixel of it"
+    },
+    {
+      "output": "p2_curved_safe_distance/box_corner.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas on the preview footer label row (1 level, 1 px, seen in the 06 T6a-08 P2-7d runs); this commit changes no pixel of it"
+    },
+    {
+      "output": "p2_shortcut_filters/pilot_view_front.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas (1 level, 2 px, seen in the 06 T6b-08 P2-7d runs); this commit changes no pixel of it"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b); this commit changes no export"
+    },
+    {
+      "output": "ui_visual/00_initial.sidebar.screenshot.png",
+      "change": "modified",
+      "reason": "added after the first gate run: one sidebar pixel differed by 7 levels (DOM text antialiasing of a DOM-only capture); this commit changes no markup, style or sidebar text (LED-sim material and tile cache key only)"
+    }
+  ],
+  "notes": "08 P2-7e (B-L18): Strategies.combinedLedSimColor retired; LEDMaterialFactory.combined LED sim = MeshBasicMaterial({map: white tile, vertexColors: true}); LEDPixelTextureFactory.tile keys its cache by new THREE.Color(color).getHexString() and the layout (no output change by itself). Section and panel LED sim (toggles/05, 06) must stay identical."
+}

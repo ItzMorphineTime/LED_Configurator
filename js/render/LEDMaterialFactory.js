@@ -56,7 +56,8 @@ export class LEDMaterialFactory {
   /**
    * The material of the combined mesh.
    * panel IDs: the atlas canvas as a CanvasTexture; LED sim: one white tile repeated over the whole atlas (one tile per
-   * LED: the pixel-accurate atlas UVs of 08 P2-7a give each section its own LED rows); colour: vertex colours.
+   * LED: the pixel-accurate atlas UVs of 08 P2-7a give each section its own LED rows) multiplied by the vertex colours, so
+   * every section's LEDs take its colour (08 P2-7e, B-L18 fixed); colour: vertex colours.
    * Ports: index.html@cd3fd3f lines 1664-1675 (the canvas of 1667 is PanelIdRenderer.atlasCanvas).
    * Side effects: allocates the texture(s) then the material (THREE ids).
    * @param {import('../domain/WallSection.js').WallSection[]} sections  the wall's sections, in order
@@ -78,17 +79,11 @@ export class LEDMaterialFactory {
       const texture = this.#canvasTexture(combinedCanvas);
       material = new THREE.MeshBasicMaterial({ map: texture, side: this.#side(), wireframe: display.wireframe });
     } else if (display.ledSimEnabled) {
-      // LEGACY(B-L18): white LEDs whatever the section colours. The tile repeats totalLedX x totalLedY times over the
-      // atlas UVs, one tile per LED: since 08 P2-7a (B-M5 fixed) each section spans v in [0, uvHeight], its own LED rows.
-      const ledColor = () => {
-        switch (Strategies.combinedLedSimColor) {
-          case 'white':
-            return new THREE.Color("white");
-          default:
-            throw unsupportedStrategy('combinedLedSimColor', Strategies.combinedLedSimColor);
-        }
-      };
-      material = new THREE.MeshBasicMaterial({ map: this.#ledTiles.tiled(atlas.totalLedX, atlas.totalLedY, ledColor()), side: this.#side(), wireframe: display.wireframe });
+      // 08 P2-7e (B-L18 fixed; Strategies.combinedLedSimColor retired): a white tile times the per-section vertex colours,
+      // so the combined LED sim shows each section's colour as section and panel modes do (legacy: white LEDs, no
+      // vertexColors). The tile repeats totalLedX x totalLedY times over the atlas UVs, one tile per LED: since 08 P2-7a
+      // (B-M5 fixed) each section spans v in [0, uvHeight], its own LED rows.
+      material = new THREE.MeshBasicMaterial({ map: this.#ledTiles.tiled(atlas.totalLedX, atlas.totalLedY, new THREE.Color("white")), vertexColors: true, side: this.#side(), wireframe: display.wireframe });
     } else {
       material = new THREE.MeshBasicMaterial({ vertexColors: true, side: this.#side(), wireframe: display.wireframe });
     }

@@ -65,10 +65,10 @@ export const Strategies = deepFreeze({
   previewRendersHelpers: true,                     // B-M11
   gizmoRotateSign: -1,                             // B-M12
   pilotForwardYSign: -1,                           // B-M13
-  combinedLedSimColor: 'white',                    // B-L18
 });                                                // dispose.wallTextures / dispose.gizmo (B-H5, B-L12: true since
                                                    // Phase 1C H1 / H2) retired by 08 P2-12a: always dispose;
-                                                   // exportCombinedColor (B-L6) retired by 08 P2-7d: per-section materials
+                                                   // exportCombinedColor (B-L6) retired by 08 P2-7d: per-section materials;
+                                                   // combinedLedSimColor (B-L18) retired by 08 P2-7e: white tile x vertex colours
 
 /**
  * The exact Phase-1 mesh profiles (docs/improvements/08-bugfix-roadmap.md 4.2). Production code never reads these;
@@ -195,7 +195,7 @@ const QUIRKS = deepFreeze({
   'B-L17': ['4K check per section only',
     'wall-level check'],
   'B-L18': ['Combined LED sim white (E-4)',
-    'colour + key fix'],
+    'Landed in 08 P2-7e (the combined LED-sim material multiplies a white tile by the per-section vertex colours, `vertexColors: true`; the LED tile cache key is the normalised `getHexString()` of the colour; `Strategies.combinedLedSimColor` retired; no tag site)'],
   'B-L19': ['Panel mode: no logos, fixed label size (F-4, G-4)',
     'viewport default fixed in 08 P2-12d (panel IDs sample the section canvas); the per-panel canvas is reachable only with `uv.panel_uvs = \'panel\'` (04 UV-9, with the panel-mode export UVs)'],
   'B-L20': ['Unbounded LED tile cache',
@@ -254,8 +254,7 @@ const TAG_SITES = deepFreeze([
   ['js/geometry/WallLayout.js#framingBounds', ['B-L2', 'B-M10']],
   ['js/io/ProjectSerializer.js#write', ['B-L31']],
   ['js/render/SceneManager.js#addHelper', ['B-M11']],
-  ['js/render/LEDMaterialFactory.js#combined', ['B-L18']],
-  ['js/render/textures/LEDPixelTextureFactory.js#tile', ['B-L18', 'B-L20']],
+  ['js/render/textures/LEDPixelTextureFactory.js#tile', ['B-L20']],
   ['js/render/textures/PanelIdRenderer.js#panelCanvas', ['B-L19']],
   ['js/render/textures/PanelIdRenderer.js#sectionCanvas', ['B-L35']],
   ['js/render/CameraRigView.js#rebuildFrustum', ['B-L33']],

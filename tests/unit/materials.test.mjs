@@ -26,8 +26,20 @@ import { WallMeshBuilder, maxIndexOf } from '../../js/geometry/WallMeshBuilder.j
 
 /** The THREE subset LEDMaterialFactory and LEDWallView use; every constructor records its arguments. */
 class FakeMaterial { constructor(params) { this.params = params; } }
-class FakeCanvasTexture { constructor(canvas) { this.image = canvas; } }
-class FakeColor { constructor(css) { this.css = css; } }
+class FakeCanvasTexture {
+  constructor(canvas) { this.image = canvas; this.repeat = { set: (x, y) => { this.repeat.value = [x, y]; } }; }
+  clone() { const t = new FakeCanvasTexture(this.image); t.master = this; return t; }
+}
+/** THREE.Color for '#rgb', '#rrggbb' (any case), 'white' and a FakeColor; getHexString() as r128 (lower-case rrggbb). */
+class FakeColor {
+  constructor(css) {
+    this.css = css;
+    const src = css instanceof FakeColor ? css.css : css;
+    const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(src ?? '');
+    this.hex = src === 'white' ? 'ffffff' : m ? (m[1].length === 3 ? m[1].replace(/./g, (c) => c + c) : m[1]).toLowerCase() : 'ffffff';
+  }
+  getHexString() { return this.hex; }
+}
 class FakeAttribute { constructor(array, itemSize) { this.array = array; this.itemSize = itemSize; } }
 class FakeUint32Attribute extends FakeAttribute {}
 class FakeGeometry {
@@ -56,12 +68,14 @@ const FakeTHREE = {
   MeshBasicMaterial: FakeMaterial, CanvasTexture: FakeCanvasTexture, Color: FakeColor, DoubleSide: 2,
   BufferGeometry: FakeGeometry, Float32BufferAttribute: FakeAttribute, Uint32BufferAttribute: FakeUint32Attribute,
   Group: FakeObject3D, Mesh: FakeMesh, PlaneGeometry: FakePlaneGeometry,
+  RepeatWrapping: 1000, LinearFilter: 1006, LinearMipmapLinearFilter: 1008,
 };
 globalThis.window = { THREE: FakeTHREE };
 
 const { PanelIdRenderer } = await import('../../js/render/textures/PanelIdRenderer.js');
 const { LEDMaterialFactory } = await import('../../js/render/LEDMaterialFactory.js');
 const { LEDWallView } = await import('../../js/render/LEDWallView.js');
+const { LEDPixelTextureFactory } = await import('../../js/render/textures/LEDPixelTextureFactory.js');
 
 /** A 2D context that accepts every method call and property write. */
 const fakeContext = () => new Proxy({}, {
@@ -312,4 +326,47 @@ describe('LEDWallView panel mode with panel IDs: one material per section, secti
       for (const m of meshes) assert.deepEqual(m.geometry.attributes.uv.array, [0, 1, 1, 1, 0, 0, 1, 0]);
     });
   }
+});
+
+describe('combined LED sim takes the section colours (B-L18; 08 P2-7e)', () => {
+  test('the combined LED-sim material is a white tile (repeat totalLedX x totalLedY) times the vertex colours', () => {
+    const calls = [];
+    const ledTiles = { tiled: (x, y, color) => { calls.push([x, y, color]); return new FakeCanvasTexture({ tile: true }); } };
+    const display = { panelIdsEnabled: false, ledSimEnabled: true, wireframe: false };
+    const { panelIds } = renderer();
+    const factory = new LEDMaterialFactory({ display, panelIds, ledTiles, win: { console: { warn() {} } } });
+    const sections = [section({ name: 'A', color: '#ff0000' }), section({ id: 1, name: 'B', color: '#00ff00', panelRows: 5 })];
+    const atlas = computeAtlas(sections);
+    const material = factory.combined(sections, atlas);
+    assert.equal(material.params.vertexColors, true, 'the section colours come from the vertex colours');
+    assert.ok(material.params.map instanceof FakeCanvasTexture);
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0].slice(0, 2), [atlas.totalLedX, atlas.totalLedY]);
+    assert.equal(calls[0][2].getHexString(), 'ffffff', 'a white tile');
+    assert.equal(Strategies.combinedLedSimColor, undefined, 'the switch is retired');
+  });
+
+  test('LEDPixelTextureFactory.tile: the cache key is the normalised hex colour, so equal colours share one master', () => {
+    // A 2D context whose methods return a gradient stand-in (the tile painters call createRadialGradient().addColorStop).
+    const paintable = () => new Proxy({}, {
+      get: (target, key) => (key in target ? target[key] : () => ({ addColorStop() {} })),
+      set: (target, key, value) => { target[key] = value; return true; },
+    });
+    const canvases = [];
+    const doc = { canvases, createElement: (tag) => { const c = { tag, width: 0, height: 0, getContext: paintable }; canvases.push(c); return c; } };
+    const display = { ledLayout: 'single-dot' };
+    const tiles = new LEDPixelTextureFactory({ doc, display, theme: { canvas: CanvasTheme } });
+    const a = tiles.tile('#00F0FF');
+    const b = tiles.tile('#00f0ff');
+    assert.equal(a.master, b.master, "'#00F0FF' and '#00f0ff' are one tile");
+    assert.equal(doc.canvases.length, 1);
+    const white = tiles.tile(new FakeColor('white'));
+    assert.equal(tiles.tile('#ffffff').master, white.master, 'a THREE.Color and its hex string are one tile');
+    assert.notEqual(tiles.tile(new FakeColor('#ff0000')).master, white.master, 'two Color objects no longer share "[object Object]"');
+    assert.equal(doc.canvases.length, 3);
+    display.ledLayout = 'square';
+    assert.notEqual(tiles.tile('#00f0ff').master, a.master, 'the layout is part of the key');
+    const tiled = tiles.tiled(7, 3, '#00f0ff');
+    assert.deepEqual(tiled.repeat.value, [7, 3]);
+  });
 });

@@ -109,6 +109,9 @@ gigabytes of graphics memory.
 - Visualizes pixel density and appearance
 - Toggle on/off for performance
 
+Release note: in Combined mode the LED simulation now shows each section's colour, as Section and Panel modes always did;
+it used to show white LEDs on every section.
+
 ---
 
 ## 🎮 Controls
