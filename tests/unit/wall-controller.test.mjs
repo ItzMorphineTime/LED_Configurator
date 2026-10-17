@@ -28,7 +28,7 @@ import { ProjectSerializer } from '../../js/io/ProjectSerializer.js';
 import { sectionsFromProject } from '../../js/io/ProjectSchema.js';
 import { runFontGate } from '../../js/app/fontGate.js';
 import { HeaderStats } from '../../js/ui/HeaderStats.js';
-import { escapeHtml } from '../../js/ui/dom.js';
+import { escapeHtml, setTitleWithWarning } from '../../js/ui/dom.js';
 import { SectionListPanel } from '../../js/ui/SectionListPanel.js';
 import { SectionLogosPanel } from '../../js/ui/SectionLogosPanel.js';
 import { WallDisplayPanel } from '../../js/ui/WallDisplayPanel.js';
@@ -533,6 +533,7 @@ class FakeElement {
 
   get id() { return this.attrs.id; }
   get firstChild() { return this.children[0] ?? null; }
+  get ownerDocument() { return this.doc; }
 
   get value() {
     if (this.valueSet || this.tagName !== 'select') return this.rawValue ?? '';
@@ -633,6 +634,7 @@ class FakeDocument {
   querySelector(sel) { return this.root.querySelector(sel); }
   querySelectorAll(sel) { return this.root.querySelectorAll(sel); }
   createElement(tag) { const el = new FakeElement(this, tag, {}); this.record(el, 'create', tag); return el; }
+  createTextNode(text) { const el = new FakeElement(this, '#text', {}); el.text = text; this.record(el, 'createText', text); return el; }
   take() { const out = this.log; this.log = []; return out; }
   byId(id) { return this.getElementById(id); }
 }
@@ -678,6 +680,7 @@ const lines = (a, b) => LEGACY_LINES.slice(a - 1, b).join('\n');
  * angle min/max (WallSection.LIMITS), and the number handler's rules round the integer fields and apply the caps.
  * 08 P2-3a (B-M4, 08 6.5): every interpolation of a section value in the card and logo-row templates, and the live
  * rename's title, go through escapeHtml (ui/dom.js, passed into the legacy closure).
+ * 08 P2-3c (B-L16): the live rename and the 4K patch of the card title use setTitleWithWarning (ui/dom.js, passed in too).
  */
 /** The legacy template's swatch line for colour `c` (index.html@cd3fd3f 3970-3975). */
 const swatchLine = (c) => `<div class="color-swatch-small \${section.color === '${c}' ? 'active' : ''}" data-color="${c}" style="background: ${c};"></div>`;
@@ -730,6 +733,13 @@ const TEMPLATE_EDITS = Object.freeze([
     "<div class=\"curve-hint\">${escapeHtml(`${curveType}${section.curveIntensity !== 0 ? ` (${section.curveIntensity > 0 ? '+' : ''}${section.curveIntensity}°)` : ''}`)}</div>", 1],
   ['Canvas ${canvasWidth}×${canvasHeight} exceeds 4K</span>', 'Canvas ${escapeHtml(canvasWidth)}×${escapeHtml(canvasHeight)} exceeds 4K</span>', 2],
   ["sectionEl.querySelector('.section-title').innerHTML = section.name + ", "sectionEl.querySelector('.section-title').innerHTML = escapeHtml(section.name) + ", 1],
+  // 08 P2-3c (B-L16): the live rename and the 4K patch write the title through setTitleWithWarning (ui/dom.js).
+  ["sectionEl.querySelector('.section-title').innerHTML = escapeHtml(section.name) + \n                        (sectionEl.querySelector('.warning-indicator') ? ' <span class=\"warning-indicator\">⚠</span>' : '');",
+    "setTitleWithWarning(sectionEl.querySelector('.section-title'), section.name, !!sectionEl.querySelector('.warning-indicator'));", 1],
+  ["if (!titleEl.innerHTML.includes('warning-indicator')) {\n                                titleEl.innerHTML = titleEl.innerHTML.replace(/Wall \\d+/, `$& <span class=\"warning-indicator\">⚠</span>`);\n                            }",
+    "setTitleWithWarning(titleEl, section.name, true);", 1],
+  ["titleEl.innerHTML = titleEl.innerHTML.replace(/ <span class=\"warning-indicator\">⚠<\\/span>/, '');",
+    "setTitleWithWarning(titleEl, section.name, false);", 1],
 ]);
 
 /** `src` with every TEMPLATE_EDITS row applied; throws when a row does not occur exactly its declared number of times. */
@@ -783,7 +793,7 @@ ${lines(4975, 5003)}
         sectionLabelFontSize, sectionLabelColor, sectionLogos }),
     };`;
   // eslint-disable-next-line no-new-func
-  return new Function('document', 'initialSections', 'escapeHtml', src)(doc, initialSections, escapeHtml);
+  return new Function('document', 'initialSections', 'escapeHtml', 'setTitleWithWarning', src)(doc, initialSections, escapeHtml, setTitleWithWarning);
 }
 
 /** The markup that holds every element the wall panels own (header stats .. logo container). */
@@ -939,7 +949,7 @@ describe('legacy parity: panels + WallController vs index.html@cd3fd3f', { skip:
       setNumber(doc, 1, 'panelRows', '99');
     });
     step('rename card 0 "Foo"', (doc) => setName(doc, 0, 'Foo'));
-    step('renamed card exceeds 4K: no title ⚠ (B-L16)', (doc) => { setNumber(doc, 0, 'panelCols', '50'); setNumber(doc, 0, 'ledX', '100'); });
+    step('renamed card exceeds 4K: the title ⚠ too (B-L16 fixed in 08 P2-3c)', (doc) => { setNumber(doc, 0, 'panelCols', '50'); setNumber(doc, 0, 'ledX', '100'); });
     step('rename card 0 "" -> "Wall 1"', (doc) => setName(doc, 0, ''));
     step('fits again', (doc) => setNumber(doc, 0, 'ledX', '32'));
     step('exceeds again with a default name: title ⚠', (doc) => setNumber(doc, 0, 'ledX', '100'));

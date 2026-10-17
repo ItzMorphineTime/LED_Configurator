@@ -1,0 +1,19 @@
+{
+  "commit": "P2-3c",
+  "bugs": ["B-L16"],
+  "expect": [
+    { "output": "ui_sections/{ui_09_card1_4k_warning,ui_10_card0_4k_warning}.json", "change": "modified", "each": true,
+      "reason": "card 1 was renamed before it crosses 4K: its title now shows the ⚠ (setTitleWithWarning from the model; legacy inserted it only after a \"Wall <digits>\" match, so a renamed card got none), in ui_09 and still in ui_10 (08 criterion 17)" }
+  ],
+  "mayChange": [
+    { "output": "p2_curved_safe_distance/box_corner.screenshot.png", "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas on the preview footer label row (1 level, 1 px at (920, 912), seen in the 06 T6a-08 P2-3b runs); this commit changes no rendered pixel of it" },
+    { "output": "p2_shortcut_filters/pilot_view_front.screenshot.png", "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas (1 level, 2 px, seen in the 06 T6b-08 P2-3b runs); this commit changes no rendered pixel of it" },
+    { "output": "toggles/15_car_moved.screenshot.png", "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-08 P2-3b runs)" },
+    { "output": "large_wall/final__export-zip__morph-led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b); this commit changes no export" }
+  ],
+  "notes": "08 P2-3c (B-L16): ui/dom.js setTitleWithWarning; SectionListPanel's live rename and #patchCard write the card title from the model. Unchanged by construction: every title that already had the right ⚠ (default names), the reverted card (ui_11 on: no ⚠ either way) and every rename without a 4K crossing (the same markup as the escaped innerHTML of 08 P2-3a)."
+}

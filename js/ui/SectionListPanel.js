@@ -18,10 +18,11 @@
  * legacy markup byte for byte. 08 P2-8a (B-L15, 08 4.4): the four integer inputs (columns, rows, Pixels X/Y) gain
  * step="1", panel height max="100000", Pixels X/Y max="65536" and the panel angle min="-180" max="180"
  * (WallSection.LIMITS). 08 P2-3a (B-M4, 08 6.5): every interpolation of a section value goes through escapeHtml
- * (legacy interpolated them raw), so imported or typed markup renders as text.
+ * (legacy interpolated them raw), so imported or typed markup renders as text. 08 P2-3c (B-L16): the live rename and
+ * the 4K patch rebuild the title from the model with setTitleWithWarning (ui/dom.js).
  */
 import { Events } from '../core/EventBus.js';
-import { byId, escapeHtml } from './dom.js';
+import { byId, escapeHtml, setTitleWithWarning } from './dom.js';
 
 /**
  * The 4K warning block of a freshly rendered card (multi-line markup, render only; the in-place patch inserts
@@ -276,8 +277,7 @@ export class SectionListPanel {
     sectionEl.querySelector('.section-name-input').addEventListener('input', (e) => {
       e.stopPropagation();
       const name = wallController.renameSection(section, e.target.value, index);
-      sectionEl.querySelector('.section-title').innerHTML = escapeHtml(name) +
-          (sectionEl.querySelector('.warning-indicator') ? ' <span class="warning-indicator">⚠</span>' : '');
+      setTitleWithWarning(sectionEl.querySelector('.section-title'), name, !!sectionEl.querySelector('.warning-indicator'));
       wallController.commitRename();
     });
     sectionEl.querySelector('.section-name-input').addEventListener('click', (e) => e.stopPropagation());
@@ -326,14 +326,12 @@ export class SectionListPanel {
       warningEl.className = 'section-warning';
       warningEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>Canvas ${escapeHtml(canvasWidth)}×${escapeHtml(canvasHeight)} exceeds 4K</span>`;
       sectionEl.querySelector('.section-content').insertBefore(warningEl, sectionEl.querySelector('.section-content').firstChild);
-      if (!titleEl.innerHTML.includes('warning-indicator')) {
-        // LEGACY(B-L16): the ⚠ is inserted after the first "Wall <digits>" match, so a renamed section gets none
-        // and a name like "Wall 2B" gets it in the middle.
-        titleEl.innerHTML = titleEl.innerHTML.replace(/Wall \d+/, `$& <span class="warning-indicator">⚠</span>`);
-      }
+      // The title is rebuilt from the model (B-L16 fixed in 08 P2-3c: legacy inserted the ⚠ after the first
+      // "Wall <digits>" match of the title's markup, so a renamed section got none and "Wall 2B" got it in the middle).
+      setTitleWithWarning(titleEl, section.name, true);
     } else if (!exceeds4K && existingWarning) {
       existingWarning.remove();
-      titleEl.innerHTML = titleEl.innerHTML.replace(/ <span class="warning-indicator">⚠<\/span>/, '');
+      setTitleWithWarning(titleEl, section.name, false);
     } else if (exceeds4K && existingWarning) {
       existingWarning.querySelector('span').textContent = `Canvas ${canvasWidth}×${canvasHeight} exceeds 4K`;
     }

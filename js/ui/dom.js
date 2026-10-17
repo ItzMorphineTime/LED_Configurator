@@ -2,7 +2,7 @@
  * @module ui/dom
  * Small DOM helpers shared by the ui panels: id lookup on an injected document, the legacy `.toggle` idiom,
  * block/none display switching, the dialogs facade over an injected window and the HTML escaper of every template
- * interpolation (escapeHtml, 08 P2-3a, B-M4).
+ * interpolation (escapeHtml, 08 P2-3a, B-M4) and the card-title writer (setTitleWithWarning, 08 P2-3c, B-L16).
  * Legacy source: index.html@cd3fd3f 4165-4169 (toggle idiom), 4170 / 4190 / 4233 / 4325 / 4335 / 4366
  * (display switching), 2788 / 3479 / 5005 (alert).
  * Layer: ui (may import core, legacy, domain static rule tables and ui/dom.js).
@@ -26,6 +26,28 @@ const HTML_ESC = Object.freeze({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&
  * @returns {string} String(s) with & < > " ' replaced by &amp; &lt; &gt; &quot; &#39;
  */
 export const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => HTML_ESC[c]);
+
+/**
+ * Writes a card title from the model (08 6.5, B-L16 fixed in 08 P2-3c): `titleEl.textContent = name`, then, when `warn`,
+ * the text node ' ' and a `<span class="warning-indicator">⚠</span>`, both created through `titleEl.ownerDocument` (no
+ * global document). The resulting textContent ("Stage Left ⚠") and markup equal what the card template renders, for any
+ * name, so the ⚠ no longer depends on the name (legacy inserted it after a "Wall <digits>" match).
+ * Side effects: replaces titleEl's children.
+ * @param {Element} titleEl  the card's .section-title
+ * @param {string} name
+ * @param {boolean} warn     whether the title shows the 4K ⚠
+ */
+export function setTitleWithWarning(titleEl, name, warn) {
+  titleEl.textContent = name;
+  if (warn) {
+    const doc = titleEl.ownerDocument;
+    titleEl.appendChild(doc.createTextNode(' '));
+    const span = doc.createElement('span');
+    span.className = 'warning-indicator';
+    span.textContent = '⚠';
+    titleEl.appendChild(span);
+  }
+}
 
 /**
  * Looks up an element by id on the injected document.

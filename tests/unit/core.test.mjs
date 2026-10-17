@@ -15,7 +15,7 @@ import {
 } from '../../js/legacy/LegacyCompat.js';
 import * as LegacyCompat from '../../js/legacy/LegacyCompat.js';
 import { SceneTheme, CanvasTheme, UiColors, Palette, Brand, Theme } from '../../js/theme/Theme.js';
-import { byId, flipToggle, setDisplay, createDialogs, escapeHtml } from '../../js/ui/dom.js';
+import { byId, flipToggle, setDisplay, createDialogs, escapeHtml, setTitleWithWarning } from '../../js/ui/dom.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ARCHITECTURE = readFileSync(join(ROOT, 'docs', 'ARCHITECTURE.md'), 'utf8');
@@ -349,7 +349,7 @@ describe('LEGACY_SITES', () => {
   // The Phase 2 fixes landed so far (docs/improvements/08-bugfix-roadmap.md section 10, merge order), each with the
   // 08 commit its 8.2 fix cell names. Every landing commit adds its id here.
   const PHASE2_LANDED = { 'B-M1': 'P2-5a', 'B-H3': 'P2-1a', 'B-L5': 'P2-1b', 'B-L4': 'P2-1c', 'B-H1': 'P2-2a', 'B-L3': 'P2-2b', 'B-H2': 'P2-2c',
-    'B-L11': 'P2-9b', 'B-L15': 'P2-8a', 'B-M4': 'P2-3a', 'B-L8': 'P2-3b' };
+    'B-L11': 'P2-9b', 'B-L15': 'P2-8a', 'B-M4': 'P2-3a', 'B-L8': 'P2-3b', 'B-L16': 'P2-3c' };
   // The quirks a Phase 3 feature step fixed (its spec and step, as its 8.2 fix cell names them): B-L24's badge overlap in
   // 06 T4a (its .view-btn.active half had landed in 01 F1-2; its two CSS documentation entries are gone).
   const PHASE3_LANDED = { 'B-L24': '06 T4a' };
@@ -510,6 +510,26 @@ describe('ui/dom', () => {
     for (const v of [0, -0, 5, 2.5, NaN, Infinity, null, undefined, true, { toString: () => 'x<' }, 'plain']) {
       assert.equal(escapeHtml(v), `${v}`.replace(/</g, '&lt;'), `escapeHtml(${String(v)})`);
     }
+  });
+
+  test('setTitleWithWarning writes the title from the model: text, then " " and the warning span when warn (08 6.5, B-L16)', () => {
+    const made = [];
+    const doc = {
+      createTextNode: (t) => ({ kind: 'text', text: t }),
+      createElement: (tag) => { const el = { kind: 'element', tag, className: '', textContent: '' }; made.push(el); return el; },
+    };
+    const title = {
+      ownerDocument: doc, children: [], text: null,
+      set textContent(v) { this.text = v; this.children = []; },
+      appendChild(c) { this.children.push(c); return c; },
+    };
+    setTitleWithWarning(title, 'Stage <Left> "1"', true);
+    assert.equal(title.text, 'Stage <Left> "1"', 'set as text, never parsed');
+    assert.deepEqual(title.children, [{ kind: 'text', text: ' ' }, { kind: 'element', tag: 'span', className: 'warning-indicator', textContent: '⚠' }]);
+    setTitleWithWarning(title, 'Foo', false);
+    assert.equal(title.text, 'Foo');
+    assert.deepEqual(title.children, [], 'no warning: the text only (the old children are replaced)');
+    assert.equal(made.length, 1);
   });
 
   test('flipToggle toggles `active` and reads the new state back', () => {

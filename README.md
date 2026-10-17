@@ -148,7 +148,7 @@ The hosted version on [GitHub Pages](https://itzmorphinetime.github.io/LED_Confi
 | Curve Intensity | Curvature angle per panel (positive = concave, negative = convex) | -180° to +180° |
 | Section Offset | Rotation before section | -180° to +180° |
 
-A value outside its range is clamped to it when the field is changed, and a fractional column, row or LED count is rounded to the nearest whole number. An empty field, or 0 in a field whose default is not 0, falls back to the default (columns and rows 1, width and height 500mm, LED resolution 32).
+A value outside its range is clamped to it when the field is changed, and a fractional column, row or LED count is rounded to the nearest whole number. A section whose canvas is larger than 4K shows a warning on its card and a ⚠ next to its name (since this update also for a renamed section). An empty field, or 0 in a field whose default is not 0, falls back to the default (columns and rows 1, width and height 500mm, LED resolution 32).
 
 Release note: columns, rows and LED counts used to accept fractions such as 2.5, which built broken geometry; they are now rounded. Panel height, LED counts and the panel angle gained upper limits (100,000mm, 65,536 and ±180°) far above any real wall, so that every value the app can produce is also accepted when a project file is imported.
 
