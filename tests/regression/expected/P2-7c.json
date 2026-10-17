@@ -1,0 +1,38 @@
+{
+  "commit": "P2-7c",
+  "bugs": [
+    "B-M7"
+  ],
+  "expect": [
+    {
+      "output": "**/*__export-gltf__*.gltf",
+      "change": "modified",
+      "each": true,
+      "reason": "B-M7: every glTF primitive gains TEXCOORD_0 (VEC2 5126, own buffer view, written (u, 1 - v)): combined the pixel-accurate atlas UVs of the new leaf mesh.gltf.combinedUV, section 0..1 per section, panel PANEL_UVS; POSITION, NORMAL, indices and materials keep their values (the buffer grows by 8 bytes per vertex and later views shift)"
+    },
+    {
+      "output": "**/*__export-zip__*.zip",
+      "change": "modified",
+      "each": true,
+      "reason": "the same TEXCOORD_0 in the glTF entry of every ZIP"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-08 P2-7b runs); this commit changes no pixel of it"
+    },
+    {
+      "output": "p2_curved_safe_distance/box_corner.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas on the preview footer label row (1 level, 1 px, seen in the 06 T6a-08 P2-7b runs); this commit changes no pixel of it"
+    },
+    {
+      "output": "p2_shortcut_filters/pilot_view_front.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas (1 level, 2 px, seen in the 06 T6b-08 P2-7b runs); this commit changes no pixel of it"
+    }
+  ],
+  "notes": "08 P2-7c (B-M7): mesh.gltf.attributes = [POSITION, NORMAL, TEXCOORD_0] and the new leaf mesh.gltf.combinedUV = atlas-pixel-accurate (04 2.3 row 08-3, read only when TEXCOORD_0 is written). No OBJ, MTL, JSON, PNG or screenshot changes."
+}

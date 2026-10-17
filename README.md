@@ -233,6 +233,11 @@ Modern 3D format with embedded materials for:
 - AR/VR applications
 - Real-time engines
 
+Release note: the glTF now carries texture coordinates (UV channel 0) on every mesh, so the panel-ID textures, LED
+content or a baked projection can be applied in Blender, Unreal or any engine: in Combined mode each section maps its own
+part of the Panel IDs PNG (as the OBJ does), in Section mode each section spans its own texture, and in Panel mode each
+panel spans 0..1. Positions, normals and materials are unchanged.
+
 ### ZIP Package
 Complete export bundle containing:
 - JSON configuration

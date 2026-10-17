@@ -9,7 +9,8 @@
  */
 
 import { exportSectionName, exportPanelName } from '../geometry/PanelNaming.js';
-import { maxIndexOf, indexWidth } from '../geometry/WallMeshBuilder.js';
+import { maxIndexOf, indexWidth, atlasUvRect, WallMeshBuilder } from '../geometry/WallMeshBuilder.js';
+import { computeAtlas } from '../geometry/TextureAtlas.js';
 import { Strategies, unsupportedStrategy } from '../legacy/LegacyCompat.js';
 
 /**
@@ -60,7 +61,8 @@ export class GltfExporter {
 
   /**
    * profile = builder.profile (the injected Strategies.mesh.gltf); #addMesh reads profile.attributes /
-   * indexType / doubleSided (#writePanels also asks #attributeList whether NORMAL is written); the builder reads
+   * indexType / doubleSided (the three writers also ask #attributeList whether NORMAL and TEXCOORD_0 are written); the
+   * combined writer reads profile.combinedUV, only when TEXCOORD_0 is written (08 P2-7c); the builder reads
    * profile.winding / normals / panelNormal.
    * Side effects: none.
    * @param {{brand: {gltfGenerator: string}, colorToRgb: ColorToRgb,
@@ -83,8 +85,10 @@ export class GltfExporter {
    *   section: one mesh per section (indices from 0), coloured by that section after its indices;
    *   panel: one mesh per panel (the 4 builder corners, indices panelQuadIndices(0), the facing normal x4), colour per
    *     section first.
-   * The attributes follow profile.attributes: POSITION, and NORMAL since 08 P2-2d (the builder's 08 6.4 normals);
-   * the 'ccw' indices of 08 P2-2d face the stage, consistent with NORMAL.
+   * The attributes follow profile.attributes: POSITION, NORMAL since 08 P2-2d (the builder's 08 6.4 normals) and
+   * TEXCOORD_0 since 08 P2-7c (B-M7 fixed; 08 6.7: written as (u, 1 - v), glTF's top-left UV origin): combined the
+   * pixel-accurate atlas UVs (profile.combinedUV), section (col / cols, row / rows), panel PANEL_UVS; the 'ccw' indices
+   * of 08 P2-2d face the stage, consistent with NORMAL.
    * The buffer is encoded with the injected encoder (default chunkedBase64, any size).
    * Ports: index.html@cd3fd3f lines 4719-4909.
    * Side effects: none.
@@ -143,21 +147,25 @@ export class GltfExporter {
 
   /**
    * Combined mode, verbatim 4830-4851: every section grid appended with loops (indices offset by the running
-   * declared vertex count, from 0), then the colour, then one mesh.
+   * declared vertex count, from 0), then the colour, then one mesh. With TEXCOORD_0 (08 P2-7c) each grid carries the
+   * uv option of #combinedUvOption (the pixel-accurate atlas rect, 08 6.7).
    * @param {BufferState} state
    * @param {import('../domain/WallSection.js').WallSection[]} sections
    * @param {import('../geometry/WallLayout.js').WallLayout} layout
    */
   #writeCombined(state, sections, layout) {
+    const uvFor = this.#combinedUvOption(sections);
     const allVertices = [];
     const allNormals = [];
+    const allUvs = [];
     const allIndices = [];
     let indexOffset = 0;
 
-    layout.sections.forEach((sl) => {
-      const grid = this.#builder.sectionGrid(sl, { indexBase: indexOffset, uv: null });
+    layout.sections.forEach((sl, sectionIndex) => {
+      const grid = this.#builder.sectionGrid(sl, { indexBase: indexOffset, uv: uvFor(sectionIndex) });
       for (let i = 0; i < grid.positions.length; i++) allVertices.push(grid.positions[i]);
       for (let i = 0; i < grid.normals.length; i++) allNormals.push(grid.normals[i]);
+      for (let i = 0; i < grid.uvs.length; i++) allUvs.push(grid.uvs[i]);
       for (let i = 0; i < grid.indices.length; i++) allIndices.push(grid.indices[i]);
       indexOffset += grid.vertexAdvance;
     });
@@ -172,19 +180,46 @@ export class GltfExporter {
       default:
         throw unsupportedStrategy('exportCombinedColor', Strategies.exportCombinedColor);
     }
-    this.#addMesh(state, 'LED_Wall_Combined', { positions: allVertices, normals: allNormals }, [{ indices: allIndices, color }]);
+    this.#addMesh(state, 'LED_Wall_Combined', { positions: allVertices, normals: allNormals, uvs: allUvs },
+      [{ indices: allIndices, color }]);
   }
 
   /**
-   * Section mode, verbatim 4853-4868: per section its grid (indices from 0), then its colour, then its mesh.
+   * The sectionGrid uv option of each section of the combined mesh. Without TEXCOORD_0 in profile.attributes: null for
+   * every section (the Phase-1 profile has no combinedUV leaf, and it is never read). With TEXCOORD_0 (08 P2-7c; 04 2.3
+   * row 08-3) the new leaf profile.combinedUV: 'atlas-pixel-accurate' -> atlasUvRect(computeAtlas(sections).entries[i]),
+   * the viewport's pixel-accurate atlas UVs (08 6.7), so the combined glTF maps the combined panel-ID image
+   * (Brand.files.panelIdsPng) exactly.
+   * @param {import('../domain/WallSection.js').WallSection[]} sections
+   * @returns {(sectionIndex: number) => ({offsetU: number, widthU: number, heightV: number}|null)}
+   * @throws {Error} unsupportedStrategy('mesh.gltf.combinedUV', ...) for a foreign value when TEXCOORD_0 is written;
+   *   unsupportedStrategy('mesh.gltf.attributes', ...) from #attributeList
+   */
+  #combinedUvOption(sections) {
+    if (!this.#attributeList().includes('TEXCOORD_0')) return () => null;
+    const profile = this.#builder.profile;
+    switch (profile.combinedUV) {
+      case 'atlas-pixel-accurate': {
+        const atlas = computeAtlas(sections);
+        return (sectionIndex) => atlasUvRect(atlas.entries[sectionIndex]);
+      }
+      default:
+        throw unsupportedStrategy('mesh.gltf.combinedUV', profile.combinedUV);
+    }
+  }
+
+  /**
+   * Section mode, verbatim 4853-4868: per section its grid (indices from 0), then its colour, then its mesh. With
+   * TEXCOORD_0 (08 P2-7c) the grid carries the section's own 0..1 UVs (uv 'unit', the UVs of the section texture).
    * @param {BufferState} state
    * @param {import('../geometry/WallLayout.js').WallLayout} layout
    */
   #writeSections(state, layout) {
+    const uv = this.#attributeList().includes('TEXCOORD_0') ? 'unit' : null;
     layout.sections.forEach((sl, sectionIndex) => {
-      const grid = this.#builder.sectionGrid(sl, { indexBase: 0, uv: null });
+      const grid = this.#builder.sectionGrid(sl, { indexBase: 0, uv });
       const color = this.#colorToRgb(sl.section.color);
-      this.#addMesh(state, exportSectionName(sectionIndex), { positions: grid.positions, normals: grid.normals },
+      this.#addMesh(state, exportSectionName(sectionIndex), { positions: grid.positions, normals: grid.normals, uvs: grid.uvs },
         [{ indices: grid.indices, color }]);
     });
   }
@@ -193,14 +228,17 @@ export class GltfExporter {
    * Panel mode (and any unknown mode), verbatim 4870-4891: per section its colour first, then one mesh per panel
    * (row-major) from the 4 builder corners (BL, BR, TR, TL) flattened x, y, z and panelQuadIndices(0). When the
    * profile's attributes list NORMAL (08 P2-2d), the normals are builder.panelNormals(panel): 4 copies of the facing
-   * normal; otherwise the builder is not asked for them (the Phase-1 glTF profile has no panelNormal). The attribute
-   * list is checked first (#attributeList), so a foreign list throws its own error before any builder call.
+   * normal; otherwise the builder is not asked for them (the Phase-1 glTF profile has no panelNormal). With TEXCOORD_0
+   * (08 P2-7c) the UVs are WallMeshBuilder.PANEL_UVS (per-panel 0..1, as the OBJ panel `vt`; 04 UV-9 later offers
+   * section-space UVs). The attribute list is checked first (#attributeList), so a foreign list throws its own error
+   * before any builder call.
    * @param {BufferState} state
    * @param {import('../geometry/WallLayout.js').WallLayout} layout
    */
   #writePanels(state, layout) {
     const builder = this.#builder;
     const withNormals = this.#attributeList().includes('NORMAL');
+    const withUvs = this.#attributeList().includes('TEXCOORD_0');
     layout.sections.forEach(({ section, panels, panelW, panelH }, sectionIndex) => {
       const color = this.#colorToRgb(section.color);
 
@@ -208,10 +246,11 @@ export class GltfExporter {
         const vertices = [];
         for (const c of builder.panelCorners(panel, panelW, panelH)) vertices.push(c.x, c.y, c.z);
         const normals = withNormals ? builder.panelNormals(panel) : [];
+        const uvs = withUvs ? WallMeshBuilder.PANEL_UVS.slice() : [];
 
         const indices = builder.panelQuadIndices(0);
         const name = exportPanelName(sectionIndex, panel.row, panel.col);
-        this.#addMesh(state, name, { positions: vertices, normals }, [{ indices, color }]);
+        this.#addMesh(state, name, { positions: vertices, normals, uvs }, [{ indices, color }]);
       });
     });
   }
@@ -222,13 +261,14 @@ export class GltfExporter {
    * every profile read comes first (#attributeList, #indexFormat per primitive, #doubleSided), before any output.
    *   attributes follow profile.attributes, in its order (04 5.5): POSITION (Float32Array, target 34962, min/max from
    *     the float64 values), NORMAL (08 P2-2d: Float32Array, its own view with target 34962, no min/max; it needs one
-   *     normal per position in attrs.normals);
+   *     normal per position in attrs.normals), TEXCOORD_0 (08 P2-7c: VEC2 5126, its own view with target 34962, no
+   *     min/max, written (u, 1 - v); it needs one uv per position in attrs.uvs);
    *   primitives: each with its own index view and accessor (the index width of its own indices) and its own material
    *     (materialName, default name + "_Material"); every caller passes one primitive so far (08 P2-7d adds more).
    * @param {BufferState} state
    * @param {string} name
-   * @param {{positions: number[], normals?: number[]}} attrs  flat float64 arrays (min/max are computed from the
-   *   positions, not from the Float32Array)
+   * @param {{positions: number[], normals?: number[], uvs?: number[]}} attrs  flat float64 arrays (min/max are computed
+   *   from the positions, not from the Float32Array); uvs in the OBJ / three convention (v up)
    * @param {{indices: number[], color: {r: number, g: number, b: number}, materialName?: string}[]} primitives
    * @throws {Error} unsupportedStrategy('mesh.gltf.attributes' | 'mesh.gltf.indexType' | 'mesh.gltf.doubleSided' |
    *   'mesh.gltf.normals', ...) for a foreign or inconsistent profile value
@@ -240,6 +280,9 @@ export class GltfExporter {
     const doubleSided = this.#doubleSided();
     if (attributes.includes('NORMAL') && !(attrs.normals && attrs.normals.length === attrs.positions.length)) {
       throw unsupportedStrategy('mesh.gltf.normals', this.#builder.profile.normals);
+    }
+    if (attributes.includes('TEXCOORD_0') && !(attrs.uvs && attrs.uvs.length / 2 === attrs.positions.length / 3)) {
+      throw unsupportedStrategy('mesh.gltf.attributes', attributes);
     }
 
     const materialIndices = primitives.map(({ color, materialName }) => {
@@ -265,6 +308,9 @@ export class GltfExporter {
           break;
         case 'NORMAL':
           accessors.NORMAL = this.#addVec3(state, attrs.normals, false);
+          break;
+        case 'TEXCOORD_0':
+          accessors.TEXCOORD_0 = this.#addTexCoords(state, attrs.uvs);
           break;
         default:
           throw unsupportedStrategy('mesh.gltf.attributes', attributes);
@@ -305,8 +351,6 @@ export class GltfExporter {
     const currentMeshIndex = state.meshIndex++;
     gltf.meshes.push({
       name: name,
-      // LEGACY(B-M7): no TEXCOORD_0 (profile.attributes lists POSITION and, since 08 P2-2d, NORMAL; TEXCOORD_0 arrives
-      // with 08 P2-7c), so no texture can be applied downstream.
       primitives: primitives.map((primitive, p) => ({
         attributes: { ...accessors },
         indices: indexAccessors[p],
@@ -376,8 +420,53 @@ export class GltfExporter {
   }
 
   /**
+   * One TEXCOORD_0 attribute (08 P2-7c, 08 6.7; 04 7.3): the uvs written as (u, 1 - v) into a Float32Array (glTF puts
+   * the UV origin at the top-left of the image and three's GLTFLoader sets texture.flipY = false, while the builder
+   * keeps the OBJ / three convention, v up), its own buffer view (target 34962) padded to 4 bytes, then a VEC2 FLOAT
+   * accessor with count = uvs.length / 2 and no min/max.
+   * @param {BufferState} state
+   * @param {number[]} uvs  flat float64 u, v (v up)
+   * @returns {number} the accessor index
+   */
+  #addTexCoords(state, uvs) {
+    const { gltf } = state;
+    const texCoords = new Float32Array(uvs.length);
+    for (let i = 0; i < uvs.length; i += 2) {
+      texCoords[i] = uvs[i];
+      texCoords[i + 1] = 1 - uvs[i + 1];
+    }
+    const bytes = new Uint8Array(texCoords.buffer);
+    state.allBufferData.push(bytes);
+
+    const bufferView = gltf.bufferViews.length;
+    gltf.bufferViews.push({
+      buffer: 0,
+      byteOffset: state.byteOffset,
+      byteLength: bytes.length,
+      target: 34962
+    });
+    state.byteOffset += bytes.length;
+    const padding = (4 - (state.byteOffset % 4)) % 4;
+    if (padding > 0) {
+      state.allBufferData.push(new Uint8Array(padding));
+      state.byteOffset += padding;
+    }
+
+    const accessorIndex = state.accessorIndex++;
+    gltf.accessors.push({
+      bufferView,
+      byteOffset: 0,
+      componentType: 5126,
+      count: uvs.length / 2,
+      type: "VEC2"
+    });
+    return accessorIndex;
+  }
+
+  /**
    * The attribute list of the profile, checked before any output (04 5.5 read rule): every element is switched over
-   * the supported attributes, 'POSITION' must come first and none may repeat. 'TEXCOORD_0' is added by 08 P2-7c.
+   * the supported attributes ('POSITION', 'NORMAL', and 'TEXCOORD_0' since 08 P2-7c), 'POSITION' must come first and
+   * none may repeat.
    * @returns {readonly string[]} profile.attributes
    * @throws {Error} unsupportedStrategy('mesh.gltf.attributes', attributes) otherwise
    */
@@ -388,6 +477,7 @@ export class GltfExporter {
       switch (attribute) {
         case 'POSITION':
         case 'NORMAL':
+        case 'TEXCOORD_0':
           break;
         default:
           throw unsupportedStrategy('mesh.gltf.attributes', attributes);

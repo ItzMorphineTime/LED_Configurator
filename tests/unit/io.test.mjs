@@ -908,11 +908,25 @@ describe('strategy reads (foreign profile values throw unsupportedStrategy)', ()
   });
 
   test('GltfExporter: attributes, indexType and doubleSided in every mode', () => {
-    for (const [key, value] of [['attributes', ['POSITION', 'TEXCOORD_0']], ['attributes', ['NORMAL']], ['attributes', ['NORMAL', 'POSITION']],
+    for (const [key, value] of [['attributes', ['POSITION', 'COLOR_0']], ['attributes', ['TEXCOORD_0', 'POSITION']], ['attributes', ['NORMAL']], ['attributes', ['NORMAL', 'POSITION']],
       ['attributes', ['POSITION', 'POSITION']], ['attributes', []], ['indexType', 'uint32'], ['doubleSided', 'yes']]) {
       const exporter = makeGltf({ ...LegacyProfiles.mesh.gltf, [key]: value });
       for (const mode of MODES) assert.throws(() => exporter.write(args(mode)), expectError(`mesh.gltf.${key}`, value), `${key} ${mode}`);
     }
+  });
+
+  test('GltfExporter: combinedUV (08 P2-7c) is read in combined mode only, and only when the attributes list TEXCOORD_0', () => {
+    const foreign = makeGltf({ ...Strategies.mesh.gltf, combinedUV: 'plan' });
+    assert.throws(() => foreign.write(args('combined')), expectError('mesh.gltf.combinedUV', 'plan'));
+    assert.doesNotThrow(() => foreign.write(args('section')));
+    assert.doesNotThrow(() => foreign.write(args('panel')));
+    // The Phase-1 profile has no combinedUV leaf: with TEXCOORD_0 added it throws in combined mode only.
+    const noLeaf = makeGltf({ ...LegacyProfiles.mesh.gltf, attributes: ['POSITION', 'TEXCOORD_0'] });
+    assert.throws(() => noLeaf.write(args('combined')), expectError('mesh.gltf.combinedUV', undefined));
+    assert.doesNotThrow(() => noLeaf.write(args('section')));
+    assert.doesNotThrow(() => noLeaf.write(args('panel')));
+    // Without TEXCOORD_0 the leaf is never read.
+    assert.doesNotThrow(() => makeGltf({ ...Strategies.mesh.gltf, attributes: ['POSITION', 'NORMAL'], combinedUV: 'plan' }).write(args('combined')));
   });
 
   test('the Phase-1 profiles do not throw; the default glTF encoder is chunkedBase64 (08 P2-1a) and an injected one is used', () => {
@@ -1804,9 +1818,9 @@ describe('glTF: stage-facing winding and the NORMAL attribute (B-H2, 08 P2-2d)',
     return Array.from(new Ctor(copy));
   };
 
-  test("the production profile winds 'ccw' with 'averaged' normals, panelNormal 'facing' and attributes POSITION, NORMAL", () => {
+  test("the production profile winds 'ccw' with 'averaged' normals, panelNormal 'facing' and attributes POSITION, NORMAL (+ TEXCOORD_0 since 08 P2-7c)", () => {
     assert.deepEqual(JSON.parse(JSON.stringify(Strategies.mesh.gltf)), { winding: 'ccw', normals: 'averaged', panelNormal: 'facing',
-      attributes: ['POSITION', 'NORMAL'], indexType: 'auto', doubleSided: 'omit' });
+      attributes: ['POSITION', 'NORMAL', 'TEXCOORD_0'], combinedUV: 'atlas-pixel-accurate', indexType: 'auto', doubleSided: 'omit' });
     assert.deepEqual(JSON.parse(JSON.stringify(LegacyProfiles.mesh.gltf)), { winding: 'legacy-cw', normals: 'none',
       attributes: ['POSITION'], indexType: 'uint16', doubleSided: 'omit' });
   });
@@ -1820,7 +1834,7 @@ describe('glTF: stage-facing winding and the NORMAL attribute (B-H2, 08 P2-2d)',
         for (const r of checkGltfOrientation(doc)) assert.equal(r.failures, 0, `${label} [${mode}] ${r.name}: ${r.first}`);
         for (const mesh of doc.meshes) {
           for (const prim of mesh.primitives) {
-            assert.deepEqual(Object.keys(prim.attributes), ['POSITION', 'NORMAL'], `${label} [${mode}]`);
+            assert.deepEqual(Object.keys(prim.attributes), Strategies.mesh.gltf.attributes, `${label} [${mode}]`);
             const normal = doc.accessors[prim.attributes.NORMAL];
             assert.equal(normal.componentType, 5126);
             assert.equal(normal.type, 'VEC3');
@@ -1896,12 +1910,14 @@ describe('glTF: stage-facing winding and the NORMAL attribute (B-H2, 08 P2-2d)',
     }
   });
 
-  test('large_wall combined: the NORMAL view grows the buffer from 79,728 to 121,056 bytes (01 2.4; chunked base64 since P2-1a)', () => {
+  test('large_wall combined: the NORMAL view grows the buffer from 79,728 to 121,056 bytes (01 2.4; chunked base64 since P2-1a); TEXCOORD_0 (08 P2-7c) adds 8 bytes per vertex', () => {
     const project = projectFromConfig(CONFIGS.large_wall);
-    const now = GLTF.write(writeArgs(project, 'combined'));
+    const normals = makeGltf({ ...Strategies.mesh.gltf, attributes: ['POSITION', 'NORMAL'] }).write(writeArgs(project, 'combined'));
     const old = makeGltf({ ...LegacyProfiles.mesh.gltf, indexType: 'auto' }).write(writeArgs(project, 'combined'));
     assert.equal(old.buffers[0].byteLength, 79728);
-    assert.equal(now.buffers[0].byteLength, 121056);
+    assert.equal(normals.buffers[0].byteLength, 121056);
+    const vertices = 4 * 41 * 21;   // four sections of 40 x 20 panels: 41 x 21 grid vertices each
+    assert.equal(GLTF.write(writeArgs(project, 'combined')).buffers[0].byteLength, 121056 + 8 * vertices);
   });
 
   test('NORMAL without per-vertex normals is refused: strip modes name mesh.gltf.normals, panel mode mesh.panelNormal', () => {
@@ -1956,5 +1972,86 @@ describe('combined OBJ: pixel-accurate atlas vt (B-M6, 08 P2-7b, 08 6.7)', () =>
       assert.equal(Math.min(...mine.map((v) => v[1])), 0);
       assert.equal(Math.max(...mine.map((v) => v[1])), Number(e.uvHeight.toFixed(6)), `${s.name}: v_max = rows * ledY / totalLedY`);
     });
+  });
+});
+
+describe('glTF TEXCOORD_0 (B-M7, 08 P2-7c, 08 6.7)', () => {
+  const writeArgs = (project, meshMode) => ({ sections: project.wall.sections, meshMode, layout: layoutProject(project) });
+  /** The floats of a VEC2 / VEC3 FLOAT accessor of a written document. */
+  const floats = (doc, a) => {
+    const accessor = doc.accessors[a];
+    const view = doc.bufferViews[accessor.bufferView];
+    const bytes = Buffer.from(doc.buffers[0].uri.split(',')[1], 'base64');
+    const n = accessor.count * { VEC2: 2, VEC3: 3 }[accessor.type];
+    return Array.from(new Float32Array(bytes.buffer.slice(bytes.byteOffset + view.byteOffset, bytes.byteOffset + view.byteOffset + 4 * n)));
+  };
+  /** The expected TEXCOORD_0 floats of builder uvs (v up): (u, 1 - v), as float32. */
+  const flipped = (uvs) => Array.from(new Float32Array(uvs.map((x, i) => (i % 2 ? 1 - x : x))));
+
+  test('every primitive in every mode has TEXCOORD_0: VEC2 5126, its own view 34962, the POSITION count, no min/max; check-gltf passes', (t) => {
+    let primitives = 0;
+    for (const [label, project] of handPicked()) {
+      if (!project.wall.sections.length) continue;
+      for (const mode of MODES) {
+        const doc = GLTF.write(writeArgs(project, mode));
+        assert.deepEqual(checkGltfDocument(doc), [], `${label} [${mode}]`);
+        for (const mesh of doc.meshes) {
+          for (const prim of mesh.primitives) {
+            const tex = doc.accessors[prim.attributes.TEXCOORD_0];
+            assert.ok(tex, `${label} [${mode}] ${mesh.name}`);
+            assert.deepEqual([tex.componentType, tex.type, tex.count], [5126, 'VEC2', doc.accessors[prim.attributes.POSITION].count]);
+            assert.ok(!('min' in tex) && !('max' in tex));
+            assert.equal(doc.bufferViews[tex.bufferView].target, 34962);
+            assert.equal(doc.bufferViews[tex.bufferView].byteOffset % 4, 0);
+            primitives++;
+          }
+        }
+      }
+    }
+    t.diagnostic(`${primitives} primitives`);
+  });
+
+  test("the values are the builder UVs written (u, 1 - v): combined = the viewport's pixel-accurate atlas UVs, section = 0..1, panel = PANEL_UVS", () => {
+    const viewport = new WallMeshBuilder(Strategies.mesh.viewport);
+    const builder = new WallMeshBuilder(Strategies.mesh.gltf);
+    for (const key of ['default', 'flat3', 'mixed', 'box_corner']) {
+      const project = key === 'default' ? Project.createDefault() : projectFromConfig(CONFIGS[key]);
+      const sections = project.wall.sections;
+      const layout = layoutProject(project);
+      const combined = GLTF.write(writeArgs(project, 'combined'));
+      const all = combined.meshes[0].primitives.flatMap((prim) => floats(combined, prim.attributes.TEXCOORD_0));
+      assert.deepEqual(all, flipped(viewport.combinedGrid(layout, computeAtlas(sections)).uvs), `${key} combined`);
+      const section = GLTF.write(writeArgs(project, 'section'));
+      layout.sections.forEach((sl, i) => {
+        assert.deepEqual(floats(section, section.meshes[i].primitives[0].attributes.TEXCOORD_0),
+          flipped(builder.sectionGrid(sl, { uv: 'unit' }).uvs), `${key} section ${i}`);
+      });
+      const panel = GLTF.write(writeArgs(project, 'panel'));
+      for (const mesh of panel.meshes) {
+        assert.deepEqual(floats(panel, mesh.primitives[0].attributes.TEXCOORD_0), [0, 1, 1, 1, 1, 0, 0, 0], `${key} ${mesh.name}`);
+      }
+    }
+    // The V flip itself: v = 0 (the bottom of the image in the OBJ / three convention) is t = 1 (glTF's top-left origin).
+    assert.deepEqual(flipped([0.25, 0, 0.5, 1, 1, 0.75]), [0.25, 1, 0.5, 0, 1, 0.25]);
+  });
+
+  test('POSITION, NORMAL, indices and materials are unchanged by TEXCOORD_0 (the profile without it gives the same data)', () => {
+    const without = makeGltf({ ...Strategies.mesh.gltf, attributes: ['POSITION', 'NORMAL'] });
+    for (const [label, project] of handPicked()) {
+      if (!project.wall.sections.length) continue;
+      for (const mode of MODES) {
+        const a = GLTF.write(writeArgs(project, mode));
+        const b = without.write(writeArgs(project, mode));
+        assert.deepEqual(a.materials, b.materials);
+        assert.deepEqual(a.nodes, b.nodes);
+        a.meshes.forEach((mesh, m) => mesh.primitives.forEach((prim, k) => {
+          const other = b.meshes[m].primitives[k];
+          assert.deepEqual(floats(a, prim.attributes.POSITION), floats(b, other.attributes.POSITION), `${label} [${mode}]`);
+          assert.deepEqual(floats(a, prim.attributes.NORMAL), floats(b, other.attributes.NORMAL));
+          assert.deepEqual(a.accessors[prim.attributes.POSITION].min, b.accessors[other.attributes.POSITION].min);
+          assert.deepEqual(a.accessors[prim.indices].count, b.accessors[other.indices].count);
+        }));
+      }
+    }
   });
 });

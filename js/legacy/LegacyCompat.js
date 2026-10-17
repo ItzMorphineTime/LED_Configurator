@@ -43,8 +43,9 @@ export const Strategies = deepFreeze({
     viewport: { winding: 'ccw', normals: 'averaged', combinedUV: 'atlas-pixel-accurate', side: 'double' },
     obj:      { winding: 'ccw', normals: 'averaged', stripNormals: 'per-vertex',
                 combinedUV: 'atlas-pixel-accurate', panelNormal: 'facing' },
-    gltf:     { winding: 'ccw', normals: 'averaged', panelNormal: 'facing', attributes: ['POSITION', 'NORMAL'],
-                indexType: 'auto', doubleSided: 'omit' },  // 'omit' = the material object has NO doubleSided key
+    gltf:     { winding: 'ccw', normals: 'averaged', panelNormal: 'facing', attributes: ['POSITION', 'NORMAL', 'TEXCOORD_0'],
+                combinedUV: 'atlas-pixel-accurate', indexType: 'auto',
+                doubleSided: 'omit' },                     // 'omit' = the material object has NO doubleSided key
   },                                               // gltf.indexType: 'auto' since 08 P2-1b (B-L5), Phase-1 'uint16';
                                                    // viewport.winding: 'ccw' since 08 P2-2a (B-H1), Phase-1 'legacy-cw';
                                                    // viewport.normals: 'averaged' since 08 P2-2b (B-L3), Phase-1 'right-panel';
@@ -54,7 +55,9 @@ export const Strategies = deepFreeze({
                                                    // and the new leaf gltf.panelNormal (08 P2-2d);
                                                    // viewport.combinedUV: 'atlas-pixel-accurate' since 08 P2-7a (B-M5),
                                                    // Phase-1 'atlas-u-full-v'; obj.combinedUV: 'atlas-pixel-accurate'
-                                                   // since 08 P2-7b (B-M6), Phase-1 'per-section-overlap'
+                                                   // since 08 P2-7b (B-M6), Phase-1 'per-section-overlap';
+                                                   // gltf.attributes + 'TEXCOORD_0' and the new leaf gltf.combinedUV since
+                                                   // 08 P2-7c (B-M7)
   exportCombinedColor: 'first-section',            // B-L6
   framingBounds: 'flat',                           // B-L2, B-M10
   curveBeforeFirstPanel: true,                     // B-L1
@@ -138,7 +141,7 @@ const QUIRKS = deepFreeze({
   'B-M6': ['Overlapping combined OBJ UVs (R-6)',
     'Landed in 08 P2-7b (`mesh.obj.combinedUV = \'atlas-pixel-accurate\'`: the combined OBJ `vt` are the viewport\'s pixel-accurate atlas UVs, `atlasUvRect` of each `computeAtlas` entry, so they match the combined panel-ID image; no tag site)'],
   'B-M7': ['glTF POSITION only (S-2)',
-    '`NORMAL` landed in 08 P2-2d; `TEXCOORD_0` with 08 P2-7c'],
+    'Landed in 08 P2-7c (`TEXCOORD_0` on every primitive, written (u, 1 - v): combined the pixel-accurate atlas UVs of the new leaf `mesh.gltf.combinedUV = \'atlas-pixel-accurate\'`, section 0..1 per section, panel `PANEL_UVS`; `NORMAL` landed in 08 P2-2d; no tag site)'],
   'B-M8': ['Safe-distance group survives preview off (K-2)',
     'Landed in 08 P2-4b (`CameraController.setPreviewEnabled(false)` calls `hub.syncSafeDistance()` after `rig.remove()`, which removes the floor; the next enable rebuilds it; no tag site)'],
   'B-M9': ['Preview 320x180 stretch (L-1)',
@@ -252,7 +255,6 @@ const TAG_SITES = deepFreeze([
   ['js/io/ProjectSerializer.js#write', ['B-L31']],
   ['js/io/ObjExporter.js#write', ['B-L6']],
   ['js/io/GltfExporter.js#write', ['B-L6']],
-  ['js/io/GltfExporter.js#addMesh', ['B-M7']],
   ['js/render/SceneManager.js#addHelper', ['B-M11']],
   ['js/render/LEDMaterialFactory.js#combined', ['B-L18']],
   ['js/render/textures/LEDPixelTextureFactory.js#tile', ['B-L18', 'B-L20']],
