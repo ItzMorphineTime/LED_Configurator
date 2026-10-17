@@ -81,9 +81,9 @@ it; the main viewport still shows them.
 - Renders on top of scene for easy interaction
 
 ### Wall Pivot (export origin)
-- Choose where the exported wall's origin (its pivot) sits: **Bottom-left corner** (as before), **Wall mesh centre**
-  (the centre of the wall's bounding box) or **Wall centre on floor** (halfway between the first section's first edge
-  and the last section's last edge, at floor level)
+- Choose where the exported wall's origin (its pivot) sits: **Bottom-left corner** (as before), **Wall mesh centre on
+  floor** (the centre of the wall's bounding box, at floor level) or **Wall centre on floor** (halfway between the first
+  section's first edge and the last section's last edge, at floor level)
 - Move the pivot further with a metre offset on X, Y and Z (1 mm steps, up to ±1000 m), by typing it or by dragging the
   pivot marker in the viewport (press **O** or "Select pivot (O)"; hold Ctrl or ⌘ to drag in steps of the "Ctrl-drag
   snap" size; Escape cancels a drag)
@@ -324,7 +324,7 @@ re-centre by hand after each change.
 | Mode | Where the pivot sits |
 |------|----------------------|
 | Bottom-left corner | The first section's first bottom corner (how every earlier version exported) |
-| Wall mesh centre (bounding box) | The centre of the wall's bounding box, half the tallest section up |
+| Wall mesh centre on floor (bounding box) | The centre of the wall's bounding box seen from above, on the floor (use Offset Y to raise it, for example to half the wall height) |
 | Wall centre on floor (first ↔ last edge) | Halfway between the first section's first edge and the last section's last edge, on the floor |
 
 - **Offset X / Y / Z** (metres, 1 mm steps, up to ±1000 m) moves the pivot from that anchor in the wall's axes: X along
@@ -361,10 +361,9 @@ camera's distance to the wall's start plane.
   (up) axis becomes Unreal's Z. The glTF importer applies both conversions; for the OBJ, check the import's axis
   conversion and uniform scale (100 turns metres into centimetres). Place the imported mesh at your stage origin with no
   rotation, for example at the root of the nDisplay configuration when the pivot is the tracking origin.
-- **A raised pivot** (Wall mesh centre, or an Offset Y): the exported wall's floor is below the file origin by the pivot
-  height, which the OBJ header's `Stage placement` line states. Place the asset that much above your stage floor to
-  stand the wall on the floor; a floor-level pivot (Bottom-left corner, Wall centre on floor, Offset Y = 0) needs no
-  height.
+- **A raised pivot** (an Offset Y): the exported wall's floor is below the file origin by the pivot height, which the
+  OBJ header's `Stage placement` line states. Place the asset that much above your stage floor to stand the wall on the
+  floor; a floor-level pivot (every mode with Offset Y = 0) needs no height.
 
 ### Session only (for now)
 The pivot, its offset and the "Keep stage layout" and marker switches last for the session: Export JSON and Export All
@@ -485,7 +484,7 @@ Contributions are welcome! Feel free to:
 ## 📋 Changelog
 
 ### Latest Updates
-- ✅ Wall pivot: export origin at the bottom-left corner, the wall mesh centre or the wall centre on the floor, plus an offset; draggable pivot marker (O); camera and props kept in place; floor grid centred on the pivot (session only for now)
+- ✅ Wall pivot: export origin at the bottom-left corner, the wall mesh centre on the floor or the wall centre on the floor, plus an offset; draggable pivot marker (O); camera and props kept in place; floor grid centred on the pivot (session only for now)
 - ✅ Morph branding: dark interface, Morph colours on the 3D scene and the panel-ID textures, the Morph section palette, exports named `morph-led-wall-*`
 - ✅ 3D Gizmo system for camera and prop manipulation
 - ✅ World/Local space toggle for gizmos

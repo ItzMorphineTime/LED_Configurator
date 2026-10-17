@@ -2313,11 +2313,12 @@ describe('Feature 3 exports (03 7, T3)', () => {
     }
   });
 
-  test('the 6.8 table: the first combined v line per pivot, and the OBJ y range of mesh-center', () => {
+  test('the 6.8 table: the first combined v line per pivot, and the OBJ y range of a raised pivot', () => {
     const cases = [
       ['bottom-left', { x: 0, y: 0, z: 0 }, 'v 0.000000 0.000000 0.000000', [0, 1.5]],
       ['wall-center', { x: 0, y: 0, z: 0 }, 'v -1.250000 0.000000 0.000000', [0, 1.5]],
-      ['mesh-center', { x: 0, y: 0, z: 0 }, 'v -1.250000 -0.750000 0.000000', [-0.75, 0.75]],
+      ['mesh-center', { x: 0, y: 0, z: 0 }, 'v -1.250000 0.000000 0.000000', [0, 1.5]],
+      ['mesh-center', { x: 0, y: 0.75, z: 0 }, 'v -1.250000 -0.750000 0.000000', [-0.75, 0.75]],
       ['wall-center', { x: 0, y: 0, z: 2 }, 'v -1.250000 0.000000 -2.000000', [0, 1.5]],
     ];
     for (const [mode, offset, first, [lo, hi]] of cases) {
@@ -2338,8 +2339,8 @@ describe('Feature 3 exports (03 7, T3)', () => {
     assert.deepEqual(lines.slice(1, 5), [
       '# Mesh Mode: section',
       '# Faces: counter-clockwise front faces; vn point out of the LED surface (toward the stage)',
-      '# Pivot: mesh-center anchor 1.250000 0.750000 0.000000 offset 0.500000 1.000000 2.000000 (layout m); file origin = pivot',
-      '# Stage placement: origin at stage (0 1.750000 0) (Y up, metres)',
+      '# Pivot: mesh-center anchor 1.250000 0.000000 0.000000 offset 0.500000 1.000000 2.000000 (layout m); file origin = pivot',
+      '# Stage placement: origin at stage (0 1.000000 0) (Y up, metres)',
     ]);
     assert.equal(`${lines[5]}\n`, Brand.objGeneratorLine.split('\n')[0] + '\n');
     // a non-finite layout: no resolution, no header, untranslated
@@ -2353,12 +2354,12 @@ describe('Feature 3 exports (03 7, T3)', () => {
   test('glTF (7.2): POSITION in the export frame (exact float32 y = baseY + row * panelH), scenes[0].extras.pivot after the nodes', () => {
     for (const mode of MODES) {
       const project = projectOf([WallSection.createDefault()], mode);
-      project.wall.pivot = pivotOf('mesh-center', { x: 0, y: 0.25, z: 0 });
+      project.wall.pivot = pivotOf('mesh-center', { x: 0, y: 1, z: 0 });
       const layout = layoutProject(project, { frame: 'export' });
       const gltf = GLTF.write({ sections: project.wall.sections, meshMode: mode, layout });
       assert.deepEqual(Object.keys(gltf.scenes[0]), ['nodes', 'extras']);
       assert.deepEqual(gltf.scenes[0].extras, {
-        pivot: { mode: 'mesh-center', offset_m: [0, 0.25, 0], anchor_layout_m: [1.25, 0.75, 0], point_layout_m: [1.25, 1, 0] },
+        pivot: { mode: 'mesh-center', offset_m: [0, 1, 0], anchor_layout_m: [1.25, 0, 0], point_layout_m: [1.25, 1, 0] },
       });
       assert.equal(gltf.nodes.some((n) => 'translation' in n), false, 'no node translation: the frame is baked');
       const buffer = Buffer.from(gltf.buffers[0].uri.split(',')[1], 'base64');
@@ -2387,7 +2388,7 @@ describe('Feature 3 exports (03 7, T3)', () => {
 
   test('ProjectIO: the wall exports read the export frame; the safe-distance OBJ translates by sb - P (7.1)', async () => {
     const project = Project.createDefault();
-    project.wall.pivot = pivotOf('mesh-center', { x: 0, y: 0, z: 2 });
+    project.wall.pivot = pivotOf('mesh-center', { x: 0, y: 0.75, z: 2 });   // P = (1.25, 0.75, 2): the anchor is on the floor
     const frames = [];
     const log = [];
     const resolution = resolvePivot(computeWallLayout(project.wall.sections), project.wall.pivot);

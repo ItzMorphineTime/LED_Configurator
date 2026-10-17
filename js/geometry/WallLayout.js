@@ -228,8 +228,10 @@ export class WallLayout {
    *   'bottom-left' (PivotMode.BOTTOM_LEFT): {x: firstEdge.x, y: y0, z: firstEdge.z} (the implicit legacy origin);
    *   'wall-center' (PivotMode.WALL_CENTER): the midpoint of firstEdge and lastEdge at y0 (the owner's "middle of
    *     entire wall");
-   *   'mesh-center' (PivotMode.MESH_CENTER): the centre of generativeBounds(), y included: half the tallest section
-   *     for a bottom-aligned wall (decision B5, Q2).
+   *   'mesh-center' (PivotMode.MESH_CENTER): the x/z centre of generativeBounds() on the floor, y = y0 (the owner's
+   *     "Wall mesh centre on floor", 2026-10-17; 03 D1, Q2 (c), decision B5). The box skips NaN coordinates, so
+   *     its x and z are NaN (resolvePivot: null) only for a wall without grid vertices (the empty box); the panel
+   *     height no longer takes part.
    * On a translated copy every mode follows the translation: copy.pivotPoint(m) = pivotPoint(m) + (dx, dy, dz).
    * Side effects: none.
    * @param {string} mode  a PivotMode value
@@ -251,7 +253,7 @@ export class WallLayout {
       }
       case PivotMode.MESH_CENTER: {
         const { min, max } = this.generativeBounds();
-        return { x: (min.x + max.x) / 2, y: (min.y + max.y) / 2, z: (min.z + max.z) / 2 };
+        return { x: (min.x + max.x) / 2, y: y0, z: (min.z + max.z) / 2 };
       }
       default:
         throw new RangeError(`Unknown pivot mode ${JSON.stringify(mode)}`);

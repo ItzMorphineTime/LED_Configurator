@@ -122,7 +122,7 @@ describe('WallController.rebuild (P1, ARCHITECTURE.md 6.1)', () => {
 
   test("layout({frame}) is layoutProject(project, {frame}); the default is the stage frame (03 T3)", () => {
     const r = makeRig();
-    r.project.wall.pivot = pivotOf('mesh-center', { x: 0, y: 0, z: 2 });
+    r.project.wall.pivot = pivotOf('mesh-center', { x: 0, y: 0.75, z: 2 });   // P = (1.25, 0.75, 2): the anchor is on the floor
     assert.deepEqual(r.wc.layout(), layoutProject(r.project));
     assert.equal(r.wc.layout().pivot.frame, 'stage');
     const exp = r.wc.layout({ frame: 'export' });

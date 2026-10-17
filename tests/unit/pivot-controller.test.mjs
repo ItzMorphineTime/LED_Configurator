@@ -291,7 +291,10 @@ describe('Selectable \'pivot\' (the path-B hook set of 03 5.4, 07 C33)', () => {
     r.pc.setMode('mesh-center');
     const out = vec();
     assert.equal(r.pc.gizmoAnchor(out), out);
-    assert.deepEqual([out.x, out.y, out.z], [0, 0.75, 0], 'AC 3: glyph (0, 0.75, 0) for mesh-center on the default wall');
+    assert.deepEqual([out.x, out.y, out.z], [0, 0, 0], 'AC 3: glyph (0, 0, 0) for mesh-center (on the floor) on the default wall');
+    r.pc.setOffsetAxis('y', '0.75');
+    assert.equal(r.pc.gizmoAnchor(out), out);
+    assert.deepEqual([out.x, out.y, out.z], [0, 0.75, 0], 'AC 3: a raised pivot (Offset Y 0.75) puts the glyph at (0, 0.75, 0)');
     const rotation = vec();
     r.pc.orientGizmo(rotation, 'translate');
     assert.deepEqual([rotation.x, rotation.y, rotation.z], [0, 0, 0]);

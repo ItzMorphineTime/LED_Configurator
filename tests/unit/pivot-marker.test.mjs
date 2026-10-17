@@ -121,19 +121,29 @@ describe('PivotMarkerView: construction and init (R4, 03 5.8)', () => {
 });
 
 describe('placement in the stage frame (03 5.3)', () => {
-  test('mesh-center on the default wall: glyph (0, 0.75, 0) (AC 3), drop line on, no ghost or link', () => {
+  test('mesh-center on the default wall: glyph (0, 0, 0) on the floor (AC 3), no drop line, no ghost or link', () => {
     const r = makeRig({ show: true });
     r.view.init(resolutionOf('mesh-center'));
+    assert.deepEqual(xyz(r.view.glyphPosition(new Vector3())), [0, 0, 0]);
+    assert.deepEqual(xyz(glyph(r.view).position), [0, 0, 0]);
+    const [ghost, linkHalo, linkCore, dropHalo, dropCore] = r.view.group.children;
+    assert.equal(ghost.visible, false);
+    assert.equal(linkCore.visible || linkHalo.visible, false);
+    assert.equal(dropCore.visible || dropHalo.visible, false, 'a floor pivot has no drop line');
+  });
+
+  test('a raised pivot (mesh-center, Offset Y 0.75): glyph (0, 0.75, 0), the drop line to the floor, the ghost on the floor', () => {
+    const r = makeRig({ show: true });
+    r.view.init(resolutionOf('mesh-center', { x: 0, y: 0.75, z: 0 }));
     assert.deepEqual(xyz(r.view.glyphPosition(new Vector3())), [0, 0.75, 0]);
     assert.deepEqual(xyz(glyph(r.view).position), [0, 0.75, 0]);
     const [ghost, linkHalo, linkCore, dropHalo, dropCore] = r.view.group.children;
-    assert.equal(ghost.visible, false);
-    assert.equal(linkCore.visible, false);
     assert.equal(dropCore.visible && dropHalo.visible, true);
     const p = dropCore.geometry.getAttribute('position');
     assert.deepEqual([p.getX(0), p.getY(0), p.getZ(0), p.getX(1), p.getY(1), p.getZ(1)], [0, 0, 0, 0, 0.75, 0]);
     assert.deepEqual([...dropCore.geometry.getAttribute('lineDistance').array], [0, 0.75]);
-    assert.equal(linkHalo.visible, false);
+    assert.deepEqual(xyz(ghost.position), [0, 0, 0], 'the anchor on the floor');
+    assert.equal(ghost.visible && linkCore.visible && linkHalo.visible, true, 'the non-zero offset links the anchor and the glyph');
   });
 
   test('an offset: the ghost at the anchor (-offset.x, A.y, -offset.z) with the link to the glyph; floor pivot: no drop', () => {
@@ -152,25 +162,29 @@ describe('placement in the stage frame (03 5.3)', () => {
     r.view.init(resolutionOf('bottom-left'));
     r.bus.emit(Events.WALL_PIVOT_CHANGED, { resolution: resolutionOf('bottom-left', { x: 0, y: 1.5, z: 0 }) });
     assert.deepEqual(xyz(glyph(r.view).position), [0, 1.5, 0]);
-    const tall = resolutionOf('mesh-center', undefined, [{ id: 0, name: 'W', panelCols: 5, panelRows: 5, panelWidth: 500,
-      panelHeight: 500, ledX: 32, ledY: 32, curveIntensity: 0, angleOffset: 0, color: '#ffffff' }]);
+    const tall = resolutionOf('mesh-center', { x: 0, y: 1.25, z: 0 }, [{ id: 0, name: 'W', panelCols: 5, panelRows: 5,
+      panelWidth: 500, panelHeight: 500, ledX: 32, ledY: 32, curveIntensity: 0, angleOffset: 0, color: '#ffffff' }]);
     r.bus.emit(Events.WALL_REBUILT, { layout: { pivot: { resolution: tall } } });
     assert.deepEqual(xyz(glyph(r.view).position), [0, 1.25, 0]);
+    r.bus.emit(Events.WALL_REBUILT, { layout: { pivot: { resolution: resolutionOf('mesh-center') } } });
+    assert.deepEqual(xyz(glyph(r.view).position), [0, 0, 0], 'mesh-center itself is on the floor');
   });
 
   test('the drag preview moves the glyph, the drop and the link; the ghost stays; clearPreview restores', () => {
     const r = makeRig({ show: true });
     r.view.init(resolutionOf('mesh-center'));
-    r.view.setPreview(0.3, 0, -1);
-    const [ghost, , linkCore] = r.view.group.children;
+    r.view.setPreview(0.3, 0.75, -1);
+    const [ghost, , linkCore, , dropCore] = r.view.group.children;
     assert.deepEqual(xyz(glyph(r.view).position), [0.3, 0.75, -1]);
     assert.deepEqual(xyz(r.view.glyphPosition(new Vector3())), [0.3, 0.75, -1]);
-    assert.deepEqual(xyz(ghost.position), [0, 0.75, 0]);
+    assert.deepEqual(xyz(ghost.position), [0, 0, 0]);
     assert.equal(ghost.visible, true, 'a non-zero effective offset shows the ghost and the link');
     assert.equal(linkCore.visible, true);
+    assert.equal(dropCore.visible, true, 'the previewed glyph is raised: the drop line follows it');
     r.view.clearPreview();
-    assert.deepEqual(xyz(glyph(r.view).position), [0, 0.75, 0]);
+    assert.deepEqual(xyz(glyph(r.view).position), [0, 0, 0]);
     assert.equal(ghost.visible, false);
+    assert.equal(dropCore.visible, false);
   });
 });
 

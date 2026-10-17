@@ -1,0 +1,72 @@
+{
+  "commit": "B1-pivot-floor",
+  "bugs": [],
+  "expect": [
+    {
+      "output": "pivot_modes/*_mesh-center_pivot.json",
+      "change": "modified",
+      "each": true,
+      "reason": "the readout of the mesh-center pivot drops to the floor: y = the first section's baseY (0.000) instead of half the tallest section, x and z unchanged"
+    },
+    {
+      "output": "pivot_modes/*_mesh-center_*__export-{obj,gltf}__*",
+      "change": "modified",
+      "each": true,
+      "reason": "the export frame of the mesh-center pivot is the bounding-box centre on the floor: every exported y rises by the old P.y (the OBJ pivot header and the glTF extras give the new anchor), x and z unchanged"
+    },
+    {
+      "output": "pivot_modes/*_mesh-center.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the pivot marker glyph sits on the floor (no raised glyph, no drop line); the wall, grid and camera are unchanged (the stage frame never read P.y)"
+    },
+    {
+      "output": "pivot_stage/keep_{on,off}_mesh-center.json",
+      "change": "modified",
+      "each": true,
+      "reason": "#pivot-readout gives y 0.000 and #pivot-status 'Pivot height 0.000 m' after the wall-center -> mesh-center switch; the camera and prop inputs are unchanged (the stage origin never read P.y)"
+    },
+    {
+      "output": "pivot_stage/keep_{on,off}_mesh-center.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the pivot marker glyph sits on the floor instead of half the wall height up"
+    },
+    {
+      "output": "pivot_gizmo/focus_01_arrow_down.json",
+      "change": "modified",
+      "reason": "ArrowDown selects mesh-center with the offset (2.018, 0.123, 2): the readout y is the offset alone (0.123) instead of 0.75 + 0.123"
+    },
+    {
+      "output": "ui_visual/{00_initial,02_selection_visible,04_options_ledsim_camera_props,05_gizmo_pilot,06_options_panelids_logo,07_two_sections,08_collapsed_and_4k_warning}.text.json",
+      "change": "modified",
+      "each": true,
+      "reason": "the radio label reads 'Wall mesh centre on floor (bounding box)' (labels and body innerText)"
+    },
+    {
+      "output": "ui_visual/{00_initial,04_options_ledsim_camera_props,06_options_panelids_logo,07_two_sections,08_collapsed_and_4k_warning}.sidebar.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the new label text in the Wall Pivot radio card (one line, as before: the card height is unchanged)"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-03 T3 runs); this commit changes no pixel of it"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen again in the 03 T2 gate, the 03 T3 review run and the 03 review run of 2026-10-17, textures/L2_PanelIDs.png); this commit changes no texture"
+    },
+    {
+      "output": "pivot_stage/*.screenshot.png",
+      "exclude": "pivot_stage/*mesh-center*",
+      "change": "modified",
+      "reason": "the overlay-glyph jitter seen in the F3-T8b, F3-T12, F3-T6b and F3-T6c runs (1 level, at most 9 px, on the help badge and the camera preview footer labels over the canvas); the other pivot_stage states do not use mesh-center"
+    }
+  ],
+  "notes": "Owner request (1) of 2026-10-17: the 'Wall mesh centre (bounding box)' pivot mode sits ON THE FLOOR. WallLayout.pivotPoint('mesh-center') = {x, z: the generativeBounds() centre; y: y0 = sections[0].baseY}, the floor every other mode uses; relabelled 'Wall mesh centre on floor (bounding box)' (03 D1, 6.1, Q2 now answered (c), IMPROVEMENT_PLAN B5). The stage frame never read P.y, so the viewport changes only by the marker glyph; the export frame of mesh-center moves by the old P.y. Every other output must stay identical."
+}

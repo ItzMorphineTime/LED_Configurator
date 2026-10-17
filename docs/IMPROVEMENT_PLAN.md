@@ -278,7 +278,7 @@ Spec: [docs/improvements/03-pivot.md](improvements/03-pivot.md). Step F (true fr
 **What you get.**
 - **Three modes.**
   - `Bottom-left` is today's behaviour and stays the default.
-  - `Mesh centre` is the true bounding-box centre of the wall, at half the height of the tallest section.
+  - `Mesh centre on floor` is the bounding-box centre of the wall on the floor (the owner's answer of 2026-10-17 to B5; a raised pivot is an Offset Y).
   - `Wall centre` is the midpoint between the first section's first bottom vertex and the last section's last bottom vertex, always on the floor.
 - **An offset.** Pivot = anchor + offset, in metres at 1 mm resolution. The offset moves the pivot relative to the wall, as in a DCC tool. It never moves the wall.
 - **Exports land where you need them.** Every OBJ and glTF is written with the pivot as the file origin, so walls arrive in Unreal or Blender with no manual re-centring. A pivot comment (OBJ) and `extras` (glTF) are written only for non-default pivots.
@@ -494,7 +494,7 @@ Every question has a recommended default. If you accept the defaults, only the i
 - **No project file v2 now.** 08 P2-13e and P2-8b-d, 03 T7 and 04 UV-5c wait for M7a ("Project file v2 and session"); the pivot and the UV settings last for the session only until then, and their release notes say so (principle 6). An import resets them (03 §4.4, Q14).
 - **The UV editor takes path B** (04 header): `UvFallbackHistory`, the `ViewportInput` `'u'` branch with the shared typing guard, in-memory viewer preferences and observer hooks on the Phase-1 `SelectionManager`, because 07 I1/I2/H1/H3 are not built; 04 UV-18 removes them later. Spec 02 is not built, so 04 UV-17 is skipped; the viewer chooses a section with its section dropdown and a double-click on the wall (UV-15).
 - **Export OBJ is one download** (08 P2-6e, landed): `morph-led-wall-obj.zip` with the OBJ, the MTL and every texture the MTL references.
-- **Every other open question keeps its recommended default:** A7 (the 03 T13 sign-off, confirmed: 03 §5.10.1, 02 §10.3), B4 bottom-left, B5 the bounding-box centre, B5a the generated wall, B6 the 100 m grid centred on the stage origin, B7 per-section 0..1 with the Atlas layout as an option (the owner's own review of the exports in Blender and Unreal stands in for B8's go/no-go), B9 16 MP, A11 / 08 Q4, Q5 yes.
+- **Every other open question keeps its recommended default:** A7 (the 03 T13 sign-off, confirmed: 03 §5.10.1, 02 §10.3), B4 bottom-left, B5 the bounding-box centre (on the floor since the owner's request of 2026-10-17), B5a the generated wall, B6 the 100 m grid centred on the stage origin, B7 per-section 0..1 with the Atlas layout as an option (the owner's own review of the exports in Blender and Unreal stands in for B8's go/no-go), B9 16 MP, A11 / 08 Q4, Q5 yes.
 
 ### A. At kick-off (M0)
 
@@ -524,7 +524,7 @@ Every question has a recommended default. If you accept the defaults, only the i
 | B2 | Per-section LED side in Feature 1 | 01 Q2 | **Yes**; no per-project flag | F1-4 | Recommended default |
 | B3 | A "legacy inverted" export option | 01 Q5 | **No**; a release note and the checker tool instead | F1-5 | Recommended default |
 | B4 | Default pivot for new projects | 03 Q1 | **Bottom-left** (today's behaviour). Optionally, a "Use for new projects" button keeps your preferred mode per device in 07's `app/Prefs` (03 T17, 0.5 d, after 07 H3); files are unaffected | 03 T1 (T17 after 07 H3) | Recommended default |
-| B5 | Meaning of "middle of wall mesh" | 03 Q2 | **3D bounding-box centre**; add an optional surface-centre mode if you meant the content centre | 03 T2 | Recommended default |
+| B5 | Meaning of "middle of wall mesh" | 03 Q2 | **Bounding-box centre on the floor** (03 Q2 (c); "Wall mesh centre on floor (bounding box)"); the 3D centre is an Offset Y; an optional surface-centre mode stays available if you meant the content centre | 03 T2, B1-pivot-floor | **Decided by the owner, 2026-10-17** (was: the 3D bounding-box centre) |
 | B5a | Does the pivot anchor use the generated wall or the live mesh (with section offsets and detached sections)? | 03 Q5 | **Generated wall only**, so the pivot stays still while sections are nudged. **Consequence:** once risers, leaned flats or soffits exist, "middle of wall mesh" is the middle of the generated wall, not of the exported mesh, and the file origin sits off the centre of the exported geometry; correct it with the pivot offset (a later "Use current mesh" button can fill it in). Choose "live mesh" only if exports must always be centred on the final geometry; the pivot then moves while you drag sections. | 03 T2 | Recommended default |
 | B6 | Grid relative to the stage origin | 03 Q8 | **100 m grid centred on the stage origin** | 03 T10 | Recommended default |
 | B7 | Combined-mesh UV default | 04 Q1, Q18 | **Per-section 0..1 if you apply content per material slot; Atlas if your main pipelines are one feed per mesh** (nDisplay mesh projection, disguise), or export Individual Section Meshes. Both fill the UV space; per-section islands overlap across sections, which repeats a single feed. B8's test decides. A per-export-target default (04 Q18) is not recommended now | UV-7 | Recommended default (B8's test chooses between the two) |

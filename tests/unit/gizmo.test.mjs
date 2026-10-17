@@ -313,23 +313,28 @@ describe('test 20: the WALL_REBUILT re-anchor of a selected pivot (03 5.4)', () 
     return { ...g, project, wc, pc, selection, spies };
   }
 
-  test('mesh-center, rows 3 -> 5: the gizmo sits on the new P.y (1.25) right after WALL_REBUILT, whatever the order', () => {
+  test('mesh-center + offset y 0.75, rows 3 -> 5: WALL_REBUILT re-anchors the gizmo on P.y, whatever the order', () => {
     const r = anchorRig();
     r.pc.toggleSelect();
     r.pc.setMode('mesh-center');
+    assert.equal(r.gizmo.group.position.y, 0, 'mesh-center sits on the floor (owner request 2026-10-17, 03 6.1)');
+    r.pc.setOffsetAxis('y', '0.75');
     assert.equal(r.gizmo.group.position.y, 0.75);
     const section = r.project.wall.sections[0];
     r.wc.setSectionField(section, 'panelRows', '5');
+    r.gizmo.group.position.y = 99;   // a stale anchor: only the WALL_REBUILT re-anchor can restore it
     r.spies.length = 0;
     r.wc.commitSectionEdit();
-    assert.equal(r.gizmo.group.position.y, 1.25);
-    assert.deepEqual(r.spies.at(-1), ['after', 1.25], 'a later WALL_REBUILT subscriber already sees the new anchor');
+    assert.equal(r.gizmo.group.position.y, 0.75, 'the floor anchor ignores the rows; P.y is the offset');
+    assert.deepEqual(r.spies.at(-1), ['after', 0.75], 'a later WALL_REBUILT subscriber already sees the anchor');
   });
 
   test('an import (which resets the session-only pivot) re-anchors too', () => {
     const r = anchorRig();
     r.pc.toggleSelect();
     r.pc.setMode('mesh-center');
+    r.pc.setOffsetAxis('y', '1.25');
+    assert.equal(r.gizmo.group.position.y, 1.25);
     r.wc.applyImport({ sections: [new WallSection({ ...WallSection.createDefault(), panelRows: 7 })], meshMode: null });
     assert.equal(r.gizmo.group.position.y, 0, 'the identity pivot of the imported (v1) wall');
   });

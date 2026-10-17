@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Implementation-ready specification (Phase 3). **Plan review (2026-10-16):** Q5 now states its export consequence and is raised in the plan next to Q2; Q1 gains an optional per-device default for new projects through 07's `app/Prefs` (T17, C19); D5 notes that detaching a chain section (spec 02 T17) is a generative edit. **Revision 3.1** applies the cross-spec consistency review (07 §0 C32-C62): the single composition pipeline is recorded as 07 C32 (5.10); the path-B hook set becomes `allowedAxes(mode)` (`null` = unsupported, replacing `allowedModes`) and `endGizmoDrag({cancel})` (no `cancelGizmoDrag`, no argument-less `endGizmoDrag`; C33); the HDRI point's kind is `'projector'` (C36); the marker uses `RENDER_ORDER.PIVOT_MARKER` (996) and two-tone 06 colours, and its pick proxy is on `HELPERS` (C56); scalers register through `SceneManager.addPreRender` (C46); every `translateStage` clamps through `LIMITS` and the orbit joins `stageAnchored` from 07 I4b (C45); step F reads `FramingPolicy`'s three named boxes (C34) and is counted only in 08 (T11 dropped); feature keys are absent until T7 (C39); this spec adds no help-badge token (C35); T13 keeps only the owner sign-off (07 D0 does the documentation). Revision 3: resolves the review of revision 2. Changes: spec 02's current hook set and composition rule are adopted unchanged (5.10.1); a cancelled drag now swallows the rest of the mouse gesture (5.4); step F is the roadmap's P2-11c commit itself (6.6); the help-badge edit moves to spec 02's step D2; the JSON and ZIP allowed kinds of steps A′ and C are corrected; pick priority applies only against wall hits; the gizmo re-anchors on rebuilds; the panel status is derived from event payloads; the CSS, harness and estimate details are completed. |
+| **Status** | Implementation-ready specification (Phase 3). **Owner change (2026-10-17, B1-pivot-floor):** `mesh-center` sits on the floor: `y = y0` (`sections[0].baseY`, the floor of the other two modes), x and z still the bounding-box centre; the radio reads "Wall mesh centre on floor (bounding box)". Q2 is answered (c); D1, 3.1, 3.2, 5.4, 6.1, 6.8, 8.1 (tests 1, 2, 5, 20), the ACs 3, 17 and 23 and Q2 are amended; a raised pivot is reached with Offset Y. **Plan review (2026-10-16):** Q5 now states its export consequence and is raised in the plan next to Q2; Q1 gains an optional per-device default for new projects through 07's `app/Prefs` (T17, C19); D5 notes that detaching a chain section (spec 02 T17) is a generative edit. **Revision 3.1** applies the cross-spec consistency review (07 §0 C32-C62): the single composition pipeline is recorded as 07 C32 (5.10); the path-B hook set becomes `allowedAxes(mode)` (`null` = unsupported, replacing `allowedModes`) and `endGizmoDrag({cancel})` (no `cancelGizmoDrag`, no argument-less `endGizmoDrag`; C33); the HDRI point's kind is `'projector'` (C36); the marker uses `RENDER_ORDER.PIVOT_MARKER` (996) and two-tone 06 colours, and its pick proxy is on `HELPERS` (C56); scalers register through `SceneManager.addPreRender` (C46); every `translateStage` clamps through `LIMITS` and the orbit joins `stageAnchored` from 07 I4b (C45); step F reads `FramingPolicy`'s three named boxes (C34) and is counted only in 08 (T11 dropped); feature keys are absent until T7 (C39); this spec adds no help-badge token (C35); T13 keeps only the owner sign-off (07 D0 does the documentation). Revision 3: resolves the review of revision 2. Changes: spec 02's current hook set and composition rule are adopted unchanged (5.10.1); a cancelled drag now swallows the rest of the mouse gesture (5.4); step F is the roadmap's P2-11c commit itself (6.6); the help-badge edit moves to spec 02's step D2; the JSON and ZIP allowed kinds of steps A′ and C are corrected; pick priority applies only against wall hits; the gizmo re-anchors on rebuilds; the panel status is derived from event payloads; the CSS, harness and estimate details are completed. |
 | **Builds on** | `docs/ARCHITECTURE.md` (binding contract), `docs/REFACTOR_PLAN.md` (Phase 3 order: 1, 6, **3**, 2, 4, 5; Phase 2 item 11 pairs B-M10, B-L2 and B-M15 with this feature). |
 | **Legacy reference** | `index.html@cd3fd3f`. Line numbers below refer to that file. Bug ids refer to the verified defect list ([`docs/DEFECTS.md`](../DEFECTS.md): `B-H*`, `B-M*`, `B-L*`). Roadmap ids (`P2-*`) refer to `docs/improvements/08-bugfix-roadmap.md`. |
 | **Hard prerequisites** | Phase 1 merged (WP1-WP10). **Merge gates (roadmap §1.1, F3 row): P2-3, P2-8 and P2-13e (persistence only).** Only T7 (persistence, step A′) actually depends on them: on P2-3 for its B-L8 `ProjectValidator`, and on P2-13e for the B-L31 v2 writer. P2-8 is kept as a merge gate for ordering only. No task depends on it: offsets never use `orDefault`, the `posZ` branch handles B-L9 itself where it matters (4.1), and B-L15 is documented (2.3). Every task is identity-exact with or without it. If the owner wants F3 earlier, P2-8 can become a soft gate without any change to this spec. |
@@ -16,7 +16,7 @@
 
 | # | Decision | Section |
 |---|---|---|
-| D1 | There are three anchor modes: `bottom-left` (today's behaviour and the default), `mesh-center` (the true bounding-box centre, **including y = half the tallest section**) and `wall-center` (the midpoint of the first section's first bottom vertex and the last section's last bottom vertex, y = 0). Other readings of "middle of wall mesh" (the surface centre, per-section origins) are raised with the owner in Q2 and Q13; the mode enum is the extension point (6.1). | 6.1, 11.2 |
+| D1 | There are three anchor modes, **all on the floor**: `bottom-left` (today's behaviour and the default), `mesh-center` (the bounding-box centre in plan, **on the floor: y = y0**, the owner's answer (c) to Q2 of 2026-10-17; until then y was half the tallest section) and `wall-center` (the midpoint of the first section's first bottom vertex and the last section's last bottom vertex, y = 0). A raised pivot is an Offset Y. Other readings of "middle of wall mesh" (the surface centre, per-section origins) stay open in Q2 and Q13; the mode enum is the extension point (6.1). | 6.1, 11.2 |
 | D2 | **Pivot point P = anchor(mode) + offset.** The offset is a Vec3 in metres, in layout axes. It moves the pivot relative to the wall, as in a DCC. It does **not** move the wall relative to the pivot: exported vertices are `x_E = x_L − P`. Spec 02's current revision already uses this sign and placement (its 6.17: no root group, no separate `W`; 5.10.1 #4). | 4.1, 6.2 |
 | D3 | **Three frames.** The *layout* frame is the legacy world. In the *stage* frame the origin is the pivot projected onto the floor, O = (P.x, 0, P.z). In the *export* frame the origin is the pivot P itself. The viewport, camera, props, safe zone and grid live in the stage frame, where the floor is always y = 0. Every export is written in the export frame, so the DCC pivot is the file origin. | 5.1 |
 | D4 | **The pivot is baked into the layout, not applied as a scene-graph root transform.** `layoutProject(project, {frame})` translates the raw walk once. Spec 02 then builds its per-section matrices from the translated geometry (spec 02 6.6, translation-equivariant). Every consumer (wall view, frames, safe zone, framing, picking, exporters) reads the translated layout. Nothing re-derives the transform. | 5.2, 5.10, 6.3 |
@@ -122,7 +122,7 @@ Consequence for this spec: the pivot radio cards must **not** reuse the `.mesh-m
 ### 3.1 Concepts the user sees
 
 - **Pivot:** the point that becomes the origin of every exported mesh. A white marker shows it in the viewport.
-- **Stage origin:** the point on the floor directly below or above the pivot. The grid centre lines and the RGB axes cross here, and camera and prop coordinates are measured from it. For the floor-level modes (`bottom-left`, `wall-center`, and any offset with y = 0), the stage origin *is* the pivot.
+- **Stage origin:** the point on the floor directly below or above the pivot. The grid centre lines and the RGB axes cross here, and camera and prop coordinates are measured from it. For every mode with an offset y = 0 (all three anchors are on the floor since the owner change of 2026-10-17), the stage origin *is* the pivot.
 - **Anchor:** where the selected mode places the pivot before the offset. When the offset is non-zero, a dimmed ghost marks it.
 
 The panel says this in one line under the readout: *"Exports: mesh origin = pivot. Viewport: grid origin = pivot on the floor."*
@@ -137,7 +137,7 @@ The panel says this in one line under the readout: *"Exports: mesh origin = pivo
 │ │ (•) Bottom-left corner                           │ │  #pivot-mode-select.pivot-mode-select
 │ └──────────────────────────────────────────────────┘ │  (radio cards; .pivot-mode-option, styled
 │ ┌──────────────────────────────────────────────────┐ │   like .mesh-mode-option but NOT that class)
-│ │ ( ) Wall mesh centre (bounding box)              │ │
+│ │ ( ) Wall mesh centre on floor (bounding box)     │ │
 │ └──────────────────────────────────────────────────┘ │
 │ ┌──────────────────────────────────────────────────┐ │
 │ │ ( ) Wall centre on floor (first ↔ last edge)     │ │
@@ -149,7 +149,7 @@ The panel says this in one line under the readout: *"Exports: mesh origin = pivo
 │  Keep stage layout on pivot change         [■■■○]     │  #toggle-pivot-keep-stage
 │  Show pivot marker                         [■■■○]     │  #toggle-pivot-marker
 │ ┌──────────────────────────────────────────────────┐ │
-│ │ Pivot (from wall start): 1.250, 0.750, 0.000 m   │ │  #pivot-readout
+│ │ Pivot (from wall start): 1.250, 0.000, 0.000 m   │ │  #pivot-readout
 │ │ Exports: mesh origin = pivot                     │ │
 │ │ Stage origin moved +1.250, 0.000 m · camera and  │ │  #pivot-status (aria-live)
 │ │ props kept their place                           │ │
@@ -159,7 +159,7 @@ The panel says this in one line under the readout: *"Exports: mesh origin = pivo
 
 | Control | Id / markup | Type | Label | Range / options | Default | Units | Behaviour |
 |---|---|---|---|---|---|---|---|
-| Mode | `<div class="pivot-mode-select" id="pivot-mode-select" role="radiogroup" aria-label="Pivot mode">` containing three cards (markup below). **Never** the `mesh-mode-option` class or a `data-mode` attribute (2.2). | radio group | "Bottom-left corner" / "Wall mesh centre (bounding box)" / "Wall centre on floor (first ↔ last edge)" | `bottom-left`, `mesh-center`, `wall-center` | `bottom-left` | – | Listens for **`change` on the radio**, not label `click` (B-L13). Calls `pivotController.setMode(value)`. The mirror sets both `checked` and the label's `.active`. |
+| Mode | `<div class="pivot-mode-select" id="pivot-mode-select" role="radiogroup" aria-label="Pivot mode">` containing three cards (markup below). **Never** the `mesh-mode-option` class or a `data-mode` attribute (2.2). | radio group | "Bottom-left corner" / "Wall mesh centre on floor (bounding box)" / "Wall centre on floor (first ↔ last edge)" | `bottom-left`, `mesh-center`, `wall-center` | `bottom-left` | – | Listens for **`change` on the radio**, not label `click` (B-L13). Calls `pivotController.setMode(value)`. The mirror sets both `checked` and the label's `.active`. |
 | Offset X/Y/Z | `<input type="number" id="pivot-offset-x" step="0.001" min="-1000" max="1000" value="0">` (likewise y, z), each inside its own `.input-field` with a `<label for>`, in one `.section-row.pivot-offset-row` (3 columns; markup below) | number | "Offset X (m)", "Offset Y (m)", "Offset Z (m)" | [−1000, 1000] | 0 | metres. Stored rounded to 0.001 (1 mm). `step="0.001"` matches the storage resolution, so a stored value such as 1.235 is never a step mismatch. | On `change`: `v = pivotController.setOffsetAxis(axis, el.value)`, then `el.value = v.toFixed(3)` (write-back). A non-numeric or empty entry reverts to the stored value. It never uses `orDefault` (B-L9). |
 | Reset offset | `<button class="export-btn secondary" id="pivot-reset-offset">` inside `.pivot-actions` | button | "Reset offset" | – | – | – | `pivotController.resetOffset()`. Disabled while the offset is (0, 0, 0). |
 | Select pivot | `<button class="export-btn secondary" id="pivot-select" aria-pressed="false">` inside `.pivot-actions` | toggle button | "◎ Select pivot (O)" | – | not pressed | – | Same as the `O` key (3.4). `.active` and `aria-pressed` mirror whether the pivot is selected. The label also documents the `O` key, because this spec adds no help-badge token (3.4). |
@@ -183,7 +183,7 @@ The panel says this in one line under the readout: *"Exports: mesh origin = pivo
     <label class="pivot-mode-option" data-pivot-mode="mesh-center">
       <input type="radio" name="pivot-mode" value="mesh-center">
       <span class="pivot-mode-radio"></span>
-      <span class="pivot-mode-label">Wall mesh centre (bounding box)</span>
+      <span class="pivot-mode-label">Wall mesh centre on floor (bounding box)</span>
     </label>
     <label class="pivot-mode-option" data-pivot-mode="wall-center">
       <input type="radio" name="pivot-mode" value="wall-center">
@@ -324,7 +324,7 @@ It is linked in the `css/features/*` block of 07 C52's link order (after `css/11
 |---|---|
 | Mode or offset changed and the stage origin moved, keep on | `#pivot-status`: `Stage origin moved ${dx>=0?'+':''}${dx.toFixed(3)}, ${dz…} m · camera and props kept their place`. The camera and prop inputs update (pose events with `source: 'pivot'`). |
 | Same, keep off | `Stage origin moved … m · camera and props kept their coordinates` |
-| Only the pivot height changed (Y offset, or wall-centre ↔ mesh-centre on a monotonic wall) | `Pivot height ${P.y.toFixed(3)} m · affects exports only`. No rebuild happens. |
+| Only the pivot height changed (Y offset), or a mode change that moves neither the stage origin nor the height (wall-centre ↔ mesh-centre on a monotonic wall since both sit on the floor, 2026-10-17: `Pivot height 0.000 m`) | `Pivot height ${P.y.toFixed(3)} m · affects exports only`. No rebuild happens (the stage origin did not move). |
 | A section edit moved the stage origin relative to the wall start (centred modes) | `Wall edit moved the stage origin by ${dx}, ${dz} m (relative to the wall start) · camera and props kept their coordinates`, from `WALL_REBUILT {cause: 'edit', stageShift}`. Any later `'edit'` rebuild replaces it: with its own shift message, or with an empty status when its `stageShift` is zero. |
 | Import | The status is cleared (`WALL_PIVOT_CHANGED{source: 'import'}`, then `WALL_REBUILT{cause: 'import'}`); the panel mirrors the file's pivot. |
 | The pivot is more than 50 m from the anchor | The readout line gets class `.pivot-warning` (CSS `--pivot-warning`): `Pivot is ${d.toFixed(1)} m from the anchor`. |
@@ -507,7 +507,7 @@ At the identity pivot, L = S = E, and `layoutProject` returns the untranslated l
 
 **Frame per consumer (07 C60).** The table above is the list that 07's D0 copies into ARCHITECTURE §1.4. Texture content (spec 04's UVs, spec 05's bake, panel IDs) is independent of the frame. The trap it prevents: spec 05's bake must read the **stage** layout, because the projection point is stored in the stage frame; reusing `ProjectIO`'s export layout would sample every texel P.y too low.
 
-**Why the stage floor stays at y = 0 (rejected alternative: the full 3D pivot as the viewport origin).** If the viewport origin sat at a `mesh-center` pivot (mid-height) or at a raised offset, six legacy sites would break or need state-dependent rules:
+**Why the stage floor stays at y = 0 (rejected alternative: the full 3D pivot as the viewport origin).** If the viewport origin sat at a raised pivot (an Offset Y; before 2026-10-17 also the mid-height `mesh-center`), six legacy sites would break or need state-dependent rules:
 - the camera `posY ≥ 0` rule, which would forbid camera heights below mid-wall;
 - the gizmo `posY ≥ 0`;
 - the pilot clamp `posY ≥ 0.1`;
@@ -529,7 +529,7 @@ The "Y Height" label would also stop meaning height. VP stage coordinate systems
 | `js/domain/CineCamera.js` | `translateStage`; the `posZ` rule context and pivot-aware branch (step F: no minimum, 4.1); `resetTo` and `coverage` read `minX`/`wallZ` (6.6); step F: `resetTo(framing)` of roadmap §6.10 |
 | `js/domain/Prop.js` | `translateStage` |
 | `js/theme/Theme.js` | `SceneTheme.pivot`. In step D, `SceneTheme.grid` changes per the owner's answer to Q8 (recommended `{size: 100, divisions: 100, position: [0, 0, 0]}`). |
-| `js/geometry/WallLayout.js` | `SectionLayout.baseY`; `generativeBounds()` (the Phase 1 `bounds()` semantics, which equal `FramingPolicy`'s `generativeBox`; spec 02 T3 makes it attached-only, identical until a section is detached; `bounds()` delegates to it until spec 02 makes `bounds()` transformed); `bounds()` honours `baseY`; `pivotPoint(mode)` with floor modes at `sections[0].baseY`, `mesh-center` on `generativeBounds()`, and `RangeError` on unknown modes; `translated(dx, dy, dz)` on the raw walk only (it throws if any `postTransform` is non-null; 5.10); `WallLayout.pivot`; `resolvePivot()`; `stageShift(a, b)`; `layoutProject(project, {frame})`; `framingBounds(project, resolution)` with the `'flat-pivot'` case (step A). Step F (P2-11c): the `'layout'` case of roadmap §6.10, with `worldVertices()` and `extentAcross(facing)` added if P2-11a has not landed (6.1-6.6). |
+| `js/geometry/WallLayout.js` | `SectionLayout.baseY`; `generativeBounds()` (the Phase 1 `bounds()` semantics, which equal `FramingPolicy`'s `generativeBox`; spec 02 T3 makes it attached-only, identical until a section is detached; `bounds()` delegates to it until spec 02 makes `bounds()` transformed); `bounds()` honours `baseY`; `pivotPoint(mode)` with every mode at `sections[0].baseY` (`mesh-center`: the x/z centre of `generativeBounds()` on the floor, 2026-10-17), and `RangeError` on unknown modes; `translated(dx, dy, dz)` on the raw walk only (it throws if any `postTransform` is non-null; 5.10); `WallLayout.pivot`; `resolvePivot()`; `stageShift(a, b)`; `layoutProject(project, {frame})`; `framingBounds(project, resolution)` with the `'flat-pivot'` case (step A). Step F (P2-11c): the `'layout'` case of roadmap §6.10, with `worldVertices()` and `extentAcross(facing)` added if P2-11a has not landed (6.1-6.6). |
 | `js/geometry/WallMeshBuilder.js` | `sectionGrid`: `const y = sl.baseY === 0 ? row * sl.panelH : sl.baseY + row * sl.panelH` (the identity branch is the verbatim legacy expression) |
 | `js/legacy/LegacyCompat.js` | `Strategies.framingBounds: 'flat'` becomes `'flat-pivot'` (step A), then `'layout'` (step F). `LEGACY_SITES` text updates (5.7). |
 | `js/render/PivotMarkerView.js` | **new** (5.3) |
@@ -763,7 +763,7 @@ setSnapIncrements(partial)   // Object.assign(interaction.snap, partial): a merg
 - The orbit's own `mouseup` and `mouseleave` listeners (3833-3834) still reset `isDragging`, so leaving the canvas and re-entering with the button held cannot orbit either.
 - When nothing is cancelled, the flag is never set, so every legacy path is unchanged (step A identity).
 
-**Re-anchoring after rebuilds.** `SELECTABLE_MOVED {id: 'pivot'}` is emitted by P-PIVOT, by the drag preview and by cancel. A rebuild with another cause can also move the marker: a section edit or an import that changes `P.y` (the `mesh-center` height) or the anchor in plan. Mirrors may not emit events (R3), so instead `TransformGizmo` re-anchors a selected pivot on `WALL_REBUILT`. The anchor is read from `wallController.pivotResolution`, which rebuild step 1 sets before the event, so the order of `WALL_REBUILT` subscribers does not matter (5.3 `gizmoAnchor`).
+**Re-anchoring after rebuilds.** `SELECTABLE_MOVED {id: 'pivot'}` is emitted by P-PIVOT, by the drag preview and by cancel. A rebuild with another cause can also move the marker: an import that changes `P.y` (it resets the offset) or the anchor in plan. Since `mesh-center` sits on the floor (2026-10-17), a section edit no longer changes the glyph (always (0, P.y, 0) in the stage frame, with `P.y = y0 + offset.y`); the re-anchor stays, because the gizmo must never keep a stale anchor (test 20 checks it with a stale position). Mirrors may not emit events (R3), so instead `TransformGizmo` re-anchors a selected pivot on `WALL_REBUILT`. The anchor is read from `wallController.pivotResolution`, which rebuild step 1 sets before the event, so the order of `WALL_REBUILT` subscribers does not matter (5.3 `gizmoAnchor`).
 
 `onMouseUp` stays idempotent across the canvas and window `mouseup` calls, because only the first call sees `wasDragging === true`. After `cancelDrag()`, the later mouse-up sees `false`, commits nothing and clears `gestureCancelled`.
 
@@ -874,7 +874,7 @@ The bootstrap rebuild (ARCHITECTURE 6.2 row 1) becomes `wallController.rebuild({
 
 1. **1.4 world conventions:** replace the "world origin" bullet with the three frames of 5.1, and note that `wallGroup` keeps an identity transform and vertices are baked in the stage frame.
 2. **Section 9, Feature 3 row:** replace "a root group in `LEDWallView` … (`-pivot + offset`)" with "baked translation in `layoutProject`; stage frame `−(P.x, 0, P.z)`, export frame `−P`; P = anchor + offset; the raw walk is translated first and spec 02's `applySectionOffsets(out)` builds its section matrices from the translated layout (07 C32); no wall root transform, ever (the identity `wallGroup` transform is a unit-tested invariant)". 07's D0 makes this rewrite.
-3. **3.6:** settle the `pivotPoint('mesh-center')` y policy as the box centre on `generativeBounds()`, the floor modes at `sections[0].baseY`, and add `translated` (raw walk only), `baseY`, `generativeBounds`, `resolvePivot`, `stageShift` and `layoutProject(project, {frame})`.
+3. **3.6:** settle the `pivotPoint('mesh-center')` policy as the x/z box centre of `generativeBounds()` on the floor (y = `sections[0].baseY`, the owner change of 2026-10-17; it was the 3D box centre until then), the floor modes at `sections[0].baseY`, and add `translated` (raw walk only), `baseY`, `generativeBounds`, `resolvePivot`, `stageShift` and `layoutProject(project, {frame})`.
 4. **3.8:** the `Selectable` typedef of 5.4 (the path-B hook set of 07 C33, `kind` required for new Selectables), the `pickAt` rule (priority against wall hits only), `InteractionState.snap` and `InteractionState.gestureCancelled`, and the `TransformGizmo` lifecycle (`beginGizmoDrag`, `endGizmoDrag({cancel})`, `cancelDrag` → `endGizmoDrag({cancel: true})`, `allowedAxes(mode)` with `null`, `setSnapIncrements`, `ctx = {space, axisWorld, snap}`, the `WALL_REBUILT` re-anchor). `OrbitController`'s pointer `mousemove` guard gains `gestureCancelled`.
 5. **4:** state rows for `Project.wall.pivot` (writers: `WallPivot` methods via `PivotController`, `WallController.applyImport`), `display.showPivotMarker` (`PivotController.setMarkerVisible`) and `InteractionState.gestureCancelled` (writer: `TransformGizmo` only).
 6. **5.1/5.2:** `Events.WALL_PIVOT_CHANGED`, the events of 5.5, the `WALL_REBUILT` `cause` and `stageShift` fields, and the `SELECTION_CHANGED.modes` payload field.
@@ -932,14 +932,14 @@ Let `f = firstEdge` (`sections[0].edges[0]`) and `l = lastEdge` (the last sectio
 ```
 'bottom-left' : { x: f.x,               y: y0,                        z: f.z }
 'wall-center' : { x: (f.x + l.x) / 2,   y: y0,                        z: (f.z + l.z) / 2 }
-'mesh-center' : b = generativeBounds();  { x: (b.min.x + b.max.x) / 2, y: (b.min.y + b.max.y) / 2, z: (b.min.z + b.max.z) / 2 }
+'mesh-center' : b = generativeBounds();  { x: (b.min.x + b.max.x) / 2, y: y0,                        z: (b.min.z + b.max.z) / 2 }
 otherwise     : throw new RangeError(`Unknown pivot mode ${JSON.stringify(mode)}`)   (the Phase 1 error type, kept)
 empty wall    : null
 ```
 
-In the layout frame `y0 = 0`, so the floor modes return the Phase 1 values bit for bit (`0` is the same `+0` the Phase 1 literal produced). On a translated copy, the floor anchors follow the floor (`baseY = dy`), so `copy.pivotPoint(m)` equals the original's `pivotPoint(m)` shifted by `(dx, dy, dz)` in **every** mode. In particular, `pivotPoint(m)` of the stage layout is `A − O = (−o.x, A.y, −o.z)`, and of the export layout `A − P = −o`, where `A` is the layout-frame anchor, `o` the offset, and `O`, `P` as in 5.1.
+Every mode is a floor mode since the owner change of 2026-10-17 ("Middle of the wall pivot mode should be on the floor"; Q2 answered (c)). In the layout frame `y0 = 0`, so the floor modes return the Phase 1 values bit for bit (`0` is the same `+0` the Phase 1 literal produced). On a translated copy, the floor anchors follow the floor (`baseY = dy`), so `copy.pivotPoint(m)` equals the original's `pivotPoint(m)` shifted by `(dx, dy, dz)` in **every** mode. In particular, `pivotPoint(m)` of the stage layout is `A − O = (−o.x, A.y, −o.z)`, and of the export layout `A − P = −o`, where `A` is the layout-frame anchor, `o` the offset, and `O`, `P` as in 5.1.
 
-`generativeBounds()` is `FramingPolicy`'s `generativeBox` (07 C34): the axis-aligned box over every grid vertex before spec 02's offsets, over the **attached** sections only once spec 02 T3 lands (identical until a section is detached, so a detached ceiling never moves the pivot). In plan it is the edges; in height it runs from `sl.baseY` to `sl.baseY + panelRows · panelH`. For bottom-aligned walls `min.y = 0` and `max.y = max over sections of panelRows · panelHeight · 0.001`, so mesh-centre y is **half the tallest section's height**. Frames (0.02 m deep boxes) are excluded. The bounding box is the one DCCs call "bounds centre"; the area centroid is not used.
+`generativeBounds()` is `FramingPolicy`'s `generativeBox` (07 C34): the axis-aligned box over every grid vertex before spec 02's offsets, over the **attached** sections only once spec 02 T3 lands (identical until a section is detached, so a detached ceiling never moves the pivot). In plan it is the edges; in height it runs from `sl.baseY` to `sl.baseY + panelRows · panelH`. `mesh-center` reads only the plan extent of the box: its x and z are the box centre (what DCCs call the bounds centre, dropped to the floor), and **y is the floor `y0`**, so the section heights no longer take part (until 2026-10-17 y was the box centre, half the tallest section's height for bottom-aligned walls; that pivot is now Offset Y = half the height). The box skips NaN coordinates, so only a wall without grid vertices (the empty box) gives a non-finite `mesh-center` anchor (`resolvePivot`: `null`); a NaN panel height no longer does. Frames (0.02 m deep boxes) are excluded. The area centroid is not used.
 
 **Extension point (Q2, Q13).** A further mode costs one `PivotMode` entry, one `PIVOT_MODES` entry (which the validator and the radio list read), one radio card and one `pivotPoint` case. The candidate the owner may want is the **surface centre** (`surface-center`, optional task T15): the point on the LED surface halfway along the wall, where the content centre sits.
 
@@ -1130,7 +1130,8 @@ round_mm(v) = Math.round(v * 1000) / 1000 || 0
 |---|---|---|---|---|---|
 | bottom-left | (0, 0, 0) | (0, 0, 0) | [0, 2.5] | `v 0.000000 0.000000 0.000000` | [0, 1.5] |
 | wall-center | (1.25, 0, 0) | (1.25, 0, 0) | [−1.25, 1.25] | `v -1.250000 0.000000 0.000000` | [0, 1.5] |
-| mesh-center | (1.25, 0.75, 0) | (1.25, 0, 0) | [−1.25, 1.25] | `v -1.250000 -0.750000 0.000000` | [−0.75, 0.75] |
+| mesh-center | (1.25, 0, 0) | (1.25, 0, 0) | [−1.25, 1.25] | `v -1.250000 0.000000 0.000000` | [0, 1.5] |
+| mesh-center + (0, 0.75, 0) | (1.25, 0.75, 0) | (1.25, 0, 0) | [−1.25, 1.25] | `v -1.250000 -0.750000 0.000000` | [−0.75, 0.75] |
 | wall-center + (0, 0, 2) | (1.25, 0, 2) | (1.25, 0, 2) | [−1.25, 1.25] at z = −2 | `v -1.250000 0.000000 -2.000000` | [0, 1.5] |
 
 **Re-expression example.** Camera preview on, Reset, then Z Position set to 1.5. The pose is (1.25, 0.75, 1.5), with 35 mm full frame. The frame is 1.54 × 1.03 m, so the status is "Within bounds". The person is at (2, 0, 2) and the car at (4, 0, 3).
@@ -1148,15 +1149,15 @@ With keep off, the camera stays at (1.25, 0.75, 1.5), and the coverage recompute
 
 | Config | bottom-left | wall-center | mesh-center | Layout bounds |
 |---|---|---|---|---|
-| default | 0, 0, 0 | 1.2500, 0, 0 | 1.2500, 0.7500, 0 | x [0, 2.5], y [0, 1.5], z [0, 0] |
-| flat3 | 0, 0, 0 | 3.5000, 0, 0 | 3.5000, 0.7500, 0 | x [0, 7], z [0, 0] |
-| concave_offsets | 0, 0, 0 | 2.5960, 0, 2.3397 | 2.5960, 1.0000, 2.3397 | x [0, 5.1919], y [0, 2], z [0, 4.6795] |
-| convex | 0, 0, 0 | 1.8779, 0, −0.6102 | 1.8779, 1.0000, −0.6102 | x [0, 3.7557], z [−1.2203, 0] |
-| mixed | 0, 0, 0 | 4.6976, 0, 0.9830 | 4.6976, 0.8438, 0.9830 | x [0, 9.3951], y [0, 1.6875], z [0, 1.9660] |
-| box_corner | 0, 0, 0 | **0.0000**, 0, 1.5000 | **1.5000**, 0.7500, 1.5000 | x [0, 3], z [0, 3] |
-| large_wall | 0, 0, 0 | 36.0745, 0, 13.1300 | 36.0745, 5.0000, 13.1300 | x [0, 72.149], y [0, 10], z [0, 26.2601] |
+| default | 0, 0, 0 | 1.2500, 0, 0 | 1.2500, 0, 0 | x [0, 2.5], y [0, 1.5], z [0, 0] |
+| flat3 | 0, 0, 0 | 3.5000, 0, 0 | 3.5000, 0, 0 | x [0, 7], z [0, 0] |
+| concave_offsets | 0, 0, 0 | 2.5960, 0, 2.3397 | 2.5960, 0, 2.3397 | x [0, 5.1919], y [0, 2], z [0, 4.6795] |
+| convex | 0, 0, 0 | 1.8779, 0, −0.6102 | 1.8779, 0, −0.6102 | x [0, 3.7557], z [−1.2203, 0] |
+| mixed | 0, 0, 0 | 4.6976, 0, 0.9830 | 4.6976, 0, 0.9830 | x [0, 9.3951], y [0, 1.6875], z [0, 1.9660] |
+| box_corner | 0, 0, 0 | **0.0000**, 0, 1.5000 | **1.5000**, 0, 1.5000 | x [0, 3], z [0, 3] |
+| large_wall | 0, 0, 0 | 36.0745, 0, 13.1300 | 36.0745, 0, 13.1300 | x [0, 72.149], y [0, 10], z [0, 26.2601] |
 
-On monotonic walls the bounding-box x/z coincides with the chord midpoint, so `mesh-center` differs from `wall-center` only in y. `box_corner`, whose wall folds back to x = 0, shows the two modes diverging in plan. This is why Q2 asks the owner what "middle of wall mesh" was meant to be.
+On monotonic walls the bounding-box x/z coincides with the chord midpoint, so since the owner change of 2026-10-17 (both modes on the floor) `mesh-center` equals `wall-center` there (within the walk's rounding); until then they differed only in y. `box_corner`, whose wall folds back to x = 0, shows the two modes diverging in plan.
 
 ### 6.9 The curve-convention caveat (B-L1)
 
@@ -1217,11 +1218,11 @@ On monotonic walls the bounding-box x/z coincides with the chord midpoint, so `m
 
 **`tests/unit/pivot.test.mjs` (new)**
 
-1. `pivotPoint` equals the table in 6.8 within 1e-4 for all seven configs and the three modes. In the layout frame the floor modes return `y` with `Object.is(y, 0)` (Phase 1 values unchanged). Unknown modes throw **`RangeError`**. An empty wall returns `null`.
+1. `pivotPoint` equals the table in 6.8 within 1e-4 for all seven configs and the three modes. In the layout frame every mode returns `y` with `Object.is(y, 0)` (Phase 1 values unchanged; `mesh-center` too since 2026-10-17), and `mesh-center` is the x/z centre of `generativeBounds()` whatever the section heights, with `y` following `baseY` on a translated copy. Unknown modes throw **`RangeError`**. An empty wall returns `null`.
 2. `resolvePivot`:
    - offset arithmetic;
    - `stageOrigin.y === 0`;
-   - a NaN panel width gives `null` in `wall-center` and a NaN panel height gives `null` in `mesh-center`, and both give a non-null resolution in `bottom-left` (corrected in T2: `generativeBounds()` skips NaN coordinates, so a NaN width alone leaves the mesh-centre box finite);
+   - a NaN panel width gives `null` in `wall-center`, and a non-null resolution in `bottom-left` and in `mesh-center` (`generativeBounds()` skips NaN coordinates, so the finite first edge alone spans the box: (0, 0, 0)); a NaN panel height gives a non-null resolution in every mode (`mesh-center` reads only the plan extent since 2026-10-17; before, it gave `null` there);
    - a wall whose sections have no grid vertices (negative counts) gives `null` in `mesh-center` (empty box);
    - an empty wall gives the anchor (0, 0, 0) plus the offset (non-null);
    - `stageShift(null, null)` is (0, 0) and `stageShift(a, b)` is `so(b) − so(a)`.
@@ -1234,7 +1235,7 @@ On monotonic walls the bounding-box x/z coincides with the chord midpoint, so `m
    - **the precondition:** a layout with a non-null stub `postTransform` makes `translated()` throw. A raw layout gives a copy whose `postTransform`s are all `null`. No cached derived value is copied: a stub lazy `frame` getter on the copy reads the translated edges.
 5. Frames:
    - `export` positions = `stage` positions − (0, P.y, 0) for `sectionGrid` output and `panelCorners`, in all three modes;
-   - with `mesh-center`, the default wall's combined grid y range is [−0.75, 0.75].
+   - with `mesh-center`, the default wall's combined export grid y range is [0, 1.5] (on the floor); with `mesh-center` + Offset Y 0.75 it is [−0.75, 0.75], and the stage grid stands on the floor in both.
 6. `framingBounds`:
    - `'flat-pivot'` at identity equals the legacy `'flat'` expressions (kept in the test as an oracle), over the fuzzed walls and a grid of camera poses and orbit offsets: `Object.is` for the orbit target x and y, the `resetTo` pose, every `coverage` output and the `posZ` rule; `===` for the orbit target z (only the sign of zero can differ, `0 + -0`, which is unobservable);
    - `'layout'` (step F; reuses the roadmap's P2-11c test vectors where P2-11c has landed): for the B-L2 wall with `wall-center`, `center` is (0.664, H/2, 0.000), `facing` is (−0.988, 0, −0.156), `width` is 3.196 (`extentAcross`, not the axis-aligned 1.828) and the Reset pose is (−4.274, H/2, −0.782) with pan −99.0°, all within 1e-3 (6.6). For the default and `flat3` walls, `width`, the orbit target and the Reset pose are `Object.is`-equal to the `'flat-pivot'` values. A wall with no finite grid vertices returns the flat-pivot framing (finite `center`, no NaN).
@@ -1272,7 +1273,7 @@ On monotonic walls the bounding-box x/z coincides with the chord midpoint, so `m
     - a canvas `mouseup` clears `gestureCancelled`; a following plain drag of 40 px orbits by exactly 0.4 rad (legacy rate, so the guard did not leak);
     - with no cancel, `gestureCancelled` is never set, and a legacy camera-target drag produces the same orbit and target writes as before (identity);
     - a release on the window instead of the canvas (window `mouseup` → `onMouseUp`) also clears the flag.
-20. **Gizmo re-anchor** (`gizmo.test.mjs` with a real `WallController` and `PivotController`, stub views): with the pivot selected in `mesh-center` on the default wall, `setSectionField(rows: 3 → 5)` rebuilds (`cause: 'edit'`), and the gizmo group's position y equals the new `P.y` (1.25) right after `WALL_REBUILT`, whatever the subscription order (the test registers a second `WALL_REBUILT` spy before and after the gizmo). An import that changes the anchor does the same. With a camera target selected, `WALL_REBUILT` leaves the gizmo position untouched.
+20. **Gizmo re-anchor** (`gizmo.test.mjs` with a real `WallController` and `PivotController`, stub views): with the pivot selected in `mesh-center` on the default wall the gizmo sits on the floor (y 0) and Offset Y 0.75 raises it to 0.75; the gizmo position is then made stale (y 99) and `setSectionField(rows: 3 → 5)` rebuilds (`cause: 'edit'`): the gizmo group's position y is `P.y` (0.75: the floor anchor ignores the rows) right after `WALL_REBUILT`, whatever the subscription order (the test registers a second `WALL_REBUILT` spy before and after the gizmo). An import that changes the anchor (it resets an Offset Y of 1.25) re-anchors to 0. (Until 2026-10-17 the rows edit itself moved `P.y` from 0.75 to 1.25.) With a camera target selected, `WALL_REBUILT` leaves the gizmo position untouched.
 
 **Amended existing tests**
 
@@ -1359,8 +1360,8 @@ Each criterion names how it is checked: (harness), (unit), (static) or (manual).
 2. `layoutProject(project)` with the identity pivot returns the object produced by `computeWallLayout`: the unit test asserts `===`. (unit)
 3. For the default wall:
    - `wall-center` makes the combined OBJ's first vertex line `v -1.250000 0.000000 0.000000`; (harness)
-   - `mesh-center` makes it `v -1.250000 -0.750000 0.000000`, with every OBJ `v` y in [−0.75, 0.75]; (harness)
-   - in both modes the viewport wall stands on the floor (stage `baseY = 0`) and `glyphPosition` is (0, 0.75, 0) for `mesh-center`. (unit)
+   - `mesh-center` (on the floor since 2026-10-17) makes it `v -1.250000 0.000000 0.000000` too, with every OBJ `v` y in [0, 1.5]; `mesh-center` + Offset Y 0.75 makes it `v -1.250000 -0.750000 0.000000`, with every OBJ `v` y in [−0.75, 0.75]; (harness for the mode, unit for the offset)
+   - in every case the viewport wall stands on the floor (stage `baseY = 0`), and `glyphPosition` is (0, 0, 0) for `mesh-center` and (0, 0.75, 0) with Offset Y 0.75. (unit)
 4. The anchor values of table 6.8 are reproduced within 1e-4 for every harness configuration and mode. (unit)
 5. Set up the default wall with camera preview on, Reset, Z Position 1.5, person and car on, and keep on. Switching `bottom-left` → `wall-center` then: (harness)
    - sets `#camera-pos-x` to `0.00`, person pos-x to `0.75` and car pos-x to `2.75`;
@@ -1381,7 +1382,7 @@ Each criterion names how it is checked: (harness), (unit), (static) or (manual).
 14. JSON v2 export → import → export reproduces the pivot block, the panel state, and byte-identical OBJ and glTF. Importing any v1 file sets the pivot to bottom-left / (0, 0, 0) without moving the camera. (harness)
 15. A v2 file with an invalid pivot (8.3 `pivot_validation`) loads with mode `bottom-left`, offset (0, 1000, 0) and keep on, with validator warnings and no console error. (harness)
 16. The non-identity OBJ header lines and glTF `scenes[0].extras.pivot` are present iff `!pivot.isIdentity` (and the resolution is non-null). (unit)
-17. The safe-distance OBJ (once B-M1 is fixed), exported with `mesh-center`, has floor vertices at `y = 0.005 − P.y` (to 6 dp). A group built under an earlier pivot (preview turned off, then the pivot changed) is written in the current export frame. (unit)
+17. The safe-distance OBJ (once B-M1 is fixed), exported with a raised pivot (`mesh-center` + Offset Y; `mesh-center` alone is on the floor since 2026-10-17), has floor vertices at `y = 0.005 − P.y` (to 6 dp). A group built under an earlier pivot (preview turned off, then the pivot changed) is written in the current export frame. (unit)
 18. The pivot panel's radios are reachable and operable by keyboard: the checked radio takes focus and `ArrowDown` changes the mode (harness); Tab order reaches them (manual); no CSS hides them (static). Both new toggles have `role="switch"`, reflect `aria-checked`, and toggle on Space and Enter (harness for the attribute, manual for the keys).
 19. **Before step F:** with a pivot whose stage origin is off the wall plane (default wall, `wall-center` + offset (0, 0, 2), `wallZ = −2`), typing `0` in Z Position stores and shows `0`, typing `-5` stores `−1.9`, and the `min` attribute is `-1.9`. For `concave_offsets` with `wall-center` (`wallZ = −2.3397`), the attribute is `-2.3` (on the 0.1 grid, so a typed `0` is not `:invalid`), and `-5` stores `−2.24`. At the identity pivot the field behaves exactly as legacy (`0` → `5`, `min="0.1"`) (unit + harness). **After step F:** any finite value is stored, there is no `min` attribute, and a non-numeric entry gives `wallZ + 5` (unit).
 20. With a non-finite layout (`resolution === null`, possible before B-L8), no exception is thrown, the marker is hidden and not pickable, the readout says `Pivot unavailable · invalid section values`, `#camera-pos-z` keeps `min="0.1"`, the JSON writes `resolved_m: null`, and exports are the untranslated layout without pivot metadata. For an empty wall, `resolved_m` holds the anchor (0, 0, 0) plus the offset. (unit)
@@ -1392,7 +1393,7 @@ Each criterion names how it is checked: (harness), (unit), (static) or (manual).
 
     For flat walls these values are unchanged. A wall without finite grid vertices falls back to the flat-pivot framing, with no NaN target. Step F re-baselines exactly the roadmap's P2-11c manifest, once. (unit + harness via the step-F manifest)
 22. `node tests/static/check.mjs` and `node --test "tests/unit/**/*.test.mjs"` pass, including the tests of 8.1 and 8.2. (static + unit)
-23. With the pivot selected, a section edit or an import that changes the anchor (for example, more rows in `mesh-center`) moves the gizmo onto the marker in the same frame, without any other input. (unit test 20)
+23. With the pivot selected, every rebuild re-anchors the gizmo on the marker in the same frame, without any other input: an import that changes the anchor (it resets the offset), and a section edit (since 2026-10-17 no section edit changes the glyph, so the test makes the gizmo position stale first). (unit test 20)
 24. The `PivotPanel` status is a pure function of the mirrored event payloads: delivering any `WALL_PIVOT_CHANGED` or `WALL_REBUILT` payload twice gives the same text, and the panel keeps no event history. (unit test 17)
 25. This spec does not change the `.info-badge` text and adds no token to it (07 C35). No viewport screenshot changes in step B. (static + harness)
 26. Exported JSON and ZIP JSON change only in the steps that allow them (A′: the `pivot` key; C: `display.show_pivot_marker`). Before step C, a v2 file with `display.show_pivot_marker: true` does not turn the marker on (the key is `dropped-unknown`). (harness + unit)
@@ -1483,7 +1484,7 @@ Effort scale: S ≤ 0.5 d, M 1-2 d, L 3-5 d, XL > 5 d.
 | # | Question | Recommended default |
 |---|---|---|
 | Q1 | Should **new** projects default to `wall-center` instead of `bottom-left`? | **`bottom-left`** for now. Every existing pipeline and file stays identical. Revisit after users try the modes; switching later is a one-line default change plus a re-baseline. A user who always works in another mode can make it their own default with the optional T17 ("Use for new projects", stored per device in 07's `app/Prefs`, C19), which changes no file and no golden. |
-| Q2 | What is "middle of wall mesh"? (a) the 3D bounding-box centre (y = half the tallest section; current `mesh-center`); (b) the **surface centre**: the point on the LED surface halfway along the wall at mid-height, where the content centre sits (6.1, O(n)); (c) the bounding-box centre on the floor. On 6 of the 7 harness walls (a) and `wall-center` differ only in y, so (b) may be what was meant. | **(a) for `mesh-center`** (what DCCs call the bounds centre), and add (b) as a fourth mode `surface-center` ("Wall surface centre (content centre)", optional T15, S) if the owner confirms the content-centre reading. (c) is reachable with Offset Y. |
+| Q2 | What is "middle of wall mesh"? (a) the 3D bounding-box centre (y = half the tallest section; `mesh-center` until 2026-10-17); (b) the **surface centre**: the point on the LED surface halfway along the wall at mid-height, where the content centre sits (6.1, O(n)); (c) the bounding-box centre on the floor. On 6 of the 7 harness walls (a) and `wall-center` differ only in y, so (b) may be what was meant. | **Answered by the owner on 2026-10-17: (c).** "Middle of the wall pivot mode should be on the floor": `mesh-center` is the bounding-box centre in plan on the floor, labelled "Wall mesh centre on floor (bounding box)" (D1, 6.1). (a) is reachable with Offset Y (half the tallest section). (b) stays the optional fourth mode `surface-center` (T15) if the owner asks for the content centre. |
 | Q3 | Should the viewport origin rise to the pivot height (a full 3D origin), or stay on the floor? | **Stay on the floor** (5.1). The pivot height is exact in exports only. |
 | Q4 | Keep stage layout on by default? | **On** |
 | Q5 | Should the pivot anchor include per-section offsets (the live mesh) or only the generated wall? | **Generated wall only** (D5). It is stable while sections are nudged. **Consequence:** once spec 02 offsets or detached sections exist (risers, leaned flats, soffits, ceilings), `mesh-center` is the centre of the generated chain, not of the exported mesh, and `wall-center` ignores detached sections; the file origin then sits off the centre of the exported geometry by the offsets' effect. Use the pivot offset to correct it, or a later "Use current mesh" button (S, after spec 02 3a) that stores the difference between the transformed `bounds()` centre and the anchor as the offset. Choose "live mesh" only if exports must always be centred on the final geometry; the pivot then moves while sections are dragged and nudged. |

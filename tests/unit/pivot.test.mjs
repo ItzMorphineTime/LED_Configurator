@@ -42,15 +42,15 @@ const WALLS = {
   ...Object.fromEntries(Object.entries(CONFIGS).map(([name, data]) => [name, importSections(data)])),
 };
 
-/** 6.8's anchor table (4 dp; the unit-test oracle values), layout frame. */
+/** 6.8's anchor table (4 dp; the unit-test oracle values), layout frame. mesh-center is on the floor (owner, 2026-10-17). */
 const ANCHORS = {
-  default:         { 'bottom-left': [0, 0, 0], 'wall-center': [1.25, 0, 0], 'mesh-center': [1.25, 0.75, 0] },
-  flat3:           { 'bottom-left': [0, 0, 0], 'wall-center': [3.5, 0, 0], 'mesh-center': [3.5, 0.75, 0] },
-  concave_offsets: { 'bottom-left': [0, 0, 0], 'wall-center': [2.5960, 0, 2.3397], 'mesh-center': [2.5960, 1, 2.3397] },
-  convex:          { 'bottom-left': [0, 0, 0], 'wall-center': [1.8779, 0, -0.6102], 'mesh-center': [1.8779, 1, -0.6102] },
-  mixed:           { 'bottom-left': [0, 0, 0], 'wall-center': [4.6976, 0, 0.9830], 'mesh-center': [4.6976, 0.8438, 0.9830] },
-  box_corner:      { 'bottom-left': [0, 0, 0], 'wall-center': [0, 0, 1.5], 'mesh-center': [1.5, 0.75, 1.5] },
-  large_wall:      { 'bottom-left': [0, 0, 0], 'wall-center': [36.0745, 0, 13.1300], 'mesh-center': [36.0745, 5, 13.1300] },
+  default:         { 'bottom-left': [0, 0, 0], 'wall-center': [1.25, 0, 0], 'mesh-center': [1.25, 0, 0] },
+  flat3:           { 'bottom-left': [0, 0, 0], 'wall-center': [3.5, 0, 0], 'mesh-center': [3.5, 0, 0] },
+  concave_offsets: { 'bottom-left': [0, 0, 0], 'wall-center': [2.5960, 0, 2.3397], 'mesh-center': [2.5960, 0, 2.3397] },
+  convex:          { 'bottom-left': [0, 0, 0], 'wall-center': [1.8779, 0, -0.6102], 'mesh-center': [1.8779, 0, -0.6102] },
+  mixed:           { 'bottom-left': [0, 0, 0], 'wall-center': [4.6976, 0, 0.9830], 'mesh-center': [4.6976, 0, 0.9830] },
+  box_corner:      { 'bottom-left': [0, 0, 0], 'wall-center': [0, 0, 1.5], 'mesh-center': [1.5, 0, 1.5] },
+  large_wall:      { 'bottom-left': [0, 0, 0], 'wall-center': [36.0745, 0, 13.1300], 'mesh-center': [36.0745, 0, 13.1300] },
 };
 
 const near = (a, b, eps) => Math.abs(a - b) <= eps;
@@ -109,11 +109,12 @@ describe('03 test 1: pivotPoint anchors (6.1, 6.8)', () => {
     }
   });
 
-  test('layout frame: the floor modes return y with Object.is(y, 0) (the Phase-1 values); unknown modes throw RangeError', () => {
+  test('layout frame: every mode returns y with Object.is(y, 0) (all three are floor modes); unknown modes throw RangeError', () => {
     for (const sections of Object.values(WALLS)) {
       const layout = computeWallLayout(sections);
       assert.ok(Object.is(layout.pivotPoint(PivotMode.BOTTOM_LEFT).y, 0));
       assert.ok(Object.is(layout.pivotPoint(PivotMode.WALL_CENTER).y, 0));
+      assert.ok(Object.is(layout.pivotPoint(PivotMode.MESH_CENTER).y, 0), 'mesh-center sits on the floor (owner, 2026-10-17)');
       assert.deepEqual(layout.pivotPoint(PivotMode.BOTTOM_LEFT), { x: 0, y: 0, z: 0 });
       assert.throws(() => layout.pivotPoint('middle'), { name: 'RangeError', message: 'Unknown pivot mode "middle"' });
     }
@@ -123,11 +124,14 @@ describe('03 test 1: pivotPoint anchors (6.1, 6.8)', () => {
     for (const mode of PIVOT_MODES) assert.equal(computeWallLayout([]).pivotPoint(mode), null);
   });
 
-  test('mesh-center y is half the tallest section (generativeBounds, 6.1); frames are not part of the box', () => {
+  test('mesh-center is the generativeBounds x/z centre on the floor (y0 = sections[0].baseY), whatever the heights (6.1)', () => {
     const layout = computeWallLayout([section({ panelRows: 3 }), section({ id: 1, panelRows: 5, panelHeight: 400 })]);
     assert.deepEqual(layout.generativeBounds(), layout.bounds());
-    assert.ok(near(layout.pivotPoint(PivotMode.MESH_CENTER).y, 1.0, 1e-12));
-    assert.ok(near(layout.generativeBounds().max.y, 2.0, 1e-12));
+    const b = layout.generativeBounds();
+    assert.ok(near(b.max.y, 2.0, 1e-12), 'the box still spans the tallest section');
+    assert.deepEqual(layout.pivotPoint(PivotMode.MESH_CENTER), { x: (b.min.x + b.max.x) / 2, y: 0, z: (b.min.z + b.max.z) / 2 });
+    const moved = layout.translated(1, 2, 3).pivotPoint(PivotMode.MESH_CENTER);
+    assert.deepEqual(moved, { x: (b.min.x + b.max.x) / 2 + 1, y: 2, z: (b.min.z + b.max.z) / 2 + 3 }, 'y follows the floor (baseY)');
   });
 });
 
@@ -155,15 +159,19 @@ describe('03 test 2: resolvePivot and stageShift (6.2)', () => {
   });
 
   test('non-finite walls: null where the anchor is not finite, a resolution in bottom-left', () => {
-    // bounds() skips NaN coordinates, so each mode needs its own non-finite field (03 8.1 test 2 as corrected by 03 T2)
+    // bounds() skips NaN coordinates (03 8.1 test 2 as corrected by 03 T2). mesh-center reads only the plan extent of the
+    // box since it sits on the floor (owner, 2026-10-17): a NaN panel height leaves it finite, and with a NaN width the
+    // finite first edge alone spans the box; only a wall without grid vertices gives the empty box
     const nanWidth = computeWallLayout([section({ panelWidth: NaN })]);
     assert.equal(resolvePivot(nanWidth, pivotOf('wall-center')), null);
+    assert.deepEqual(resolvePivot(nanWidth, pivotOf('mesh-center')).point, { x: 0, y: 0, z: 0 });
     assert.deepEqual(resolvePivot(nanWidth, pivotOf('bottom-left')).point, { x: 0, y: 0, z: 0 });
     const nanHeight = computeWallLayout([section({ panelHeight: NaN })]);
-    assert.equal(resolvePivot(nanHeight, pivotOf('mesh-center')), null);
+    assert.deepEqual(resolvePivot(nanHeight, pivotOf('mesh-center')).point, { x: 1.25, y: 0, z: 0 });
     assert.deepEqual(resolvePivot(nanHeight, pivotOf('bottom-left')).point, { x: 0, y: 0, z: 0 });
     const nanBoth = computeWallLayout([section({ panelWidth: NaN, panelHeight: NaN })]);
-    for (const mode of ['wall-center', 'mesh-center']) assert.equal(resolvePivot(nanBoth, pivotOf(mode)), null, mode);
+    assert.equal(resolvePivot(nanBoth, pivotOf('wall-center')), null);
+    assert.deepEqual(resolvePivot(nanBoth, pivotOf('mesh-center')).point, { x: 0, y: 0, z: 0 });
     const noVertices = computeWallLayout([section({ panelCols: -1, panelRows: -1 })]);
     assert.equal(resolvePivot(noVertices, pivotOf('mesh-center')), null, 'the empty box of a wall without grid vertices');
   });
@@ -322,13 +330,18 @@ describe('03 test 5: export = stage - (0, P.y, 0) for the grids and the panel co
     }
   });
 
-  test('mesh-center on the default wall: the export grid y range is [-0.75, 0.75]; the stage grid stands on the floor', () => {
-    const project = projectOf(WALLS.default, pivotOf('mesh-center'));
+  test('mesh-center on the default wall: the export grid y range is [0, 1.5] (on the floor); Offset Y 0.75 gives [-0.75, 0.75]', () => {
     const ys = (layout) => gridPoints(layout).map((p) => p.y);
-    assert.deepEqual([Math.min(...ys(layoutProject(project, { frame: 'export' }))), Math.max(...ys(layoutProject(project, { frame: 'export' })))], [-0.75, 0.75]);
-    assert.deepEqual([Math.min(...ys(layoutProject(project))), Math.max(...ys(layoutProject(project)))], [0, 1.5]);
-    const first = gridPoints(layoutProject(project, { frame: 'export' }))[0];
-    assert.equal(`v ${first.x.toFixed(6)} ${first.y.toFixed(6)} ${first.z.toFixed(6)}`, 'v -1.250000 -0.750000 0.000000');
+    const range = (layout) => [Math.min(...ys(layout)), Math.max(...ys(layout))];
+    const first = (layout) => { const p = gridPoints(layout)[0]; return `v ${p.x.toFixed(6)} ${p.y.toFixed(6)} ${p.z.toFixed(6)}`; };
+    const project = projectOf(WALLS.default, pivotOf('mesh-center'));
+    assert.deepEqual(range(layoutProject(project, { frame: 'export' })), [0, 1.5]);
+    assert.deepEqual(range(layoutProject(project)), [0, 1.5]);
+    assert.equal(first(layoutProject(project, { frame: 'export' })), 'v -1.250000 0.000000 0.000000');
+    const raised = projectOf(WALLS.default, pivotOf('mesh-center', { x: 0, y: 0.75, z: 0 }));
+    assert.deepEqual(range(layoutProject(raised, { frame: 'export' })), [-0.75, 0.75]);
+    assert.deepEqual(range(layoutProject(raised)), [0, 1.5], 'the stage grid stands on the floor');
+    assert.equal(first(layoutProject(raised, { frame: 'export' })), 'v -1.250000 -0.750000 0.000000');
   });
 
   test('wall-center on the default wall: the first export vertex is (-1.25, 0, 0) (6.8)', () => {

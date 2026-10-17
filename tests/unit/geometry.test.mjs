@@ -917,14 +917,14 @@ describe('framingBounds and the Feature 3 seams', () => {
     for (const mode of Object.values(PivotMode)) assert.equal(empty.pivotPoint(mode), null);
   });
 
-  test('flat 5 x 500 mm, 3 rows: bounds, bottom-left (0, 0, 0), wall-center (1.25, 0, 0), mesh-center', () => {
+  test('flat 5 x 500 mm, 3 rows: bounds, bottom-left (0, 0, 0), wall-center (1.25, 0, 0), mesh-center on the floor', () => {
     const layout = computeWallLayout([WallSection.createDefault()]);
     assert.equal(layout.firstEdge, layout.sections[0].edges[0]);
     assert.equal(layout.lastEdge, layout.sections[0].edges[5]);
     assert.deepEqual(layout.bounds(), { min: { x: 0, y: 0, z: 0 }, max: { x: 2.5, y: 1.5, z: 0 } });
     assert.deepEqual(layout.pivotPoint(PivotMode.BOTTOM_LEFT), { x: 0, y: 0, z: 0 });
     assert.deepEqual(layout.pivotPoint(PivotMode.WALL_CENTER), { x: 1.25, y: 0, z: 0 });
-    assert.deepEqual(layout.pivotPoint(PivotMode.MESH_CENTER), { x: 1.25, y: 0.75, z: 0 });
+    assert.deepEqual(layout.pivotPoint(PivotMode.MESH_CENTER), { x: 1.25, y: 0, z: 0 });
     assert.throws(() => layout.pivotPoint('centre'), RangeError);
   });
 
@@ -942,7 +942,7 @@ describe('framingBounds and the Feature 3 seams', () => {
     assert.ok(nearPoint(b.min, { x: 0, y: 0, z: 0 }) && nearPoint(b.max, { x: 2, y: 1, z: 2 }), JSON.stringify(b));
     assert.deepEqual(layout.pivotPoint(PivotMode.BOTTOM_LEFT), { x: 0, y: 0, z: 0 });
     assert.ok(nearPoint(layout.pivotPoint(PivotMode.WALL_CENTER), { x: 1, y: 0, z: 1 }));
-    assert.ok(nearPoint(layout.pivotPoint(PivotMode.MESH_CENTER), { x: 1, y: 0.5, z: 1 }));
+    assert.ok(nearPoint(layout.pivotPoint(PivotMode.MESH_CENTER), { x: 1, y: 0, z: 1 }));
     // flatEdges joins the two sections without duplicating the shared corner edge
     assert.equal(layout.flatEdges().length, 5);
   });
