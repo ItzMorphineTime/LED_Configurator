@@ -536,7 +536,10 @@ describe('Wall', () => {
     assert.deepEqual(PIVOT_MODES, ['bottom-left', 'mesh-center', 'wall-center']);
     assert.ok(Object.isFrozen(PIVOT_MODES));
     assert.equal(PIVOT_OFFSET_LIMIT_M, 1000);
-    assert.deepEqual({ ...new WallPivot() }, { mode: 'bottom-left', offset: { x: 0, y: 0, z: 0 }, keepStageLayout: true });
+    // 03 12.4 (F3-O1): the orientation joins the fields; 'none' with a zero yaw offset is the identity default
+    assert.deepEqual({ ...new WallPivot() }, {
+      mode: 'bottom-left', offset: { x: 0, y: 0, z: 0 }, keepStageLayout: true, orientation: { align: 'none', yawOffsetDeg: 0 },
+    });
     const keepOff = new WallPivot();
     keepOff.setKeepStageLayout(false);
     assert.equal(keepOff.isIdentity, true, 'keepStageLayout does not count');

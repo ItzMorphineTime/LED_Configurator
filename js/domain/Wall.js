@@ -2,7 +2,8 @@
  * @module domain/Wall
  * The ordered list of wall sections (legacy `wallSections`), the section id allocator (legacy `nextSectionId`),
  * the header totals, the legacy flat bounds, and the wall pivot (Feature 3, 03 T1: `WallPivot` with its rules; the
- * identity until the pivot UI lands, docs/improvements/03-pivot.md 4.1).
+ * identity until the pivot UI lands, docs/improvements/03-pivot.md 4.1) with its whole-wall orientation (03 section 12,
+ * F3-O1: `OrientationAlign`, `WallPivot.orientation` and its rules).
  * Legacy source: index.html@cd3fd3f 1395-1409 (state), 2307-2313 (totals), 2487-2493 / 2551-2557 / 2597-2603 /
  * 3757-3762 (flat bounds), 4088-4103 (add), 4133 (delete), 4976 + 4989 (import replace + allocator).
  * Layer: domain (may import legacy; THREE-free and DOM-free).
@@ -24,27 +25,57 @@ export const PIVOT_OFFSET_LIMIT_M = 1000;
 const OFFSET_AXES = Object.freeze(['x', 'y', 'z']);
 
 /**
+ * How the whole wall is turned about the pivot (03 section 12, the owner's request of 2026-10-17):
+ * 'center-neg-x' ("Centre on −X") turns the LED normal at the wall's centre point to +X, so the wall's centre lies
+ * toward −X from the pivot and the face looks at the stage on +X; 'none' applies the yaw offset alone.
+ */
+export const OrientationAlign = Object.freeze({ CENTER_NEG_X: 'center-neg-x', NONE: 'none' });
+
+/** The orientation alignments in display order: the #pivot-align options (03 12.9) and, with v2, the validator read it. */
+export const ORIENTATION_ALIGNS = Object.freeze([OrientationAlign.CENTER_NEG_X, OrientationAlign.NONE]);
+
+/** The largest yaw offset magnitude, in degrees (03 12.4). */
+export const YAW_OFFSET_LIMIT_DEG = 180;
+
+/**
  * The wall pivot (Feature 3, 03 4.1): P = anchor(mode) + offset (D2). The offset is in metres, in layout axes (X along
  * the wall start, Y up, Z toward the stage), and moves the pivot relative to the wall. keepStageLayout decides whether
- * an explicit pivot edit re-expresses the camera and props (D6). The default is the identity (bottom-left, zero offset):
- * the implicit legacy pivot. Written only through these methods (ARCHITECTURE.md section 4); the pivot is session-only
+ * an explicit pivot or orientation edit re-expresses the camera and props (D6, 03 12.6). The orientation (03 section 12)
+ * turns the whole wall about the vertical axis through P: the alignment ('center-neg-x' or 'none') plus a yaw offset in
+ * degrees. The default is the identity (bottom-left, zero offset, DEFAULT_ALIGN 'none' with a zero yaw offset): the
+ * implicit legacy pivot. Written only through these methods (ARCHITECTURE.md section 4); the pivot is session-only
  * until the project file v2 lands (03 header, "Sequencing", the owner's decision of 2026-10-17).
  */
 export class WallPivot {
+  /**
+   * The alignment of a new pivot (03 12.11): 'none' until the owner's default (Centre on −X for new projects) lands in
+   * its own commit, so every output stays unchanged until the orientation is used.
+   * @type {string}
+   */
+  static DEFAULT_ALIGN = OrientationAlign.NONE;
+
   /** @type {string} a PivotMode value */
   mode = PivotMode.BOTTOM_LEFT;
   /** @type {{x: number, y: number, z: number}} metres; replaced (never mutated in place) by every setter */
   offset = { x: 0, y: 0, z: 0 };
-  /** @type {boolean} re-express the camera and props on explicit pivot edits (D6, Q4: on by default) */
+  /** @type {boolean} re-express the camera and props on explicit pivot and orientation edits (D6, Q4: on by default) */
   keepStageLayout = true;
+  /**
+   * The whole-wall orientation (03 12.1): align is an ORIENTATION_ALIGNS value, yawOffsetDeg degrees in
+   * [-YAW_OFFSET_LIMIT_DEG, YAW_OFFSET_LIMIT_DEG] stored to 0.1 degree (positive = counter-clockwise seen from above,
+   * the sign of three.js rotation.y). Replaced (never mutated in place) by every setter.
+   * @type {{align: string, yawOffsetDeg: number}}
+   */
+  orientation = { align: WallPivot.DEFAULT_ALIGN, yawOffsetDeg: 0 };
 
   /**
    * Side effects: none.
-   * @returns {boolean} true when the pivot is bottom-left with a zero offset (the implicit legacy pivot);
-   *   keepStageLayout does not count
+   * @returns {boolean} true when the pivot is bottom-left with a zero offset and the orientation is 'none' with a zero
+   *   yaw offset (the implicit legacy pivot); keepStageLayout does not count
    */
   get isIdentity() {
-    return this.mode === PivotMode.BOTTOM_LEFT && this.offset.x === 0 && this.offset.y === 0 && this.offset.z === 0;
+    return this.mode === PivotMode.BOTTOM_LEFT && this.offset.x === 0 && this.offset.y === 0 && this.offset.z === 0 &&
+      this.orientation.align === OrientationAlign.NONE && this.orientation.yawOffsetDeg === 0;
   }
 
   /**
@@ -112,6 +143,34 @@ export class WallPivot {
   }
 
   /**
+   * Sets the orientation alignment (03 12.4; rebuild-policy row F3-6). The orientation object is REPLACED.
+   * Side effects: replaces orientation.
+   * @param {*} align  an ORIENTATION_ALIGNS value
+   * @returns {boolean} whether the alignment changed
+   * @throws {RangeError} `Unknown orientation alignment ${JSON.stringify(align)}` for anything else
+   */
+  setAlign(align) {
+    if (!ORIENTATION_ALIGNS.includes(align)) throw new RangeError(`Unknown orientation alignment ${JSON.stringify(align)}`);
+    const changed = this.orientation.align !== align;
+    this.orientation = { ...this.orientation, align };
+    return changed;
+  }
+
+  /**
+   * Stores the yaw offset through parseYawOffset (03 12.4; row F3-7). A value parseYawOffset rejects (not finite) writes
+   * nothing, and the stored value is returned for the input's write-back. The orientation object is REPLACED.
+   * Side effects: replaces orientation (only when the value parses).
+   * @param {number|string} raw  a number, or the input's text (degrees)
+   * @returns {number} the stored yaw offset in degrees
+   */
+  setYawOffset(raw) {
+    const v = WallPivot.parseYawOffset(raw);
+    if (v === null) return this.orientation.yawOffsetDeg;
+    this.orientation = { ...this.orientation, yawOffsetDeg: v };
+    return v;
+  }
+
+  /**
    * Number or text -> metres: finite values are rounded to 1 mm and clamped to +-PIVOT_OFFSET_LIMIT_M; anything else
    * gives null. Never orDefault: 0 is a valid offset (B-L9 does not apply). A rounded -0 is normalised to +0
    * (`|| 0`). Idempotent: parseOffset(parseOffset(x)) === parseOffset(x) for every finite x.
@@ -126,6 +185,20 @@ export class WallPivot {
   }
 
   /**
+   * Number or text -> degrees (03 12.4): finite values are rounded to 0.1 degree and clamped to +-YAW_OFFSET_LIMIT_DEG;
+   * anything else gives null. Never orDefault: 0 is a valid yaw offset. A rounded -0 is normalised to +0 (`|| 0`).
+   * Idempotent: parseYawOffset(parseYawOffset(x)) === parseYawOffset(x) for every finite x.
+   * Side effects: none.
+   * @param {*} raw
+   * @returns {number|null}
+   */
+  static parseYawOffset(raw) {
+    const v = typeof raw === 'number' ? raw : parseFloat(raw);
+    if (!Number.isFinite(v)) return null;
+    return Math.max(-YAW_OFFSET_LIMIT_DEG, Math.min(YAW_OFFSET_LIMIT_DEG, Math.round(v * 10) / 10)) || 0;
+  }
+
+  /**
    * Side effects: none.
    * @returns {WallPivot} a deep copy
    */
@@ -134,17 +207,20 @@ export class WallPivot {
     copy.mode = this.mode;
     copy.offset = { ...this.offset };
     copy.keepStageLayout = this.keepStageLayout;
+    copy.orientation = { ...this.orientation };
     return copy;
   }
 
   /**
    * Side effects: none.
    * @param {WallPivot} other
-   * @returns {boolean} mode, the three offset components and keepStageLayout, each compared with ===
+   * @returns {boolean} mode, the three offset components, keepStageLayout and the two orientation fields, each compared
+   *   with ===
    */
   equals(other) {
     return this.mode === other.mode && this.offset.x === other.offset.x && this.offset.y === other.offset.y &&
-      this.offset.z === other.offset.z && this.keepStageLayout === other.keepStageLayout;
+      this.offset.z === other.offset.z && this.keepStageLayout === other.keepStageLayout &&
+      this.orientation.align === other.orientation.align && this.orientation.yawOffsetDeg === other.orientation.yawOffsetDeg;
   }
 }
 

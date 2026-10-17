@@ -452,6 +452,7 @@ tests/
     core.test.mjs                          WP3   EventBus semantics, LegacyCompat helpers, LEGACY_SITES shape
     domain.test.mjs                        WP3   rule tables vs legacy expressions, Wall/CineCamera/Prop/LogoLibrary semantics
     oracle/legacy-geometry.mjs             WP4   verbatim THREE-free copies of the legacy layout walks and grid builders
+    orientation.test.mjs                   F3-O1  the whole-wall orientation (03 12.12): the domain rules (test 1)
     pivot.test.mjs                         03 T2  Feature 3's geometry (03 8.1 tests 1-9): the 6.8 anchors, resolvePivot,
                                                  stageShift, the frames of layoutProject, translated(), the export frame of
                                                  the grids and panel corners, the framing ('flat-pivot', then 'layout' since
@@ -965,12 +966,19 @@ export const PivotMode = Object.freeze({ BOTTOM_LEFT: 'bottom-left', MESH_CENTER
 
 export const PIVOT_MODES = Object.freeze(['bottom-left', 'mesh-center', 'wall-center']);   // 03 T1: radio order; the validator's enum
 export const PIVOT_OFFSET_LIMIT_M = 1000;                                                      // 03 T1 (4.1, Q11)
+export const OrientationAlign = Object.freeze({ CENTER_NEG_X: 'center-neg-x', NONE: 'none' });  // 03 12.1 (F3-O1)
+export const ORIENTATION_ALIGNS = Object.freeze(['center-neg-x', 'none']);                      // F3-O1: the #pivot-align order
+export const YAW_OFFSET_LIMIT_DEG = 180;                                                        // F3-O1 (03 12.4)
 
 export class WallPivot {            // Feature 3 (03 T1, 4.1); session-only until project file v2 (03 header, owner 2026-10-17)
   mode = PivotMode.BOTTOM_LEFT;
   offset = { x: 0, y: 0, z: 0 };    // metres, layout axes; REPLACED (never mutated in place) by every setter
-  keepStageLayout = true;           // re-express camera and props on explicit pivot edits (D6, Q4)
-  get isIdentity()                 // mode === BOTTOM_LEFT && offset x, y, z all === 0 (keepStageLayout does not count)
+  keepStageLayout = true;           // re-express camera and props on explicit pivot and orientation edits (D6, Q4; 03 12.6)
+  static DEFAULT_ALIGN = 'none'     // F3-O1 (03 12.11): the alignment of a new pivot; the owner's default flips it in its own commit
+  orientation = { align: WallPivot.DEFAULT_ALIGN, yawOffsetDeg: 0 }   // F3-O1 (03 12.1): the whole-wall yaw about +Y through the
+                                   // pivot (three.js rotation.y sign); REPLACED (never mutated in place) by its setters
+  get isIdentity()                 // mode === BOTTOM_LEFT && offset x, y, z all === 0 && orientation is ('none', 0)
+                                   // (keepStageLayout does not count)
   /** PIVOT_MODES.includes(mode) ? (changed = this.mode !== mode, this.mode = mode, changed)
    *  : throw new RangeError(`Unknown pivot mode ${JSON.stringify(mode)}`)   (the pivotPoint error type) */
   setMode(mode)
@@ -980,12 +988,22 @@ export class WallPivot {            // Feature 3 (03 T1, 4.1); session-only unti
   setOffset(vec)                   // setOffsetAxis for x, y, z in order; returns this.offset
   resetOffset()                    // this.offset = {x: 0, y: 0, z: 0}
   setKeepStageLayout(on)           // typeof on === 'boolean' ? (changed, store) : throw TypeError
+  /** F3-O1 (03 12.4): ORIENTATION_ALIGNS.includes(align) ? (changed, orientation = {...orientation, align})
+   *  : throw new RangeError(`Unknown orientation alignment ${JSON.stringify(align)}`) */
+  setAlign(align)
+  /** F3-O1: v = WallPivot.parseYawOffset(raw); v === null ? orientation.yawOffsetDeg
+   *  : (orientation = {...orientation, yawOffsetDeg: v}, v)   (the stored value, for the input's write-back) */
+  setYawOffset(raw)
   /** v = typeof raw === 'number' ? raw : parseFloat(raw); Number.isFinite(v)
    *  ? Math.max(-1000, Math.min(1000, Math.round(v * 1000) / 1000)) || 0 : null. Never orDefault (0 is valid, B-L9 does not
    *  apply); -0 is normalised; idempotent. */
   static parseOffset(raw)
-  clone()                          // deep copy
-  equals(other)                    // mode, the three offset components and keepStageLayout, by ===
+  /** F3-O1: v = typeof raw === 'number' ? raw : parseFloat(raw); Number.isFinite(v)
+   *  ? Math.max(-180, Math.min(180, Math.round(v * 10) / 10)) || 0 : null (degrees, 0.1 degree). Never orDefault; -0 is
+   *  normalised; idempotent. */
+  static parseYawOffset(raw)
+  clone()                          // deep copy (the orientation included)
+  equals(other)                    // mode, the three offset components, keepStageLayout and the two orientation fields, by ===
 }
 
 export class Wall {
@@ -3307,7 +3325,7 @@ Writers listed here are the only allowed writers (checked by `tests/static/check
 | (01 F1-1, not legacy) normals debug view settings | `DebugViewSettings.shading`, `.normals.enabled`, `.normals.vertex`, `.normals.face`, `.normals.lengthScale`, `.normals.onTop` (not persisted) | `DebugViewController` only (its use cases; static rule 10 ALLOWLIST) |
 | (01 F1-1, not legacy) the debug-shading override | `LEDWallView` private `#shading`, `#override` (`MaterialOverride` stash) and the wall meshes' `.material` | `LEDWallView.setDebugShading/rebuild/withContentMaterials` (through `MaterialOverride`) |
 | (01 F1-1, not legacy) the normal lines | `NormalsDebugView.object3D` (its `LineSegments` and buffers), `#last` | `NormalsDebugView` (its `WALL_REBUILT` handler, `sync`, `dispose`) |
-| (03 T1, not legacy) the wall pivot | `Project.wall.pivot` (`WallPivot`: `mode`, `offset`, `keepStageLayout`; session-only until project file v2, the owner's decision of 2026-10-17) | `WallPivot` methods only (`setMode`, `setOffsetAxis`, `setOffset`, `resetOffset`, `setKeepStageLayout`), called from `PivotController` (03 T4); the field `Project.wall.pivot` itself is assigned only by `WallController.applyImport` (03 4.4) |
+| (03 T1, not legacy) the wall pivot | `Project.wall.pivot` (`WallPivot`: `mode`, `offset`, `keepStageLayout` and, since F3-O1, `orientation` = `{align, yawOffsetDeg}` (03 §12); session-only until project file v2, the owner's decision of 2026-10-17) | `WallPivot` methods only (`setMode`, `setOffsetAxis`, `setOffset`, `resetOffset`, `setKeepStageLayout`, and since F3-O1 `setAlign`, `setYawOffset`), called from `PivotController` (03 T4; the orientation use cases from F3-O3); the field `Project.wall.pivot` itself is assigned only by `WallController.applyImport` (03 4.4) |
 | (03 T5, not legacy) the cancelled-gesture flag and the snap increments | `InteractionState.gestureCancelled` (set by `cancelDrag`, cleared by `onMouseUp` and the next `onMouseDown`), `InteractionState.snap` (`{pivotM: 0.1}`; spec 02 adds its keys; session-only) | `TransformGizmo` only (`snap` through `setSnapIncrements`, a merge) |
 | (03 T5, not legacy) the pivot marker | `PivotMarkerView` private `#group` (its glyph, ghost, drop and link objects), `#resolution`, `#preview`, `#selected` | `PivotMarkerView` (`init`, its three mirrors, `setPreview` / `clearPreview` from `PivotController`, `updateScale` from the pre-render hook) |
 | (03 T1, not legacy) the pivot-marker flag | `Project.display.showPivotMarker` (initially `DisplaySettings.DEFAULT_SHOW_PIVOT_MARKER`, `true` since 03 step C, T9; session-only) | `PivotController.setMarkerVisible` (03 T4) |
@@ -4390,3 +4408,8 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 **F3-O0, the orientation design (03 §12; the owner's request of 2026-10-17)** (manifest `tests/regression/expected/F3-O0.json`, an invariance gate: documentation only):
 - `docs/improvements/03-pivot.md` section 12 defines the whole-wall orientation: `WallPivot.orientation = {align: 'center-neg-x' | 'none', yawOffsetDeg}`, the centre point and its normal, the alignment yaw, the frames, the consumers, the rigid re-expression, Reset and the view presets, the exports, the panel block, the rebuild rows F3-6 and F3-7, the tests and the steps F3-O1 to F3-O7; the header, D12, Q7 (answered) and T14 (superseded) follow.
 - 1.4 records the planned turn of the stage and export frames; section 9's Feature 3 row records the orientation seam. No served file changes: every output must stay identical.
+
+**F3-O1, the orientation domain (03 §12.4)** (manifest `tests/regression/expected/F3-O1.json`, an invariance gate: nothing calls the new rules yet):
+- 3.5 `js/domain/Wall.js`: `OrientationAlign`, `ORIENTATION_ALIGNS`, `YAW_OFFSET_LIMIT_DEG`; `WallPivot.DEFAULT_ALIGN` (`'none'` in this unit), `orientation = {align, yawOffsetDeg}` (replaced by its setters), `setAlign` (`RangeError` outside the enum), `setYawOffset` and `parseYawOffset` (finite, clamped to ±180°, 0.1°, never `orDefault`, −0 normalised, idempotent); `isIdentity`, `clone` and `equals` cover the orientation.
+- 4: the `Project.wall.pivot` row names the orientation and its two setters.
+- 2.3: `tests/unit/orientation.test.mjs` (03 12.12 test 1); `domain.test.mjs`'s WallPivot defaults gain the orientation.
