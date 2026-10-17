@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Implementation-ready specification (Phase 3). **Owner change (2026-10-17, B1-pivot-floor):** `mesh-center` sits on the floor: `y = y0` (`sections[0].baseY`, the floor of the other two modes), x and z still the bounding-box centre; the radio reads "Wall mesh centre on floor (bounding box)". Q2 is answered (c); D1, 3.1, 3.2, 5.4, 6.1, 6.8, 8.1 (tests 1, 2, 5, 20), the ACs 3, 17 and 23 and Q2 are amended; a raised pivot is reached with Offset Y. **Plan review (2026-10-16):** Q5 now states its export consequence and is raised in the plan next to Q2; Q1 gains an optional per-device default for new projects through 07's `app/Prefs` (T17, C19); D5 notes that detaching a chain section (spec 02 T17) is a generative edit. **Revision 3.1** applies the cross-spec consistency review (07 §0 C32-C62): the single composition pipeline is recorded as 07 C32 (5.10); the path-B hook set becomes `allowedAxes(mode)` (`null` = unsupported, replacing `allowedModes`) and `endGizmoDrag({cancel})` (no `cancelGizmoDrag`, no argument-less `endGizmoDrag`; C33); the HDRI point's kind is `'projector'` (C36); the marker uses `RENDER_ORDER.PIVOT_MARKER` (996) and two-tone 06 colours, and its pick proxy is on `HELPERS` (C56); scalers register through `SceneManager.addPreRender` (C46); every `translateStage` clamps through `LIMITS` and the orbit joins `stageAnchored` from 07 I4b (C45); step F reads `FramingPolicy`'s three named boxes (C34) and is counted only in 08 (T11 dropped); feature keys are absent until T7 (C39); this spec adds no help-badge token (C35); T13 keeps only the owner sign-off (07 D0 does the documentation). Revision 3: resolves the review of revision 2. Changes: spec 02's current hook set and composition rule are adopted unchanged (5.10.1); a cancelled drag now swallows the rest of the mouse gesture (5.4); step F is the roadmap's P2-11c commit itself (6.6); the help-badge edit moves to spec 02's step D2; the JSON and ZIP allowed kinds of steps A′ and C are corrected; pick priority applies only against wall hits; the gizmo re-anchors on rebuilds; the panel status is derived from event payloads; the CSS, harness and estimate details are completed. |
+| **Status** | Implementation-ready specification (Phase 3). **Owner request (2026-10-17, orientation):** section 12 adds the whole-wall orientation: Centre on −X (the LED face's centre normal turned to +X) plus a yaw offset, a yaw about +Y through the pivot that `layoutProject` bakes into the stage and export frames. It answers Q7 and supersedes T14. It is built in steps F3-O0 to F3-O7 (12.13), with `'none'` the default until the next unit. **Owner change (2026-10-17, B1-pivot-floor):** `mesh-center` sits on the floor: `y = y0` (`sections[0].baseY`, the floor of the other two modes), x and z still the bounding-box centre; the radio reads "Wall mesh centre on floor (bounding box)". Q2 is answered (c); D1, 3.1, 3.2, 5.4, 6.1, 6.8, 8.1 (tests 1, 2, 5, 20), the ACs 3, 17 and 23 and Q2 are amended; a raised pivot is reached with Offset Y. **Plan review (2026-10-16):** Q5 now states its export consequence and is raised in the plan next to Q2; Q1 gains an optional per-device default for new projects through 07's `app/Prefs` (T17, C19); D5 notes that detaching a chain section (spec 02 T17) is a generative edit. **Revision 3.1** applies the cross-spec consistency review (07 §0 C32-C62): the single composition pipeline is recorded as 07 C32 (5.10); the path-B hook set becomes `allowedAxes(mode)` (`null` = unsupported, replacing `allowedModes`) and `endGizmoDrag({cancel})` (no `cancelGizmoDrag`, no argument-less `endGizmoDrag`; C33); the HDRI point's kind is `'projector'` (C36); the marker uses `RENDER_ORDER.PIVOT_MARKER` (996) and two-tone 06 colours, and its pick proxy is on `HELPERS` (C56); scalers register through `SceneManager.addPreRender` (C46); every `translateStage` clamps through `LIMITS` and the orbit joins `stageAnchored` from 07 I4b (C45); step F reads `FramingPolicy`'s three named boxes (C34) and is counted only in 08 (T11 dropped); feature keys are absent until T7 (C39); this spec adds no help-badge token (C35); T13 keeps only the owner sign-off (07 D0 does the documentation). Revision 3: resolves the review of revision 2. Changes: spec 02's current hook set and composition rule are adopted unchanged (5.10.1); a cancelled drag now swallows the rest of the mouse gesture (5.4); step F is the roadmap's P2-11c commit itself (6.6); the help-badge edit moves to spec 02's step D2; the JSON and ZIP allowed kinds of steps A′ and C are corrected; pick priority applies only against wall hits; the gizmo re-anchors on rebuilds; the panel status is derived from event payloads; the CSS, harness and estimate details are completed. |
 | **Builds on** | `docs/ARCHITECTURE.md` (binding contract), `docs/REFACTOR_PLAN.md` (Phase 3 order: 1, 6, **3**, 2, 4, 5; Phase 2 item 11 pairs B-M10, B-L2 and B-M15 with this feature). |
 | **Legacy reference** | `index.html@cd3fd3f`. Line numbers below refer to that file. Bug ids refer to the verified defect list ([`docs/DEFECTS.md`](../DEFECTS.md): `B-H*`, `B-M*`, `B-L*`). Roadmap ids (`P2-*`) refer to `docs/improvements/08-bugfix-roadmap.md`. |
 | **Hard prerequisites** | Phase 1 merged (WP1-WP10). **Merge gates (roadmap §1.1, F3 row): P2-3, P2-8 and P2-13e (persistence only).** Only T7 (persistence, step A′) actually depends on them: on P2-3 for its B-L8 `ProjectValidator`, and on P2-13e for the B-L31 v2 writer. P2-8 is kept as a merge gate for ordering only. No task depends on it: offsets never use `orDefault`, the `posZ` branch handles B-L9 itself where it matters (4.1), and B-L15 is documented (2.3). Every task is identity-exact with or without it. If the owner wants F3 earlier, P2-8 can become a soft gate without any change to this spec. |
@@ -27,6 +27,7 @@
 | D9 | **One snapping model, shared with spec 02:** snapping is active only while Ctrl/⌘ is held during a gizmo drag, and it snaps the **dragged distance** (relative), never the absolute value. Axes that are not dragged keep their stored value bit-for-bit. | 6.7, 5.10.1 |
 | D10 | **Framing:** step A switches `Strategies.framingBounds` to `'flat-pivot'` (translation-correct, identity-exact). Step F is the roadmap's **P2-11c commit itself**: `'layout'` framing as roadmap §6.10 defines it with `FramingPolicy`'s three named boxes (08 P2-13g, 07 C34): `generativeBox` (attached, pre-offset: the pre-I4b orbit re-target and this spec's `mesh-center` anchor), `wallBox` (`bounds()`, transformed, all sections: camera Reset and 07's `F`/open framing) and `stageExtent` (sections with \|n.y\| ≤ 0.9: D, frame width and height, `fits`), plus `facing`, the `resetTo` pan and the camera Z minimum removed, evaluated on `layoutProject(project)`. It is implemented once, by the roadmap, and counted only there (this spec has no step-F task); if P2-11c has landed before this spec, step F is empty. | 6.6, 8.4 |
 | D11 | **One hook set, one composition rule** (07 C32, C33). The path-B `Selectable`/`TransformGizmo` hooks map one-to-one onto 07's Selectable v2: `kind`, `pickPriority`, `allowedAxes(mode)` returning `{x, y, z}` or `null` (`null` = the mode is unsupported; it replaces `allowedModes`, so the pivot returns `null` for `'rotate'`), `orientGizmo(rotation, mode)`, `beginGizmoDrag()`, `applyGizmoTranslate/Rotate(…, ctx)` with `ctx = {space, axisWorld, snap}`, and `endGizmoDrag({cancel})` only. `TransformGizmo.cancelDrag()` calls `target.endGizmoDrag({cancel: true})` and sets `interaction.gestureCancelled`. The composition rule: translate the raw walk, then `applySectionOffsets(out)` builds the section offsets from the translated geometry (07 C32). This spec lands both first (T5, T2), and spec 02 reuses them. If this feature lands after 07 I3, it implements Selectable v2 directly instead (path A, 5.4). | 5.4, 5.10 |
+| D12 | **Orientation (owner request of 2026-10-17):** `WallPivot.orientation = {align: 'center-neg-x' \| 'none', yawOffsetDeg}`, a yaw ψ about +Y through the pivot (the sign of three.js `rotation.y`). Centre on −X turns the LED normal at the wall's centre point (the arc-length midpoint of the bottom edge chain) to +X, and ψ = alignment + offset. `layoutProject` turns the translated walk by ψ (stage and export frames), so every consumer follows. Keep stage layout re-expresses rigidly; Reset and the view presets face the LED. | 12 |
 
 ---
 
@@ -1424,7 +1425,7 @@ Effort scale: S ≤ 0.5 d, M 1-2 d, L 3-5 d, XL > 5 d.
 | T12 | ARCHITECTURE.md amendments (5.9; the F3 row of section 9 is rewritten by 07's D0), README "Pivot" section (DCC placement guidance: Unreal Z-up, Y→Z; the `O` key, which is also in 07's `ShortcutHelp`). **As built:** every 5.9 amendment landed with its code commit (T1-T6, T9, T10; the amendment log of ARCHITECTURE 12 lists them); this task's own commit adds the README "Pivot" section (the modes, offset, marker, O and drag, keep stage layout, the stage origin, exports and placement in Blender and Unreal, a raised pivot, the session-only note) and brings the section 9 row up to date. | S (0.5 d) | lands with the T2-T7 commits |
 | T13 | Owner sign-off of the shared contract of 5.10.1 (its amendments are already applied to specs 02 and 07 by 07's consolidated D0), recorded in both documents. **Done:** signed off on 2026-10-16 (A7), recorded in 5.10.1 and 02 §10.3, confirmed on 2026-10-17. | S (0.5 d) | **hard gate for T5** |
 | T16 | Harness runs and re-baselines for steps A (zero-diff proof), A′, B, C and D: five full runs, each with a compare-report review against the step's allowed kinds, and promotion (8.4); step F's run is 08's. **As run:** one full candidate run, a review, the promotion and a full self-consistency run per commit (08 8.1): step A in F3-T1, T2, T3, T3b, T4 and T5 (all zero-diff), step B in F3-T6, step C in F3-T9, step D in F3-T10, step E in F3-T8a (the identical library re-capture) and F3-T8b; step A′ waits for T7. Each compare log is in `tests/regression/output/logs/<commit-id>.compare.log`. | M (2 d) | each with its step's task |
-| T14 (optional, Q7) | Pivot alignment `align: 'chord'`: stage yaw so the first→last chord is parallel to +X; rotates poses on re-expression; v2 field `pivot.align` | M | T8, the B-L1 decision |
+| T14 (optional, Q7) | **Superseded by section 12 (owner request of 2026-10-17):** the orientation (Centre on −X plus a yaw offset) replaces the chord alignment `align: 'chord'`; its steps are F3-O0 to F3-O7 (12.13). | – | – |
 | T15 (optional, Q2) | `surface-center` mode (6.1 extension) | S | T8, owner answer to Q2 |
 | T17 (optional, Q1) | Per-device default for new projects: a "Use for new projects" button in `PivotPanel` stores the current mode in 07's `app/Prefs` as the `:prefs` member `pivot_default_mode` (C19; absent or unknown = `bottom-left`); New (07 D8) and a first start without autosave read it. Opening or importing a file never reads it (Q14: files decide their own pivot), and the harness clears storage (07 G3), so no golden changes. Unit tests for the read and the fallback. | S (0.5 d) | T6, 07 H3 (`Prefs`), 07 D8 (New) |
 
@@ -1491,7 +1492,7 @@ Effort scale: S ≤ 0.5 d, M 1-2 d, L 3-5 d, XL > 5 d.
 | Q4 | Keep stage layout on by default? | **On** |
 | Q5 | Should the pivot anchor include per-section offsets (the live mesh) or only the generated wall? | **Generated wall only** (D5). It is stable while sections are nudged. **Consequence:** once spec 02 offsets or detached sections exist (risers, leaned flats, soffits, ceilings), `mesh-center` is the centre of the generated chain, not of the exported mesh, and `wall-center` ignores detached sections; the file origin then sits off the centre of the exported geometry by the offsets' effect. Use the pivot offset to correct it, or a later "Use current mesh" button (S, after spec 02 3a) that stores the difference between the transformed `bounds()` centre and the anchor as the offset. Choose "live mesh" only if exports must always be centred on the final geometry; the pivot then moves while sections are dragged and nudged. |
 | Q6 | Offset axes: world/layout axes, or wall-chord-aligned axes? | **World/layout axes.** They are simple and predictable, and they match the grid and gizmo. |
-| Q7 | Add pivot **alignment**, so the exported wall faces +Z squarely (a yaw that makes the first→last chord parallel to X; a curved 10×3° wall is yawed by 16.5° today)? | **Not in this feature.** Ship as T14 (`pivot.align: 'none' \| 'chord'`, default `'none'`) once B-L1 is decided. It rotates the stage frame and therefore camera and prop rotations too. |
+| Q7 | Add pivot **alignment**, so the exported wall faces +Z squarely (a yaw that makes the first→last chord parallel to X; a curved 10×3° wall is yawed by 16.5° today)? | **Answered by the owner on 2026-10-17: yes, as an orientation** (section 12): Centre on −X (the LED normal at the wall's centre turned to +X, with the stage on +X) plus a yaw offset about the pivot, applied in `layoutProject`, with poses re-expressed rigidly when keep stage layout is on. It supersedes the chord rule of T14. |
 | Q8 | How should the floor grid relate to the stage origin? Today `GridHelper(50, 50)` at (12.5, 0, 12.5) covers x, z ∈ [−12.5, 37.5] (mostly in front of the wall) with lines at half-metres. Options: (a) `GridHelper(50, 50)` at the origin: lines through whole metres, but coverage [−25, 25], so half of it lies behind a bottom-left wall and `large_wall` (72 m) loses floor; (b) keep size 50 at a whole-metre offset such as (12, 0, 12): whole-metre lines, legacy-like coverage in front, but asymmetric around a centred wall; (c) `GridHelper(100, 100)` centred on the stage origin: whole-metre lines, ±50 m in every direction for every pivot mode, 202 instead of 102 lines (negligible cost). | **(c)** (step D). It follows the DCC convention, covers the stage for every pivot mode, and keeps the grid centre lines on the stage origin where the axes cross. |
 | Q9 | Should the pivot marker be visible by default? | **Yes, but only once B-M11 is fixed** (step C waits for it). The fix comes from roadmap P2-10a (the preview render hides registered helpers) or from spec 07 R1 (`LAYERS.HELPERS`), whichever lands first; spec 01 does not do it (its CR-6). Before then, the marker would also appear in the camera preview and pilot view used for previs. Until then it ships off, files cannot turn it on (4.2), and `O` / "Select pivot" still show it while selected. |
 | Q10 | Should the export metadata (OBJ comment, glTF extras) be written always or only for non-default pivots? | **Only for non-default pivots** until Feature 6 re-baselines the OBJ headers. Then **always**. |
@@ -1502,3 +1503,287 @@ Effort scale: S ≤ 0.5 d, M 1-2 d, L 3-5 d, XL > 5 d.
 | Q15 | In the centred modes, should keep-stage-layout also re-express the camera and props when a section edit moves the stage origin? | **No** (D6, 3.7). Stage coordinates are the source of truth between explicit pivot edits, so a camera centred on the wall stays centred as the wall grows. `#pivot-status` reports each shift. |
 | Q16 | Snapping gesture for gizmo drags (pivot and sections): Ctrl/⌘-held (spec 02) or always on with Ctrl to disable? And one shared translate increment, or per target? | **Ctrl/⌘-held, per-target increments** (D9, 5.10.1 #3): free dragging stays the default, as in Blender, and the pivot's metre-scale steps differ from the sections' millimetre steps. Changing the gesture later is one line in `TransformGizmo.onMouseMove` for both specs. |
 | Q17 | Merge gates: keep roadmap §1.1's P2-8 as a hard gate for F3, or relax it to a soft gate so the non-persistent pivot work can merge earlier? | **Keep it** (header). Nothing in this spec depends on P2-8, so relaxing it later needs no spec change. |
+
+---
+
+## 12. Orientation: the whole wall turned about the pivot (owner request of 2026-10-17)
+
+**Request (owner, 2026-10-17).** "Implement a system that can add an orientation offset to the entire LED wall so the centre of the wall is aligned to −X." The stage lies on +X: the wall is turned about the pivot's vertical axis so that the wall's centre lies on the −X axis from the pivot and its LED face looks along +X, toward the origin. The same request sets the defaults of new projects to this alignment, the `wall-center` pivot and section meshes; those defaults, and the import rule that goes with them, are the next unit's (12.11). This section is the design of record. It answers Q7 (12.13) and supersedes the optional T14.
+
+### 12.0 Decisions at a glance
+
+| # | Decision | Section |
+|---|---|---|
+| O1 | `WallPivot.orientation = {align, yawOffsetDeg}`: `align` is `'center-neg-x'` ("Centre on −X") or `'none'`; `yawOffsetDeg` is in degrees, in [−180, 180], stored to 0.1°. The orientation is a yaw ψ about +Y through the pivot point. Positive is counter-clockwise seen from above, the sign of three.js `rotation.y` (R_y(90°) maps +Z to +X). There is no pitch and no roll: the floor stays y = 0. | 12.1, 12.4 |
+| O2 | With `'center-neg-x'` the **alignment yaw** ψa is recomputed on every rebuild, so that the outward LED normal at the wall's centre point maps to +X. The centre point is the arc-length midpoint of the bottom edge chain; its normal is the normal of the column that contains it, or the normalised mean of both columns' normals when it falls on a column edge. The total yaw is ψ = wrapDeg(ψa + yawOffsetDeg); with `'none'` it is ψ = wrapDeg(yawOffsetDeg). | 12.2 |
+| O3 | The yaw is **baked into the layout, where the pivot is** (D4): `layoutProject` translates the raw walk into the frame, then turns it by ψ about the frame's vertical axis (`WallLayout.rotated`). Every consumer follows with no orientation code of its own: the wall view, frames, safe-distance band, normals debug, pivot marker, picking, coverage, framing, OBJ, glTF and ZIP. There is still never a wall root transform. | 12.3, 12.5 |
+| O4 | Frames: L is unchanged; S: x_S = R_y(ψ)(x_L − O); E: x_E = R_y(ψ)(x_L − P) = x_S − (0, P.y, 0). The pivot offset stays in layout axes (Q6). | 12.3 |
+| O5 | **Keep stage layout** re-expresses the camera and props by the full rigid change (turn and translation, pans included) when the user changes the pivot or the orientation. A section edit that changes the alignment yaw never re-expresses (D6); `#pivot-status` reports the turn. | 12.6 |
+| O6 | With `'center-neg-x'`, the default camera (the camera preview's first Reset) and Reset Camera stand **5 m along the centre normal from the wall centre, 1.5 m high, looking at the wall centre** (the wall's mid-height above the centre point). The view presets (Front, Side, Top, Reset) turn with the wall: Front looks along the centre normal, or, with `'none'`, along the turned +Z. | 12.7 |
+| O7 | Exports are written in the turned export frame. The OBJ header gains a `# Orientation:` line and the glTF `scenes[0].extras.pivot` an `orientation` object, both only when ψ ≠ 0, so the bytes of every unturned export never change. | 12.8 |
+| O8 | UI: an "Orientation" block in the Wall Pivot panel: an alignment select (Centre on −X / None), a yaw offset input (°, −180..180, step 0.1) and a read-only resolved yaw. Session-only, like the pivot. | 12.9 |
+| O9 | This unit keeps `'none'` as the default (`WallPivot.DEFAULT_ALIGN`), so every existing output stays unchanged until the orientation is used. The next unit flips the default to `'center-neg-x'` (with `wall-center` and section meshes, owner request (4)). | 12.11 |
+| O10 | Exactness: the yaw's cosine and sine are exact for multiples of 90° (`yawTrig`), so the default flat wall turned by 90° lands exactly on x = 0, with LED normals exactly +X. | 12.2 |
+
+### 12.1 Definition
+
+```js
+// js/domain/Wall.js (12.4)
+export const OrientationAlign = Object.freeze({ CENTER_NEG_X: 'center-neg-x', NONE: 'none' });
+export const ORIENTATION_ALIGNS = Object.freeze([OrientationAlign.CENTER_NEG_X, OrientationAlign.NONE]);   // select order
+export const YAW_OFFSET_LIMIT_DEG = 180;
+WallPivot.orientation = { align: WallPivot.DEFAULT_ALIGN, yawOffsetDeg: 0 }   // replaced, never mutated in place
+```
+
+**Rotation.** R_y(ψ)(x, y, z) = (x·cos ψ + z·sin ψ, y, −x·sin ψ + z·cos ψ), the matrix of three.js `rotation.y = ψ`. It maps +Z to (sin ψ, 0, cos ψ): at ψ = 90°, +Z goes to +X and +X goes to −Z. Seen from above (from +Y), a positive ψ turns counter-clockwise. The azimuth of a horizontal direction v is az(v) = atan2(v.x, v.z), so az(R_y(ψ)v) = az(v) + ψ.
+
+**Where the axis is.** The vertical line through the pivot point P (layout frame). In the stage frame this line is the stage origin's vertical (O = (P.x, 0, P.z)); in the export frame it is the file's Y axis. The exported wall therefore turns about the file origin, and the viewport wall about the stage origin, where the grid lines and the axes cross.
+
+### 12.2 The centre, its normal and the alignment yaw (`geometry/WallOrientation.js`)
+
+**Bottom edge chain.** The polyline `layout.flatEdges()`: the floor edge of every column in wall order, with section joins counted once. Segment j runs from v_j to v_{j+1}. Its length is ℓ_j = hypot(Δx, Δz) and its LED normal is n_j = (−Δz/ℓ_j, 0, Δx/ℓ_j), the builder's stored normal (`pushRightPanelNormal`): +Z for a flat wall along +X, the stage side.
+
+**Centre.** Let Lt = Σ ℓ_j over the segments with ℓ_j > 0. The centre is at arc length Lt/2:
+- inside a segment (acc_j < Lt/2 < acc_j + ℓ_j): C = v_j + u·(v_{j+1} − v_j) with u = (Lt/2 − acc_j)/ℓ_j, and the normal is n_j;
+- on a segment end (|acc_j + ℓ_j − Lt/2| ≤ ε, with ε = 1e-9·max(1, Lt)): C = v_{j+1}, and the normal is normalise(n_j + n_k), where k is the next segment of positive length. It is n_j alone when there is no such segment or the sum vanishes (a 180° fold). The tolerance absorbs float sums, so an even number of equal columns, or two equal sections, always gives the symmetric bisector;
+- y = `sections[0].baseY`, the floor of the frame, as for the anchors of 6.1.
+
+`wallCentre(layout)` returns `{point, normal}` in the layout's own frame, or `null` for an empty wall, a wall without positive-length columns, or a non-finite Lt. It is equivariant: the centre of the stage layout is the layout's centre carried into the stage frame.
+
+**Alignment yaw.** ψa = wrapDeg(90 − az(n_c)·180/π) = wrapDeg(90 − atan2(n_c.x, n_c.z)·180/π), so that R_y(ψa)·n_c = +X. Without a centre, ψa = 0. `wrapDeg` is the one in `domain/rules.js`, with range (−180, 180]. The total yaw is ψ = wrapDeg(ψa + yawOffsetDeg) for `'center-neg-x'`, or ψ = wrapDeg(yawOffsetDeg) for `'none'`. Since `wrapDeg(+0) = +0`, the default is the identity.
+
+**Exact trigonometry.** `yawTrig(ψ)` returns the exact (cos, sin) when ψ is a multiple of 90°, and `Math.cos`/`Math.sin` of ψ·π/180 otherwise. A flat wall along +X has n_c = (−0, 0, 1), atan2(−0, 1) = −0 and ψa = 90 exactly, so its turned vertices are exact (no `-0.000000` in an OBJ).
+
+**Worked values** (legacy walk; `wall-center` pivot; C_S is the centre in the stage frame after the turn; 4 dp):
+
+| Wall | Lt (m) | Centre lies | ψa | C_S (x, z) | Note |
+|---|---|---|---|---|---|
+| default (5 × 500 mm, flat) | 2.5 | inside column 3 | **90** | (0, 0) | The worked check: R_y(90°) maps +Z to +X, and the wall runs from z = +1.25 to z = −1.25 on x = 0. |
+| 10 × 500 mm at 3° (concave, even) | 5.0 | on the edge between columns 5 and 6 | 106.5 | (−0.3254, 0) | The bisector of 15° and 18°: the middle lies on −X, the sagitta behind the pivot. |
+| 5 × 500 mm at 5° (concave, odd) | 2.5 | inside column 3 | 105 | (−0.1304, 0) | On −X. |
+| `flat3` | 7.0 | on a column edge of the middle section | 90 | (0, 0) | The mean of two equal normals. |
+| `convex` (−4°) | 4.0 | on a column edge | 72 | (+0.2775, 0) | A convex middle lies in front of the chord, so on +X. |
+| `concave_offsets` (asymmetric) | 7.5 | inside a column | 142 | (−1.1058, 0.2479) | Asymmetric: the normal maps to +X, and the middle is off the axis. |
+| `mixed` (several sections, mixed sizes) | 9.8 | inside a column | 101 | (−0.4202, −0.0497) | The same. |
+| `box_corner` | 9.0 | on a column edge of the second section (the side along +Z) | 180 | (−3, 0) | That side faces −X, so the whole box turns by 180°. |
+| empty wall | – | – | 0 | – | ψ = yawOffsetDeg |
+
+On a symmetric wall the `wall-center` pivot puts the middle exactly on the −X axis: behind the pivot by the sagitta when the wall is concave, in front of it when convex. On an asymmetric wall the normal still maps to +X, but the chord midpoint does not lie on the centre normal. A pivot at the centre point itself (the optional `surface-center` mode, T15) would put the middle on the axis exactly.
+
+### 12.3 Frames and `layoutProject`
+
+| Frame | Definition | Change |
+|---|---|---|
+| Layout (L) | the walk | none |
+| Stage (S) | x_S = R_y(ψ)(x_L − O), O = (P.x, 0, P.z) | the turn about the stage origin's vertical |
+| Export (E) | x_E = R_y(ψ)(x_L − P) = x_S − (0, P.y, 0) | the turn about the file's Y axis |
+
+At ψ = 0 these are the frames of 5.1, bit for bit, and at the identity pivot `layoutProject` still returns the walk itself.
+
+```js
+export function layoutProject(project, { frame = 'stage' } = {}) {
+  ...                                                              // raw walk, resolvePivot (now with the yaw), t as in 6.3
+  const yawDeg = frame === 'layout' || !resolution ? 0 : resolution.yawDeg;
+  let out = (t is zero) ? raw : raw.translated(t.x, t.y, t.z);
+  if (yawDeg !== 0) out = out.rotated(yawDeg);                     // about the frame origin's vertical (the pivot)
+  // spec 02 inserts applySectionOffsets(out) here (built from the turned section frames: composition below)
+  out.pivot = { resolution, frame, translation: t, yawDeg };
+  return out;
+}
+```
+
+**`WallLayout.rotated(yawDeg)`** is a pure copy with the raw-walk precondition of `translated`:
+- each edge (x, z) becomes R_y(ψ)(x, z), and its `angle` becomes `angle − ψ` (radians: a walk direction with heading a has azimuth 90° − a, so the heading turns the other way);
+- each panel centre (x, z) becomes R_y(ψ)(x, z), y is unchanged, and `rotY` becomes `rotY + ψ` (a panel quad's local +X is R_y(rotY)·+X, so the turned panel is R_y(ψ + rotY));
+- `baseY` and every other field are unchanged.
+
+Vertex normals are derived from the turned edges, and panel normals from `rotY` (`sin rotY, 0, cos rotY`), so the LED normals turn with the wall. `rotated(0)` is never called (the identity path).
+
+**Composition with spec 02 (5.10).** The frame map is now the rigid motion M = R_y(ψ)·T(−O) (stage) or M = R_y(ψ)·T(−P) (export). Spec 02 builds S_i from the section's own transformed edges and `baseY` (its 6.5), so S_i built on the turned section equals M·S_i·M⁻¹ for any rigid M: the equivariance of 5.10 #2 extends from translations to rigid motions. The canonical transform becomes x_frame = M·S_i·v. 5.10 #4 now applies:
+- spec 02's section gizmo works in each section's basis B, which is derived from the turned geometry, so its deltas need no extra turn;
+- the pivot's own offset is in layout axes, so its drags turn stage deltas back by −ψ (12.5).
+
+### 12.4 Domain, resolution and events
+
+**`WallPivot`** (pure domain):
+- `static DEFAULT_ALIGN = OrientationAlign.NONE` in this unit (12.11);
+- `orientation = {align: DEFAULT_ALIGN, yawOffsetDeg: 0}`;
+- `setAlign(align)`: throws `RangeError('Unknown orientation alignment …')` outside `ORIENTATION_ALIGNS`; returns whether the value changed;
+- `setYawOffset(raw)`: goes through `parseYawOffset`. A rejected value writes nothing. Returns the stored value (for the input's write-back);
+- `static parseYawOffset(raw)`: takes a number or text. Finite values are clamped to [−180, 180] and rounded to 0.1° (`Math.round(v * 10) / 10 || 0`); anything else gives `null`. Never `orDefault`: 0 is valid. Idempotent;
+- `isIdentity` also requires the identity orientation (`align === 'none' && yawOffsetDeg === 0`); `clone()` and `equals()` include the orientation.
+
+**`PivotResolution`** gains:
+- `align` and `yawOffsetDeg` (copied from the pivot);
+- `alignYawDeg` (ψa; 0 with `'none'` or without a centre);
+- `yawDeg` (ψ).
+
+`resolvePivot` computes ψa on the raw walk; it depends on the sections only, never on the pivot point. A `null` resolution (a non-finite layout) turns nothing. `isIdentityResolution(r)` also requires `r.yawDeg === 0`.
+
+**Stage-change helpers** (next to `stageShift`):
+- `yawShift(a, b)` = ψ(b) − ψ(a) in degrees, where a `null` resolution counts as 0;
+- `stageChange(a, b)` = the rigid map of 12.6: `{yawDeg, cos, sin, dx, dz}`.
+
+**Events.** No new key:
+- `WALL_PIVOT_CHANGED` gains the sources `'align'` and `'yaw-offset'` and the field `yawShiftDeg`; its `pivot` carries `orientation`;
+- `WALL_REBUILT` gains `yawShiftDeg` (against the resolution cached before the rebuild), next to `stageShift`.
+
+### 12.5 Consumers
+
+| Consumer | Frame | What changes |
+|---|---|---|
+| `LEDWallView` (combined, section and panel meshes, frames), picking | S | nothing: they read the turned layout (panel `rotY`, edges) |
+| `NormalsDebugView` (normal lines, face orientation) | S | nothing: it reads the wall meshes |
+| Safe-distance band (`SafeDistanceView`, `SafeDistanceBand`) | S | nothing: the band follows the turned `flatEdges()`. The group stamps `userData.stageYawDeg` next to its stage origin (12.8). |
+| `FrustumCoverage`, `CameraHub` (fits, D) | S | nothing: the turned column quads and stage extent |
+| `framingBounds` | S | the boxes, `facing` and `stageExtent` follow the turn. It gains `centre` (the layout's `wallCentre`), `aligned` and `viewYawDeg` (12.7); `wallZ` is the z of the turned walk start. |
+| `OrbitController` | S | the target follows the turned box; the presets add `viewYawDeg` (12.7) |
+| `CineCamera.resetTo` | S | the aligned rule of 12.7 |
+| `PivotMarkerView` | S | the anchor ghost is at R_y(ψ)(A − O); the glyph stays at (0, P.y, 0) |
+| `PivotController` gizmo drag | S → L | the stage drag is snapped along the dragged stage axis, then turned by −ψ into the layout-axis offset. Each axis is rounded to 1 mm, and an axis whose turned delta rounds to 0 keeps its stored value. The preview is R_y(ψ)(target − offset). |
+| Re-expression (`StageAnchored`) | S | turn and translate (12.6) |
+| `WallController` | – | `commitPivot` rebuilds iff the stage origin moved **or ψ changed**; `WALL_REBUILT.yawShiftDeg` |
+| `ObjExporter`, `GltfExporter`, ZIP | E | the turned export layout; the orientation metadata (12.8) |
+| Safe-distance OBJ | S → E | from the group's stamp (O_b, ψ_b) into the current E frame (12.8) |
+| `CameraController.setCameraField('posZ')` | S | the context `wallZ` is the z of the turned walk start (a non-numeric Z still falls back to wallZ + 5) |
+| Textures (panel IDs, LED simulation, atlas, UVs) | – | none: they do not depend on the frame |
+
+### 12.6 Keep stage layout: the rigid re-expression
+
+Before an explicit pivot or orientation edit the stage map is s = R(ψ_a)(x_L − O_a) (resolution a); after it, it is R(ψ_b)(x_L − O_b). A stage point that keeps its place relative to the wall therefore moves to
+
+```
+s_b = R(Δψ)·s_a + R(ψ_b)·(O_a − O_b),    Δψ = ψ_b − ψ_a
+```
+
+and a pan becomes `wrapDeg(rotY + Δψ)`. For the film camera's 'YXZ' Euler, R_y(Δψ)·R_y(pan)·R_x·R_z = R_y(pan + Δψ)·R_x·R_z; the props' `rotY` turns the same way. `stageChange(a, b)` returns `{yawDeg: Δψ, cos, sin, dx, dz}` with (dx, dz) = R(ψ_b)(O_a − O_b).
+
+Each `StageAnchored` participant implements `reexpressStage(change)`:
+- with Δψ = 0 it is exactly `translateStage(dx, dz)`. When ψ_b = 0 this is the 6.5 rule bit for bit, because (dx, dz) is then −stageShift;
+- otherwise it turns the position about the stage origin, adds (dx, dz), clamps through its `LIMITS` and turns its pan.
+
+The P-PIVOT pipeline (5.6) re-expresses iff keep is on and the stage map changed (origin or yaw), and it rebuilds in the same cases. Height-only changes still neither rebuild nor re-express.
+
+A section edit that changes ψa (align on) rebuilds with `cause: 'edit'` and re-expresses nothing (D6, Q15). The wall turns about the stage origin while the camera keeps its stage coordinates, and `#pivot-status` says so.
+
+### 12.7 Camera Reset, the default camera and the view presets
+
+**Framing additions** (`framingBounds(layout)`, stage frame):
+- `centre` = `wallCentre(layout)` (null without one);
+- `aligned` = whether the resolution's `align` is `'center-neg-x'`;
+- `viewYawDeg` = 90 + yawOffsetDeg when aligned with a centre (exactly the azimuth of the turned centre normal: az(n_c) + ψ = 90° − ψa + ψa + offset), else ψ (the azimuth of the turned +Z; 0 at the identity).
+
+**Reset (`CineCamera.resetTo(framing)`).** When aligned with a centre:
+- the pan is p = wrapDeg(viewYawDeg), and the centre normal is n = (sin p, 0, cos p) (`yawTrig`, exact at 90°);
+- the camera stands at C + 5·n in x and z, at y = `CineCamera.RESET_EYE_HEIGHT_M` = 1.5, with pan p and roll 0;
+- its tilt is atan2(h − 1.5, 5)·180/π, with h = `wallBox.center.y` (the wall's mid-height above the centre point), so its optical axis passes through the wall centre.
+
+Otherwise (`'none'`, or no centre) the 08 P2-11c rule is unchanged (`wallBox.center + 5·facing`, level). The camera preview's first enable runs Reset, so this rule is also the default camera. For the default wall with `wall-center` and Centre on −X, the camera stands at (5, 1.5, 0) with pan 90° and tilt −8.53° (the wall's centre is 0.75 m high).
+
+**View presets (`OrbitController.setView`).** With θ0 = viewYawDeg·π/180:
+- Front: θ0; Side: θ0 + π/2; Top: θ0 (φ 0.1); Reset: θ0 + 0.3 (distance 8, offset 0);
+- at ψ = 0 without alignment, θ0 = 0 and the legacy angles are used verbatim.
+
+With Centre on −X, Front looks at the LED face along −X from the stage side (+X), Top keeps the face toward the bottom of the screen as before, and Side looks along the wall. The bootstrap's `setView('reset')` reads the same θ0.
+
+### 12.8 Exports
+
+- **Frame.** Every OBJ, glTF and ZIP geometry is the turned export layout: the file origin is the pivot and, with Centre on −X, the LED face's centre normal is +X.
+- **OBJ header.** The two pivot lines of 7.1 are written iff the resolution is not the identity (bottom-left, zero offset and ψ = 0). When ψ ≠ 0 a third line follows them: `# Orientation: yaw ${ψ} deg about +Y through the pivot (align ${align}: ${ψa} deg + offset ${yawOffsetDeg} deg)` (numbers `toFixed(6)`).
+- **glTF.** `scenes[0].extras.pivot` gains `orientation: {align, yaw_deg, align_yaw_deg, yaw_offset_deg}` when ψ ≠ 0. No node rotation is written: the vertices are baked (7.2).
+- **Safe-distance OBJ.** `SafeDistanceView` stamps `userData.stageYawDeg = ψ_b` next to `stageOrigin`. `ProjectIO` writes s_E = R(ψ − ψ_b)·s + R(ψ)·(O_b − P) in x and z, and y − P.y (`writeSafeDistance(group, band, {translate, yawDeg})`; the band's normals are +Y and do not turn). With ψ = ψ_b = 0 the translate-only bytes of 7.1 are unchanged.
+- **JSON** is unchanged (session-only, 12.11).
+
+### 12.9 UX: the "Orientation" block of the Wall Pivot panel
+
+The block sits after the Ctrl-drag snap row and before the two switches, because keep stage layout applies to it too:
+
+```html
+<div class="pivot-orientation" id="pivot-orientation" role="group" aria-labelledby="pivot-orientation-title">
+  <div class="pivot-subtitle" id="pivot-orientation-title">Orientation</div>
+  <div class="section-row pivot-orientation-row">
+    <div class="input-field"><label for="pivot-align">Alignment</label>
+      <select id="pivot-align" class="ui-select pivot-align" title="Turn the wall about the pivot so the LED face's centre normal points along +X and the wall's centre lies toward −X.">
+        <option value="center-neg-x">Centre on −X</option>
+        <option value="none" selected>None</option>
+      </select></div>
+    <div class="input-field"><label for="pivot-yaw-offset">Yaw offset (°)</label>
+      <input type="number" id="pivot-yaw-offset" step="0.1" min="-180" max="180" value="0"></div>
+  </div>
+  <div class="pivot-yaw-readout" id="pivot-yaw-readout" aria-live="polite">Wall yaw 0.0° (no alignment, offset 0.0°)</div>
+</div>
+```
+
+| Control | Behaviour |
+|---|---|
+| `#pivot-align` | `change` → `pivotController.setAlign(value)` (row F3-6). It mirrors `pivot.orientation.align`. |
+| `#pivot-yaw-offset` | `change` → `el.value = pivotController.setYawOffset(el.value).toFixed(1)` (row F3-7): a rejected entry reverts, 200 gives 180.0 and 12.34 gives 12.3. Never `orDefault`. |
+| `#pivot-yaw-readout` | Read-only, written from the resolution on `WALL_PIVOT_CHANGED` and `WALL_REBUILT` (section edits change ψa): `Wall yaw ${ψ}° = alignment ${ψa}° + offset ${o}°` (Centre on −X), `Wall yaw ${ψ}° (no alignment, offset ${o}°)` (None), or `Wall yaw unavailable · invalid section values` (null resolution). One decimal, never `-0.0`. |
+| `#pivot-status` | For `'align'` and `'yaw-offset'`: `Wall turned ${±Δψ}° about the pivot · camera and props kept their place` (keep on) or `… kept their coordinates` (keep off), and `Wall yaw unchanged at ${ψ}°` when Δψ = 0. For a section edit that turns the wall: `Wall edit moved the stage origin by … m and turned the wall by ${±Δψ}° (relative to the wall start) · camera and props kept their coordinates`; the existing text is kept when only the origin moved. |
+
+Accessibility: a labelled `group`, a native `<select>` and `<input>` with `<label for>`, and an `aria-live="polite"` readout. The styles live in `css/features/pivot.css` and use the role tokens only (`.pivot-orientation`, `.pivot-subtitle`, `.section-row.pivot-orientation-row` with two columns, `.pivot-yaw-readout` in the mono style of the readout box). There is no inline style (static rule 18 covers `#pivot-section`).
+
+### 12.10 Rebuild policy rows (ARCHITECTURE 6.2)
+
+| Id | Trigger | UI entry | Controller call | Rebuild | Other steps |
+|---|---|---|---|---|---|
+| F3-6 | `#pivot-align` `change` | `PivotPanel` | `PivotController.setAlign` → `commitPivot` | iff ψ changed (cause `'pivot'`) | re-express iff keep; `WALL_PIVOT_CHANGED{align}` |
+| F3-7 | `#pivot-yaw-offset` `change` | `PivotPanel` | `PivotController.setYawOffset` → `commitPivot` | iff ψ changed | write-back `toFixed(1)` |
+
+Rows F3-1 to F3-4 now rebuild iff the stage origin moved or ψ changed. ψ does not depend on the pivot point, so in practice they are unchanged.
+
+### 12.11 Persistence, defaults and import
+
+- **Session-only**, like the pivot (header, "Sequencing"): Export JSON writes no orientation. Project file v2 (T7, M7a) will add `pivot.orientation = {align, yaw_offset_deg}` and the informational `pivot.resolved_m.yaw_deg`. Validator: an unknown `align` gives the default plus a warning; `yaw_offset_deg` goes through `parseYawOffset`, otherwise 0 plus a warning.
+- **Default.** `WallPivot.DEFAULT_ALIGN` is `'none'` in this unit (O9). The next unit sets it to `'center-neg-x'`, together with the `wall-center` pivot mode and section meshes for new projects (owner request (4)). That re-baselines the default outputs once, in its own commit.
+- **Import.** In this unit an import still resets the pivot, orientation included (4.4, Q14). The next unit applies the owner's rule: a v1 file carries no pivot or orientation, so the import keeps the session's.
+
+### 12.12 Tests
+
+**Unit** (`tests/unit/orientation.test.mjs`, plus the amended pivot, controller, marker, framing, io and panel tests):
+1. `parseYawOffset`: `'0'` → 0, `''` → null, `'abc'` → null, `200` → 180, `-200` → −180, `12.34` → 12.3, `-0.04` → 0 (not −0); idempotent. `setAlign('left')` throws `RangeError`. `isIdentity`, `clone` and `equals` cover the orientation.
+2. `wallCentre`: the default wall's centre is (1.25, 0, 0) with normal (−0, 0, 1); the even 10 × 3° wall's centre is on the column edge, with the bisector normal; `flat3`'s is on a column edge of its middle section; `box_corner`'s turns by 180°; an empty wall and a zero-width wall give `null`.
+3. Alignment:
+   - the default flat wall gives ψa = 90 **exactly**; with `wall-center`, every stage edge has x === 0 and z running from +1.25 to −1.25, every panel `rotY` is π/2, and every builder normal is exactly (1, 0, 0);
+   - a symmetric concave wall (odd and even column counts) with `wall-center` puts its centre on −X (|z| < 1e-12, x < 0);
+   - for `concave_offsets`, `mixed` and `box_corner` (asymmetric, several sections) the turned centre normal is (1, 0, 0) within 1e-12;
+   - an empty wall gives ψ = yawOffsetDeg; a yaw offset adds to ψa and wraps.
+4. Frames: export = stage − (0, P.y, 0) under a yaw (grids and panel corners); `rotated` keeps lengths, `baseY` and heights, and its raw-walk precondition throws; the framing of the turned layout equals the 08 P2-11c values turned by ψ; the identity yaw returns the walk itself.
+5. Re-expression: for random poses, an align, yaw or pivot edit with keep on leaves the camera's and the props' placement relative to the wall unchanged (position in the wall's local frame, and pan relative to the wall); Δψ = 0 is bit-identical to `translateStage`.
+6. Controller: `setAlign` gives one rebuild, re-expression iff keep, and `WALL_PIVOT_CHANGED{align, yawShiftDeg: 90}`; `setYawOffset` writes back; a no-op emits nothing; a section edit with align on re-expresses nothing and carries `yawShiftDeg`; a drag under ψ = 90°: a stage +X drag of 0.3 m commits a layout offset z of +0.3.
+7. Reset and presets: the aligned default wall gives (5, 1.5, 0), pan 90 and tilt atan2(−0.75, 5); the presets use θ0 = π/2 when aligned, and 0 at the identity (the legacy angles bit for bit).
+8. Exports: the `# Orientation:` line and the glTF `orientation` extras appear iff ψ ≠ 0; the safe-distance OBJ of a group stamped under another yaw lands in the current E frame.
+9. Panel: the readout and status texts, idempotent on a repeated payload; the select and the yaw input mirror the pivot.
+
+**Harness** (`pivot_orientation`, a forward golden in `scenarios-features.mjs`):
+- the default wall with `wall-center`, then Centre on −X: the panel state, the readouts, the combined OBJ and the section glTF, and screenshots of the Front and Top presets;
+- the camera preview on (the Reset pose);
+- a yaw offset of 30° with keep on (the re-expressed camera); keep off, and the offset back to 0;
+- Centre on −X on the imported `concave_offsets` and `mixed` walls and on a symmetric concave wall;
+- post-checks on the exports: every OBJ `vn` and glTF `NORMAL` of the default wall is +X; the default wall's vertices lie on x = 0 with z in [−1.25, 1.25]; the symmetric concave wall's centre lies on −X.
+
+**Manual (headless Blender).** Import the harness's Centre-on-−X OBJ and glTF (`bpy.ops.wm.obj_import`, `bpy.ops.import_scene.gltf`). The LED face normals point +X in Blender's frame too (the importers' Y-up to Z-up conversion keeps +X), and the wall centre lies on the origin (flat wall) or on −X (concave wall).
+
+### 12.13 Steps (each its own gated commit, 08 8.1)
+
+| Step | Content | Expected outputs |
+|---|---|---|
+| F3-O0 | this section and the ARCHITECTURE seams | none (documentation) |
+| F3-O1 | domain: `OrientationAlign`, `WallPivot.orientation` and its rules | none |
+| F3-O2 | geometry: `geometry/WallOrientation.js` (`yawTrig`, `wallCentre`, `alignmentYawDeg`), `WallLayout.rotated`, the resolution fields, `yawShift` and `stageChange`, `layoutProject`'s turn | none (ψ = 0) |
+| F3-O3 | consumers: P-PIVOT with the rigid re-expression, `reexpressStage`, `commitPivot`, `WALL_REBUILT.yawShiftDeg`, the marker ghost, the turned pivot drag | none |
+| F3-O4 | camera Reset (aligned) and the view presets; the framing additions | none |
+| F3-O5 | exports: the orientation metadata and the turned safe-distance OBJ | none |
+| F3-O6 | UI: the Orientation block, rows F3-6 and F3-7, the README and the harness-contract ids | `ui_visual` text, styles and sidebar screenshots (the new block), and any page-wide control probe that lists it |
+| F3-O7 | harness: the `pivot_orientation` scenario, the Blender check | new outputs only |
+
+**Q7 (answered 2026-10-17).** The owner asked for alignment, but not the chord rule of T14 (`align: 'chord'`): Centre on −X with a free yaw offset, as defined above. This section supersedes T14. Q1 (the default pivot of new projects) is answered by the same request (`wall-center`, in the next unit).
+
+### 12.14 Risks
+
+| Risk | Mitigation |
+|---|---|
+| Float noise in turned coordinates (`-0.000000`) | `yawTrig` is exact at multiples of 90°, the default case; other angles carry noise of about 1e-16, as any rotation does. |
+| The alignment flips when a section edit moves the centre across a sharp corner (for example a box corner) | Deliberate: the rule is "the normal at the centre". The status line reports the turn, and the yaw offset corrects the result by hand. |
+| An asymmetric wall's middle lies off the −X axis | Documented (12.2); the `surface-center` pivot (T15) would put it on the axis. |
+| Users expect the offset inputs to follow the turned axes | Q6 keeps layout axes, and the README says so; the gizmo moves the pivot along the turned (stage) axes, as seen. |
