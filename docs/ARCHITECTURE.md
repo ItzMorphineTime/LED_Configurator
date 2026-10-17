@@ -3357,7 +3357,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 8.4: the JetBrains Mono 700 row is reduced to the two font-gate limitations.
 - 9: Feature 6's landed steps.
 
-**06 T6a, the Morph export header and generator strings (docs/improvements/06-morph-branding.md 4.2, 5.4, 7, 8.1 U9, 8.4)** (manifest `tests/regression/expected/F6-T6a.json`: every OBJ (lines 1 and 3), MTL (line 1), glTF (`asset.generator`) and safe-distance OBJ (line 2) export and every ZIP through those entries; no file name changes):
+**06 T6a, the Morph export header and generator strings (docs/improvements/06-morph-branding.md 4.2, 5.4, 7, 8.1 U9, 8.4)** (manifest `tests/regression/expected/F6-T6a.json`: every OBJ (lines 1 and 4; line 3 is the 01 CR-3 orientation line), MTL (line 1), glTF (`asset.generator`) and safe-distance OBJ (line 2) export and every ZIP through those entries; no file name changes):
 - 3.4: `Brand.productName`, the OBJ/MTL/safe-distance comment headers and `gltfGenerator` name "Morph LED Configurator"; new `Brand.jsonGenerator` (`{ name }`, frozen), `shortName`, `company`, `homepage`. `Brand.files` keeps the Phase-1 names until 06 T6b.
 - 2.3: `tests/unit/fixtures/legacy-brand.mjs` (`LEGACY_BRAND`): `io.test.mjs` builds its oracle-compared exporters with it; the golden comparisons and the use-case tests use `Theme.brand`; `theme.test.mjs` U9 (the string half).
 - 9: Feature 6's landed steps.
@@ -3382,3 +3382,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 
 **06 T6b2, rule 17 matches a legacy file name only as a whole token (review follow-up of 06 T6b)** (manifest `tests/regression/expected/F6-T6b2.json`, an invariance gate: empty `expect`; `tests/static` and documentation only):
 - 2.3, 10: static rule 17 (06 R-B3b) used the token boundary `(?![A-Za-z0-9_-])` after a legacy file name, so `panel-ids.png.bak`, which the bad fixture documents as a near miss, was reported as `panel-ids.png`. It now uses the boundary of `compare.mjs --rename` (a `.` after the name ends the token only when it does not continue the name), and the static self-test asserts that the bad fixture's near-miss line is not reported (`CLEAN_IN_BAD`); before, the self-test checked only that each expected violation occurred.
+
+**06 T6a2, two stale references of 06 T5 and T6a corrected (review follow-up of 06 T5 and T6a)** (manifest `tests/regression/expected/F6-T6a2.json`, an invariance gate: empty `expect`; a comment, a manifest reason and documentation only):
+- 12: the 06 T6a entry above and the `F6-T6a.json` reason of its OBJ entry said lines 1 and 3; the T6a diff changed lines 1 and 4 (line 3 is the 01 CR-3 orientation line since 08 P2-2c), as its commit message and 06 7 and 8.4 say.
+- 2.2: the header of `render/frameColor.js` named its test file `frame-color.test.mjs`; U13 lives in `scene-overlays.test.mjs` (2.3).

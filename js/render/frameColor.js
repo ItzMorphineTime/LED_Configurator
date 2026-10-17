@@ -6,7 +6,7 @@
  * (the two WCAG ratios are equal at the worst colour, sqrt((L_light + 0.05) / (L_dark + 0.05))). Textured or
  * see-through panels (panel IDs, the LED simulation, HDRI content once spec 05 lands, wireframe) and free-string
  * colours get the light frame.
- * Pure: no THREE, no DOM, imports nothing; Node-tested (tests/unit/frame-color.test.mjs, U13).
+ * Pure: no THREE, no DOM, imports nothing; Node-tested (tests/unit/scene-overlays.test.mjs, U13).
  * Layer: render.
  */
 
