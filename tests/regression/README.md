@@ -661,8 +661,8 @@ then the summary.
   `node tools/check-orientation.mjs --failures-only tests/regression/output/baseline` checks every
   export of a capture. Since 08 P2-2 every wall export passes; what still fails is owned by later 08
   commits and listed in `tests/unit/export-orientation.test.mjs` (`OPEN_DEFECTS`): the safe-distance
-  floor OBJs (no `vn`, B-L29, 08 P2-5b), `import_edge`'s `ii_combined` and `ii_section` OBJ and glTF
-  (string counts, B-L8, 08 P2-3b) and `p2_zero_inputs`' combined OBJ (2.5 columns, B-L15, 08 P2-8a).
+  floor OBJs (no `vn`, B-L29, 08 P2-5b) and `import_edge`'s `ii_combined` and `ii_section` OBJ and glTF
+  (string counts, B-L8, 08 P2-3b); `p2_zero_inputs`' combined OBJ passes since 08 P2-8a (Columns 2.5 is rounded to 3).
   That test runs the same check over `GOLDEN_DIR` and over 500 seeded integer walls in every mesh mode.
 - `node tools/check-gltf.mjs <file.gltf ...>`: buffer, bufferView and accessor bounds, component and
   4-byte alignment, index values below the vertex count and never the primitive-restart value,
@@ -825,6 +825,9 @@ in parentheses changes them:
   (08 P2-1a: the TypeError is an M-EXP-1 alert; 08 P2-1c: Export Panel IDs alerts M-EXP-2 and creates no
   canvas, and the ZIP leaves the texture out, with `texture_file: null`, no `map_Kd` and the M-EXP-4 alert;
   08 P2-1d: with panel IDs on, the viewport shows the section colour instead of a blank texture).
+- `p2_zero_inputs`: Columns 2.5 was stored as typed (2.5 columns, 7.5 panels, an OBJ with fractional indices,
+  B-L15) (08 P2-8a: it is rounded to 3, and every card snapshot records `step="1"` on the four integer inputs, the
+  `max` of panel height and Pixels X/Y and the `min`/`max` of the panel angle).
 - `p2_shortcut_filters`: `g` in the focused select turns translate mode on, Ctrl+G turns it off again,
   and the three auto-repeated `p` presses leave pilot mode on (B-L11) (08 P2-9b: the select is a typing target and
   Ctrl and auto-repeat are filtered, so translate mode and pilot mode stay off in steps 1 to 3).

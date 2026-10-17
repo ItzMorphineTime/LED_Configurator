@@ -270,13 +270,14 @@ export class WallMeshBuilder {
 
     this.#pushVertices(sl, writeNormal, writeUv, out);
 
-    // LEGACY(B-L8, B-L15): vertsPerRow is the raw `panelCols + 1` (an imported string '10' gives '101', 2.5 gives
-    // 3.5), so imported strings and fractional counts produce the legacy (garbage) indices.
+    // LEGACY(B-L8): vertsPerRow is the raw `panelCols + 1` (an imported string '10' gives '101', an imported 2.5
+    // gives 3.5), so unvalidated imported strings and fractional counts produce the legacy (garbage) indices. The card
+    // rules round the counts since 08 P2-8a (B-L15 fixed), so only an import can still bring such values.
     const vertsPerRow = section.panelCols + 1;
     this.#pushIndices(section, indexBase, vertsPerRow, winding, out.indices);
 
-    // LEGACY(B-L15): the DECLARED vertex count, which differs from the vertices actually pushed when the counts
-    // are fractional; the next section's indexBase advances by it.
+    // The DECLARED vertex count; for an unvalidated imported fractional count (B-L8, tagged above) it differs from the
+    // vertices actually pushed, and the next section's indexBase advances by it.
     const vertexAdvance = (section.panelCols + 1) * (section.panelRows + 1);
     return { positions: out.positions, normals: out.normals, uvs: out.uvs, indices: out.indices, vertexAdvance };
   }
@@ -304,8 +305,8 @@ export class WallMeshBuilder {
 
   /**
    * The index loops of sectionGrid. Every index keeps the exact left-to-right association
-   * `indexBase + row * vertsPerRow + col` (B-L15, tagged at sectionGrid): with the OBJ base 1,
-   * `(1 + row * vpr) + col` differs from `(row * vpr + col) + 1` in the last ulp for fractional counts.
+   * `indexBase + row * vertsPerRow + col` (B-L8, tagged at sectionGrid): with the OBJ base 1,
+   * `(1 + row * vpr) + col` differs from `(row * vpr + col) + 1` in the last ulp for imported fractional counts.
    * @param {import('../domain/WallSection.js').WallSection} section
    * @param {number} indexBase
    * @param {number|string} vertsPerRow  the raw `section.panelCols + 1`

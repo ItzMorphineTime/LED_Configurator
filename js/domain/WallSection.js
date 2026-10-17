@@ -2,7 +2,8 @@
  * @module domain/WallSection
  * One section of the LED wall with the legacy field names (so ported code reads `section.panelCols` unchanged),
  * the card input rules (legacy number `change` handler) and the derived labels shown on the section card.
- * Values are never coerced or validated (ARCHITECTURE.md R12): imported strings and NaN stay as they are.
+ * The constructor never coerces or validates (ARCHITECTURE.md R12): imported strings and NaN stay as they are. The card
+ * rules round the integer fields and clamp every field to `LIMITS` since 08 P2-8a (B-L15).
  * Legacy source: index.html@cd3fd3f 1395-1407 (default section), 3897-3908, 3958 (card derived values),
  * 4016 (rename), 4026-4054 (field rules and card patch values); `const scale = 0.001` at 1479, 2488, 2552, 2591,
  * 3757, 4493, 4912, 4920 (MM_TO_M).
@@ -10,6 +11,20 @@
  */
 
 import { orDefault } from '../legacy/LegacyCompat.js';
+import { clamp, deepFreeze, roundInt } from './rules.js';
+
+/**
+ * One card rule after its fallback (08 P2-8a, 4.4): the value rounded when the field is an integer field, then
+ * clamped to the field's WallSection.LIMITS range.
+ * Side effects: none.
+ * @param {string} field  a WallSection.LIMITS key
+ * @param {number} v      the value after the legacy fallback (never NaN)
+ * @returns {number}
+ */
+function cardRule(field, v) {
+  const { min, max, int } = WallSection.LIMITS[field];
+  return clamp(int ? roundInt(v) : v, min, max);
+}
 
 /** Millimetres to metres; replaces the 8 local `const scale = 0.001`. */
 export const MM_TO_M = 0.001;
@@ -73,21 +88,46 @@ export class WallSection {
   }
 
   /**
+   * The ranges of the eight numeric section fields (spec 07 4.1 and 4.3; 08 4.4): plain frozen data
+   * `{ field: { min, max, int, default } }`. FIELD_RULES read their bounds and the integer flag from it, and from
+   * 08 P2-3b so does the import validator (io/ProjectSchema.js), so the card inputs and the import cannot disagree.
+   * `default` is the validator's default (the v1 import default); the card rules keep their own legacy fallbacks.
+   * The caps on panel height (100,000 mm), LEDs (65,536) and curve (±180°) are sanity caps far above any buildable
+   * wall (aee55ac removed the old UI caps on purpose); they exist so that every value the UI can produce lies inside
+   * the validator's range (07 Q15).
+   * @type {Readonly<Record<string, Readonly<{min: number, max: number, int: boolean, default: number}>>>}
+   */
+  static LIMITS = deepFreeze({
+    panelCols: { min: 1, max: 50, int: true, default: 5 },
+    panelRows: { min: 1, max: 20, int: true, default: 3 },
+    panelWidth: { min: 50, max: 5000, int: false, default: 500 },
+    panelHeight: { min: 50, max: 100000, int: false, default: 500 },
+    ledX: { min: 8, max: 65536, int: true, default: 32 },
+    ledY: { min: 8, max: 65536, int: true, default: 32 },
+    curveIntensity: { min: -180, max: 180, int: false, default: 0 },
+    angleOffset: { min: -180, max: 180, int: false, default: 0 },
+  });
+
+  /**
    * Card number-input rules, applied to v = parseFloat(raw); fields without a rule keep v.
-   * B-L9 via orDefault (tagged in LegacyCompat): 0 and NaN fall back to the default.
-   * LEGACY(B-L15): no rounding; fractional panel/LED counts are stored as typed.
+   * B-L9 via orDefault (tagged in LegacyCompat): 0 and NaN fall back to the card fallback (until 08 P2-8b).
+   * 08 P2-8a (B-L15 fixed, 08 4.4): the integer fields (columns, rows, LEDs) are rounded with roundInt, and every
+   * field is clamped to its LIMITS range: `clamp(roundInt(orDefault(v, fallback)), min, max)` for the integer fields,
+   * `clamp(orDefault(v, fallback), min, max)` for the others. Panel width and the angle offset keep their legacy
+   * results (clamp equals the legacy Math.max/Math.min pair for every number orDefault returns); panel height, the
+   * LED counts and the curve gain their caps.
    * Ports: index.html@cd3fd3f lines 4030-4036.
    * @type {Readonly<Record<string, (v: number) => number>>}
    */
   static FIELD_RULES = Object.freeze({
-    panelCols: (v) => Math.max(1, Math.min(50, orDefault(v, 1))),
-    panelRows: (v) => Math.max(1, Math.min(20, orDefault(v, 1))),
-    panelWidth: (v) => Math.max(50, Math.min(5000, orDefault(v, 500))),
-    panelHeight: (v) => Math.max(50, orDefault(v, 500)),
-    ledX: (v) => Math.max(8, orDefault(v, 32)),
-    ledY: (v) => Math.max(8, orDefault(v, 32)),
-    curveIntensity: (v) => orDefault(v, 0),
-    angleOffset: (v) => Math.max(-180, Math.min(180, orDefault(v, 0))),
+    panelCols: (v) => cardRule('panelCols', orDefault(v, 1)),
+    panelRows: (v) => cardRule('panelRows', orDefault(v, 1)),
+    panelWidth: (v) => cardRule('panelWidth', orDefault(v, 500)),
+    panelHeight: (v) => cardRule('panelHeight', orDefault(v, 500)),
+    ledX: (v) => cardRule('ledX', orDefault(v, 32)),
+    ledY: (v) => cardRule('ledY', orDefault(v, 32)),
+    curveIntensity: (v) => cardRule('curveIntensity', orDefault(v, 0)),
+    angleOffset: (v) => cardRule('angleOffset', orDefault(v, 0)),
   });
 
   /**

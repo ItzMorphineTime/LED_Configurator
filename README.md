@@ -139,16 +139,18 @@ The hosted version on [GitHub Pages](https://itzmorphinetime.github.io/LED_Confi
 ### Wall Section Parameters
 | Parameter | Description | Range |
 |-----------|-------------|-------|
-| Panel Columns | Number of panels horizontally | 1-50 |
-| Panel Rows | Number of panels vertically | 1-20 |
+| Panel Columns | Number of panels horizontally (whole number) | 1-50 |
+| Panel Rows | Number of panels vertically (whole number) | 1-20 |
 | Panel Width | Width in millimeters | 50-5000mm |
-| Panel Height | Height in millimeters | 50mm minimum, no maximum |
-| LED X Resolution | Horizontal pixels per panel | 8 minimum, no maximum |
-| LED Y Resolution | Vertical pixels per panel | 8 minimum, no maximum |
-| Curve Intensity | Curvature angle per panel (positive = concave, negative = convex) | not limited |
+| Panel Height | Height in millimeters | 50-100,000mm |
+| LED X Resolution | Horizontal pixels per panel (whole number) | 8-65,536 |
+| LED Y Resolution | Vertical pixels per panel (whole number) | 8-65,536 |
+| Curve Intensity | Curvature angle per panel (positive = concave, negative = convex) | -180° to +180° |
 | Section Offset | Rotation before section | -180° to +180° |
 
-A value outside its range is clamped to it when the field is changed. An empty field, or 0 in a field whose default is not 0, falls back to the default (columns and rows 1, width and height 500mm, LED resolution 32).
+A value outside its range is clamped to it when the field is changed, and a fractional column, row or LED count is rounded to the nearest whole number. An empty field, or 0 in a field whose default is not 0, falls back to the default (columns and rows 1, width and height 500mm, LED resolution 32).
+
+Release note: columns, rows and LED counts used to accept fractions such as 2.5, which built broken geometry; they are now rounded. Panel height, LED counts and the panel angle gained upper limits (100,000mm, 65,536 and ±180°) far above any real wall, so that every value the app can produce is also accepted when a project file is imported.
 
 ### Camera Settings
 | Parameter | Description |

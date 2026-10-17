@@ -351,7 +351,7 @@ describe('LEGACY_SITES', () => {
   // The Phase 2 fixes landed so far (docs/improvements/08-bugfix-roadmap.md section 10, merge order), each with the
   // 08 commit its 8.2 fix cell names. Every landing commit adds its id here.
   const PHASE2_LANDED = { 'B-M1': 'P2-5a', 'B-H3': 'P2-1a', 'B-L5': 'P2-1b', 'B-L4': 'P2-1c', 'B-H1': 'P2-2a', 'B-L3': 'P2-2b', 'B-H2': 'P2-2c',
-    'B-L11': 'P2-9b' };
+    'B-L11': 'P2-9b', 'B-L15': 'P2-8a' };
   // The quirks a Phase 3 feature step fixed (its spec and step, as its 8.2 fix cell names them): B-L24's badge overlap in
   // 06 T4a (its .view-btn.active half had landed in 01 F1-2; its two CSS documentation entries are gone).
   const PHASE3_LANDED = { 'B-L24': '06 T4a' };

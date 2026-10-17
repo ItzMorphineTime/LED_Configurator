@@ -15,7 +15,9 @@
  * Montserrat) and "Panel Colour", the custom input's title "Custom colour". The colour dot's and the swatches'
  * inline backgrounds are per-section data and stay. Do not re-indent them. 06 T7: the swatches are rendered from the
  * injected palette's cardSwatches, one per line with the legacy indentation, so the six legacy swatches would give the
- * legacy markup byte for byte.
+ * legacy markup byte for byte. 08 P2-8a (B-L15, 08 4.4): the four integer inputs (columns, rows, Pixels X/Y) gain
+ * step="1", panel height max="100000", Pixels X/Y max="65536" and the panel angle min="-180" max="180"
+ * (WallSection.LIMITS).
  */
 import { Events } from '../core/EventBus.js';
 import { legacyHtml } from '../legacy/LegacyCompat.js';
@@ -99,21 +101,21 @@ function cardHtml(section, showDelete, swatches) {
                             </div>
                         </div>
                         <div class="section-row">
-                            <div class="input-field"><label>Columns</label><input type="number" data-field="panelCols" value="${legacyHtml(section.panelCols)}" min="1" max="50"></div>
-                            <div class="input-field"><label>Rows</label><input type="number" data-field="panelRows" value="${legacyHtml(section.panelRows)}" min="1" max="20"></div>
+                            <div class="input-field"><label>Columns</label><input type="number" data-field="panelCols" value="${legacyHtml(section.panelCols)}" min="1" max="50" step="1"></div>
+                            <div class="input-field"><label>Rows</label><input type="number" data-field="panelRows" value="${legacyHtml(section.panelRows)}" min="1" max="20" step="1"></div>
                         </div>
                         <div class="section-row">
                             <div class="input-field"><label>Width (mm)</label><input type="number" data-field="panelWidth" value="${legacyHtml(section.panelWidth)}" min="50" max="5000"></div>
-                            <div class="input-field"><label>Height (mm)</label><input type="number" data-field="panelHeight" value="${legacyHtml(section.panelHeight)}" min="50"></div>
+                            <div class="input-field"><label>Height (mm)</label><input type="number" data-field="panelHeight" value="${legacyHtml(section.panelHeight)}" min="50" max="100000"></div>
                         </div>
                         <div class="section-row">
-                            <div class="input-field"><label>Pixels X</label><input type="number" data-field="ledX" value="${legacyHtml(section.ledX)}" min="8"></div>
-                            <div class="input-field"><label>Pixels Y</label><input type="number" data-field="ledY" value="${legacyHtml(section.ledY)}" min="8"></div>
+                            <div class="input-field"><label>Pixels X</label><input type="number" data-field="ledX" value="${legacyHtml(section.ledX)}" min="8" max="65536" step="1"></div>
+                            <div class="input-field"><label>Pixels Y</label><input type="number" data-field="ledY" value="${legacyHtml(section.ledY)}" min="8" max="65536" step="1"></div>
                         </div>
                         <div class="section-row">
                             <div class="input-field">
                                 <label>Panel Angle (°)</label>
-                                <input type="number" data-field="curveIntensity" value="${legacyHtml(section.curveIntensity)}" step="0.1">
+                                <input type="number" data-field="curveIntensity" value="${legacyHtml(section.curveIntensity)}" min="-180" max="180" step="0.1">
                                 <div class="curve-hint">${legacyHtml(hint)}</div>
                             </div>
                             <div class="input-field">

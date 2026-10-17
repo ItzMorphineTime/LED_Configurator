@@ -207,7 +207,10 @@ js/
                                                  properties; COLOR_BINDINGS, FONT_BINDINGS, UNBRANDED, BIND_FONTS_DEFAULT,
                                                  parseHexColor, parseCssColor (pure, imports nothing; wired in App by 06 T3)
   domain/
-    WallSection.js                         WP3   WallSection entity (legacy field names, field rules, derived labels), MM_TO_M
+    rules.js                               08 P2-8a  clamp, roundInt, deepFreeze: the shared numeric rules of the UI rule
+                                                 tables and (from 08 P2-3b) the import validator (08 4.4; imports nothing)
+    WallSection.js                         WP3   WallSection entity (legacy field names, field rules, derived labels), MM_TO_M;
+                                                 08 P2-8a: LIMITS, the rounding and capped field rules
     Wall.js                                WP3   Wall (ordered sections, id allocator, totals, legacy flat bounds), WallPivot, PivotMode
     Project.js                             WP3   Project aggregate, DisplaySettings (content enum), ContentMode, PanelIdStyle
     LogoLibrary.js                         WP3   Section logos keyed by section id (plain-object key semantics)
@@ -764,14 +767,18 @@ export class WallSection {
   /** `Wall ${index + 1}` */
   static defaultName(index)
 
-  /** Verbatim 4030-4036, applied to v = parseFloat(raw). B-L9 via orDefault (tagged in LegacyCompat); LEGACY(B-L15) no rounding.
-   *  panelCols: v => Math.max(1, Math.min(50, orDefault(v, 1)))
-   *  panelRows: v => Math.max(1, Math.min(20, orDefault(v, 1)))
-   *  panelWidth: v => Math.max(50, Math.min(5000, orDefault(v, 500)))
-   *  panelHeight: v => Math.max(50, orDefault(v, 500))
-   *  ledX / ledY: v => Math.max(8, orDefault(v, 32))
-   *  curveIntensity: v => orDefault(v, 0)
-   *  angleOffset: v => Math.max(-180, Math.min(180, orDefault(v, 0))) */
+  /** 08 P2-8a (07 4.1, 4.3; 08 4.4): plain frozen data { field: { min, max, int, default } }; FIELD_RULES read min, max
+   *  and int from it (and, from 08 P2-3b, so does the validator), `default` is the validator's (v1 import) default.
+   *  panelCols 1..50 int 5; panelRows 1..20 int 3; panelWidth 50..5000 500; panelHeight 50..100000 500;
+   *  ledX / ledY 8..65536 int 32; curveIntensity -180..180 0; angleOffset -180..180 0 */
+  static LIMITS
+
+  /** 4030-4036, applied to v = parseFloat(raw), with the 08 P2-8a rounding and caps (B-L15 fixed). B-L9 via orDefault
+   *  (tagged in LegacyCompat) until 08 P2-8b. With L = LIMITS[field]: x = orDefault(v, fallback);
+   *  clamp(L.int ? roundInt(x) : x, L.min, L.max) (domain/rules.js), the fallbacks being the legacy ones:
+   *  panelCols, panelRows 1; panelWidth, panelHeight 500; ledX, ledY 32; curveIntensity, angleOffset 0.
+   *  panelWidth and angleOffset give the legacy values (clamp equals Math.max(lo, Math.min(hi, x)) for every number
+   *  orDefault returns); columns, rows and LEDs are rounded; panel height, the LEDs and the curve gain their caps. */
   static FIELD_RULES
 
   /** const v = parseFloat(raw); return Object.prototype.hasOwnProperty.call(FIELD_RULES, field) ? FIELD_RULES[field](v) : v;
@@ -1133,9 +1140,11 @@ export class WallMeshBuilder {
    *      undefined) -> nothing pushed; any other non-object uv throws TypeError (a programmer error, not a strategy)
    *  Indices: vertsPerRow = section.panelCols + 1 (raw: string cols concatenate, B-L8); for row < panelRows,
    *    col < panelCols: bl = indexBase + row * vertsPerRow + col; br = bl + 1;
-   *    tl = indexBase + (row + 1) * vertsPerRow + col; tr = tl + 1;   (exact left-to-right association, B-L15)
+   *    tl = indexBase + (row + 1) * vertsPerRow + col; tr = tl + 1;   (exact left-to-right association; fractional
+   *    imported counts, B-L8; the card rules round the counts since 08 P2-8a, B-L15 fixed)
    *    indices.push(...quadIndices(bl, br, tl, tr, profile.winding))
-   *  vertexAdvance = (section.panelCols + 1) * (section.panelRows + 1)   (the DECLARED count, B-L15)
+   *  vertexAdvance = (section.panelCols + 1) * (section.panelRows + 1)   (the DECLARED count; it differs from the pushed
+   *    count only for an imported fractional count, B-L8)
    *  @param {SectionLayout} sl
    *  @param {{indexBase?: number, uv?: 'unit'|{offsetU:number,widthU:number}|null, normals?: 'averaged'|'right-panel'|'none'}} [opts]
    *         defaults: indexBase 0, uv null, normals profile.normals
@@ -2250,7 +2259,8 @@ export class SectionListPanel {
    *  for each (section, index): section.ensureName(index); warning block template (verbatim 3909-3916, multi-line, ONLY in render);
    *  card = div.className 'wall-section collapsed'; card.innerHTML = verbatim template 3920-3980 (06 T1: the offset hint is
    *  <div class="curve-hint curve-hint--small"> instead of its inline font-size: 9px; 06 T4c: the labels "Panel Angle (°)"
-   *  and "Panel Colour" and the title "Custom colour") with EVERY interpolation of a
+   *  and "Panel Colour" and the title "Custom colour"; 08 P2-8a: step="1" on the columns, rows and Pixels X/Y inputs,
+   *  max="100000" on panel height, max="65536" on Pixels X/Y, min="-180" max="180" on the panel angle) with EVERY interpolation of a
    *  section value passed through legacyHtml() (LEGACY(B-M4)): name (title and input value), colour (dot style and colour input),
    *  id, the numeric field values (imported strings are not coerced, B-L8), summary (it contains the raw panelCols /
    *  panelRows) and hint; the six swatches stay literal; the 4K warning's canvasWidth / canvasHeight are products of two
@@ -3002,7 +3012,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | B-L12 | Gizmo resources leak (memory only) | `Strategies.dispose.gizmo` | Landed in Phase 1C H2 (`dispose.gizmo = true`; no tag site) |
 | B-L13 | Mesh-mode handler fires twice (C-4) | `WallDisplayPanel.bind` (tag + warning) | "mode unchanged -> no-op" guard, never radio `change` |
 | B-L14 | Colliding ZIP texture names (U-3) | `Strategies.zipTextureNaming` | de-duplicate |
-| B-L15 | Fractional integer fields (D-8); declared vertex advance | `WallSection.FIELD_RULES` + `WallMeshBuilder.sectionGrid` (tags) | `Math.round` + `step` |
+| B-L15 | Fractional integer fields (D-8); declared vertex advance | `WallSection.FIELD_RULES` (fixed; the imported half of `WallMeshBuilder.sectionGrid` is B-L8's) | Landed in 08 P2-8a (`WallSection.LIMITS`; the card rules round columns, rows and LEDs and cap panel height, LEDs and curve; `step="1"` and the `max` attributes on the card inputs; no tag site) |
 | B-L16 | 4K ⚠ via `/Wall \d+/` (D-10) | `SectionListPanel.#patchCard` (tag) | title from the model |
 | B-L17 | 4K check per section only | `WallSection.exceeds4K` (tag) | wall-level check |
 | B-L18 | Combined LED sim white (E-4) | `Strategies.combinedLedSimColor` + `LEDPixelTextureFactory.tile` cache key (tag) | colour + key fix |
@@ -3036,7 +3046,6 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/legacy/LegacyCompat.js#orDefault` | B-L9 |
 | `js/legacy/LegacyCompat.js#legacyHtml` | B-M4 |
 | `js/domain/WallSection.js#constructor` | B-L8 |
-| `js/domain/WallSection.js#FIELD_RULES` | B-L15 |
 | `js/domain/WallSection.js#exceeds4K` | B-L17 |
 | `js/domain/Wall.js#appendLikeLast` | B-L8 |
 | `js/domain/Wall.js#replaceAll` | B-L8 |
@@ -3052,7 +3061,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/geometry/WallLayout.js#computeWallLayout` | B-L1 |
 | `js/geometry/WallLayout.js#flatEdges` | B-M15 |
 | `js/geometry/WallLayout.js#framingBounds` | B-L2, B-M10 |
-| `js/geometry/WallMeshBuilder.js#sectionGrid` | B-L15, B-L8 |
+| `js/geometry/WallMeshBuilder.js#sectionGrid` | B-L8 |
 | `js/geometry/WallMeshBuilder.js#combinedGrid` | B-M5 |
 | `js/geometry/TextureAtlas.js#panelPxPerLed` | B-M16 |
 | `js/geometry/PanelNaming.js#zipTextureFileName` | B-L14 |
@@ -3098,7 +3107,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/ui/WallDisplayPanel.js#bind` | B-L13 |
 | `index.html` (markup, untagged; documentation-only) | B-L36 |
 
-Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14) and B-L5 (08 P2-1b; its only site was the tag in `GltfExporter.addMesh`, which keeps B-H2 and B-M7) and B-L4 (08 P2-1c; its sites were the tags in `ProjectIO.exportPanelIds`, which has no tag left, and `ProjectIO.exportZIP`, which keeps B-L14; its viewport half never had a tag and is fixed by 08 P2-1d) and B-H1 (08 P2-2a; its sites were the tags in `WallMeshBuilder.quadIndices`, which keeps B-H2 until 08 P2-2d, and `LEDMaterialFactory.side`, whose `'double'` value is now a design choice) and B-L3 (08 P2-2b; its only site was the tag in `WallMeshBuilder.sectionGrid`, which keeps B-L15 and B-L8) and B-H2 (08 P2-2c and P2-2d; its sites were the tags in `ObjExporter.write`'s `#stripNormalLine`, which left with P2-2c (`write` keeps B-M6, B-L6 and B-L8), `WallMeshBuilder.quadIndices`, which has no tag left, and `GltfExporter.addMesh`, which keeps B-M7) and B-L11 (08 P2-9b; its sites were the tags in `InputState.isShortcutIgnoredTarget`, now a re-export of `core/typingTarget.js isTypingTarget`, and `ViewportInput.attachShortcuts`, which has no tag left); in Phase 3, B-L24 (its `.view-btn.active` half in 01 F1-2, `css/features/debug-view.css`; its badge-overlap half in 06 T4a, `.selection-indicator` at `bottom: 64px` in `css/09-viewport-tools.css`; its two documentation-only entries, the `Legacy note B-L24` paragraphs of the `css/07-viewport.css` and `css/09-viewport-tools.css` header comments, left with 06 T4a, whose header comments now say where it landed).
+Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14) and B-L5 (08 P2-1b; its only site was the tag in `GltfExporter.addMesh`, which keeps B-H2 and B-M7) and B-L4 (08 P2-1c; its sites were the tags in `ProjectIO.exportPanelIds`, which has no tag left, and `ProjectIO.exportZIP`, which keeps B-L14; its viewport half never had a tag and is fixed by 08 P2-1d) and B-H1 (08 P2-2a; its sites were the tags in `WallMeshBuilder.quadIndices`, which keeps B-H2 until 08 P2-2d, and `LEDMaterialFactory.side`, whose `'double'` value is now a design choice) and B-L3 (08 P2-2b; its only site was the tag in `WallMeshBuilder.sectionGrid`, which keeps B-L15 and B-L8) and B-H2 (08 P2-2c and P2-2d; its sites were the tags in `ObjExporter.write`'s `#stripNormalLine`, which left with P2-2c (`write` keeps B-M6, B-L6 and B-L8), `WallMeshBuilder.quadIndices`, which has no tag left, and `GltfExporter.addMesh`, which keeps B-M7) and B-L11 (08 P2-9b; its sites were the tags in `InputState.isShortcutIgnoredTarget`, now a re-export of `core/typingTarget.js isTypingTarget`, and `ViewportInput.attachShortcuts`, which has no tag left) and B-L15 (08 P2-8a; its sites were the tags in `WallSection.FIELD_RULES`, which has no tag left, and `WallMeshBuilder.sectionGrid`, which keeps B-L8 for unvalidated imported counts); in Phase 3, B-L24 (its `.view-btn.active` half in 01 F1-2, `css/features/debug-view.css`; its badge-overlap half in 06 T4a, `.selection-indicator` at `bottom: 64px` in `css/09-viewport-tools.css`; its two documentation-only entries, the `Legacy note B-L24` paragraphs of the `css/07-viewport.css` and `css/09-viewport-tools.css` header comments, left with 06 T4a, whose header comments now say where it landed).
 
 How rule 6 reads these rows (as implemented in `tests/static/check.mjs`): the comparison is per file, so a tag may sit in a private helper that only the named method calls (for example `ProjectSerializer.#readV1` for `#read`, `ObjExporter.#writeCombined` for `#write`, `GltfExporter.#writeCombined` for `#write`); a tag wrapped across JSDoc continuation lines counts as one tag (placeholders are still rejected); and a row whose `js/` file does not exist is reported, so a typo in a site path cannot bypass the check.
 
@@ -3148,7 +3157,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 3. Every ordered step a direct call; every event a pure mirror emitted at the legacy DOM-write point (R2, R3)?
 4. Domain values uncoerced; id-keyed maps with plain-object key semantics (R12)?
 5. Every quirk you touched is a `Strategies` key read at its 8.1 site (switch-and-throw, value or array comparison per 1.5) or a registered `LEGACY(B-xx)` tag (R7)? Every other bug mention written without the `LEGACY(` prefix?
-6. Markup and templates byte-identical (R8, Phase 1; since 06 T1 except the declared edits: the 99-utilities classes of `index.html`, 06 T4c's British copy, and the `TEMPLATE_EDITS` of `wall-controller.test.mjs`, which the legacy-parity tests apply to the legacy source); listeners attached in the legacy phase and order (R11)?
+6. Markup and templates byte-identical (R8, Phase 1; since 06 T1 except the declared edits: the 99-utilities classes of `index.html`, 06 T4c's British copy, 08 P2-8a's card input attributes and rules, and the `TEMPLATE_EDITS` of `wall-controller.test.mjs`, which the legacy-parity tests apply to the legacy source); listeners attached in the legacy phase and order (R11)?
 7. No `try/catch` added (the only sanctioned ones since 08 P2-1a: `ProjectIO.#runExport` and the export size guards); async/sync shape unchanged (R13)?
 8. Imports follow the layer table and are case-exact; no globals (R9)?
 9. Unit, static and full golden-master gates green? From Phase 2 on: the commit's expected-change manifest written first, the parent commit's output as the baseline, and `compare.mjs --expect` exiting 0 (10)?
@@ -3386,3 +3395,11 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 **06 T6a2, two stale references of 06 T5 and T6a corrected (review follow-up of 06 T5 and T6a)** (manifest `tests/regression/expected/F6-T6a2.json`, an invariance gate: empty `expect`; a comment, a manifest reason and documentation only):
 - 12: the 06 T6a entry above and the `F6-T6a.json` reason of its OBJ entry said lines 1 and 3; the T6a diff changed lines 1 and 4 (line 3 is the 01 CR-3 orientation line since 08 P2-2c), as its commit message and 06 7 and 8.4 say.
 - 2.2: the header of `render/frameColor.js` named its test file `frame-color.test.mjs`; U13 lives in `scene-overlays.test.mjs` (2.3).
+
+**08 P2-8a, B-L15 landed** (manifest `tests/regression/expected/P2-8a.json`: every card snapshot (the seven `sections_initial`, the 16 `ui_sections` states, the nine `import_edge` wall states, `p2_xss_names`, `p2_zip_section_mode`) for the new input attributes, and `p2_zero_inputs`' card, stats and combined OBJ for Columns 2.5 -> 3; merged before the validator of 08 P2-3b):
+- 2.2: `domain/rules.js` (`clamp`, `roundInt`, `deepFreeze`; imports nothing), the shared numeric rules of the UI rule tables and, from 08 P2-3b, the import validator (08 4.4).
+- 3.5: `WallSection.LIMITS` (07 4.1, 4.3: `{ field: { min, max, int, default } }`, deep-frozen); `FIELD_RULES` read `min`, `max` and `int` from it: the integer fields (columns, rows, LEDs) are rounded, and panel height (100,000 mm), the LEDs (65,536) and the curve (±180°) gain their sanity caps; panel width and the angle offset keep their legacy values. The `orDefault` fallbacks stay until 08 P2-8b.
+- 3.6: `WallMeshBuilder.sectionGrid` keeps its B-L8 tag only (unvalidated imported counts until 08 P2-3b).
+- 3.11 (R1/R8 template note, 08 5.5): the card template gains `step="1"` on the four integer inputs, `max="100000"` on panel height, `max="65536"` on Pixels X/Y and `min="-180" max="180"` on the panel angle; the legacy-parity tests apply them, and the rule changes of the number handler, as `TEMPLATE_EDITS` (11 item 6).
+- 8.2: the B-L15 row is kept with a `Landed` fix cell; 8.3: the row `WallSection.js#FIELD_RULES` is deleted and B-L15 leaves `WallMeshBuilder.js#sectionGrid`, so `LEGACY_SITES` no longer lists it.
+- 2.3: `domain.test.mjs` (the 4.4 rule table, `LIMITS`, the reachability property of every card rule over the grid and 10,000 seeded inputs, `rules`); `export-orientation.test.mjs` loses the B-L15 `OPEN_DEFECTS` row (`p2_zero_inputs`' combined OBJ passes).

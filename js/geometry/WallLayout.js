@@ -202,7 +202,7 @@ function includePoint(min, max, x, y, z) {
  * Walks the sections once, carrying the cursor (x, z, facing angle) across section joins, and returns every edge
  * position and panel centre. Section fields are read raw and never coerced (B-L8): `col < section.panelCols`
  * with a string compares numerically, `section.curveIntensity === 0` is false for the string '0', and fractional
- * counts walk ceil(cols) columns (B-L15).
+ * imported counts walk ceil(cols) columns (B-L8; the card rules round the counts since 08 P2-8a, B-L15).
  * Arithmetic, verbatim 1483-1549 (identical in all three legacy copies):
  *   panelW = section.panelWidth * MM_TO_M; panelH = section.panelHeight * MM_TO_M;
  *   curveAngleRad = (section.curveIntensity * Math.PI) / 180; isFlat = section.curveIntensity === 0;

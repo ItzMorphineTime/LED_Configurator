@@ -7,6 +7,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { MM_TO_M, SECTION_FIELDS, WallSection } from '../../js/domain/WallSection.js';
+import { clamp, roundInt, deepFreeze } from '../../js/domain/rules.js';
 import { PivotMode, WallPivot, Wall } from '../../js/domain/Wall.js';
 import { ContentMode, DisplaySettings, PanelIdStyle, Project } from '../../js/domain/Project.js';
 import { LogoLibrary } from '../../js/domain/LogoLibrary.js';
@@ -18,7 +19,10 @@ import { DebugShading, SHADING_CYCLE, DebugViewSettings } from '../../js/domain/
 const INPUTS = ['', '0', '-0', '1', '2.5', '50', '51', '-3', 'abc', '1e3', ' 7 ', '0x10', 'NaN', 'Infinity', '-181', '361'];
 /** Extra raw inputs that sit on or near every clamp of every rule. */
 const EXTRA_INPUTS = ['0.5', '0.09', '0.1', '1.5', '7.9', '8', '20.5', '32', '-90.5', '90.01', '100.5', '179.9', '180',
-  '359.99', '400.2', '5000.1', '799.9', '800.01', '1e-7', '-0.000001', '3abc', '.5', '-Infinity', '  '];
+  '359.99', '400.2', '5000.1', '799.9', '800.01', '1e-7', '-0.000001', '3abc', '.5', '-Infinity', '  ',
+  // 08 P2-8a: the rounding of the integer fields and the new caps (100,000 mm, 65,536 LEDs, ±180° curve)
+  '9.75', '49.5', '50.49', '19.5', '65535.5', '65536', '65536.4', '70000', '99999.9', '100000', '100000.5', '1e9', '-180.5',
+  '180.01', '-200'];
 const ALL_INPUTS = [...INPUTS, ...EXTRA_INPUTS];
 
 /** Asserts Object.is equality with a readable message. */
@@ -83,6 +87,22 @@ function legacySectionField(field, raw) {
   else if (field === 'panelHeight') value = Math.max(50, value || 500);
   else if (field === 'ledX' || field === 'ledY') value = Math.max(8, value || 32);
   else if (field === 'curveIntensity') value = value || 0;
+  else if (field === 'angleOffset') value = Math.max(-180, Math.min(180, value || 0));
+  return value;
+}
+
+/**
+ * 08 P2-8a (B-L15 fixed, 08 4.4): the legacy handler with the rounding of the integer fields and the caps of
+ * WallSection.LIMITS, written out as plain expressions (the independent copy the rule table is compared with).
+ */
+function p28aSectionField(field, raw) {
+  let value = parseFloat(raw);
+  if (field === 'panelCols') value = Math.min(50, Math.max(1, Math.round(value || 1)));
+  else if (field === 'panelRows') value = Math.min(20, Math.max(1, Math.round(value || 1)));
+  else if (field === 'panelWidth') value = Math.max(50, Math.min(5000, value || 500));
+  else if (field === 'panelHeight') value = Math.min(100000, Math.max(50, value || 500));
+  else if (field === 'ledX' || field === 'ledY') value = Math.min(65536, Math.max(8, Math.round(value || 32)));
+  else if (field === 'curveIntensity') value = Math.min(180, Math.max(-180, value || 0));
   else if (field === 'angleOffset') value = Math.max(-180, Math.min(180, value || 0));
   return value;
 }
@@ -339,7 +359,23 @@ describe('WallSection', () => {
     assert.equal(WallSection.defaultName(9), 'Wall 10');
   });
 
-  test('FIELD_RULES / parseField / setField equal the legacy handler over the input grid (Object.is)', () => {
+  test('LIMITS: the 07 4.3 ranges as plain frozen data (08 P2-8a)', () => {
+    assert.deepEqual(WallSection.LIMITS, {
+      panelCols: { min: 1, max: 50, int: true, default: 5 },
+      panelRows: { min: 1, max: 20, int: true, default: 3 },
+      panelWidth: { min: 50, max: 5000, int: false, default: 500 },
+      panelHeight: { min: 50, max: 100000, int: false, default: 500 },
+      ledX: { min: 8, max: 65536, int: true, default: 32 },
+      ledY: { min: 8, max: 65536, int: true, default: 32 },
+      curveIntensity: { min: -180, max: 180, int: false, default: 0 },
+      angleOffset: { min: -180, max: 180, int: false, default: 0 },
+    });
+    assert.ok(Object.isFrozen(WallSection.LIMITS));
+    for (const limits of Object.values(WallSection.LIMITS)) assert.ok(Object.isFrozen(limits));
+    assert.deepEqual(Object.keys(WallSection.LIMITS), Object.keys(WallSection.FIELD_RULES), 'one range per card rule');
+  });
+
+  test('FIELD_RULES / parseField / setField equal the 08 P2-8a rule table over the input grid (Object.is)', () => {
     assert.deepEqual(Object.keys(WallSection.FIELD_RULES),
       ['panelCols', 'panelRows', 'panelWidth', 'panelHeight', 'ledX', 'ledY', 'curveIntensity', 'angleOffset']);
     assert.ok(Object.isFrozen(WallSection.FIELD_RULES));
@@ -347,7 +383,7 @@ describe('WallSection', () => {
       'hasOwnProperty', 'unknown'];
     for (const field of fields) {
       for (const raw of ALL_INPUTS) {
-        const expected = legacySectionField(field, raw);
+        const expected = p28aSectionField(field, raw);
         same(WallSection.parseField(field, raw), expected, `parseField(${field}, ${JSON.stringify(raw)})`);
         if (Object.hasOwn(WallSection.FIELD_RULES, field)) {
           same(WallSection.FIELD_RULES[field](parseFloat(raw)), expected, `FIELD_RULES.${field}(${JSON.stringify(raw)})`);
@@ -359,10 +395,53 @@ describe('WallSection', () => {
     }
   });
 
-  test('B-L15: fractional counts are stored unrounded', () => {
+  test('08 P2-8a differs from the legacy handler only by the rounding of the integer fields and the new caps', () => {
+    for (const field of Object.keys(WallSection.FIELD_RULES)) {
+      const { min, max, int } = WallSection.LIMITS[field];
+      for (const raw of ALL_INPUTS) {
+        const legacy = legacySectionField(field, raw);
+        const now = WallSection.parseField(field, raw);
+        if (Object.is(now, legacy)) continue;
+        assert.ok((int && !Number.isInteger(legacy)) || legacy > max || legacy < min,
+          `${field}(${JSON.stringify(raw)}): ${now} differs from the legacy ${legacy} for no documented reason`);
+      }
+    }
+    // panelWidth and angleOffset already had both clamps: identical over the grid
+    for (const field of ['panelWidth', 'angleOffset']) {
+      for (const raw of ALL_INPUTS) same(WallSection.parseField(field, raw), legacySectionField(field, raw), `${field}(${raw})`);
+    }
+  });
+
+  test('B-L15 fixed (08 P2-8a): integer counts are rounded, panel height, LEDs and curve are capped', () => {
     const s = WallSection.createDefault();
-    assert.equal(s.setField('panelCols', '2.5'), 2.5);
-    assert.equal(s.setField('ledX', '9.75'), 9.75);
+    assert.equal(s.setField('panelCols', '2.5'), 3, 'p2_zero_inputs: Columns 2.5 -> 3');
+    assert.equal(s.setField('panelCols', '0.4'), 1);
+    assert.equal(s.setField('panelRows', '19.5'), 20);
+    assert.equal(s.setField('ledX', '9.75'), 10);
+    assert.equal(s.setField('ledY', '7.4'), 8);
+    assert.equal(s.setField('ledX', '70000'), 65536);
+    assert.equal(s.setField('panelHeight', '200000'), 100000);
+    assert.equal(s.setField('panelHeight', '123.45'), 123.45, 'panel sizes are not rounded');
+    assert.equal(s.setField('curveIntensity', '200'), 180);
+    assert.equal(s.setField('curveIntensity', '-500'), -180);
+    assert.equal(s.setField('curveIntensity', '2.55'), 2.55, 'the curve is not rounded');
+  });
+
+  test('reachability: every value a card rule produces lies in LIMITS (an integer for the integer fields)', () => {
+    const rand = rng(8);
+    const raws = [...ALL_INPUTS];
+    for (let i = 0; i < 5000; i++) {
+      const mag = 10 ** Math.floor(rand() * 12 - 3);
+      raws.push(String((rand() - 0.5) * 2 * mag));
+      raws.push(String(Math.round((rand() - 0.3) * 300000) / 100));
+    }
+    for (const [field, { min, max, int }] of Object.entries(WallSection.LIMITS)) {
+      for (const raw of raws) {
+        const v = WallSection.parseField(field, raw);
+        assert.ok(Number.isFinite(v) && v >= min && v <= max, `${field}(${raw}) = ${v} outside [${min}, ${max}]`);
+        if (int) assert.ok(Number.isInteger(v), `${field}(${raw}) = ${v} is not an integer`);
+      }
+    }
   });
 
   test('setColor, rename and ensureName', () => {
@@ -419,6 +498,34 @@ describe('WallSection', () => {
     assert.equal(at(3841, 100), true);
     assert.equal(at(2161, 2161), true);
     assert.equal(at(2000, 3000), false);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// rules (08 P2-8a, 4.4)
+// ---------------------------------------------------------------------------------------------------------------
+
+describe('rules', () => {
+  test('clamp equals the legacy Math.max(lo, Math.min(hi, v)) for every number but NaN', () => {
+    const values = [-Infinity, -1e9, -181, -180, -0.5, -0, 0, 0.5, 1, 49.9, 50, 50.1, 180, 1e9, Infinity];
+    for (const v of values) {
+      for (const [lo, hi] of [[1, 50], [-180, 180], [50, 100000], [8, 65536]]) {
+        same(clamp(v, lo, hi), Math.max(lo, Math.min(hi, v)), `clamp(${v}, ${lo}, ${hi})`);
+      }
+    }
+    same(clamp(-0, -180, 180), -0, 'clamp keeps -0 inside the range');
+  });
+
+  test('roundInt is Math.round (halves up)', () => {
+    for (const v of [2.5, -2.5, 0.49999999999999994, 1.5, -0.4, 65535.5, 7.4, 1e21, -0]) same(roundInt(v), Math.round(v), `roundInt(${v})`);
+  });
+
+  test('deepFreeze freezes nested objects and arrays and returns its argument', () => {
+    const o = { a: { b: [1, { c: 2 }] }, d: 'x' };
+    assert.equal(deepFreeze(o), o);
+    assert.ok(Object.isFrozen(o) && Object.isFrozen(o.a) && Object.isFrozen(o.a.b) && Object.isFrozen(o.a.b[1]));
+    assert.equal(deepFreeze(null), null);
+    assert.equal(deepFreeze(5), 5);
   });
 });
 

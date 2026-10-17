@@ -176,7 +176,7 @@ describe('rebuild policy (ARCHITECTURE.md 6.2): run counts and tile-cache clears
     const section = r.project.wall.sections[0];
     assert.equal(r.wc.setSectionField(section, 'panelCols', '75'), 50);
     assert.equal(r.wc.setSectionField(section, 'ledX', ''), 32);
-    assert.equal(r.wc.setSectionField(section, 'panelRows', '2.5'), 2.5, 'B-L15: no rounding');
+    assert.equal(r.wc.setSectionField(section, 'panelRows', '2.5'), 3, 'B-L15 fixed in 08 P2-8a: integer counts are rounded');
     assert.equal(section.panelCols, 50);
     assert.deepEqual(r.trace, []);
     r.wc.commitSectionEdit();
@@ -654,6 +654,8 @@ const lines = (a, b) => LEGACY_LINES.slice(a - 1, b).join('\n');
  * "Custom colour" title) and of the logo row's position options ("Centre"); option values are unchanged.
  * 06 T7 (06 3.9, 5.7): the card's swatches come from the palette (Palette.cardSwatches, one line each with the legacy
  * indentation), so the six literal swatch lines of the legacy template become the palette's lines.
+ * 08 P2-8a (B-L15, 08 4.4): the card's integer inputs gain step="1", panel height and Pixels X/Y their max, the panel
+ * angle min/max (WallSection.LIMITS), and the number handler's rules round the integer fields and apply the caps.
  */
 /** The legacy template's swatch line for colour `c` (index.html@cd3fd3f 3970-3975). */
 const swatchLine = (c) => `<div class="color-swatch-small \${section.color === '${c}' ? 'active' : ''}" data-color="${c}" style="background: ${c};"></div>`;
@@ -675,6 +677,17 @@ const TEMPLATE_EDITS = Object.freeze([
   ['>Center</option>', '>Centre</option>', 1],
   ['>Center Right</option>', '>Centre Right</option>', 1],
   ['>Bottom Center</option>', '>Bottom Centre</option>', 1],
+  ['data-field="panelCols" value="${section.panelCols}" min="1" max="50">', 'data-field="panelCols" value="${section.panelCols}" min="1" max="50" step="1">', 1],
+  ['data-field="panelRows" value="${section.panelRows}" min="1" max="20">', 'data-field="panelRows" value="${section.panelRows}" min="1" max="20" step="1">', 1],
+  ['data-field="panelHeight" value="${section.panelHeight}" min="50">', 'data-field="panelHeight" value="${section.panelHeight}" min="50" max="100000">', 1],
+  ['data-field="ledX" value="${section.ledX}" min="8">', 'data-field="ledX" value="${section.ledX}" min="8" max="65536" step="1">', 1],
+  ['data-field="ledY" value="${section.ledY}" min="8">', 'data-field="ledY" value="${section.ledY}" min="8" max="65536" step="1">', 1],
+  ['data-field="curveIntensity" value="${section.curveIntensity}" step="0.1">', 'data-field="curveIntensity" value="${section.curveIntensity}" min="-180" max="180" step="0.1">', 1],
+  ["if (field === 'panelCols') value = Math.max(1, Math.min(50, value || 1));", "if (field === 'panelCols') value = Math.min(50, Math.max(1, Math.round(value || 1)));", 1],
+  ["else if (field === 'panelRows') value = Math.max(1, Math.min(20, value || 1));", "else if (field === 'panelRows') value = Math.min(20, Math.max(1, Math.round(value || 1)));", 1],
+  ["else if (field === 'panelHeight') value = Math.max(50, value || 500);", "else if (field === 'panelHeight') value = Math.min(100000, Math.max(50, value || 500));", 1],
+  ["else if (field === 'ledX' || field === 'ledY') value = Math.max(8, value || 32);", "else if (field === 'ledX' || field === 'ledY') value = Math.min(65536, Math.max(8, Math.round(value || 32)));", 1],
+  ["else if (field === 'curveIntensity') value = value || 0;", "else if (field === 'curveIntensity') value = Math.min(180, Math.max(-180, value || 0));", 1],
 ]);
 
 /** `src` with every TEMPLATE_EDITS row applied; throws when a row does not occur exactly its declared number of times. */

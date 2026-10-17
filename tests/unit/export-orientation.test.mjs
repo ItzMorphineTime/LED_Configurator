@@ -42,8 +42,6 @@ const OPEN_DEFECTS = Object.freeze([
     why: 'the safe-distance floor OBJ has no vn lines (and its triangles face -Y)' },
   { pattern: /^import_edge\/ii_(combined|section)__export-(obj|gltf)__[^/ ]+\.(obj|gltf) :: /, bug: 'B-L8', fixedBy: '08 P2-3b',
     why: 'counts imported as strings give a vertsPerRow of "101", so indices run past the vertex count' },
-  { pattern: /^p2_zero_inputs\/combined__export-obj__[^/ ]+\.obj :: /, bug: 'B-L15', fixedBy: '08 P2-8a',
-    why: 'a fractional column count (2.5) gives fractional and out-of-range indices' },
 ]);
 
 /** Deterministic PRNG (mulberry32), the generator of the other unit tests. */

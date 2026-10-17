@@ -1,0 +1,31 @@
+{
+  "commit": "P2-8a",
+  "bugs": ["B-L15"],
+  "expect": [
+    { "output": "{default,flat3,concave_offsets,convex,mixed,box_corner,large_wall}/sections_initial.json", "change": "modified", "each": true,
+      "reason": "every section snapshot records the card inputs' attributes: columns, rows and Pixels X/Y gain step=\"1\", panel height max=\"100000\", Pixels X/Y max=\"65536\", the panel angle min=\"-180\" max=\"180\" (WallSection.LIMITS); values unchanged" },
+    { "output": "ui_sections/ui_*.json", "change": "modified", "each": true,
+      "reason": "the 16 card snapshots of ui_sections: the same input attributes; no step types a fractional count or a value above a new cap, so every value is unchanged" },
+    { "output": "import_edge/{ii_strings_state,iv_after_import,iv_after_delete,v_after_import,v_after_add,vi_before,vi_after,vii_after,viii_after}.json", "change": "modified", "each": true,
+      "reason": "the import_edge wall states with cards: the same input attributes (imported values are not touched by the card rules)" },
+    { "output": "p2_xss_names/sections_*.json", "change": "modified", "each": true,
+      "reason": "the two card snapshots: the same input attributes" },
+    { "output": "p2_zip_section_mode/sections_renamed.json", "change": "modified",
+      "reason": "its card snapshot: the same input attributes (the 08 P2-8a card listed only p2_xss_names; found by grepping the parent baseline for \"max\")" },
+    { "output": "p2_zero_inputs/{sections_zero,stats_zero}.json", "change": "modified", "each": true,
+      "reason": "Columns 2.5 is rounded to 3 (B-L15, 08 criterion 32; the input shows 3), so the card summary, the canvas size and the header totals follow (9 panels, 9,216 pixels instead of 7.5 and 7,680); sections_zero also records the new input attributes" },
+    { "output": "p2_zero_inputs/combined__export-obj__*.obj", "change": "modified",
+      "reason": "the combined OBJ of the 3-column wall: integer indices within the vertex count (the 2.5-column file had fractional and out-of-range indices); it now passes tools/check-orientation.mjs, so its OPEN_DEFECTS row is deleted" }
+  ],
+  "mayChange": [
+    { "output": "p2_curved_safe_distance/box_corner.screenshot.png", "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas on the preview footer label row (1 level, 1 px at (920, 912), seen in the 06 T6a-T6b2 runs); this commit changes no rendered pixel of it" },
+    { "output": "p2_shortcut_filters/pilot_view_front.screenshot.png", "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas (1 level, 2 px, seen in the 06 T6b, T7 and T6b2 runs); this commit changes no rendered pixel of it" },
+    { "output": "toggles/15_car_moved.screenshot.png", "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-T6b2 runs)" },
+    { "output": "large_wall/final__export-zip__morph-led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b); this commit changes no export of large_wall" }
+  ],
+  "notes": "08 P2-8a (B-L15): domain/rules.js (clamp, roundInt, deepFreeze), WallSection.LIMITS (07 4.3), the card rules round columns, rows and LEDs and cap panel height (100,000 mm), LEDs (65,536) and the curve (±180°); the card template gains step=\"1\" on the four integer inputs, max on height and LEDs and min/max on the curve. No harness step types a value above a new cap; the only fractional count is p2_zero_inputs' Columns 2.5. Imports are not touched (the validator is 08 P2-3b)."
+}
