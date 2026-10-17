@@ -415,7 +415,7 @@ describe('Theme', () => {
   test('scene values keep their numeric type; the Morph scene values since 06 T5 (06 3.8, 5.4)', () => {
     assert.deepEqual(SceneTheme, {
       background: 0x0a0a0a,
-      grid: { size: 50, divisions: 50, centerColor: 0x333333, color: 0x1c1c1c, position: [12.5, 0, 12.5] },
+      grid: { size: 100, divisions: 100, centerColor: 0x333333, color: 0x1c1c1c, position: [0, 0, 0] },   // 03 T10 (Q8)
       axesSize: 0.5,
       lights: { ambient: { color: 0xffffff, intensity: 0.3 },
                 point: { color: 0xffffff, intensity: 0.8, position: [5, 5, 10] } },

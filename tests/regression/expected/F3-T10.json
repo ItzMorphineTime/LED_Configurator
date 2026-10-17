@@ -1,0 +1,25 @@
+{
+  "commit": "F3-T10",
+  "bugs": [],
+  "expect": [
+    {
+      "output": "**/*.screenshot.png",
+      "exclude": "ui_visual/**",
+      "change": "modified",
+      "reason": "03 8.4 step D (Q8 option c, the owner's B6): the floor grid is GridHelper(100, 100) centred on the stage origin (was 50 x 50 at (12.5, 0, 12.5)): its lines move to whole metres and it covers +-50 m around the origin, so every #three-canvas capture that shows the floor changes; the camera preview hides registered helpers (08 P2-10a), so its image inside the capture does not"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "ui_visual/*.viewport.screenshot.png",
+      "change": "modified",
+      "reason": "page captures with the canvas masked; nothing outside the canvas changes (listed only in case the mask leaves a border pixel)"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen again in the 03 T2 gate and the 03 T3 review run, textures/L2_PanelIDs.png); this commit changes no texture"
+    }
+  ],
+  "notes": "03 T10 (docs/improvements/03-pivot.md 5.2 Theme row, 5.7, Q8, 8.4 step D): SceneTheme.grid = {size: 100, divisions: 100, position: [0, 0, 0]}; the grid colours and tokens are unchanged. Allowed: #three-canvas screenshots only. No export, state, text or style output may change."
+}

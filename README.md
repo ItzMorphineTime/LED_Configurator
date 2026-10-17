@@ -55,7 +55,7 @@ The hosted version on [GitHub Pages](https://itzmorphinetime.github.io/LED_Confi
 - Interactive orbit controls (drag to rotate, scroll to zoom)
 - WASD + QE keyboard navigation
 - Multiple view presets (Front, Side, Top, Reset)
-- Optional floor grid with measurements
+- Optional floor grid with measurements (1 m lines over 100 m x 100 m, centred on the pivot on the floor)
 - Combined or per-section mesh rendering modes
 
 ### Camera Frustum Preview System
@@ -96,6 +96,10 @@ it; the main viewport still shows them.
 Release note: the pivot marker (a small cross at the pivot, with a dashed line to the floor when the pivot is raised and
 a grey cross at the anchor when an offset is set) is shown by default; "Show pivot marker" hides it. It never appears in
 the camera preview window or in pilot mode.
+
+Release note: the floor grid now covers 100 m x 100 m with lines on whole metres and is centred on the stage origin (the
+pivot on the floor), where the red, green and blue axes cross; it used to be 50 m x 50 m, offset in front of the wall,
+with lines on half metres.
 
 Release note: the pivot is new. It lasts for the session only: Export JSON does not save it yet, and importing a
 project file resets it to the bottom-left corner. The camera's "Z Distance from Wall" field is now "Z Position", because

@@ -14,7 +14,8 @@
  * with Brand.jsonGenerator for spec 07's JSON generator record. 06 T6b: every download file name derives from
  * Brand.filePrefix = 'morph-led-wall' (06 D9, Q11). 06 T7 (3.9, D8): the 8-colour Morph section palette with Studio
  * Grey #d9d9d6 as the default first section; the legacy palette stays only to fill colour-less sections of v1 files.
- * 03 T1 (4.1): SceneTheme.pivot, the pivot marker's two-tone colours and sizes, with the values of 06 5.12.
+ * 03 T1 (4.1): SceneTheme.pivot, the pivot marker's two-tone colours and sizes, with the values of 06 5.12. 03 T10 (Q8):
+ * the floor grid is 100 x 100 m, centred on the stage origin.
  * Legacy source: index.html@cd3fd3f 1379-1384, 1406, 1431, 1440-1449, 1563, 1693, 1821, 2009, 2034, 2042, 2064,
  * 2092, 2107, 2110, 2181, 2334, 2407, 2425-2426, 2518-2524, 2698-2751, 2792, 2826, 2840-2841, 2915-2917, 2960,
  * 3010, 3029-3089, 3225, 3264, 3970-3975, 4520-4549, 4557-4561, 4721, 4915-4916, 4923, 4934, 4964 (where each value
@@ -45,7 +46,9 @@ function deepFreeze(value) {
  */
 export const SceneTheme = deepFreeze({
   background: 0x0a0a0a,                                                     // 1431 (Morph Black)
-  grid: { size: 50, divisions: 50, centerColor: 0x333333, color: 0x1c1c1c, position: [12.5, 0, 12.5] },   // 1446-1447
+  // 03 T10 (Q8 option c, the owner's B6): 100 m x 100 m with 1 m lines, centred on the stage origin (the pivot on the
+  // floor), so its centre lines cross where the axes do, for every pivot mode; legacy 1446-1447 was 50 x 50 at (12.5, 0, 12.5)
+  grid: { size: 100, divisions: 100, centerColor: 0x333333, color: 0x1c1c1c, position: [0, 0, 0] },
   axesSize: 0.5,                                                            // 1449
   lights: { ambient: { color: 0xffffff, intensity: 0.3 },
             point: { color: 0xffffff, intensity: 0.8, position: [5, 5, 10] } },   // 1440-1443

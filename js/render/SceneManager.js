@@ -96,7 +96,8 @@ export class SceneManager {
     // Floor grid - larger area, on Y=0 plane
     const grid = sceneTheme.grid;
     this.#grid = new THREE.GridHelper(grid.size, grid.divisions, grid.centerColor, grid.color);
-    this.#grid.position.set(grid.position[0], grid.position[1], grid.position[2]); // Offset to cover area in front of wall
+    // 03 T10 (Q8): the theme centres the grid on the stage origin (legacy: offset to cover the area in front of the wall)
+    this.#grid.position.set(grid.position[0], grid.position[1], grid.position[2]);
     this.addHelper(this.#grid);
     this.#axes = new THREE.AxesHelper(sceneTheme.axesSize);
     this.addHelper(this.#axes);

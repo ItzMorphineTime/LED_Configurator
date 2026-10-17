@@ -747,7 +747,7 @@ Every scene, canvas and export literal, copied verbatim with its exact type (num
 ```js
 export const SceneTheme = Object.freeze({
   background: 0x0a0a0a,                                                     // 1431 (06 T5 values from here on, 06 3.8)
-  grid: { size: 50, divisions: 50, centerColor: 0x333333, color: 0x1c1c1c, position: [12.5, 0, 12.5] },   // 1446-1447
+  grid: { size: 100, divisions: 100, centerColor: 0x333333, color: 0x1c1c1c, position: [0, 0, 0] },   // 03 T10 (Q8, B6); legacy 1446-1447: 50 x 50 at (12.5, 0, 12.5)
   axesSize: 0.5,                                                            // 1449
   lights: { ambient: { color: 0xffffff, intensity: 0.3 },
             point: { color: 0xffffff, intensity: 0.8, position: [5, 5, 10] } },   // 1440-1443
@@ -1530,7 +1530,8 @@ export class SceneManager {
    *  renderer = new THREE.WebGLRenderer({ canvas, antialias: true }); renderer.setSize(container.clientWidth, container.clientHeight);
    *  renderer.setPixelRatio(Math.min(win.devicePixelRatio, 2));
    *  scene.add(new THREE.AmbientLight(0xffffff, 0.3)); pointLight = new THREE.PointLight(0xffffff, 0.8); pointLight.position.set(5, 5, 10);
-   *  scene.add(pointLight); grid = new THREE.GridHelper(50, 50, 0x2a2a3a, 0x1a1a24); grid.position.set(12.5, 0, 12.5);
+   *  scene.add(pointLight); grid = new THREE.GridHelper(50, 50, 0x2a2a3a, 0x1a1a24); grid.position.set(12.5, 0, 12.5)
+   *  (legacy values; 03 T10: theme.scene.grid is 100 x 100 at (0, 0, 0), centred on the stage origin);
    *  this.addHelper(grid); this.addHelper(new THREE.AxesHelper(0.5))   (values from theme.scene) */
   init()
 
@@ -4128,3 +4129,7 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 3.7 `PivotMarkerView`: hidden in pilot mode (a `PILOT_CHANGED` mirror; 03 3.3 and AC 12: "hidden and unpickable in pilot", so the pilot view, a previs view like the camera preview, stays clean now that the marker is shown by default; Q9). 5.2: `pilot:changed` gains the subscriber.
 - The v2 read and write of `display.show_pivot_marker` (the other half of 03 T9) waits for project file v2 with 03 T7 (M7a; the owner's session-only sequence), recorded in 03 10.
 - 2.3: `domain.test.mjs` (the default), `pivot-marker.test.mjs` (shown by default), `pivot-panel.test.mjs` (the switch from the default).
+
+**03 T10, the floor grid centred on the stage origin** (Feature 3 step D; docs/improvements/03-pivot.md 5.2, 5.7, Q8, 8.4; the owner's B6 = Q8 option c; manifest `tests/regression/expected/F3-T10.json`: the `#three-canvas` screenshots that show the floor change, nothing else):
+- 3.4 `Theme`: `SceneTheme.grid = {size: 100, divisions: 100, centerColor, color, position: [0, 0, 0]}` (was 50 x 50 at (12.5, 0, 12.5)): whole-metre lines over +-50 m around the stage origin, the pivot on the floor, so the grid's centre lines cross where the axes and the marker are, in every pivot mode. The grid colours and their tokens are unchanged. 3.7 `SceneManager.init` reads it as before (no API change; not a `Strategies` switch, 03 5.7).
+- 2.3: `core.test.mjs` (the `SceneTheme` snapshot).
