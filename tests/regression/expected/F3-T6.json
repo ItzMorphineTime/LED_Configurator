@@ -1,0 +1,46 @@
+{
+  "commit": "F3-T6",
+  "bugs": [],
+  "expect": [
+    {
+      "output": "ui_visual/*.sidebar.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "03 8.4 step B: the full-height sidebar capture gains the Wall Pivot section after Mesh Options, the camera Z label reads \"Z Position (m)\" and the frustum read-out gains its first row \"Distance to wall plane\""
+    },
+    {
+      "output": "ui_visual/*.text.json",
+      "change": "modified",
+      "reason": "step B: the sidebar texts (the .global-section [1] probe is now the Wall Pivot section, the .frustum-status rows gain \"Distance to wall plane\", the first .export-btn.secondary and .toggle/.input-field probes may now be the pivot panel's)"
+    },
+    {
+      "output": "ui_visual/*.styles.json",
+      "change": "modified",
+      "reason": "step B: the computed styles and layout of the sidebar probes (the control panel's scroll height, .global-section [1], the first .export-btn.secondary, .frustum-status rows)"
+    },
+    {
+      "output": "p2_project_v2/toggle_aria_*.json",
+      "change": "modified",
+      "each": true,
+      "reason": "the page-wide .toggle accessibility probe of 08 P2-13/B-L36 lists every switch of the sidebar: it gains the two new role=\"switch\" toggles of the Wall Pivot panel (#toggle-pivot-keep-stage active, aria-checked true; #toggle-pivot-marker off), inserted after #toggle-frame in document order; every other entry is unchanged (03 8.4 step B did not foresee this probe, which landed after it; the spec row is amended)"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "ui_visual/*.viewport.screenshot.png",
+      "change": "modified",
+      "reason": "step B: these page captures mask the canvas but show the visible part of the sidebar (09_narrow_800 among them), which may now include the Wall Pivot section; no canvas pixel may change"
+    },
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-03 T3 runs); this commit changes no rendered byte"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen again in the 03 T2 gate and the 03 T3 review run, textures/L2_PanelIDs.png); this commit changes no texture"
+    }
+  ],
+  "notes": "03 T6 (docs/improvements/03-pivot.md 3.2, 3.5, 3.6, 5.3, 8.2, 8.4 step B): the Wall Pivot panel markup (after Mesh Options), css/features/pivot.css, ui/PivotPanel, the camera label \"Z Position (m)\" and the \"Distance to wall plane\" row (#camera-wall-distance from CAMERA_COVERAGE_CHANGED.distToWall). No help-badge change (07 C35). Allowed: ui_visual style, text and sidebar screenshots only. Every canvas screenshot in every scenario, the import_edge mesh-mode state (pageMeshModes; the pivot cards are not .mesh-mode-option) and the camera scenario's recorded ids must stay identical: the pivot is never changed by an existing scenario, so no export, pose or viewport output may change."
+}

@@ -59,6 +59,7 @@ import { SectionListPanel } from '../ui/SectionListPanel.js';
 import { WallDisplayPanel } from '../ui/WallDisplayPanel.js';
 import { SectionLogosPanel } from '../ui/SectionLogosPanel.js';
 import { CameraPanel } from '../ui/CameraPanel.js';
+import { PivotPanel } from '../ui/PivotPanel.js';
 import { PropControls } from '../ui/PropsPanel.js';
 import { ViewportToolbar } from '../ui/ViewportToolbar.js';
 import { ExportPanel } from '../ui/ExportPanel.js';
@@ -206,6 +207,8 @@ export class App {
     // WallDisplayPanel then SectionLogosPanel (construction order = subscription order, ARCHITECTURE.md 5.2).
     const sectionList = new SectionListPanel({ doc, project, wallController, bus, palette: theme.palette });
     const displayPanel = new WallDisplayPanel({ doc, wallController, bus });
+    // 03 T6 (5.8): the Wall Pivot panel, after the display panel (the sidebar order)
+    const pivotPanel = new PivotPanel({ doc, project, pivotController, bus });
     const logosPanel = new SectionLogosPanel({ doc, project, wallController, bus });
     const cameraPanel = new CameraPanel({ doc, project, cameraController, projectIO, bus, theme });
     const personControls = new PropControls({ doc, prefix: 'person', controller: personController, prop: person, bus });
@@ -240,6 +243,7 @@ export class App {
     sectionList.expandFirst();                 // 4150-4152
     sectionList.bindAddButton();               // 4154
     displayPanel.bind();                       // 4156-4227
+    pivotPanel.bind();                         // 03 T6: the Wall Pivot panel (after Mesh Options in the sidebar)
     cameraPanel.bind();                        // 4230-4329
     personControls.bind();                     // 4332-4361
     carControls.bind();                        // 4363-4392

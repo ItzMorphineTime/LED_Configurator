@@ -49,6 +49,19 @@
  *      and js/: no Outfit, LED Wall Configurator, led-wall-config or led-wall-export, and no whole file-name token
  *      panel-ids.png, PanelIDs_Atlas.png or safe-distance-floor.obj (morph-led-wall-panel-ids.png does not match).
  *      File names come from Brand.filePrefix / Brand.files. The whole text is scanned, comments included.
+ *  18  (03 8.2, since 03 T6) the pivot markup of <root>/index.html: no element carries both a pivot-* and a mesh-mode-*
+ *      class, no element with a pivot-* class has a data-mode attribute (the mesh-mode handler, its import mirror and its
+ *      hidden-input rule must never reach the pivot cards, 03 2.2), no element inside #pivot-section and neither
+ *      #camera-wall-distance nor its row carries a style attribute, and the .info-badge text is the frozen help text
+ *      (07 C35: no feature adds a token; 07 I4a rewrites it once). HTML comments are skipped. Skipped without index.html.
+ *  19  (03 8.2, since 03 T6) the pivot radios stay focusable: when any stylesheet or index.html mentions
+ *      pivot-mode-option, css/features/pivot.css sets a display other than none on .pivot-mode-option input, and no
+ *      stylesheet has a display: none declaration in a rule with a selector that matches that input (an input selector,
+ *      with attribute or pseudo parts only, alone or under .pivot-mode-option, .pivot-mode-select, #pivot-mode-select or
+ *      #pivot-section).
+ *  20  (03 8.2, since 03 T6) the gizmo interaction state has one writer: InteractionState.isDraggingGizmo and
+ *      .gestureCancelled are assigned only in js/interaction/TransformGizmo.js, and InteractionState.snap only through
+ *      TransformGizmo.setSnapIncrements (an Object.assign of it there; no assignment to x.snap or x.snap.k anywhere).
  *
  * "Identifier" means a token of code: comments and the text of string, template and regex literals
  * are blanked first (the code inside template `${...}` is kept), and a name after `.` or `?.` is a
@@ -106,6 +119,9 @@ const RULE_TITLES = Object.freeze({
     15: 'primary CTA (R-B5)',
     16: 'brand asset (R-B4)',
     17: 'legacy names (R-B3b)',
+    18: 'pivot markup (03 8.2)',
+    19: 'pivot radios focusable (03 8.2)',
+    20: 'interaction state writer (03 8.2)',
 });
 
 /**
@@ -192,6 +208,18 @@ const CTA_TOKEN_REFERENCE_RE = /var\(\s*--cta-background\s*[,)]/g;
 const BRAND_DIR = 'assets/brand';
 const BRAND_NOTICE = 'NOTICE.md';
 const BRAND_REFERENCE_RE = /assets\/brand\/([A-Za-z0-9@._-]+)/g;
+
+/** Rule 18 (03 8.2): the pivot panel and the camera row whose subtrees carry no inline style. */
+const PIVOT_SECTION_ID = 'pivot-section';
+const PIVOT_DISTANCE_ID = 'camera-wall-distance';
+/** Rule 18 (07 C35): the help badge text, frozen until 07 I4a rewrites it (only spec 01's " N=normals" token was added). */
+const HELP_BADGE_TEXT = 'Drag to rotate • Scroll to zoom • WASD to move • G=translate R=rotate L=space P=pilot N=normals';
+/** Rule 18: elements without an end tag (they never open a subtree). */
+const VOID_ELEMENTS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
+/** Rule 19: the pivot feature stylesheet. */
+const PIVOT_STYLESHEET = 'css/features/pivot.css';
+/** Rule 20: the one module that writes the gizmo interaction state. */
+const INTERACTION_STATE_WRITER = 'interaction/TransformGizmo.js';
 
 /** Rule 7: the one event that may have no subscriber (the feature seam, ARCHITECTURE.md 5.1 rule 7). */
 const UNSUBSCRIBED_EVENTS = new Set(['WALL_REBUILT']);
@@ -1040,6 +1068,146 @@ function checkBrandAssets(ctx, sheets) {
     }
 }
 
+/** The attributes of a start tag's attribute text, as a Map of lower-case names to values ('' when valueless). */
+function tagAttributes(text) {
+    const attrs = new Map();
+    for (const a of text.matchAll(ATTRIBUTE_RE)) attrs.set(a[1].toLowerCase(), a[2] ?? a[3] ?? a[4] ?? '');
+    return attrs;
+}
+
+/**
+ * Rule 18 (03 8.2): the pivot markup of index.html (class collisions with the mesh-mode cards, data-mode on pivot
+ * elements, inline styles in the pivot section and the distance row) and the frozen help-badge text. A small tag walker
+ * keeps the stack of open elements (void elements never open one), so "inside #pivot-section" is exact for well-formed
+ * markup. HTML comments are blanked first. Skipped without index.html.
+ */
+function checkPivotMarkup(ctx) {
+    const abs = path.join(ctx.root, 'index.html');
+    if (!fs.existsSync(abs)) return;
+    const html = fs.readFileSync(abs, 'utf8').replace(/<!--[\s\S]*?-->/g, (c) => c.replace(/[^\n]/g, ' '));
+    const TAG_RE = /<(\/?)([a-zA-Z][\w:-]*)((?:\s+[^\s=>/]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?)*)\s*(\/?)>/g;
+    const stack = [];   // {name, attrs, index}
+    let sectionDepth = -1;
+    for (const tag of html.matchAll(TAG_RE)) {
+        const [, closing, rawName, attrText, selfClosing] = tag;
+        const name = rawName.toLowerCase();
+        if (closing) {
+            const at = stack.map((e) => e.name).lastIndexOf(name);
+            if (at >= 0) stack.length = at;
+            if (sectionDepth >= 0 && stack.length <= sectionDepth) sectionDepth = -1;
+            continue;
+        }
+        const attrs = tagAttributes(attrText);
+        const line = lineAt(html, tag.index);
+        const classes = (attrs.get('class') ?? '').split(/\s+/).filter(Boolean);
+        const pivotClass = classes.find((c) => c.startsWith('pivot-'));
+        const meshClass = classes.find((c) => c.startsWith('mesh-mode-'));
+        if (pivotClass && meshClass) {
+            ctx.report('index.html', line, 18, `<${name}> carries both ${pivotClass} and ${meshClass}: the pivot cards must never be mesh-mode cards (03 2.2)`);
+        }
+        if (pivotClass && attrs.has('data-mode')) {
+            ctx.report('index.html', line, 18, `<${name} class="${pivotClass}"> has a data-mode attribute: the mesh-mode import mirror would toggle it (03 2.2)`);
+        }
+        if (attrs.get('id') === PIVOT_SECTION_ID) sectionDepth = stack.length;
+        const inSection = sectionDepth >= 0;
+        const isDistance = attrs.get('id') === PIVOT_DISTANCE_ID;
+        if (attrs.has('style') && (inSection || isDistance)) {
+            ctx.report('index.html', line, 18, `<${name}> ${isDistance ? '#' + PIVOT_DISTANCE_ID : 'inside #' + PIVOT_SECTION_ID} carries a style attribute: pivot styles live in ${PIVOT_STYLESHEET} (03 3.2)`);
+        }
+        if (isDistance && stack.length && stack[stack.length - 1].attrs.has('style')) {
+            const row = stack[stack.length - 1];
+            ctx.report('index.html', lineAt(html, row.index), 18, `the row of #${PIVOT_DISTANCE_ID} carries a style attribute (03 3.5)`);
+        }
+        if (classes.includes('info-badge')) {
+            const end = html.indexOf('<', tag.index + tag[0].length);
+            const text = html.slice(tag.index + tag[0].length, end < 0 ? undefined : end).trim();
+            if (text !== HELP_BADGE_TEXT) {
+                ctx.report('index.html', line, 18, `the .info-badge text "${text}" differs from the frozen help text (07 C35: no feature token; 07 I4a rewrites it)`);
+            }
+        }
+        if (!selfClosing && !VOID_ELEMENTS.has(name)) stack.push({ name, attrs, index: tag.index });
+    }
+}
+
+/**
+ * The rules of comment-blanked CSS as {selectors, body, start}: every innermost {...} block with the selector text
+ * before it (back to the previous '{', '}' or ';').
+ * @returns {{selectors: string[], body: string, start: number}[]}
+ */
+function cssRules(text) {
+    const out = [];
+    for (const block of text.matchAll(/\{([^{}]*)\}/g)) {
+        let k = block.index - 1;
+        while (k >= 0 && text[k] !== '{' && text[k] !== '}' && text[k] !== ';') k--;
+        const selectorText = text.slice(k + 1, block.index);
+        out.push({ selectors: selectorText.split(',').map((s) => s.trim().replace(/\s+/g, ' ')).filter(Boolean), body: block[1], start: block.index });
+    }
+    return out;
+}
+
+/** The display values a rule body declares (lower case, without !important). */
+const displayValues = (body) => [...body.matchAll(/(?:^|;)\s*display\s*:\s*([^;]+)/gi)].map((m) => m[1].replace(/!important/i, '').trim().toLowerCase());
+
+/** Rule 19: does a selector match a pivot-mode radio (an input selector alone or under the pivot containers)? */
+function matchesPivotRadio(selector) {
+    const parts = selector.split(/\s*>\s*|\s+/);
+    const last = parts[parts.length - 1];
+    if (!/^input(?:\[[^\]]*\]|:[\w-]+(?:\([^)]*\))?)*$/i.test(last)) return false;
+    const ancestors = parts.slice(0, -1);
+    return ancestors.every((a) => ['.pivot-mode-option', '.pivot-mode-select', '#pivot-mode-select', '#pivot-section'].includes(a)
+        || /^\.pivot-mode-option(?::[\w-]+)*$/.test(a));
+}
+
+/**
+ * Rule 19 (03 8.2): the pivot radios are never hidden from the keyboard. Runs when index.html or a stylesheet mentions
+ * pivot-mode-option.
+ */
+function checkPivotRadios(ctx, sheets) {
+    const htmlAbs = path.join(ctx.root, 'index.html');
+    const html = fs.existsSync(htmlAbs) ? fs.readFileSync(htmlAbs, 'utf8') : '';
+    if (!html.includes('pivot-mode-option') && !sheets.some((s) => s.raw.includes('pivot-mode-option'))) return;
+    const own = sheets.find((s) => s.rel === PIVOT_STYLESHEET);
+    const shown = own && cssRules(own.text).some((r) => r.selectors.includes('.pivot-mode-option input')
+        && displayValues(r.body).some((v) => v !== 'none'));
+    if (!shown) {
+        ctx.report(own ? own.rel : PIVOT_STYLESHEET, 1, 19, `${PIVOT_STYLESHEET} must set a display other than none on .pivot-mode-option input (the radios stay focusable, 03 3.2)`);
+    }
+    for (const { rel, text } of sheets) {
+        for (const r of cssRules(text)) {
+            if (!displayValues(r.body).includes('none')) continue;
+            const hit = r.selectors.find(matchesPivotRadio);
+            if (hit) ctx.report(rel, lineAt(text, r.start), 19, `display: none on "${hit}" would hide the pivot radios from the keyboard (03 3.2)`);
+        }
+    }
+}
+
+/**
+ * Rule 20 (03 8.2): isDraggingGizmo and gestureCancelled are assigned only in TransformGizmo; snap is never assigned
+ * (it is merged by TransformGizmo.setSnapIncrements, the one Object.assign of it). Class field declarations
+ * (`gestureCancelled = false;` in InteractionState) are not member assignments and do not count.
+ */
+function checkInteractionWriters(mod, ctx) {
+    const { code } = mod.lx;
+    const isWriter = mod.jsRel === INTERACTION_STATE_WRITER;
+    const isWrite = (end) => {
+        const after = nextNonSpace(code, end);
+        return ASSIGNMENT_OPS.some((op) => code.startsWith(op, after)) || (code[after] === '=' && code[after + 1] !== '=' && code[after + 1] !== '>');
+    };
+    for (const m of code.matchAll(/\.\s*(isDraggingGizmo|gestureCancelled)(?![\w$])/g)) {
+        if (code[m.index - 1] === '?' || isWriter || !isWrite(m.index + m[0].length)) continue;
+        ctx.report(mod.rel, mod.lx.lineOf(m.index), 20, `write to .${m[1]} outside js/${INTERACTION_STATE_WRITER} (its one writer, 03 8.2)`);
+    }
+    for (const m of code.matchAll(/\.\s*snap(?:\s*\.\s*[A-Za-z_$][\w$]*)?(?![\w$])/g)) {
+        if (code[m.index - 1] === '?' || !isWrite(m.index + m[0].length)) continue;
+        ctx.report(mod.rel, mod.lx.lineOf(m.index), 20, `assignment to ${m[0].replace(/\s+/g, '')}: interaction.snap changes only through TransformGizmo.setSnapIncrements (03 8.2)`);
+    }
+    if (!isWriter) {
+        for (const m of code.matchAll(/(?<![\w$])Object\s*\.\s*assign\s*\(\s*[^,()]*\.\s*snap\s*,/g)) {
+            ctx.report(mod.rel, mod.lx.lineOf(m.index), 20, `Object.assign into .snap outside js/${INTERACTION_STATE_WRITER} (03 8.2)`);
+        }
+    }
+}
+
 // ---- runner -----------------------------------------------------------------------------------
 
 /**
@@ -1073,15 +1241,18 @@ export async function runChecks(rootDir) {
         checkModuleState(mod, ctx);
         checkDomainWrites(mod, ctx);
         checkRenderOrder(mod, ctx);
+        checkInteractionWriters(mod, ctx);
     }
     checkLookups(ctx);
     checkInlineStyles(ctx);
+    checkPivotMarkup(ctx);
     const sheets = readStylesheets(ctx);
     checkCssColourLiterals(ctx, sheets);
     checkLegacyIdentity(ctx, sheets);
     checkLegacyNames(ctx, sheets);
     checkPrimaryCta(ctx, sheets);
     checkBrandAssets(ctx, sheets);
+    checkPivotRadios(ctx, sheets);
 
     const legacy = await importIfPresent(root, 'js/legacy/LegacyCompat.js', 6, ctx);
     if (legacy.missing) notices.push('js/legacy/LegacyCompat.js not found: rules 6 (LEGACY parity) and 8 (Strategies references) skipped');
@@ -1177,6 +1348,18 @@ const EXPECTED_BAD = Object.freeze([
     ['js/ui/PanelB.js', 17, 'legacy file name "panel-ids.png"'],
     ['js/ui/PanelB.js', 17, 'legacy product name "LED Wall Configurator"'],
     ['css/07-viewport.css', 17, 'legacy font "Outfit"'],
+    ['index.html', 18, 'carries both pivot-mode-option and mesh-mode-option'],
+    ['index.html', 18, 'has a data-mode attribute'],
+    ['index.html', 18, 'inside #pivot-section carries a style attribute'],
+    ['index.html', 18, '#camera-wall-distance carries a style attribute'],
+    ['index.html', 18, 'the row of #camera-wall-distance carries a style attribute'],
+    ['index.html', 18, 'differs from the frozen help text'],
+    ['css/features/pivot.css', 19, 'must set a display other than none on .pivot-mode-option input'],
+    ['css/07-viewport.css', 19, 'display: none on "#pivot-section input[type="radio"]"'],
+    ['js/interaction/Gizmo.js', 20, 'write to .gestureCancelled outside'],
+    ['js/interaction/Gizmo.js', 20, 'write to .isDraggingGizmo outside'],
+    ['js/interaction/Gizmo.js', 20, 'assignment to .snap.pivotM'],
+    ['js/interaction/Gizmo.js', 20, 'Object.assign into .snap outside'],
 ]);
 
 /**

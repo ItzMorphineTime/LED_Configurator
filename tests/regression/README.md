@@ -752,6 +752,10 @@ The harness depends on this markup:
   - Views: `view-front`, `view-side`, `view-top`, `view-reset`, `toggle-grid`
   - Gizmo and selection: `gizmo-translate`, `gizmo-rotate`, `gizmo-space`, `gizmo-pilot`, `selection-indicator`, `pilot-info`
   - Exports and import: `export-zip`, `export-panel-ids`, `export-json`, `export-obj`, `export-gltf`, `import-input`
+  - Wall pivot (03 T6; the pivot scenarios of 03 8.3): `pivot-mode-select` (with `input[name="pivot-mode"][value=bottom-left|mesh-center|wall-center]`
+    radios inside `.pivot-mode-option[data-pivot-mode]` labels, never `.mesh-mode-option`), `pivot-offset-x/y/z`,
+    `pivot-reset-offset`, `pivot-select`, `pivot-snap`, `toggle-pivot-keep-stage`, `toggle-pivot-marker`, `pivot-readout`,
+    `pivot-status`, and the camera row `camera-wall-distance`
 - **Mesh mode:** `#mesh-mode-select input[name="mesh-mode"][value=combined|section|panel]`. The
   harness clicks the enclosing `<label>` and records `.active` on that label.
 - **Section cards:** the direct children of `#wall-sections`. Inside a card it uses

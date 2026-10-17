@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <!-- Static-check fixture (rule 12, 06 R-B2): only display, width and height may stay inline; (rule 15, 06 R-B5) one primary CTA;
-     (rule 16, 06 R-B4) every brand reference resolves with exact case and every brand file is referenced. -->
+     (rule 16, 06 R-B4) every brand reference resolves with exact case and every brand file is referenced; (rule 18, 03 8.2) pivot
+     cards with their own classes next to mesh-mode cards with data-mode, no inline style in the pivot section, the frozen help badge;
+     (rule 19) the radios shown by css/features/pivot.css, while .mesh-mode-option input stays display: none. -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -16,5 +18,14 @@
     <!-- <button class="export-btn export-btn--primary">a comment is not markup</button> -->
     <button class="export-btn export-btn--primary" id="export-zip">Export All (ZIP)</button>
     <div data-style="color: red;" class="readout-row">text with style="color: red" in it is not an attribute of a tag</div>
+    <label class="mesh-mode-option" data-mode="combined"><input type="radio" name="mesh-mode" value="combined"></label>
+    <div class="global-section" id="pivot-section">
+        <label class="pivot-mode-option active" data-pivot-mode="bottom-left"><input type="radio" name="pivot-mode" value="bottom-left"></label>
+        <br>
+        <div class="pivot-readout"><div id="pivot-readout">Pivot</div></div>
+    </div>
+    <div class="readout-row"><span class="readout-value" id="camera-wall-distance">--</span></div>
+    <div class="later" style="display: none;"></div>
+    <div class="info-badge">Drag to rotate • Scroll to zoom • WASD to move • G=translate R=rotate L=space P=pilot N=normals</div>
 </body>
 </html>

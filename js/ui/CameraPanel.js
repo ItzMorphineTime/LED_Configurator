@@ -6,7 +6,7 @@
  * coverage readout, pose inputs and export button (events up).
  * Owns #toggle-camera-preview, #camera-preview-options, #camera-filmback, #custom-filmback, #filmback-width,
  * #filmback-height, #camera-focal-length, #camera-hfov, #camera-vfov, #camera-aspect, #camera-pos-x/y/z,
- * #camera-rot-x/y/z, #frustum-width, #frustum-height, #frustum-status-text, #safe-distance,
+ * #camera-rot-x/y/z, #camera-wall-distance (03 T6), #frustum-width, #frustum-height, #frustum-status-text, #safe-distance,
  * #toggle-safe-distance, #reset-camera and #export-safe-distance.
  * Legacy source: index.html@cd3fd3f 2369-2371 (lens readout), 2484-2485 / 2515-2525 / 2533 (coverage readout),
  * 2567-2572 (reset write-back), 3342-3344 / 3378-3384 (gizmo write-back), 3554-3555 / 3614-3616 (pilot
@@ -70,6 +70,7 @@ export class CameraPanel {
   /** @type {HTMLInputElement} */ #rotX;
   /** @type {HTMLInputElement} */ #rotY;
   /** @type {HTMLInputElement} */ #rotZ;
+  /** @type {HTMLElement} */ #wallDistance;
   /** @type {HTMLElement} */ #frustumWidth;
   /** @type {HTMLElement} */ #frustumHeight;
   /** @type {HTMLElement} */ #statusText;
@@ -83,8 +84,8 @@ export class CameraPanel {
    *  CAMERA_PREVIEW_CHANGED({enabled}): #camera-preview-options display (4233)
    *  CAMERA_FILMBACK_CHANGED({key}): #custom-filmback display; the size inputs unless custom (4254-4262)
    *  CAMERA_LENS_CHANGED({hFov, vFov, filmbackWidth, filmbackHeight}): #camera-hfov/vfov/aspect (2369-2371)
-   *  CAMERA_COVERAGE_CHANGED({frameWidth, frameHeight, status, safeDistance}): frame size, status text and
-   *    colour, max distance (2484-2533)
+   *  CAMERA_COVERAGE_CHANGED({frameWidth, frameHeight, status, safeDistance, distToWall}): frame size, status text and
+   *    colour, max distance (2484-2533); 03 T6 (3.5): "Distance to wall plane" (#camera-wall-distance) from distToWall
    *  CAMERA_POSE_CHANGED({source, axis}): the pose inputs with the per-source precision
    *  CAMERA_SAFE_DISTANCE_TOGGLED({enabled}): #export-safe-distance display (4325)
    *  WALL_PIVOT_CHANGED({resolution}) and WALL_REBUILT({layout}) (03 T4, 3.5): the `min` attribute of #camera-pos-z
@@ -119,6 +120,7 @@ export class CameraPanel {
     this.#rotX = byId(doc, 'camera-rot-x');
     this.#rotY = byId(doc, 'camera-rot-y');
     this.#rotZ = byId(doc, 'camera-rot-z');
+    this.#wallDistance = byId(doc, 'camera-wall-distance');
     this.#frustumWidth = byId(doc, 'frustum-width');
     this.#frustumHeight = byId(doc, 'frustum-height');
     this.#statusText = byId(doc, 'frustum-status-text');
@@ -233,13 +235,14 @@ export class CameraPanel {
   }
 
   /**
-   * CAMERA_COVERAGE_CHANGED mirror: frame size at the wall, coverage status (text, then colour) and the
-   * maximum safe distance.
+   * CAMERA_COVERAGE_CHANGED mirror: the distance to the wall plane (03 T6, 3.5: posZ - wallZ, the flat-wall model of
+   * B-M10, hence the label), frame size at the wall, coverage status (text, then colour) and the maximum safe distance.
    * Ports: index.html@cd3fd3f lines 2484-2485, 2515-2525, 2533.
    * @param {{frameWidth: number, frameHeight: number, status: 'within'|'offCenter'|'exceeds',
-   *          safeDistance: number}} payload
+   *          safeDistance: number, distToWall: number}} payload
    */
-  #mirrorCoverage({ frameWidth, frameHeight, status, safeDistance }) {
+  #mirrorCoverage({ frameWidth, frameHeight, status, safeDistance, distToWall }) {
+    this.#wallDistance.textContent = `${distToWall.toFixed(2)}m`;
     this.#frustumWidth.textContent = `${frameWidth.toFixed(2)}m`;
     this.#frustumHeight.textContent = `${frameHeight.toFixed(2)}m`;
 

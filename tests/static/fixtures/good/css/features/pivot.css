@@ -1,0 +1,2 @@
+/* Static-check fixture (rule 19, 03 8.2): the pivot radios stay focusable (display: block, never none). */
+.pivot-mode-option input { display: block; position: absolute; opacity: 0; }

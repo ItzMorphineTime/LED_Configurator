@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <!-- Static-check fixture (rule 12, 06 R-B2): every inline style below must be reported; (rule 14) legacy residue; (rule 15) two primary CTAs;
-     (rule 16) a brand reference whose case differs from the file. -->
+     (rule 16) a brand reference whose case differs from the file; (rule 18, 03 8.2) a pivot card that is also a mesh-mode card
+     with a data-mode, inline styles in the pivot section and on the distance row and its row, a help badge with a feature token;
+     (rule 19) the pivot radios are mentioned but css/features/pivot.css does not exist. -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -15,5 +17,11 @@
     <svg width="10" height="10" viewBox="0 0 10 10" style="opacity: 0.5;"></svg>
     <button class="export-btn export-btn--primary" id="export-zip">Export All (ZIP)</button>
     <button class="export-btn--primary secondary">Fivefold</button>
+    <div class="global-section" id="pivot-section">
+        <label class="pivot-mode-option mesh-mode-option" data-mode="combined"><input type="radio" name="pivot-mode" value="bottom-left"></label>
+        <span class="pivot-hint" style="display: none;">hint</span>
+    </div>
+    <div class="readout-row" style="display: block;"><span id="camera-wall-distance" style="width: 10px;">--</span></div>
+    <div class="info-badge">Drag to rotate • O=pivot</div>
 </body>
 </html>

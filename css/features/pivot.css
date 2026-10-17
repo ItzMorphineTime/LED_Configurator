@@ -1,0 +1,146 @@
+/* css/features/pivot.css: the "Wall Pivot" panel (docs/improvements/03-pivot.md 3.2; 03 T6).
+   Linked in the css/features/* block of 07 C52's link order (after 11-export.css, before 12-responsive.css). Only
+   .pivot-* rules; colours only through the role tokens of 02-tokens.css (06 3.5, 5.12: the .mesh-mode-option roles,
+   no tinted fill; the warning is --color-warning). The radio cards repeat the seven .mesh-mode-* visual rules of
+   06-controls.css under their own classes, so the mesh-mode handler, its import mirror and its `input { display: none }`
+   never reach them (03 2.2). The radios stay focusable: visually hidden, never display: none (03 8.2). */
+
+/* ---- mode radio cards ----------------------------------------------------------------------------- */
+
+.pivot-mode-select {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 14px;
+}
+
+.pivot-mode-option {
+    position: relative;   /* containing block for the hidden input */
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.pivot-mode-option:hover {
+    border-color: var(--color-border-strong);
+}
+
+.pivot-mode-option.active {
+    background: var(--color-surface-1);
+    border-color: var(--color-accent);
+}
+
+.pivot-mode-option input {
+    display: block;
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    pointer-events: none;
+}
+
+.pivot-mode-option:focus-within {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 2px;
+}
+
+.pivot-mode-radio {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    border: 2px solid var(--color-border-strong);
+    border-radius: 50%;
+    position: relative;
+}
+
+.pivot-mode-option.active .pivot-mode-radio {
+    border-color: var(--color-accent);
+}
+
+.pivot-mode-option.active .pivot-mode-radio::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 6px;
+    height: 6px;
+    background: var(--color-accent);
+    border-radius: 50%;
+}
+
+.pivot-mode-label {
+    font-size: 12px;
+}
+
+/* ---- offsets, actions, snap ---------------------------------------------------------------------- */
+
+/* The two-class selector beats the two-column .section-row rule whatever the link order. */
+.section-row.pivot-offset-row {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+/* The flex container .export-btn { flex: 1 } expects (as in the export panel). */
+.pivot-actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.pivot-actions .export-btn {
+    flex: 1;
+    padding: 10px 8px;
+    font-size: 11px;
+}
+
+.pivot-actions .export-btn:disabled {
+    color: var(--color-text-disabled);
+    cursor: default;
+}
+
+.pivot-actions .export-btn.active {
+    box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+.pivot-snap-row {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+/* The select itself is a .ui-select (99-utilities.css: the former inline style of #led-layout and #camera-filmback). */
+.pivot-snap-label {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+}
+
+/* ---- readout and status --------------------------------------------------------------------------- */
+
+.pivot-readout {
+    --pivot-warning: var(--color-warning);
+    margin-top: 6px;
+    padding: 10px;
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+}
+
+.pivot-hint,
+.pivot-status {
+    color: var(--color-text-secondary);
+    margin-top: 4px;
+}
+
+.pivot-readout .pivot-warning {
+    color: var(--pivot-warning);
+}

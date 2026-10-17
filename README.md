@@ -80,6 +80,23 @@ it; the main viewport still shows them.
 - Visual feedback with hover highlighting
 - Renders on top of scene for easy interaction
 
+### Wall Pivot (export origin)
+- Choose where the exported wall's origin (its pivot) sits: **Bottom-left corner** (as before), **Wall mesh centre**
+  (the centre of the wall's bounding box) or **Wall centre on floor** (halfway between the first section's first edge
+  and the last section's last edge, at floor level)
+- Move the pivot further with a metre offset on X, Y and Z (1 mm steps, up to ±1000 m), by typing it or by dragging the
+  pivot marker in the viewport (press **O** or "Select pivot (O)"; hold Ctrl or ⌘ to drag in steps of the "Ctrl-drag
+  snap" size; Escape cancels a drag)
+- Every OBJ, glTF and ZIP export is written with the pivot as the file origin; the viewport's grid and axes sit on the
+  pivot projected onto the floor
+- **Keep stage layout on pivot change** moves the camera and props with the wall when you change the pivot, so their
+  placement relative to the wall is kept; turn it off to keep their coordinates instead
+- "Distance to wall plane" in the camera panel shows the camera's distance to the wall's start plane
+
+Release note: the pivot is new. It lasts for the session only: Export JSON does not save it yet, and importing a
+project file resets it to the bottom-left corner. The camera's "Z Distance from Wall" field is now "Z Position", because
+it is a stage coordinate measured from the pivot on the floor.
+
 ### Pilot Camera Mode
 - First-person view through the preview camera
 - WASD movement in camera's look direction
@@ -139,7 +156,8 @@ it used to show white LEDs on every section.
 | R | Toggle Rotate mode |
 | L | Toggle World/Local space |
 | P | Toggle Pilot camera mode |
-| Escape | Exit pilot mode / Deselect object |
+| O | Select / deselect the wall pivot (switches the gizmo to Translate) |
+| Escape | Cancel a pivot drag / Exit pilot mode / Deselect object |
 
 ### Pilot Mode Controls
 | Control | Action |
@@ -179,7 +197,7 @@ Release note: columns, rows and LED counts used to accept fractions such as 2.5,
 | Filmback Preset | Professional camera sensor sizes |
 | Sensor Width/Height | Custom sensor dimensions (mm) |
 | Focal Length | Lens focal length (8-800mm) |
-| Position X/Y/Z | Camera location in meters |
+| Position X/Y/Z | Camera location in meters, measured from the pivot on the floor (Z Position) |
 | Tilt/Pan/Roll | Camera rotation in degrees |
 
 ---

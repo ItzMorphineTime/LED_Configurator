@@ -33,6 +33,7 @@
     <link rel="stylesheet" href="css/10-section-extras.css">
     <link rel="stylesheet" href="css/11-export.css">
     <link rel="stylesheet" href="css/features/debug-view.css">
+    <link rel="stylesheet" href="css/features/pivot.css">
     <link rel="stylesheet" href="css/12-responsive.css">
     <link rel="stylesheet" href="css/99-utilities.css">
 </head>
@@ -102,6 +103,61 @@
                 <div class="toggle-container">
                     <span class="toggle-label">Show Panel Frames</span>
                     <div class="toggle" id="toggle-frame"></div>
+                </div>
+            </div>
+
+            <div class="global-section" id="pivot-section">
+                <div class="global-section-title">Wall Pivot</div>
+                <div class="pivot-mode-select" id="pivot-mode-select" role="radiogroup" aria-label="Pivot mode">
+                    <label class="pivot-mode-option active" data-pivot-mode="bottom-left">
+                        <input type="radio" name="pivot-mode" value="bottom-left" checked>
+                        <span class="pivot-mode-radio"></span>
+                        <span class="pivot-mode-label">Bottom-left corner</span>
+                    </label>
+                    <label class="pivot-mode-option" data-pivot-mode="mesh-center">
+                        <input type="radio" name="pivot-mode" value="mesh-center">
+                        <span class="pivot-mode-radio"></span>
+                        <span class="pivot-mode-label">Wall mesh centre (bounding box)</span>
+                    </label>
+                    <label class="pivot-mode-option" data-pivot-mode="wall-center">
+                        <input type="radio" name="pivot-mode" value="wall-center">
+                        <span class="pivot-mode-radio"></span>
+                        <span class="pivot-mode-label">Wall centre on floor (first ↔ last edge)</span>
+                    </label>
+                </div>
+                <div class="section-row pivot-offset-row">
+                    <div class="input-field"><label for="pivot-offset-x">Offset X (m)</label>
+                        <input type="number" id="pivot-offset-x" step="0.001" min="-1000" max="1000" value="0"></div>
+                    <div class="input-field"><label for="pivot-offset-y">Offset Y (m)</label>
+                        <input type="number" id="pivot-offset-y" step="0.001" min="-1000" max="1000" value="0"></div>
+                    <div class="input-field"><label for="pivot-offset-z">Offset Z (m)</label>
+                        <input type="number" id="pivot-offset-z" step="0.001" min="-1000" max="1000" value="0"></div>
+                </div>
+                <div class="pivot-actions">
+                    <button class="export-btn secondary" id="pivot-reset-offset" disabled>Reset offset</button>
+                    <button class="export-btn secondary" id="pivot-select" aria-pressed="false">◎ Select pivot (O)</button>
+                </div>
+                <div class="pivot-snap-row">
+                    <label class="pivot-snap-label" for="pivot-snap">Ctrl-drag snap</label>
+                    <select id="pivot-snap" class="ui-select pivot-snap" title="Hold Ctrl (⌘ on Mac) while dragging the pivot to move in steps of this size.">
+                        <option value="0.001">1 mm</option><option value="0.01">1 cm</option>
+                        <option value="0.1" selected>10 cm</option><option value="0.5">50 cm</option><option value="1">1 m</option>
+                    </select>
+                </div>
+                <div class="toggle-container">
+                    <span class="toggle-label">Keep stage layout on pivot change</span>
+                    <div class="toggle active" id="toggle-pivot-keep-stage" role="switch" tabindex="0" aria-checked="true"
+                         title="Move the camera and props with the wall when the pivot changes, so their placement relative to the wall is kept."></div>
+                </div>
+                <div class="toggle-container">
+                    <span class="toggle-label">Show pivot marker</span>
+                    <div class="toggle" id="toggle-pivot-marker" role="switch" tabindex="0" aria-checked="false"></div>
+                </div>
+                <div class="pivot-readout">
+                    <div id="pivot-readout">Pivot (from wall start): 0.000, 0.000, 0.000 m</div>
+                    <div class="pivot-hint">Exports: mesh origin = pivot. Viewport: grid origin = pivot on the floor.</div>
+                    <div class="pivot-hint">Session only: the pivot is not saved in project files yet.</div>
+                    <div class="pivot-status" id="pivot-status" aria-live="polite"></div>
                 </div>
             </div>
 
@@ -226,7 +282,7 @@
                         </div>
                     </div>
                     <div class="input-field mb-10">
-                        <label>Z Distance from Wall (m)</label>
+                        <label>Z Position (m)</label>
                         <input type="number" id="camera-pos-z" value="5" min="0.1" step="0.1">
                     </div>
                     <div class="subsection-title subsection-title--tight">Camera Rotation</div>
@@ -247,6 +303,10 @@
                         </div>
                     </div>
                     <div class="frustum-status readout">
+                        <div class="readout-row">
+                            <span class="readout-label">Distance to wall plane:</span>
+                            <span id="camera-wall-distance" class="readout-value" title="Distance along Z from the camera to the wall's start plane (flat-wall approximation)">--</span>
+                        </div>
                         <div class="readout-row">
                             <span class="readout-label">Frame Width at Wall:</span>
                             <span id="frustum-width" class="readout-value">--</span>

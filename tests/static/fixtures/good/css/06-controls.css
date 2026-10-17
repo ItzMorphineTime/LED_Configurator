@@ -14,3 +14,6 @@
 @media (max-width: 900px) {
     #three-canvas { border-color: var(--morph-red-600); }
 }
+
+/* Rule 19 near miss: the mesh-mode radios may be display: none; the pivot radios are not .mesh-mode-option. */
+.mesh-mode-option input { display: none; }
