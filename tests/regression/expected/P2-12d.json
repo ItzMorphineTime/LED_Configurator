@@ -1,0 +1,37 @@
+{
+  "commit": "P2-12d",
+  "bugs": [
+    "B-M16",
+    "B-L19"
+  ],
+  "expect": [
+    {
+      "output": "toggles/09_panelids_panel.screenshot.png",
+      "change": "modified",
+      "reason": "panel mode with panel IDs samples one section canvas per section through section-space panel UVs (08 6.15): the default wall shows its section name at the section-label size across the panels, as in section mode, instead of one 16 px/LED canvas per panel with a small name on every panel (B-M16, B-L19). toggles/06_ledsim_panel must stay identical (LED sim keeps per-panel UVs)"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-08 P2-12a runs); this commit changes no pixel of it"
+    },
+    {
+      "output": "p2_curved_safe_distance/box_corner.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas on the preview footer label row (1 level, 1 px, seen in the 06 T6a-08 P2-12a runs); this commit changes no pixel of it"
+    },
+    {
+      "output": "p2_shortcut_filters/pilot_view_front.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas (1 level, 2 px, seen in the 06 T6b-08 P2-12a runs); this commit changes no pixel of it"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b); this commit changes no export"
+    }
+  ],
+  "notes": "08 P2-12d (B-M16 landed; B-L19 fixed for the default viewport): LEDWallView builds panel mode with panel IDs from one LEDMaterialFactory.sectionShared material per section (the section canvas, with logo and section-label size) and writes WallMeshBuilder.panelUvs into each PlaneGeometry. LED sim and colour keep one material per panel and the per-panel UVs. TextureAtlas.panelPxPerLed applies the wall-wide budget of the new geometry/TextureBudget.js to the per-panel canvases, which only the later 04 uv.panel_uvs = panel option reaches. Exports are unchanged (04 UV-9 owns the panel-mode export UVs)."
+}

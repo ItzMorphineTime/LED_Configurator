@@ -96,6 +96,10 @@ scene), and it returns when the preview is turned back on with Safe Distance sti
 - Section name overlays
 - Export panel IDs as PNG texture
 
+Release note: in Panel mode the panel IDs now show the section logo and the section label size, exactly as in Section
+mode, and use one texture per section instead of one per panel, so walls with high-resolution panels no longer use
+gigabytes of graphics memory.
+
 ### LED Simulation
 - Real-time animated LED effect
 - Visualizes pixel density and appearance

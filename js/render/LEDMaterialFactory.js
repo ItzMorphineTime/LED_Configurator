@@ -6,6 +6,7 @@
  * argument evaluation order; THREE ids come from global counters, R5). A panel-ID canvas that the browser cannot
  * create (PanelIdRenderer returns null, 08 P2-1d, B-L4) falls back to the colour material of that mesh, with one
  * console warning per section and rebuild.
+ * Panel mode with panel IDs takes one material per section, shared by its panels (sectionShared, 08 P2-12d).
  * Legacy source: index.html@cd3fd3f 1664-1675 (combined), 1759-1769 (section), 1783-1793 + 2047-2048 (panel).
  * Layer: render (may import vendor/three, core, legacy, domain, geometry). Collaborators are injected.
  */
@@ -126,25 +127,44 @@ export class LEDMaterialFactory {
   }
 
   /**
+   * The material shared by every panel of one section in panel mode with panel IDs (08 P2-12d, 08 6.15; B-M16 and, for
+   * the viewport, B-L19 fixed): the section material of section(), so the panels sample the section canvas (with its
+   * logo and section-label size, at most one canvas per section instead of one per panel) through the section-space UVs
+   * LEDWallView writes into each panel (WallMeshBuilder.panelUvs). A canvas that does not fit falls back to the section
+   * colour with the warning of section(). 04 UV-9 later passes the budgeted scale (04 5.3).
+   * Side effects: as section().
+   * @param {import('../domain/WallSection.js').WallSection} section
+   * @param {number} sectionIndex
+   * @param {*} startCol  the section's first global column (atlas.entries[i].startCol)
+   * @returns {THREE.MeshBasicMaterial}
+   */
+  sectionShared(section, sectionIndex, startCol) {
+    return this.section(section, sectionIndex, startCol);
+  }
+
+  /**
    * The material of one panel mesh (panel mode).
-   * panel IDs: the panel canvas; LED sim: the section-coloured tile repeated ledX x ledY; colour: section colour.
+   * panel IDs: the per-panel canvas (since 08 P2-12d reached only by 04's `uv.panel_uvs = 'panel'` option: panel mode
+   * with panel IDs uses sectionShared); LED sim: the section-coloured tile repeated ledX x ledY; colour: section colour.
    * Ports: index.html@cd3fd3f lines 1779 (colour, PR6), 1783-1793, 2047-2048 (CanvasTexture).
    * Side effects: allocates the texture (if any) then the material (THREE ids).
    * @param {import('../domain/WallSection.js').WallSection} section
    * @param {number} sectionIndex  unused by the canvas (legacy passed it along and ignored it)
    * @param {*} globalCol  startCol + panel.col (raw `+`)
    * @param {number} row
+   * @param {number} [scale]  the per-panel canvas px/LED (the rebuild's wall-wide panelPxPerLed); default: the
+   *   PanelIdRenderer default
    * @returns {THREE.MeshBasicMaterial}
    */
-  panel(section, sectionIndex, globalCol, row) {
+  panel(section, sectionIndex, globalCol, row, scale = undefined) {
     const display = this.#display;
     let material;
     if (display.panelIdsEnabled) {
       // Use cumulative column for sequential labeling across all sections
-      const canvas = this.#panelIds.panelCanvas(globalCol, row, section.ledX, section.ledY, section);
+      const canvas = this.#panelIds.panelCanvas(globalCol, row, section.ledX, section.ledY, section, scale);
       if (canvas === null) {
-        // 08 P2-1d (B-L4): the panel canvas does not fit (ledX >= 8,192 at 4 px/LED); show the section colour.
-        this.#warnNotShown(section, section.name, this.#panelIds.panelSize(section));
+        // 08 P2-1d (B-L4): the panel canvas does not fit (beyond CANVAS_HARD_LIMITS); show the section colour.
+        this.#warnNotShown(section, section.name, this.#panelIds.panelSize(section, scale));
         return this.#colorMaterial(section);
       }
       const texture = this.#canvasTexture(canvas);

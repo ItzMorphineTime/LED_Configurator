@@ -187,7 +187,8 @@ function uvWriter(uv) {
 export class WallMeshBuilder {
   /**
    * The per-panel UVs of a panel-mode quad in the panelCorners order BL, BR, TR, TL (the OBJ panel lines
-   * `vt 0 0 / 1 0 / 1 1 / 0 1` of 4696), frozen. For the glTF panel TEXCOORD_0 of 08 P2-7c (08 5.2).
+   * `vt 0 0 / 1 0 / 1 1 / 0 1` of 4696), frozen. For the glTF panel TEXCOORD_0 of 08 P2-7c (08 5.2) and the local
+   * corners of panelUvs (08 P2-12d).
    * @type {readonly number[]}
    */
   static PANEL_UVS = Object.freeze([0, 0, 1, 0, 1, 1, 0, 1]);
@@ -419,6 +420,26 @@ export class WallMeshBuilder {
       default:
         throw unsupportedStrategy('mesh.panelNormal', this.profile.panelNormal);
     }
+  }
+
+  /**
+   * The section-space UVs of a panel-mode quad (08 P2-12d, 08 6.15; 04 5.3's panelUvs without a UV plan): for each corner
+   * (lu, lv) of PANEL_UVS, ((panel.col + lu) / panelCols, (panel.row + lv) / panelRows), in the panelCorners order BL,
+   * BR, TR, TL. A corner shared with the neighbouring panel equals the section-mode strip UV (col / panelCols,
+   * row / panelRows) bit for bit, as (c + 1) + 0 and c + 1 are the same integer. Reads no profile key.
+   * Side effects: none.
+   * @param {import('./WallLayout.js').LayoutPanel} panel  panel.col and panel.row within its section
+   * @param {import('./WallLayout.js').SectionLayout} sl  the panel's section (panelCols, panelRows)
+   * @returns {number[][]} 4 new [u, v] pairs
+   */
+  panelUvs(panel, sl) {
+    const { panelCols, panelRows } = sl.section;
+    const local = WallMeshBuilder.PANEL_UVS;
+    const uvs = [];
+    for (let k = 0; k < 4; k++) {
+      uvs.push([(panel.col + local[2 * k]) / panelCols, (panel.row + local[2 * k + 1]) / panelRows]);
+    }
+    return uvs;
   }
 
   /**

@@ -5,10 +5,12 @@
  * 4 legacy `cumulativeCol` loops (1696-1705, 1711/1772, 1777/1800, 4534-4542) and the 2 totals loops (1586-1590,
  * 1681-1685); also hosts the two per-canvas px/LED rules.
  * Legacy source: index.html@cd3fd3f 1586-1596 + 1643 (combined mesh UVs), 1681-1705 (combined panel-ID atlas),
- * 2003 (panel canvas px/LED), 2056 (section canvas px/LED). The canvas-size guard (CANVAS_HARD_LIMITS, canvasFits) is
- * new in 08 P2-1c (B-L4, 08 6.3).
+ * 2003 (panel canvas px/LED; wall-wide budget since 08 P2-12d), 2056 (section canvas px/LED). The canvas-size guard
+ * (CANVAS_HARD_LIMITS, canvasFits) is new in 08 P2-1c (B-L4, 08 6.3).
  * Layer: geometry (may import domain, legacy; THREE-free and DOM-free).
  */
+
+import { panelModePxPerLed, MAX_CANVAS_SIDE } from './TextureBudget.js';
 
 /**
  * The largest canvas every supported browser can create (08 6.3): 32,767 px per side and 268,435,456 px (16,384 x 16,384)
@@ -96,14 +98,29 @@ export function sectionPxPerLed(w, h) {
 }
 
 /**
- * Pixels per LED of a panel-mode panel-ID canvas.
- * Ports: index.html@cd3fd3f line 2003.
+ * Pixels per LED of the per-panel panel-ID canvases of one rebuild (08 P2-12d, 08 6.15, 07 6.12; B-M16 fixed): one value
+ * for the whole wall from the WALL-WIDE budget of geometry/TextureBudget.js, so the sum of the panel canvases stays within
+ * PANEL_TEXTURE_BUDGET_PX however many panels the wall has, and each canvas side within maxSide:
+ *   wallPanelLeds = sum of panelCols * panelRows * ledX * ledY; maxLedSide = the largest ledX or ledY;
+ *   panelModePxPerLed({wallPanelLeds, maxLedSide}, {maxSide}) -> its pxPerLed when it fits, else 1 (08 6.15: at least
+ *   1 px/LED; the canvasFits guard of PanelIdRenderer.panelCanvas still refuses a canvas beyond CANVAS_HARD_LIMITS).
+ * Legacy (2003) gave every panel its own Math.max(4, Math.min(16, Math.floor(4096 / Math.max(ledX, ledY)))) with no
+ * budget (a 176 x 176 LED panel became a 2816 px square, per panel). Since 08 P2-12d only 04's `uv.panel_uvs = 'panel'`
+ * option reaches the per-panel canvases: panel mode with panel IDs samples one section canvas per section.
+ * The default wall keeps 16 px/LED, as legacy.
  * Side effects: none.
- * @param {number} ledX
- * @param {number} ledY
- * @returns {number} Math.max(4, Math.min(16, Math.floor(4096 / Math.max(ledX, ledY))))
+ * @param {import('../domain/WallSection.js').WallSection[]} sections  the sections of the wall (all of them: the budget is
+ *   wall-wide)
+ * @param {{maxSide?: number}} [limits]  maxSide: min(renderer maxTextureSize, 4096); default MAX_CANVAS_SIDE (4096)
+ * @returns {number} px per LED, an integer in 1..16
  */
-export function panelPxPerLed(ledX, ledY) {
-  // LEGACY(B-M16): every panel gets its own 4-16 px/LED canvas with no global texture budget.
-  return Math.max(4, Math.min(16, Math.floor(4096 / Math.max(ledX, ledY))));
+export function panelPxPerLed(sections, { maxSide = MAX_CANVAS_SIDE } = {}) {
+  let wallPanelLeds = 0;
+  let maxLedSide = 0;
+  for (const s of sections) {
+    wallPanelLeds += s.panelCols * s.panelRows * s.ledX * s.ledY;
+    maxLedSide = Math.max(maxLedSide, s.ledX, s.ledY);
+  }
+  const { pxPerLed, fits } = panelModePxPerLed({ wallPanelLeds, maxLedSide }, { maxSide });
+  return fits ? pxPerLed : 1;
 }

@@ -1,7 +1,8 @@
 /**
  * @module render/textures/PanelIdRenderer
- * The panel-ID canvases: one canvas per panel (panel mode), one per section (section mode, ZIP textures) and
- * the combined atlas (combined mode, PNG export). Draws the RGB-cycling borders, the column/row labels, the
+ * The panel-ID canvases: one per section (section mode, ZIP textures, and since 08 P2-12d panel mode, whose panels sample
+ * their section's canvas), the combined atlas (combined mode, PNG export) and one per panel (reachable only with 04's
+ * `uv.panel_uvs = 'panel'` option since 08 P2-12d). Draws the RGB-cycling borders, the column/row labels, the
  * section name and the section logo. Pure 2D canvas: creates no THREE objects; the materials wrap the canvases.
  * Style and logos are read at draw time, exactly like legacy read its globals. A canvas that would exceed
  * CANVAS_HARD_LIMITS is not created: the three canvas methods return null instead (08 P2-1d, B-L4, 08 6.3).
@@ -49,15 +50,15 @@ export class PanelIdRenderer {
   }
 
   /**
-   * The size of the panel-mode canvas of one panel of `section` (panelCanvas), by arithmetic only (no canvas):
-   * ledX * scale x ledY * scale with scale = panelPxPerLed(ledX, ledY) (4-16 px/LED, so ledX >= 8,192 already exceeds
-   * 32,767 px). 08 P2-1c (B-L4, 08 6.3).
+   * The size of the per-panel canvas of one panel of `section` (panelCanvas), by arithmetic only (no canvas):
+   * ledX * scale x ledY * scale. 08 P2-1c (B-L4, 08 6.3).
    * Side effects: none.
    * @param {import('../../domain/WallSection.js').WallSection} section
+   * @param {number} [scale]  px per LED: the rebuild's wall-wide panelPxPerLed(sections) (08 P2-12d); defaults to
+   *   panelPxPerLed([section]), the budget of a wall of that section alone
    * @returns {{width: number, height: number}}
    */
-  panelSize(section) {
-    const scale = panelPxPerLed(section.ledX, section.ledY);
+  panelSize(section, scale = panelPxPerLed([section])) {
     return { width: section.ledX * scale, height: section.ledY * scale };
   }
 
@@ -90,7 +91,10 @@ export class PanelIdRenderer {
   }
 
   /**
-   * The panel-mode canvas of one panel: border, label and (optionally) the section name.
+   * The per-panel canvas of one panel: border, label and (optionally) the section name. Since 08 P2-12d the default
+   * viewport no longer calls it (panel mode with panel IDs samples the section canvas, 08 6.15); it stays for 04's
+   * `uv.panel_uvs = 'panel'` option, at the wall-wide px/LED of panelPxPerLed (B-M16 fixed: legacy gave every panel its
+   * own 4-16 px/LED with no budget).
    * Ports: index.html@cd3fd3f lines 2002-2046 (the CanvasTexture of 2047-2048 is created by LEDMaterialFactory).
    * Side effects: creates and draws a canvas (none when it would not fit).
    * @param {*} col    global column index (cumulative across sections; raw `+` of the start column, B-L8)
@@ -98,15 +102,15 @@ export class PanelIdRenderer {
    * @param {*} ledX   section.ledX
    * @param {*} ledY   section.ledY
    * @param {import('../../domain/WallSection.js').WallSection} section
-   * @returns {HTMLCanvasElement|null} null when ledX * scale x ledY * scale exceeds CANVAS_HARD_LIMITS (08 P2-1d;
-   *   ledX >= 8,192 already does, as scale >= 4)
+   * @param {number} [scale]  px per LED: the rebuild's wall-wide panelPxPerLed(sections); defaults to
+   *   panelPxPerLed([section])
+   * @returns {HTMLCanvasElement|null} null when ledX * scale x ledY * scale exceeds CANVAS_HARD_LIMITS (08 P2-1d)
    */
-  panelCanvas(col, row, ledX, ledY, section) {
+  panelCanvas(col, row, ledX, ledY, section, scale = panelPxPerLed([section])) {
     const style = this.#style;
     const canvasTheme = this.#theme.canvas;
-    // LEGACY(B-M16, B-L19): 4-16 px per LED for every panel with no global budget; panel mode draws no logo and
-    // sizes the section name at a fixed 0.25 x the label size (sectionLabelFontSize is ignored).
-    const scale = panelPxPerLed(ledX, ledY);
+    // LEGACY(B-L19): panel mode draws no logo and sizes the section name at a fixed 0.25 x the label size
+    // (sectionLabelFontSize is ignored); reachable only with uv.panel_uvs = 'panel' (04 UV-9) since 08 P2-12d.
     if (!canvasFits(ledX * scale, ledY * scale)) return null;
     const canvas = this.#doc.createElement('canvas');
     canvas.width = ledX * scale;

@@ -19,6 +19,9 @@ import { computeWallLayout, layoutProject, framingBounds, SectionLayout, WallLay
 import { quadIndices, WallMeshBuilder, maxIndexOf, indexWidth } from '../../js/geometry/WallMeshBuilder.js';
 import { computeAtlas, sectionPxPerLed, panelPxPerLed, canvasFits, CANVAS_HARD_LIMITS } from '../../js/geometry/TextureAtlas.js';
 import {
+  panelModePxPerLed, PANEL_TEXTURE_BUDGET_PX, SECTION_TEXTURE_BUDGET_PX, MAX_CANVAS_SIDE,
+} from '../../js/geometry/TextureBudget.js';
+import {
   columnLabel, panelLabel, exportSectionName, exportPanelName, sanitizeFilename, textureFileNames, mtlTextureFile,
 } from '../../js/geometry/PanelNaming.js';
 import * as L from './oracle/legacy-geometry.mjs';
@@ -523,13 +526,53 @@ describe('computeAtlas vs the legacy bookkeeping', () => {
     });
   });
 
-  test('sectionPxPerLed == 2056 (no override) and panelPxPerLed == 2003', (t) => {
+  test('sectionPxPerLed == 2056 (no override)', (t) => {
     overAllWalls(t, ({ sections }, mm, label) => {
       sections.forEach((s, i) => {
         compareDeep(sectionPxPerLed(s.panelCols * s.ledX, s.panelRows * s.ledY), L.legacySectionScale(s, null), `${label}[${i}].section px/LED`, mm);
-        compareDeep(panelPxPerLed(s.ledX, s.ledY), L.legacyPanelScale(s.ledX, s.ledY), `${label}[${i}].panel px/LED`, mm);
       });
     });
+  });
+
+  test('panelPxPerLed (B-M16 fixed in 08 P2-12d): the wall-wide budget of 07 6.12, one value per wall; the default wall keeps the legacy 16', () => {
+    const panels = (n, led, fields = {}) => section({ panelCols: n, panelRows: 1, ledX: led, ledY: led, ...fields });
+    // 07 6.12's worked examples.
+    assert.equal(panelPxPerLed(Project.createDefault().wall.sections), 16, 'default wall: 15 panels of 32 x 32 LEDs');
+    assert.equal(panelPxPerLed(Project.createDefault().wall.sections), L.legacyPanelScale(32, 32), 'the legacy value for the default wall');
+    assert.equal(panelPxPerLed([panels(15, 176)]), 8, '15 panels of 176 x 176 (legacy 16)');
+    assert.equal(panelPxPerLed([section({ panelCols: 80, panelRows: 40, ledX: 32, ledY: 32 })]), 3, 'large_wall size: 3,200 panels of 32 x 32 (legacy 16)');
+    assert.equal(panelPxPerLed([panels(1, 1024)]), 4, 'one panel of 1024 x 1024: 4 (a 4096 px canvas)');
+    // Wall-wide: the panels of every section count, and one value serves the whole rebuild.
+    const a = panels(15, 176);
+    assert.equal(panelPxPerLed([a, panels(15, 176, { id: 1 })]), 6, 'two such sections: floor(sqrt(33,554,432 / 929,280)) = 6');
+    // Each canvas side stays within maxSide; below 1 px/LED the result is 1 (08 6.15).
+    assert.equal(panelPxPerLed([panels(1, 512)], { maxSide: 1024 }), 2);
+    assert.equal(panelPxPerLed([panels(1, 8192, { ledY: 8 })]), 1, 'ledX 8,192: floor(4096 / 8192) = 0, so 1 px/LED');
+    // The canvas a rebuild would draw stays within the budget.
+    for (const sections of [[panels(15, 176)], [section({ panelCols: 50, panelRows: 20, ledX: 64, ledY: 64 })]]) {
+      const p = panelPxPerLed(sections);
+      const total = sections.reduce((sum, s) => sum + s.panelCols * s.panelRows * (s.ledX * p) * (s.ledY * p), 0);
+      assert.ok(total <= PANEL_TEXTURE_BUDGET_PX, `${total} px`);
+      for (const s of sections) assert.ok(Math.max(s.ledX, s.ledY) * p <= MAX_CANVAS_SIDE);
+    }
+  });
+
+  test('TextureBudget (07 X3, delivered by 08 P2-12d): the constants and panelModePxPerLed of 07 6.12', () => {
+    assert.equal(SECTION_TEXTURE_BUDGET_PX, 16777216);
+    assert.equal(PANEL_TEXTURE_BUDGET_PX, 33554432);
+    assert.equal(MAX_CANVAS_SIDE, 4096);
+    assert.deepEqual(panelModePxPerLed({ wallPanelLeds: 15360, maxLedSide: 32 }), { pxPerLed: 16, fits: true });
+    assert.deepEqual(panelModePxPerLed({ wallPanelLeds: 464640, maxLedSide: 176 }), { pxPerLed: 8, fits: true });
+    assert.deepEqual(panelModePxPerLed({ wallPanelLeds: 3276800, maxLedSide: 32 }), { pxPerLed: 3, fits: true });
+    assert.deepEqual(panelModePxPerLed({ wallPanelLeds: 1048576, maxLedSide: 1024 }), { pxPerLed: 4, fits: true });
+    assert.deepEqual(panelModePxPerLed({ wallPanelLeds: 33554433, maxLedSide: 32 }), { pxPerLed: 0, fits: false }, 'above 33,554,432 LEDs');
+    assert.deepEqual(panelModePxPerLed({ wallPanelLeds: 1024, maxLedSide: 32 }, { maxSide: 256 }), { pxPerLed: 8, fits: true });
+    let previous = Infinity;
+    for (let leds = 1000; leds <= 40000000; leds *= 3) {
+      const { pxPerLed } = panelModePxPerLed({ wallPanelLeds: leds, maxLedSide: 64 });
+      assert.ok(pxPerLed <= previous && pxPerLed <= 4096 / 64, `monotonic in wallPanelLeds and within maxSide (${leds})`);
+      previous = pxPerLed;
+    }
   });
 
   test('empty wall: zero totals, pxPerLed 4, no entries (legacy arithmetic)', () => {
@@ -1215,5 +1258,32 @@ describe('glTF builder profile and panel normals (B-H2; 08 P2-2d)', () => {
   test('PANEL_UVS: [0,0, 1,0, 1,1, 0,1] in the panelCorners order (the OBJ panel vt lines), frozen', () => {
     assert.deepEqual(WallMeshBuilder.PANEL_UVS, [0, 0, 1, 0, 1, 1, 0, 1]);
     assert.ok(Object.isFrozen(WallMeshBuilder.PANEL_UVS));
+  });
+});
+
+describe('panel-mode section-space UVs (B-M16, B-L19; 08 P2-12d, 08 6.15)', () => {
+  test('panelUvs: BL, BR, TR, TL equal ((col + u) / cols, (row + v) / rows); shared corners equal the strip UVs bit for bit', (t) => {
+    const builder = new WallMeshBuilder(Strategies.mesh.viewport);
+    let checked = 0;
+    const walls = [...CONFIG_WALLS, { label: 'odd counts', sections: [section({ panelCols: 7, panelRows: 3 }), section({ id: 1, panelCols: 13, panelRows: 11, curveIntensity: 5 })] }];
+    for (const { label, sections } of walls) {
+      for (const sl of computeWallLayout(sections).sections) {
+        const { panelCols: cols, panelRows: rows } = sl.section;
+        const strip = builder.sectionGrid(sl, { uv: 'unit' }).uvs;
+        const stripUv = (col, row) => [strip[2 * (row * (cols + 1) + col)], strip[2 * (row * (cols + 1) + col) + 1]];
+        for (const panel of sl.panels) {
+          const uvs = builder.panelUvs(panel, sl);
+          assert.equal(uvs.length, 4);
+          [[0, 0], [1, 0], [1, 1], [0, 1]].forEach(([u, v], k) => {
+            assert.ok(Object.is(uvs[k][0], (panel.col + u) / cols) && Object.is(uvs[k][1], (panel.row + v) / rows), `${label} ${k}`);
+            // The corner (panel.col + u, panel.row + v) of the section grid: the section-mode strip UV, bit for bit.
+            const [su, sv] = stripUv(panel.col + u, panel.row + v);
+            assert.ok(Object.is(uvs[k][0], su) && Object.is(uvs[k][1], sv), `${label} panel ${panel.col},${panel.row} corner ${k}`);
+            checked++;
+          });
+        }
+      }
+    }
+    t.diagnostic(`${checked} panel corners checked`);
   });
 });

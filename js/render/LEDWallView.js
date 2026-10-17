@@ -8,6 +8,9 @@
  * meshes through MaterialOverride: the content materials are stashed while a shared debug material is shown, put back
  * before every rebuild disposes the old wall, and put back around stills (withContentMaterials, 07 C48). The debug
  * materials are created by DebugMaterials on first use, so nothing changes until the shading is switched on.
+ * Panel mode with panel IDs (08 P2-12d, 08 6.15): one material per section, shared by its panels, samples the section
+ * canvas; each panel's PlaneGeometry UVs are rewritten into section space (WallMeshBuilder.panelUvs). LED sim and colour
+ * keep one material per panel and the per-panel 0..1 UVs of legacy.
  * Panel frames are adaptive (docs/improvements/06-morph-branding.md 6.7, 06 T5): each section's frames take the light
  * or the dark frame colour of SceneTheme, whichever contrasts more with the section colour (render/frameColor.js).
  * Legacy source: index.html@cd3fd3f 1457-1577, 1646-1678, 1710-1802.
@@ -32,6 +35,28 @@ import { frameColorFor } from './frameColor.js';
  */
 function indexAttribute(indices) {
   return indexWidth(maxIndexOf(indices)) === 'uint32' ? new THREE.Uint32BufferAttribute(indices, 1) : indices;
+}
+
+/**
+ * The PlaneGeometry vertex order is TL, TR, BL, BR (three r128: rows from the top, columns from the left); vertex k takes
+ * the WallMeshBuilder corner PLANE_FROM_CORNER[k] of the order BL = 0, BR = 1, TR = 2, TL = 3 (04 6.12).
+ * @type {readonly number[]}
+ */
+const PLANE_FROM_CORNER = Object.freeze([3, 2, 0, 1]);
+
+/**
+ * Writes the four corner UVs of a panel (builder order BL, BR, TR, TL) into a PlaneGeometry's uv attribute
+ * (08 P2-12d). Called before the first render, so no needsUpdate is needed.
+ * Side effects: writes geometry.attributes.uv (no THREE id).
+ * @param {THREE.PlaneGeometry} geometry
+ * @param {number[][]} uvs  WallMeshBuilder.panelUvs(panel, sl)
+ */
+function writePanelUvs(geometry, uvs) {
+  const attribute = geometry.attributes.uv;
+  for (let k = 0; k < 4; k++) {
+    const [u, v] = uvs[PLANE_FROM_CORNER[k]];
+    attribute.setXY(k, u, v);
+  }
 }
 
 /**
@@ -155,7 +180,7 @@ export class LEDWallView {
     } else if (meshMode === 'section') {
       this.#buildSections(layout, atlas);
     } else if (meshMode === 'panel') {
-      this.#buildPanels(layout, atlas);
+      this.#buildPanels(layout, atlas, display);
     } else {
       throw new Error(`Unknown mesh mode ${JSON.stringify(meshMode)}`);
     }
@@ -287,17 +312,29 @@ export class LEDWallView {
   }
 
   /**
-   * One PlaneGeometry mesh per panel, placed at the panel centre and turned to the panel's angle.
+   * One PlaneGeometry mesh per panel, placed at the panel centre and turned to the panel's angle. With panel IDs
+   * (08 P2-12d, 08 6.15; B-M16 and, for the viewport, B-L19 fixed) each section first gets one material,
+   * materials.sectionShared (the section canvas, with its logo and section-label size), shared by all of its panels, and
+   * each panel's UVs are rewritten into section space: legacy drew one 4-16 px/LED canvas per panel, without the logo.
+   * LED sim and colour keep one materials.panel per panel and the PlaneGeometry's own 0..1 UVs.
    * Ports: index.html@cd3fd3f lines 1776-1802.
    * @param {import('../geometry/WallLayout.js').WallLayout} layout
    * @param {object} atlas
+   * @param {import('../domain/Project.js').DisplaySettings} display  panelIdsEnabled
    */
-  #buildPanels(layout, atlas) {
+  #buildPanels(layout, atlas, display) {
     layout.sections.forEach((sl, i) => {
       const startCol = atlas.entries[i].startCol;
+      const shared = display.panelIdsEnabled ? this.#materials.sectionShared(sl.section, sl.sectionIndex, startCol) : null;
       sl.panels.forEach((panel) => {
         const geometry = new THREE.PlaneGeometry(sl.panelW, sl.panelH);
-        const material = this.#materials.panel(sl.section, sl.sectionIndex, startCol + panel.col, panel.row);
+        let material;
+        if (shared !== null) {
+          writePanelUvs(geometry, this.#builder.panelUvs(panel, sl));
+          material = shared;
+        } else {
+          material = this.#materials.panel(sl.section, sl.sectionIndex, startCol + panel.col, panel.row);
+        }
 
         const mesh = new THREE.Mesh(geometry, material);
         mesh.position.set(panel.x, panel.y, panel.z);
