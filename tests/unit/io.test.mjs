@@ -700,9 +700,16 @@ describe('golden files (byte-identical to the legacy downloads)', { skip: golden
       const consoleLog = JSON.parse(fs.readFileSync(file('console.json'), 'utf8'));
       for (const mode of MODES) {
         project.meshMode = mode;
-        const { objContent, mtlContent } = OBJ.write({ sections, meshMode: mode, layout: layoutProject(project) });
-        same(objContent, golden(mode, 'obj', 'obj'));
-        same(mtlContent, golden(mode, 'obj', 'mtl'));
+        // Export OBJ downloads one ZIP since 08 P2-6e: the OBJ, the MTL (map_Kd for the section textures it ships) and
+        // in section mode those textures, at the referenced paths.
+        const objEntries = `${golden(mode, 'obj', 'objZip')}.entries`;
+        const shipped = mode === 'section' ? textureFileNames(sections) : null;
+        const { objContent, mtlContent } = OBJ.write({ sections, meshMode: mode, layout: layoutProject(project), textureNames: shipped });
+        same(objContent, `${objEntries}/${FILES.obj}`);
+        same(mtlContent, `${objEntries}/${FILES.mtl}`);
+        const objZipTextures = file(`${objEntries}/textures`);
+        assert.deepEqual(fs.existsSync(objZipTextures) ? fs.readdirSync(objZipTextures).sort() : [], (shipped ?? []).slice().sort(),
+          `${mode}: the OBJ ZIP holds exactly the textures its MTL references`);
 
         const gltfName = golden(mode, 'gltf', 'gltf');
         const gltf = run(() => GLTF.write({ sections, meshMode: mode, layout: layoutProject(project) }));
@@ -1160,24 +1167,77 @@ describe('ProjectIO use cases', () => {
     assert.deepEqual(log, [['saveText', FILES.json, 'application/json', json2(serializer.write(project))]]);
   });
 
-  test('exportOBJ: layout, OBJ now, MTL through win.setTimeout(ProjectIO.MTL_DOWNLOAD_DELAY_MS); no map_Kd (B-L7 fixed in 08 P2-6c)', () => {
+  test('exportOBJ (08 P2-6e): one ZIP download, brand.files.objZip, with the OBJ and its MTL; no timer, no second download', async () => {
+    assert.equal(ProjectIO.prototype.exportOBJ.constructor.name, 'AsyncFunction');
+    assert.equal(FILES.objZip, `${Brand.filePrefix}-obj.zip`);
     const project = Project.createDefault();
-    const log = [];
-    const extra = {};
-    fakeIO(project, log, extra).exportOBJ();
-    const { objContent, mtlContent } = OBJ.write({ sections: project.wall.sections, meshMode: 'combined', layout: layoutProject(project) });
-    assert.deepEqual(log, [['layout'], ['saveText', FILES.obj, 'text/plain', objContent], ['setTimeout', 100]]);
-    assert.equal(ProjectIO.MTL_DOWNLOAD_DELAY_MS, 100);
-    extra.timer();
-    assert.deepEqual(log.at(-1), ['saveText', FILES.mtl, 'text/plain', mtlContent]);
-    // Section mode: the standalone MTL references no texture (Export OBJ delivers none).
+    for (const meshMode of ['combined', 'panel']) {
+      project.meshMode = meshMode;
+      const log = [];
+      assert.equal(await fakeIO(project, log).exportOBJ(), undefined);
+      const { objContent, mtlContent } = OBJ.write({ sections: project.wall.sections, meshMode, layout: layoutProject(project) });
+      assert.ok(objContent.includes(`\nmtllib ${FILES.mtl}\n`), 'the OBJ names the MTL entry');
+      assert.ok(!mtlContent.includes('map_Kd'), `${meshMode}: no texture referenced, none shipped`);
+      assert.deepEqual(log, [
+        ['new JSZip'],
+        ['layout'],
+        ['zip.file', FILES.obj, undefined, objContent],
+        ['zip.file', FILES.mtl, undefined, mtlContent],
+        ['generateAsync', { type: 'blob' }],
+        ['saveBlob', FILES.objZip, 'ZIP-BLOB'],
+      ], meshMode);
+    }
+  });
+
+  test('exportOBJ in section mode (08 P2-6e): the textures the MTL references ship at their map_Kd paths, as in Export All', async () => {
+    const project = projectFromConfig(CONFIGS.flat3);
     project.meshMode = 'section';
-    const log2 = [];
-    const extra2 = {};
-    fakeIO(project, log2, extra2).exportOBJ();
-    extra2.timer();
-    const sectionMtl = log2.at(-1)[3];
-    assert.ok(sectionMtl.includes('newmtl Wall_1') && !sectionMtl.includes('map_Kd'), sectionMtl);
+    const sections = project.wall.sections;
+    const names = textureFileNames(sections);
+    const log = [];
+    await fakeIO(project, log).exportOBJ();
+    const layout = layoutProject(project);
+    const { objContent, mtlContent } = OBJ.write({ sections, meshMode: 'section', layout, textureNames: names });
+    const atlas = computeAtlas(sections);
+    assert.deepEqual(log, [
+      ['new JSZip'],
+      ['layout'],
+      ['zip.file', FILES.obj, undefined, objContent],
+      ['zip.file', FILES.mtl, undefined, mtlContent],
+      ['zip.folder', 'textures'],
+      ...sections.flatMap((s, i) => [
+        ['sectionCanvas', i, null, atlas.entries[i].startCol],
+        ['toDataURL', 'image/png'],
+        ['folder.file', `textures/${names[i]}`, { base64: true }, 'QUJD'],
+      ]),
+      ['generateAsync', { type: 'blob' }],
+      ['saveBlob', FILES.objZip, 'ZIP-BLOB'],
+    ]);
+    // Every map_Kd names an entry of the archive (the owner's rule: nothing referenced may be missing).
+    const entries = new Set(log.filter((e) => e[0] === 'folder.file').map((e) => e[1]));
+    const maps = [...mtlContent.matchAll(/^map_Kd (.+)$/gm)].map((m) => m[1]);
+    assert.deepEqual(maps, names.map((n) => `textures/${n}`));
+    for (const m of maps) assert.ok(entries.has(m), m);
+  });
+
+  test('exportOBJ in section mode: an oversize texture is left out up front, a data:, PNG late (the MTL is re-written), M-EXP-4 names both', async () => {
+    const project = projectFromConfig(CONFIGS.flat3);
+    project.meshMode = 'section';
+    const sections = project.wall.sections;
+    const names = textureFileNames(sections);
+    const log = [];
+    await fakeIO(project, log, {
+      sectionSize: (s) => (s === sections[0] ? { width: 70000, height: 128 } : { width: 640, height: 384 }),
+      dataUrlFor: (i) => (i === 2 ? 'data:,' : undefined),
+    }).exportOBJ();
+    const layout = layoutProject(project);
+    const files = log.filter((e) => e[0] === 'zip.file' || e[0] === 'folder.file').map((e) => e[1]);
+    assert.deepEqual(files, [FILES.obj, FILES.mtl, `textures/${names[1]}`, FILES.mtl]);
+    const finalMtl = log.filter((e) => e[0] === 'zip.file' && e[1] === FILES.mtl).at(-1)[3];
+    assert.equal(finalMtl, OBJ.write({ sections, meshMode: 'section', layout, textureNames: [null, names[1], null] }).mtlContent);
+    assert.deepEqual([...finalMtl.matchAll(/^map_Kd (.+)$/gm)].map((m) => m[1]), [`textures/${names[1]}`]);
+    assert.deepEqual(log.slice(-2), [['saveBlob', FILES.objZip, 'ZIP-BLOB'],
+      ['alert', mExp4([`textures/${names[0]}`, `textures/${names[2]}`])]]);
   });
 
   test('exportGLTF downloads the pretty-printed document; a large panel wall downloads too (B-H3 fixed in 08 P2-1a)', () => {
@@ -1390,12 +1450,12 @@ describe('ProjectIO use cases', () => {
   test('#runExport: every export reports a failure as M-EXP-1 with its label, then warns; nothing escapes', async () => {
     const empty = projectOf([], 'combined');
     const cannotReadColor = "Cannot read properties of undefined (reading 'color')";
-    for (const [method, label] of [['exportOBJ', 'Export OBJ'], ['exportGLTF', 'Export glTF']]) {
+    for (const [method, label, before] of [['exportOBJ', 'Export OBJ (ZIP)', ['new JSZip', 'layout']], ['exportGLTF', 'Export glTF', ['layout']]]) {
       const log = [];
-      assert.equal(fakeIO(empty, log)[method](), undefined, method);
-      assert.deepEqual(log.map((e) => e[0]), ['layout', 'alert', 'warn'], method);
-      assert.equal(log[1][1], mExp1(label, cannotReadColor));
-      assert.ok(log[2][1] instanceof TypeError);
+      assert.equal(await fakeIO(empty, log)[method](), undefined, method);
+      assert.deepEqual(log.map((e) => e[0]), [...before, 'alert', 'warn'], method);
+      assert.equal(log.at(-2)[1], mExp1(label, cannotReadColor));
+      assert.ok(log.at(-1)[1] instanceof TypeError);
     }
 
     const boom = new RangeError('boom');
@@ -1593,7 +1653,7 @@ describe('structure', () => {
     }
   });
 
-  test('no try/catch except #runExport (R13 amendment, 08 P2-1a) and the legacy import one; exportZIP and exportPanelIds stay async', () => {
+  test('no try/catch except #runExport (R13 amendment, 08 P2-1a) and the legacy import one; exportZIP, exportPanelIds and exportOBJ (08 P2-6e) are async', () => {
     for (const rel of ['js/io/ProjectSerializer.js', 'js/io/ObjExporter.js', 'js/io/GltfExporter.js', 'js/io/ProjectValidator.js',
       'js/io/ProjectMigrations.js', 'js/io/ProjectSchema.js', 'js/ui/ExportPanel.js']) {
       assert.doesNotMatch(code(rel), /\btry\s*\{|\bcatch\s*[({]/, rel);
@@ -1608,8 +1668,8 @@ describe('structure', () => {
     const owner = (at) => (at > importAt ? 'import' : at > runExportAt ? 'runExport' : 'other');
     assert.deepEqual(tries.map(owner).sort(), ['import', 'runExport'], 'one try in #runExport, one in importFromInputEvent');
     assert.ok(runExportAt < importAt, '#runExport is defined before importFromInputEvent');
-    for (const name of ['exportZIP', 'exportPanelIds']) assert.equal(ProjectIO.prototype[name].constructor.name, 'AsyncFunction');
-    for (const name of ['exportJSON', 'exportOBJ', 'exportGLTF', 'exportSafeDistanceOBJ', 'importFromInputEvent']) {
+    for (const name of ['exportZIP', 'exportPanelIds', 'exportOBJ']) assert.equal(ProjectIO.prototype[name].constructor.name, 'AsyncFunction');
+    for (const name of ['exportJSON', 'exportGLTF', 'exportSafeDistanceOBJ', 'importFromInputEvent']) {
       assert.equal(ProjectIO.prototype[name].constructor.name, 'Function', name);
     }
   });

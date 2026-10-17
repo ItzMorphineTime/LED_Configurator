@@ -468,6 +468,7 @@ describe('Theme', () => {
       safeDistanceObjHeader: '# Safe Distance Floor Mesh\n# Exported from Morph LED Configurator\n\n',
       files: { json: 'morph-led-wall.json', obj: 'morph-led-wall.obj', mtl: 'morph-led-wall.mtl',
                gltf: 'morph-led-wall.gltf', zip: 'morph-led-wall-export.zip', panelIdsPng: 'morph-led-wall-panel-ids.png',
+               objZip: 'morph-led-wall-obj.zip',   // 08 P2-6e
                safeDistanceObj: 'morph-led-wall-safe-distance.obj', hdriPixelMap: 'morph-led-wall-hdri-pixel-map.png' },
     });
   });

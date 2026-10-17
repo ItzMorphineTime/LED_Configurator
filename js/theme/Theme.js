@@ -139,10 +139,12 @@ export const Brand = deepFreeze({
   files: {                                                                  // all derived from FILE_PREFIX (06 T6b, U9)
     json: `${FILE_PREFIX}.json`, obj: `${FILE_PREFIX}.obj`, mtl: `${FILE_PREFIX}.mtl`, gltf: `${FILE_PREFIX}.gltf`,
     zip: `${FILE_PREFIX}-export.zip`, panelIdsPng: `${FILE_PREFIX}-panel-ids.png`,
+    objZip: `${FILE_PREFIX}-obj.zip`,                                         // 08 P2-6e: Export OBJ (ZIP)
     safeDistanceObj: `${FILE_PREFIX}-safe-distance.obj`,
     hdriPixelMap: `${FILE_PREFIX}-hdri-pixel-map.png`,                       // spec 05 (unused until it lands)
   },
-  // used at 4964, 4915, 4916 (and the OBJ `mtllib` line), 4923, 4549, 4934, 2826; ZIP entries 4520-4530
+  // used at 4964, 4915, 4916 (and the OBJ `mtllib` line), 4923, 4549, 4934, 2826; ZIP entries 4520-4530; objZip is the
+  // Export OBJ archive (08 P2-6e), whose entries are obj, mtl and the textures/ files
 });
 
 /**

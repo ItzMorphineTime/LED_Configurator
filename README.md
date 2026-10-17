@@ -171,9 +171,9 @@ Release note: columns, rows and LED counts used to accept fractions such as 2.5,
 
 ## 📤 Export Options
 
-Every download is named after the product: `morph-led-wall.json`, `morph-led-wall.obj` with `morph-led-wall.mtl`,
-`morph-led-wall.gltf`, `morph-led-wall-export.zip`, `morph-led-wall-panel-ids.png` and
-`morph-led-wall-safe-distance.obj`. OBJ, MTL and glTF files name "Morph LED Configurator" as their generator.
+Every download is named after the product: `morph-led-wall.json`, `morph-led-wall-obj.zip` (holding
+`morph-led-wall.obj` with `morph-led-wall.mtl`), `morph-led-wall.gltf`, `morph-led-wall-export.zip`,
+`morph-led-wall-panel-ids.png` and `morph-led-wall-safe-distance.obj`. OBJ, MTL and glTF files name "Morph LED Configurator" as their generator.
 
 ### JSON Configuration
 Export and import wall configurations. The JSON file (format version 1.0) contains:
@@ -206,9 +206,15 @@ Industry-standard 3D mesh format compatible with:
 - Unreal Engine
 - Unity
 
-Release note: in section mode the MTL of Export OBJ used to point at panel-ID textures that were never downloaded; it
-now references none (Export All (ZIP) delivers the textured OBJ). The MTL is still a second download, which a browser
-may ask you to allow.
+**Export OBJ (ZIP)** downloads one archive, `morph-led-wall-obj.zip`: the OBJ, its MTL and, in section mode, the
+panel-ID textures the MTL uses (`textures/<section>_PanelIDs.png`). Unzip it and import the OBJ; the importer finds
+the MTL and the textures next to it.
+
+Release note: Export OBJ used to download the OBJ and then, a moment later, the MTL as a second file. Browsers can
+block that second download, and in section mode the MTL pointed at textures that were never downloaded, so Blender
+imported the walls without their materials. Export OBJ now downloads one ZIP with everything the OBJ needs, and
+nothing it references is missing. (A section texture too large for the browser is left out, with its MTL reference,
+and a message names it.) The button now reads "Export OBJ (ZIP)".
 
 ### glTF Export
 Modern 3D format with embedded materials for:

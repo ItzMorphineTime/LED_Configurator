@@ -24,6 +24,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { CONFIGS } from './configs.mjs';
 import { readZip } from './lib/formats.mjs';
+import { OBJ_ZIP_DOWNLOAD } from './lib/app.mjs';
 import * as ui from './lib/uiprobe.mjs';
 
 const card = (i) => `#wall-sections > :nth-child(${i + 1})`;
@@ -383,7 +384,7 @@ async function xssNamesScenario(ctx) {
     await probe('xss_probe_02_renamed');
     await record(ctx, 'sections_renamed', () => app.sectionsSnapshot());
     await record(ctx, 'logos_02_renamed', () => pageCall(app, pageLogoList));
-    await dl(ctx, 'section__export-obj', '#export-obj', { expect: 2 });
+    await dl(ctx, 'section__export-obj', '#export-obj', OBJ_ZIP_DOWNLOAD);
     await dl(ctx, 'section__export-zip', '#export-zip', { expect: 1, timeoutMs: 120000, quietMs: 800 });
 }
 
@@ -394,7 +395,7 @@ async function zipSectionModeScenario(ctx) {
     await importCfg(ctx, 'import', { ...CONFIGS.flat3, mesh_mode: 'section' }, 'flat3_section.json');
     await step(ctx, 'rename-center', () => app.setValue(`${card(1)} .section-name-input`, 'Center Stage', ['input']));
     await record(ctx, 'sections_renamed', () => app.sectionsSnapshot());
-    await dl(ctx, 'section__export-obj', '#export-obj', { expect: 2 });
+    await dl(ctx, 'section__export-obj', '#export-obj', OBJ_ZIP_DOWNLOAD);
     await dl(ctx, 'section__export-zip', '#export-zip', { expect: 1, timeoutMs: 120000, quietMs: 800 });
 }
 
@@ -447,7 +448,7 @@ async function zeroInputsScenario(ctx) {
         await app.setValue('#panel-border-thickness', '0');
     });
     await record(ctx, 'ui_zero_border', () => app.uiState());
-    await dl(ctx, 'combined__export-obj', '#export-obj', { expect: 2 });
+    await dl(ctx, 'combined__export-obj', '#export-obj', OBJ_ZIP_DOWNLOAD);
 }
 
 // ---- scenario: p2_oversize_canvas (B-L4) -------------------------------------------------------

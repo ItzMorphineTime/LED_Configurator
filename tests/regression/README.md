@@ -131,7 +131,10 @@ The six config scenarios follow the same steps:
 
 1. Record stats, the mesh-mode radio state and a section snapshot after import.
 2. Export JSON.
-3. For each of combined, section and panel modes: Export OBJ (and the MTL that follows it ~100 ms later), then Export glTF.
+3. For each of combined, section and panel modes: Export OBJ, then Export glTF. Export OBJ downloaded the OBJ and the MTL
+   that followed it ~100 ms later until 08 P2-6e; since then it downloads one ZIP (`<mode>__export-obj__morph-led-wall-obj.zip`:
+   the OBJ, the MTL and, in section mode, the textures the MTL references), and the harness expects one download
+   (`OBJ_ZIP_DOWNLOAD` of `lib/app.mjs`).
 4. Switch back to combined mode and turn panel IDs on. Optionally apply styling, then take a screenshot.
 5. Export Panel IDs PNG, then Export All ZIP, then Export JSON. Record the final stats.
 6. Round trip: re-import the exported JSON and export it again.
@@ -384,7 +387,8 @@ through its expected-change manifest. They follow the same DOM-only rules as the
 
 - **Export labels** are `<mesh mode>__<button>` (`section__export-obj`, `combined__export-zip`, ...) or
   `<wall>__export-safe-distance`, so the segment-agnostic manifest patterns
-  (`**/*section__export-obj__*.mtl`, `**/*combined__export-*`) cover them like the config scenarios.
+  (`**/*section__export-obj__*.zip`, `**/*combined__export-*`) cover them like the config scenarios (before 08 P2-6e
+  the OBJ and MTL were separate outputs, `**/*section__export-obj__*.mtl`; since then they are ZIP entries).
 - **No reachable URL** is ever part of a payload: hostile URLs use the `.invalid` top-level domain,
   which never resolves. A request to one would be recorded as a `network` error, and
   `p2_project_v2/network.json` lists every request to another origin.
@@ -440,10 +444,11 @@ it. The wall is made wider than 65,535 px so that the unfixed Export Panel IDs (
 
 The download file names are the app's `Brand.files`, all derived from `Brand.filePrefix = 'morph-led-wall'` since
 Feature 6 T6b: `morph-led-wall.json`, `.obj`, `.mtl`, `.gltf`, `morph-led-wall-export.zip`,
-`morph-led-wall-panel-ids.png` and `morph-led-wall-safe-distance.obj` (before: `led-wall-config.*`,
+`morph-led-wall-panel-ids.png` and `morph-led-wall-safe-distance.obj`, and since 08 P2-6e `morph-led-wall-obj.zip`
+(Export OBJ's one download; its entries are the `.obj`, the `.mtl` and `textures/`) (before: `led-wall-config.*`,
 `led-wall-export.zip`, `panel-ids.png`, `safe-distance-floor.obj`). The ZIP's section textures keep their
 `textures/<section>_PanelIDs.png` names (user data). Manifest patterns stay filename-agnostic
-(`**/*__export-obj__*.obj`), so they survive the rename.
+(`**/*__export-obj__*.zip`), so they survive the rename.
 
 Each output entry in the manifest is `{ file, sha256, kind, bytes, ... }`, where `kind` is one of
 `obj | mtl | gltf | json | png | zip | state | screenshot | console`. ZIP outputs also list
@@ -602,7 +607,7 @@ exit 0 with every remaining difference reported as `JITTER`.
 
 - `output` is a pattern over `<scenario>/<output>`: `*` matches within one path segment, `**` across
   segments, `{a,b}` is alternation (nestable), `?` is one character. Prefer segment-agnostic,
-  filename-agnostic patterns for whole output kinds (`**/*__export-obj__*.obj`,
+  filename-agnostic patterns for whole output kinds (`**/*__export-obj__*.zip`,
   `**/*combined__export-*`); use explicit names only for single outputs, checked against the
   parent's baseline listing. Write manifests by grepping the parent's baseline, never from memory
   (08 section 8.2, R10).
@@ -840,7 +845,8 @@ in parentheses changes them:
   is not the file the ZIP holds for a named section (`Center_Stage_PanelIDs.png`) (B-M2) (08 P2-6d: the MTL names
   the ZIP entry, `textures/<textureFileNames entry>`).
 - Every standalone section-mode MTL (`*section__export-obj__*.mtl`) has `map_Kd textures/Wall_<i>_PanelIDs.png`
-  lines for textures Export OBJ never downloads (B-L7) (08 P2-6c: no `map_Kd`; the ZIP's MTL keeps them).
+  lines for textures Export OBJ never downloads (B-L7) (08 P2-6c: no `map_Kd`; the ZIP's MTL keeps them; 08 P2-6e:
+  Export OBJ downloads one ZIP whose MTL references, and whose `textures/` folder holds, every section texture).
 - `p2_curved_safe_distance`: each of the four exports throws the B-M1 `ReferenceError`, so no OBJ is
   produced (08 P2-5a: the four OBJs download); the `concave30` screenshot shows the folded band (B-M15) (08 P2-5b:
   the mitred, clamped band; the clamped stretches are amber, and the OBJs of `concave_offsets`, `box_corner` and

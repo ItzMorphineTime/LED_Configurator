@@ -31,6 +31,13 @@ const KEYS = {
 /** CDP Input.dispatchKeyEvent modifier bits. */
 export const MODIFIERS = Object.freeze({ Alt: 1, Ctrl: 2, Meta: 4, Shift: 8 });
 
+/**
+ * The captureDownloads options of Export OBJ (08 P2-6e): one ZIP (the OBJ, its MTL and, in section mode, the textures
+ * the MTL references) instead of the legacy OBJ + MTL pair; a section-mode archive draws its textures like Export All,
+ * hence the ZIP timeout and quiet period.
+ */
+export const OBJ_ZIP_DOWNLOAD = Object.freeze({ expect: 1, timeoutMs: 120000, quietMs: 800 });
+
 function normalizeMessage(s, origin) {
     let m = String(s || '');
     if (origin) m = m.split(origin).join('<root>/');

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { CONFIGS } from './configs.mjs';
 import { decodePNG, readZip } from './lib/formats.mjs';
 import * as ui from './lib/uiprobe.mjs';
+import { OBJ_ZIP_DOWNLOAD } from './lib/app.mjs';
 import { EXTRA_SCENARIOS } from './scenarios-extra.mjs';
 import { PHASE2_SCENARIOS } from './scenarios-phase2.mjs';
 
@@ -51,7 +52,7 @@ const jsonOf = (files, name) => {
 /**
  * Standard per-config capture:
  *   stats / mesh-mode radio state / section cards after import, Export JSON,
- *   for each mesh mode: Export OBJ (+MTL), Export glTF,
+ *   for each mesh mode: Export OBJ (one ZIP since 08 P2-6e: OBJ, MTL, the textures the MTL references), Export glTF,
  *   then (back in combined mode) Panel IDs on (+ optional styling), Export Panel IDs PNG,
  *   Export All ZIP, Export JSON, final stats.
  */
@@ -69,7 +70,7 @@ async function configCapture(ctx, { configKey = null, panelIdStyle = null, zipJs
             await app.selectMeshMode(mode);
             rec.state(`${mode}__mesh_mode`, await app.meshModeState());
         });
-        await dl(ctx, `${mode}__export-obj`, '#export-obj', { expect: 2 });
+        await dl(ctx, `${mode}__export-obj`, '#export-obj', OBJ_ZIP_DOWNLOAD);
         await dl(ctx, `${mode}__export-gltf`, '#export-gltf', { expect: 1, timeoutMs: 30000 });
     }
     await step(ctx, 'panel-ids-on', async () => {
@@ -229,7 +230,7 @@ async function uiScenario(ctx) {
     await snap('card2_header_toggled');
 
     await dl(ctx, 'edited__export-json', '#export-json');
-    await dl(ctx, 'edited__export-obj', '#export-obj', { expect: 2 });
+    await dl(ctx, 'edited__export-obj', '#export-obj', OBJ_ZIP_DOWNLOAD);
 
     await step(ctx, 'delete-card0', () => app.click(`${card(0)} .section-delete`));
     await snap('after_delete_card0');

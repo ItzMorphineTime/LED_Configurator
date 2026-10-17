@@ -1,0 +1,66 @@
+{
+  "commit": "P2-6e",
+  "bugs": [
+    "B-L7"
+  ],
+  "expect": [
+    {
+      "output": "**/*__export-obj__*.obj",
+      "change": "removed",
+      "each": true,
+      "reason": "Export OBJ no longer downloads a bare OBJ: the OBJ is an entry of the one ZIP download (owner decision 2026-10-17)"
+    },
+    {
+      "output": "**/*__export-obj__*.mtl",
+      "change": "removed",
+      "each": true,
+      "reason": "the MTL is no longer a second download (100 ms later, possibly blocked by the browser, so importers found no materials): it is an entry of the ZIP, named by the OBJ's mtllib line"
+    },
+    {
+      "output": "**/*__export-obj__*.zip",
+      "change": "added",
+      "reason": "every Export OBJ step downloads morph-led-wall-obj.zip (Brand.files.objZip) holding morph-led-wall.obj, morph-led-wall.mtl and, in section mode, the textures/<name>_PanelIDs.png files its map_Kd lines reference (the OBJ entry equals the former OBJ; the MTL equals the former one in combined and panel mode and gains the map_Kd lines of the shipped textures in section mode)"
+    },
+    {
+      "output": "{default,flat3,concave_offsets,convex,mixed,box_corner,large_wall,ui_sections,import_edge,p2_xss_names,p2_zip_section_mode,p2_zero_inputs}/downloads.json",
+      "change": "modified",
+      "each": true,
+      "reason": "each Export OBJ step lists one file, morph-led-wall-obj.zip, instead of the .obj and the .mtl (the harness expects one download, OBJ_ZIP_DOWNLOAD)"
+    },
+    {
+      "output": "ui_visual/*.text.json",
+      "change": "modified",
+      "each": true,
+      "reason": "#export-obj reads \"Export OBJ (ZIP)\" and gains the title \"Downloads one ZIP: the OBJ, its MTL and the textures the MTL uses\" (the owner asked that the button say it downloads a zip)"
+    },
+    {
+      "output": "ui_visual/*.sidebar.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the full-height sidebar captures show the #export-obj label \"EXPORT OBJ (ZIP)\" (926 px of glyphs, the button size unchanged). Added after the first gate run: the manifest first listed the ui_visual screenshots under mayChange in the belief that the buttons lie below the captured area; the five sidebar captures are full height, so they always show the label"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "p2_curved_safe_distance/box_corner.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas on the preview footer label row (1 level, 1 px, seen in the 06 T6a-08 P2-6d runs); this commit changes no rendered pixel of it"
+    },
+    {
+      "output": "p2_shortcut_filters/pilot_view_front.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas (1 level, 2 px, seen in the 06 T6b-08 P2-6d runs); this commit changes no rendered pixel of it"
+    },
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-08 P2-6d runs)"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b); this commit changes no entry of Export All"
+    }
+  ],
+  "notes": "08 P2-6e (the owner's request of 2026-10-17, B-L7's second half; replaces 08 Q7's two downloads): ProjectIO.exportOBJ is async and downloads one ZIP, Brand.files.objZip; the texture plan and loop are Export All's (#planSectionTextures, #addSectionTextures, #reportLeftOut), so every map_Kd names a file the archive holds and a left-out texture loses its map_Kd and is named by M-EXP-4. ProjectIO.MTL_DOWNLOAD_DELAY_MS and the second download are gone. The harness captures one download per Export OBJ step (lib/app.mjs OBJ_ZIP_DOWNLOAD). normals_debug hashes the OBJ ZIP's entries, so exports_isolation.json is unchanged."
+}

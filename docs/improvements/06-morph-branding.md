@@ -750,6 +750,7 @@ export const Brand = Object.freeze({
   files: Object.freeze({                                                                     // all derived from FILE_PREFIX (U9)
     json: `${FILE_PREFIX}.json`, obj: `${FILE_PREFIX}.obj`, mtl: `${FILE_PREFIX}.mtl`, gltf: `${FILE_PREFIX}.gltf`,
     zip: `${FILE_PREFIX}-export.zip`, panelIdsPng: `${FILE_PREFIX}-panel-ids.png`,
+    objZip: `${FILE_PREFIX}-obj.zip`,                                                         // 08 P2-6e: Export OBJ's one ZIP
     safeDistanceObj: `${FILE_PREFIX}-safe-distance.obj`,
     hdriPixelMap: `${FILE_PREFIX}-hdri-pixel-map.png`,                                       // NEW: spec 05
   }),

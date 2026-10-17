@@ -166,7 +166,7 @@ const QUIRKS = deepFreeze({
   'B-L6': ['Combined exports use section 0\'s colour',
     'per-section'],
   'B-L7': ['MTL second download, textures missing',
-    'Landed in 08 P2-6c (the standalone MTL has no `map_Kd`: `ObjExporter.write` references a texture only when the caller ships it (`textureNames`); `Strategies.mtlDownloadDelayMs` retired as `ProjectIO.MTL_DOWNLOAD_DELAY_MS`; the possibly blocked second download is an ARCHITECTURE 8.4 observation; no tag site)'],
+    'Landed in 08 P2-6c (the standalone MTL has no `map_Kd`: `ObjExporter.write` references a texture only when the caller ships it (`textureNames`); `Strategies.mtlDownloadDelayMs` retired as `ProjectIO.MTL_DOWNLOAD_DELAY_MS`; the possibly blocked second download was an ARCHITECTURE 8.4 observation until 08 P2-6e, the owner\'s decision: Export OBJ downloads one ZIP with the OBJ, the MTL and every texture the MTL references; no tag site)'],
   'B-L8': ['No import validation; unknown mode renders as panels; raw coercion',
     'Landed in 08 P2-3b (`ProjectSerializer.read`: `detectVersion`, `migrateV1toV2` and `validateProject` of `io/ProjectMigrations.js`, `io/ProjectValidator.js`, `io/ProjectSchema.js`; `Strategies.importValidation` retired; `Wall.MAX_SECTIONS` with M-SEC-1; the size limit and the read error; the three-mode dispatch; `WallSection.setName`; no tag site)'],
   'B-L9': ['`|| default` turns 0 into the default (D-7, J-5, V-3)',

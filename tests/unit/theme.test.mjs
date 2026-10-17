@@ -570,7 +570,7 @@ describe('U9 Brand strings (06 T6a; the file names join in 06 T6b)', () => {
 });
 
 describe('U9 Brand file names (06 T6b): every download name derives from Brand.filePrefix', () => {
-  const FILE_KEYS = ['json', 'obj', 'mtl', 'gltf', 'zip', 'panelIdsPng', 'safeDistanceObj', 'hdriPixelMap'];
+  const FILE_KEYS = ['json', 'obj', 'mtl', 'gltf', 'zip', 'objZip', 'panelIdsPng', 'safeDistanceObj', 'hdriPixelMap'];   // objZip: 08 P2-6e
 
   test('filePrefix is a lowercase slug; every Brand.files value is filePrefix + an optional -suffix + an extension', () => {
     const { filePrefix, files } = Theme.brand;

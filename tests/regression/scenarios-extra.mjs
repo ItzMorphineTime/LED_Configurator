@@ -19,7 +19,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { CONFIGS } from './configs.mjs';
 import { decodePNG, readZip, sha256 } from './lib/formats.mjs';
-import { MODIFIERS } from './lib/app.mjs';
+import { MODIFIERS, OBJ_ZIP_DOWNLOAD } from './lib/app.mjs';
 import { setViewport } from './lib/uiprobe.mjs';
 import {
     MIN_REGION, classifyFace, colorMask, diffStats, largestComponent, probePoint, readProbePalette, sampleRGB, withinJitter,
@@ -696,7 +696,7 @@ async function importEdgeScenario(ctx) {
     await shot(ctx, 'i_empty');
     await step(ctx, 'i-add-section', () => app.click('#add-section-btn'));
     await record(ctx, 'i_after_add', wallState(app));
-    await dl(ctx, 'i__export-obj', '#export-obj', { expect: 2, timeoutMs: 4000 });
+    await dl(ctx, 'i__export-obj', '#export-obj', { ...OBJ_ZIP_DOWNLOAD, timeoutMs: 4000 });
     await dl(ctx, 'i__export-gltf', '#export-gltf', { expect: 1, timeoutMs: 4000 });
     await dl(ctx, 'i__export-json', '#export-json');
     await dialogs('i');
@@ -718,7 +718,7 @@ async function importEdgeScenario(ctx) {
     await dl(ctx, 'ii__export-json', '#export-json');
     for (const mode of MODES) {
         await step(ctx, `ii-mode-${mode}`, () => app.selectMeshMode(mode));
-        await dl(ctx, `ii_${mode}__export-obj`, '#export-obj', { expect: 2 });
+        await dl(ctx, `ii_${mode}__export-obj`, '#export-obj', OBJ_ZIP_DOWNLOAD);
         await dl(ctx, `ii_${mode}__export-gltf`, '#export-gltf', { expect: 1, timeoutMs: 30000 });
     }
     await record(ctx, 'ii_final_stats', () => app.stats());
@@ -729,7 +729,7 @@ async function importEdgeScenario(ctx) {
     await importText(ctx, 'iii_weird_mode', JSON.stringify({ version: '1.0', sections: [section({})], mesh_mode: 'weird' }));
     await record(ctx, 'iii_mesh_modes_after_import', () => pageCall(app, pageMeshModes));
     await shot(ctx, 'iii_weird_mode');
-    await dl(ctx, 'iii_weird__export-obj', '#export-obj', { expect: 2 });
+    await dl(ctx, 'iii_weird__export-obj', '#export-obj', OBJ_ZIP_DOWNLOAD);
     await dl(ctx, 'iii_weird__export-gltf', '#export-gltf', { expect: 1, timeoutMs: 30000 });
     await step(ctx, 'iii-click-combined', () => app.selectMeshMode('combined'));
     await record(ctx, 'iii_mesh_modes_after_combined', () => pageCall(app, pageMeshModes));
@@ -999,9 +999,12 @@ async function normalsDebugScenario(ctx) {
         const h = {};
         for (const mode of MODES) {
             await app.selectMeshMode(mode);
-            const obj = await run('#export-obj', 2);
-            h[`${mode}.obj`] = hashOf(obj, '.obj');
-            h[`${mode}.mtl`] = hashOf(obj, '.mtl');
+            // Export OBJ downloads one ZIP since 08 P2-6e: its .obj entry, and its .mtl entry with any textures, are hashed.
+            const objZip = (await run('#export-obj')).find((f) => f.filename.endsWith('.zip'));
+            const entries = objZip ? readZip(objZip.data).filter((e) => !e.isDir) : [];
+            const entryHash = (test) => entries.filter((e) => test(e.name)).map((e) => `${e.name} ${sha256(e.data)}`).join(',') || null;
+            h[`${mode}.obj`] = entryHash((n) => n.endsWith('.obj'));
+            h[`${mode}.mtl`] = entryHash((n) => !n.endsWith('.obj'));
             h[`${mode}.gltf`] = hashOf(await run('#export-gltf'), '.gltf');
         }
         await app.selectMeshMode('combined');

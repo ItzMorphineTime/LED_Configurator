@@ -1,11 +1,12 @@
 /**
  * @module app/ProjectIO
- * The export and import use cases (JSON, OBJ + MTL, glTF, panel-ID PNG, ZIP bundle, safe-distance OBJ, JSON
- * import) and the Downloader, the single owner of the legacy anchor-download sequence. Every export reads the
- * live project and a fresh layout (WallController.layout()); only the safe-distance OBJ reads a scene group.
- * Sync/async shape is legacy (R13): exportZIP and exportPanelIds stay async. Every export runs inside
- * #runExport (08 P2-1a, B-H3), which reports a failure as the M-EXP-1 alert instead of an uncaught exception or an
- * unhandled rejection; its try/catch and the legacy one around the import parse are the only ones (R13 amendment).
+ * The export and import use cases (JSON, the OBJ ZIP (OBJ + MTL + the textures the MTL references), glTF, panel-ID
+ * PNG, ZIP bundle, safe-distance OBJ, JSON import) and the Downloader, the single owner of the legacy anchor-download
+ * sequence. Every export reads the live project and a fresh layout (WallController.layout()); only the safe-distance
+ * OBJ reads a scene group. Sync/async shape is legacy (R13): exportZIP and exportPanelIds stay async; exportOBJ is
+ * async since 08 P2-6e (it builds an archive). Every export runs inside #runExport (08 P2-1a, B-H3), which reports a
+ * failure as the M-EXP-1 alert instead of an uncaught exception or an unhandled rejection; its try/catch and the legacy
+ * one around the import parse are the only ones (R13 amendment).
  * Since 08 P2-3b (B-L8 fixed) the import is validated (io/ProjectValidator through the injected serializer) and every
  * refusal and correction is reported (08 3.3: M-IMP-1 to M-IMP-7).
  * Legacy source: index.html@cd3fd3f 2786-2827 (exportSafeDistanceOBJ), 4491-4554 (exportZIP), 4911-4924
@@ -24,9 +25,9 @@ import { MAX_IMPORT_BYTES } from '../domain/rules.js';
  */
 
 /**
- * The brand strings ProjectIO uses (Theme.Brand): every download file name.
- * @typedef {{files: {json: string, obj: string, mtl: string, gltf: string, zip: string, panelIdsPng: string,
- *            safeDistanceObj: string}}} IoBrand
+ * The brand strings ProjectIO uses (Theme.Brand): every download file name (objZip: the Export OBJ archive, 08 P2-6e).
+ * @typedef {{files: {json: string, obj: string, mtl: string, gltf: string, zip: string, objZip: string,
+ *            panelIdsPng: string, safeDistanceObj: string}}} IoBrand
  */
 
 /**
@@ -117,12 +118,6 @@ export class Downloader {
 
 /** Export and import use cases. */
 export class ProjectIO {
-  /**
-   * The delay (ms) of Export OBJ's MTL download after the OBJ: the legacy 100 ms (4916), a constant since 08 P2-6c
-   * retired Strategies.mtlDownloadDelayMs (no longer a defect: the MTL references no texture it does not deliver).
-   */
-  static MTL_DOWNLOAD_DELAY_MS = 100;
-
   /** @type {import('../domain/Project.js').Project} */
   #project;
   /** @type {import('./WallController.js').WallController} */
@@ -193,24 +188,49 @@ export class ProjectIO {
   }
 
   /**
-   * Export OBJ: the OBJ now, the MTL as a second download after ProjectIO.MTL_DOWNLOAD_DELAY_MS. The MTL references no
-   * texture (08 P2-6c, B-L7 fixed: the writer gets no texture names; legacy pointed section-mode materials at textures it
-   * never delivered); the textured OBJ ships in Export All (ZIP). A browser may still prompt for or block the second
-   * download (ARCHITECTURE.md 8.4).
-   * Ports: index.html@cd3fd3f lines 4911-4917.
-   * Side effects: one download now (brand.files.obj), one timer that downloads brand.files.mtl; or the M-EXP-1
-   * alert (#runExport; for example the TypeError of combined mode on an empty wall).
+   * Export OBJ (ZIP): one download, brand.files.objZip, holding brand.files.obj, brand.files.mtl (named by the OBJ's
+   * `mtllib` line) and every texture the MTL references, at the referenced path (08 P2-6e, the owner's decision of
+   * 2026-10-17, which replaces 08 Q7's two downloads: legacy fired the MTL as a second download 100 ms later, which a
+   * browser may block, so an importer such as Blender found no materials; B-L7 fixed). Order: JSZip -> layout -> in
+   * section mode the texture plan (the names and the pre-check of Export All, 08 6.3 and 6.6) -> OBJ + MTL (map_Kd only
+   * for a shipped texture) -> in section mode the textures folder (a `data:,` PNG is left out late and the MTL entry is
+   * written again) -> generateAsync -> download -> M-EXP-4 if textures were left out. Combined and panel mode reference
+   * no texture, so their archive holds the OBJ and the MTL only. The body is the private #writeObjZip().
+   * Ports: index.html@cd3fd3f lines 4911-4917 (the OBJ and MTL text), 4534-4543 (the texture loop, as in Export All).
+   * Side effects: draws one canvas per shipped section texture (section mode); one download (brand.files.objZip) after
+   * the archive is generated, then the M-EXP-4 alert if textures were left out; or the M-EXP-1 alert (#runExport; for
+   * example the TypeError of combined mode on an empty wall).
+   * @returns {Promise<void>} never rejects
    */
-  exportOBJ() {
-    this.#runExport('Export OBJ', () => {
-      const layout = this.#wallController.layout();
-      const { objContent, mtlContent } = this.#objExporter.write({
-        sections: this.#project.wall.sections, meshMode: this.#project.meshMode, layout,
-      });
-      this.#downloader.saveText(objContent, this.#brand.files.obj, 'text/plain');
-      this.#win.setTimeout(() => this.#downloader.saveText(mtlContent, this.#brand.files.mtl, 'text/plain'),
-        ProjectIO.MTL_DOWNLOAD_DELAY_MS);
-    });
+  async exportOBJ() {
+    await this.#runExport('Export OBJ (ZIP)', () => this.#writeObjZip());
+  }
+
+  /**
+   * The body of exportOBJ (08 P2-6e).
+   * @returns {Promise<void>}
+   */
+  async #writeObjZip() {
+    const zip = new this.#JSZip();
+    const brand = this.#brand;
+    const project = this.#project;
+    const sections = project.wall.sections;
+    const layout = this.#wallController.layout();
+    const objArgs = { sections, meshMode: project.meshMode, layout };
+
+    // Only section mode references textures (one per section, ObjExporter); the other modes ship the OBJ and the MTL.
+    const plan = project.meshMode === 'section' ? this.#planSectionTextures(sections) : null;
+    const { objContent, mtlContent } = this.#objExporter.write({ ...objArgs, textureNames: plan && plan.textureNames });
+    zip.file(brand.files.obj, objContent);
+    zip.file(brand.files.mtl, mtlContent);
+
+    if (plan && this.#addSectionTextures(zip.folder('textures'), sections, plan)) {
+      zip.file(brand.files.mtl, this.#objExporter.write({ ...objArgs, textureNames: plan.textureNames }).mtlContent);
+    }
+
+    const content = await zip.generateAsync({ type: 'blob' });
+    this.#downloader.saveBlob(content, brand.files.objZip);
+    if (plan) this.#reportLeftOut(plan);
   }
 
   /**
@@ -285,36 +305,73 @@ export class ProjectIO {
     const project = this.#project;
     const sections = project.wall.sections;
 
-    // The texture file names, unique (08 6.6; B-L14 fixed in 08 P2-6b): the texture entries, the JSON texture_file and
-    // the M-EXP-4 list all come from this one list.
-    const names = textureFileNames(sections);
-    // 08 6.3 step 1: the pre-check, pure arithmetic before anything is written. A left-out texture's textureNames entry
-    // is null: JSON texture_file null and no MTL map_Kd (08 P2-6c: the OBJ writer references only shipped textures).
-    const skipped = sections.map((section) => {
-      const { width, height } = this.#panelIds.sectionSize(section, null);
-      return !canvasFits(width, height);
-    });
-    const textureNames = names.map((name, i) => (skipped[i] ? null : name));
-    const jsonText = () => JSON.stringify(this.#serializer.write(project, { variant: 'zip', textureNames }), null, 2);
+    // Step 1: the texture names and the pre-check (#planSectionTextures). A left-out texture's textureNames entry is
+    // null: JSON texture_file null and no MTL map_Kd.
+    const plan = this.#planSectionTextures(sections);
+    const jsonText = () => JSON.stringify(this.#serializer.write(project, { variant: 'zip', textureNames: plan.textureNames }),
+      null, 2);
 
     // Step 2: JSON (texture_file null when skipped), OBJ + MTL (no map_Kd when skipped), glTF.
     zip.file(brand.files.json, jsonText());
 
     const layout = this.#wallController.layout();
     const objArgs = { sections, meshMode: project.meshMode, layout };
-    const { objContent, mtlContent } = this.#objExporter.write({ ...objArgs, textureNames });
+    const { objContent, mtlContent } = this.#objExporter.write({ ...objArgs, textureNames: plan.textureNames });
     zip.file(brand.files.obj, objContent);
     zip.file(brand.files.mtl, mtlContent);
 
     const gltfContent = this.#gltfExporter.write(objArgs);
     zip.file(brand.files.gltf, JSON.stringify(gltfContent, null, 2));
 
-    // Step 3: the textures that fit; a `data:,` result (a device limit below the hard limit) is skipped late.
-    const texturesFolder = zip.folder('textures');
+    // Steps 3-4: the textures that fit; when one is left out late, re-write the JSON and MTL entries without it (JSZip
+    // keeps an entry's position).
+    if (this.#addSectionTextures(zip.folder('textures'), sections, plan)) {
+      zip.file(brand.files.json, jsonText());
+      zip.file(brand.files.mtl, this.#objExporter.write({ ...objArgs, textureNames: plan.textureNames }).mtlContent);
+    }
+
+    const content = await zip.generateAsync({ type: 'blob' });
+    this.#downloader.saveBlob(content, brand.files.zip);
+
+    // Step 5: name every left-out entry.
+    this.#reportLeftOut(plan);
+  }
+
+  /**
+   * The section textures of an archive (08 6.3 step 1, 6.6), shared by Export All (ZIP) and Export OBJ (ZIP):
+   * names = PanelNaming.textureFileNames(sections) (unique, B-L14 fixed in 08 P2-6b), the one list of the texture
+   * entries, the JSON texture_file, the MTL map_Kd and M-EXP-4; skipped[i] = the texture exceeds CANVAS_HARD_LIMITS
+   * (pure arithmetic, before anything is written); textureNames[i] = skipped[i] ? null : names[i].
+   * Side effects: none.
+   * @param {import('../domain/WallSection.js').WallSection[]} sections
+   * @returns {{names: string[], skipped: boolean[], textureNames: (string|null)[]}} a fresh plan (the arrays are updated
+   *   by #addSectionTextures)
+   * @throws {TypeError} name.replace is not a function (textureFileNames) for a non-string truthy name
+   */
+  #planSectionTextures(sections) {
+    const names = textureFileNames(sections);
+    const skipped = sections.map((section) => {
+      const { width, height } = this.#panelIds.sectionSize(section, null);
+      return !canvasFits(width, height);
+    });
+    return { names, skipped, textureNames: names.map((name, i) => (skipped[i] ? null : name)) };
+  }
+
+  /**
+   * 08 6.3 step 3 (legacy 4534-4543): draws each planned section texture (start columns from computeAtlas, PR7c) and adds
+   * it to `folder` as names[i]; a `data:,` result (a device limit below the hard limit) is left out late: its skipped
+   * entry becomes true and its textureNames entry null (step 4's bookkeeping).
+   * Side effects: draws one canvas per planned texture; adds the PNG entries; updates plan.skipped / plan.textureNames.
+   * @param {{file(name: string, data: string, options: object): *}} folder  zip.folder('textures')
+   * @param {import('../domain/WallSection.js').WallSection[]} sections
+   * @param {{names: string[], skipped: boolean[], textureNames: (string|null)[]}} plan
+   * @returns {boolean} true when a texture was left out late (the caller re-writes the entries that name the textures)
+   */
+  #addSectionTextures(folder, sections, plan) {
     const atlas = computeAtlas(sections);
     const late = [];
     for (let i = 0; i < sections.length; i++) {
-      if (skipped[i]) continue;
+      if (plan.skipped[i]) continue;
       const section = sections[i];
       const canvas = this.#panelIds.sectionCanvas(section, i, null, atlas.entries[i].startCol);
       const dataUrl = canvas.toDataURL('image/png');
@@ -323,27 +380,22 @@ export class ProjectIO {
         continue;
       }
       const base64Data = dataUrl.split(',')[1];
-      texturesFolder.file(names[i], base64Data, { base64: true });
+      folder.file(plan.names[i], base64Data, { base64: true });
     }
-
-    // Step 4: re-write the JSON and MTL entries without the late textures (JSZip keeps an entry's position).
-    if (late.length) {
-      for (const i of late) {
-        skipped[i] = true;
-        textureNames[i] = null;
-      }
-      zip.file(brand.files.json, jsonText());
-      zip.file(brand.files.mtl, this.#objExporter.write({ ...objArgs, textureNames }).mtlContent);
+    for (const i of late) {
+      plan.skipped[i] = true;
+      plan.textureNames[i] = null;
     }
+    return late.length > 0;
+  }
 
-    const content = await zip.generateAsync({ type: 'blob' });
-    this.#downloader.saveBlob(content, brand.files.zip);
-
-    // Step 5: name every left-out entry (the ZIP entry names, in section order).
-    const leftOut = [];
-    names.forEach((name, i) => {
-      if (skipped[i]) leftOut.push(`textures/${name}`);
-    });
+  /**
+   * 08 6.3 step 5: after the download, M-EXP-4 names every left-out texture entry (`textures/<name>`, in section order).
+   * Side effects: at most one alert.
+   * @param {{names: string[], skipped: boolean[]}} plan
+   */
+  #reportLeftOut(plan) {
+    const leftOut = plan.names.filter((name, i) => plan.skipped[i]).map((name) => `textures/${name}`);
     if (leftOut.length) this.#dialogs.alert(ExportMessages.zipTexturesLeftOut(leftOut));
   }
 
@@ -374,11 +426,10 @@ export class ProjectIO {
    * Runs one export and reports its failure instead of letting it escape (08 P2-1a, B-H3; 08 3.3 M-EXP-1): a
    * synchronous throw, or the rejection of the promise `fn` returns, becomes the alert
    * `${label} failed: ${message}. No file was downloaded.` followed by win.console.warn(err). This try/catch is the
-   * sanctioned exception to R13 (ARCHITECTURE.md 1.6). Errors of timers the export starts (the MTL download of
-   * Export OBJ) are not covered.
+   * sanctioned exception to R13 (ARCHITECTURE.md 1.6).
    * Side effects: those of fn; on failure one alert and one console warning.
    * @template T
-   * @param {string} label  the export's button label: 'Export JSON' | 'Export OBJ' | 'Export glTF' |
+   * @param {string} label  the export's button label: 'Export JSON' | 'Export OBJ (ZIP)' | 'Export glTF' |
    *   'Export Panel IDs' | 'Export All (ZIP)' | 'Export Safe Distance OBJ'
    * @param {() => T} fn
    * @returns {T|Promise<*>|undefined} fn's value (a returned promise is chained so that it never rejects), or
