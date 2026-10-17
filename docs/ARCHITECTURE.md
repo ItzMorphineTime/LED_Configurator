@@ -214,7 +214,8 @@ js/
     WallSection.js                         WP3   WallSection entity (legacy field names, field rules, derived labels), MM_TO_M;
                                                  08 P2-8a: LIMITS, the rounding and capped field rules
     Wall.js                                WP3   Wall (ordered sections, id allocator, totals, legacy flat bounds), WallPivot, PivotMode;
-                                                 08 P2-3b: MAX_SECTIONS, canAddSection, the 07 6.8 nextSectionId
+                                                 08 P2-3b: MAX_SECTIONS, canAddSection, the 07 6.8 nextSectionId;
+                                                 08 P2-3b2: allocateId (07 6.8 nextFree over the live ids)
     Project.js                             WP3   Project aggregate, DisplaySettings (content enum), ContentMode, PanelIdStyle
     LogoLibrary.js                         WP3   Section logos keyed by section id (plain-object key semantics)
     CineCamera.js                          WP3   Film camera: lens, pose, enabled flag, FILMBACK_PRESETS, FOV/coverage/safe-D math,
@@ -846,11 +847,18 @@ export class Wall {
   pivot                            // public field (WallPivot)
   get count()                      // sections.length
 
-  /** Verbatim 4088-4103. Evaluation order matters: `id: this.nextSectionId++` and the name are evaluated
-   *  BEFORE `last.panelCols` (an empty wall, which legacy reached through an import of `sections: []`, B-L8, incremented
-   *  the allocator before the TypeError; since 08 P2-3b the wall is never empty).
+  /** 07 6.8 nextFree over the live ids (07 4.1; 08 P2-3b2): while nextSectionId is a valid id that a live section
+   *  uses, nextSectionId++; then return nextSectionId++ when it is <= 2^31 - 1 and unused, else the smallest id no live
+   *  section uses (nextSectionId stays). Whenever nextSectionId is above every live id (every state except right after
+   *  an import whose ids reach 2^31 - 1, where replaceAll's fallback can lie below live ids) it is the legacy
+   *  `nextSectionId++` (4089); legacy handed out live ids there (duplicates, which Delete removed together). */
+  allocateId()
+
+  /** Verbatim 4088-4103 except the id (allocateId, 08 P2-3b2). Evaluation order matters: `id: this.allocateId()` and
+   *  the name are evaluated BEFORE `last.panelCols` (an empty wall, which legacy reached through an import of
+   *  `sections: []`, B-L8, incremented the allocator before the TypeError; since 08 P2-3b the wall is never empty).
    *  const last = sections[sections.length - 1]; const newColorIndex = sections.length % sectionColors.length;
-   *  new WallSection({ id: this.nextSectionId++, name: `Wall ${sections.length + 1}`, panelCols: last.panelCols,
+   *  new WallSection({ id: this.allocateId(), name: `Wall ${sections.length + 1}`, panelCols: last.panelCols,
    *    panelRows: last.panelRows, panelWidth: last.panelWidth, panelHeight: last.panelHeight, ledX: last.ledX,
    *    ledY: last.ledY, curveIntensity: last.curveIntensity, angleOffset: 0, color: sectionColors[newColorIndex] })
    *  then sections.push(it). @returns {WallSection} */
@@ -861,7 +869,8 @@ export class Wall {
 
   /** this.#sections = sections; this.nextSectionId = createIdAllocator(new Set(valid ids)).next()  (4976, 4989; 08 P2-3b,
    *  07 6.8: max + 1, the legacy Math.max(...ids) + 1 for the validator's ids, or the smallest unused id once that would
-   *  pass 2^31 - 1; recomputed on every import, never stored; legacy kept -Infinity for [] and NaN for string ids, B-L8). */
+   *  pass 2^31 - 1, which allocateId then steps past the live ids from; recomputed on every import, never stored; legacy
+   *  kept -Infinity for [] and NaN for string ids, B-L8). */
   replaceAll(sections)
   /** this.count < Wall.MAX_SECTIONS  (08 P2-3b) */
   canAddSection()
@@ -2616,7 +2625,7 @@ Writers listed here are the only allowed writers (checked by `tests/static/check
 | `sectionLabelColor` (1390) | `Project.panelIdStyle.sectionLabelColor` | same |
 | `sectionLogos` (1393) | `Project.logos` (`LogoLibrary`, plain-object keys) | `LogoLibrary` methods via `SectionLogosPanel` and `WallController.deleteSection` |
 | `wallSections` (1395) | `Project.wall.sections` (`WallSection[]`; pushed on add, replaced on delete/import) | `Wall` methods, `WallSection` methods (via `WallController`; `ensureName` at render time) |
-| `nextSectionId` (1409) | `Project.wall.nextSectionId` | `Wall.appendLikeLast/replaceAll` |
+| `nextSectionId` (1409) | `Project.wall.nextSectionId` | `Wall.allocateId` (through `appendLikeLast`), `Wall.replaceAll` |
 | `ledPixelTextureCache` (1805) | `LEDPixelTextureFactory` private `#cache` | `LEDPixelTextureFactory.tile/clearCache` |
 | `isDragging` (3747) | `OrbitController` private `#dragging` | `OrbitController` listeners |
 | `previousMousePosition` (3747) | `OrbitController` private `#prevMouse` | same |
@@ -2707,7 +2716,7 @@ Boundaries of these proofs (recorded at WP10 integration from the WP4, WP6 and W
 
 - (a) PR6 and console warnings. three r128's `Color` calls `console.warn('THREE.Color: Unknown color ...')` for an invalid colour string. Legacy created one `Color` per section in section and panel mode, in every content mode (1714, 1779); the factory creates one per colour material (per section in section mode, per panel in panel mode) and none in LED-sim or panel-ID mode. So for an imported invalid colour the number of those warnings differs, and in section mode with a string column count such as `'0'` legacy printed the warning before throwing from the right-panel normal while the port throws without it. The harness records only exceptions, `console.error` and `console.assert`, never `console.warn`.
 - (b) PR1 and PR7 "cannot throw". Arithmetic or comparison on an imported JSON object whose `toString` and `valueOf` are not callable (for example `panel.columns = {"toString":0,"valueOf":0}`) throws `TypeError: Cannot convert object to primitive value`. The import itself behaves as legacy (the card render throws first, and the import `try` alerts). On a later rebuild trigger, legacy removed the old wall before its walk threw (the scene is left without a wall), while `WallController.rebuild` throws in `layoutProject` before `view.rebuild` (the old wall stays visible).
-- (c) PR2 "every change to the section array re-renders the cards". `Wall.replaceAll` assigns the array and only then evaluates `Math.max(...ids)`, which throws for more than about 100k imported sections (`RangeError` from the spread) or for an object id like the one in (b). The import alerts and the cards are not re-rendered. On the next add or delete, legacy maps the old cards to the new ids (or, for an object id, throws in its snapshot before the push), while `SectionListPanel` maps them to the ids it last rendered (for an object id it pushes the section, increments `nextSectionId`, clears `#wall-sections` in `render()` and then throws).
+- (c) PR2 "every change to the section array re-renders the cards". (Phase 1 record; since 08 P2-3b an import reaches `replaceAll` only with at most 200 validated sections and integer ids, and `replaceAll` no longer spreads the ids, so this boundary is unreachable.) `Wall.replaceAll` assigns the array and only then evaluates `Math.max(...ids)`, which throws for more than about 100k imported sections (`RangeError` from the spread) or for an object id like the one in (b). The import alerts and the cards are not re-rendered. On the next add or delete, legacy maps the old cards to the new ids (or, for an object id, throws in its snapshot before the push), while `SectionListPanel` maps them to the ids it last rendered (for an object id it pushes the section, increments `nextSectionId`, clears `#wall-sections` in `render()` and then throws).
 - Not a reordering: after a mesh-mode label click, the `WALL_MESH_MODE_CHANGED` mirror re-runs `classList.toggle('active', ...)` on every option (legacy touched the labels only in the click handler and on import). The extra calls change no class.
 
 ### 6.1 P1: wall rebuild, `WallController.rebuild()` (legacy `createLEDWall`, 1457-1577)
@@ -3499,3 +3508,8 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 3.7, 3.10, 6.5: `CameraController.setPreviewEnabled(false)` calls `hub.syncSafeDistance()` right after `rig.remove()`; with `cine.enabled` false it removes the floor (legacy left it in the scene, stale, while its toggle was hidden with the preview options). Turning the preview on again rebuilds it through `resetPose`'s refresh when Safe Distance is still on (`camera/cam_15` unchanged, 08 criterion 20).
 - 8.2: the B-M8 row is kept with a `Landed` fix cell; 8.3: the row `CameraController.js#setPreviewEnabled` is deleted, so `LEGACY_SITES` no longer lists it.
 - 2.3: `camera-hub.test.mjs` (the preview-off sequence removes the floor after the rig; the next enable creates it again).
+
+**08 P2-3b2, Add Section never reuses a live id (review follow-up of 08 P2-3b, B-L8)** (manifest `tests/regression/expected/P2-3b2.json`, an invariance gate: empty `expect`; no harness scenario imports an id near 2^31 - 1):
+- 3.5, 4: `Wall.allocateId()` (07 4.1, delivered early; 07 6.8 `nextFree` over the live ids) gives `appendLikeLast` its id. P2-3b's `replaceAll` falls back to the smallest unused id when `max + 1` would pass 2^31 - 1; that id can lie below live ids, and the legacy `nextSectionId++` then handed out ids that live sections already used (an import of ids `[2147483647, 1]` followed by two adds gave `0, 1`: a duplicate 1, which Delete removed together with the imported section and which the next import renumbered). `allocateId` steps over live ids, takes the smallest unused id above the range, and equals the legacy `nextSectionId++` whenever `nextSectionId` is above every live id (every other state). A `nextSectionId` that is not a valid id (unreachable since 08 P2-3b) is handed out as legacy did while unused and otherwise takes the fallback, so the call always ends.
+- 6.0 (boundary (c)): marked as a Phase 1 record that 08 P2-3b made unreachable.
+- 2.3: `domain.test.mjs` (the legacy fuzz of `appendLikeLast` now starts the allocator above every live id; `allocateId` at the top of the range, after a delete, from odd values, and a 300-run add/delete property: every id stays a unique valid id); `wall-controller.test.mjs` (an import of `[2147483647, 1]`, two adds give `0, 2`, the saved file re-imports with no correction, Delete removes one section).

@@ -1,0 +1,16 @@
+{
+  "commit": "P2-3b2",
+  "bugs": ["B-L8"],
+  "expect": [],
+  "mayChange": [
+    { "output": "p2_curved_safe_distance/box_corner.screenshot.png", "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas on the preview footer label row (1 level, 1 px at (920, 912), seen in the 06 T6a-08 P2-4b runs); this commit changes no rendered pixel of it" },
+    { "output": "p2_shortcut_filters/pilot_view_front.screenshot.png", "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas (1 level, 2 px, seen in the 06 T6b-08 P2-4b runs); this commit changes no rendered pixel of it" },
+    { "output": "toggles/15_car_moved.screenshot.png", "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-08 P2-3c runs)" },
+    { "output": "large_wall/final__export-zip__morph-led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b); this commit changes no export" }
+  ],
+  "notes": "Review follow-up of 08 P2-3b (B-L8), an invariance gate: Wall.appendLikeLast takes its id from Wall.allocateId, the 07 6.8 nextFree over the live ids (07 4.1). Whenever nextSectionId is above every live id, which holds in every state the harness reaches (no scenario imports an id near 2^31 - 1), allocateId returns exactly the legacy nextSectionId++, so no output may change. It differs only after an import whose ids reach the top of the id range, where P2-3b's replaceAll falls back to the smallest unused id and the legacy ++ then handed out ids that live sections already used (covered by domain.test.mjs and wall-controller.test.mjs)."
+}

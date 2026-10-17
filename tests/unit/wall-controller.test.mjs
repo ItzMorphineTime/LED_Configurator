@@ -246,6 +246,24 @@ describe('rebuild policy (ARCHITECTURE.md 6.2): run counts and tile-cache clears
     assert.equal(r.project.wall.count, 200);
   });
 
+  test('an import whose ids reach 2^31 - 1: Add Section reuses no live id, and the saved file re-imports with zero corrections (07 6.8; 08 P2-3b2)', () => {
+    const r = makeRig();
+    const serializer = new ProjectSerializer({ palette: Palette });
+    const file = { version: '1.0', sections: [{ name: 'Top', id: 2147483647 }, { name: 'One', id: 1 }] };
+    const read = serializer.read(JSON.parse(JSON.stringify(file)));
+    assert.ok(read.ok);
+    r.wc.applyImport({ sections: sectionsFromProject(read.project), meshMode: read.project.mesh_mode });
+    r.wc.addSection();
+    r.wc.addSection();
+    const ids = r.project.wall.sections.map((s) => s.id);
+    assert.deepEqual(ids, [2147483647, 1, 0, 2], 'the legacy ++ after the fallback gave 0, then the live 1 again');
+    const again = serializer.read(JSON.parse(JSON.stringify(serializer.write(r.project, { variant: 'file' }))));
+    assert.ok(again.ok);
+    assert.deepEqual(again.issues.filter((i) => i.severity !== 'info'), [], 'no reassigned-id');
+    r.wc.deleteSection(1);
+    assert.deepEqual(r.project.wall.sections.map((s) => s.id), [2147483647, 0, 2], 'Delete removes one section');
+  });
+
   test('row 7 deleteSection with one section: nothing at all', () => {
     const r = makeRig();
     r.project.logos.ensure(0);

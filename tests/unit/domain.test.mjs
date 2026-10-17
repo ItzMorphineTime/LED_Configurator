@@ -592,12 +592,16 @@ describe('Wall', () => {
     assert.deepEqual(new Wall({ sections: [] }).flatBounds(), { totalWidth: 0, maxHeight: 0 });
   });
 
-  test('appendLikeLast equals the legacy addSection literal (fuzzed, Object.is) and pushes onto the live array', () => {
+  test('appendLikeLast equals the legacy addSection literal whenever the allocator is above every live id (fuzzed, Object.is) and pushes onto the live array', () => {
     const palette = ['#00f0ff', '#ff00aa', '#00ff66', '#ff6b35', '#ffdd00', '#aa66ff', '#66ffaa', '#ff6666'];
     const rand = rng(3);
     for (const sections of fuzzWalls(4, 200)) {
       if (sections.length === 0) continue;
-      const nextId = [1, 7, '5', NaN, -Infinity, 2.5][Math.floor(rand() * 6)];
+      // The fuzzed ids are 0..4 (or their strings), so every start value is above them and allocateId is the legacy
+      // `nextSectionId++` (08 P2-3b2). The legacy NaN and -Infinity allocators of odd imports (unreachable since 08
+      // P2-3b) handed out duplicate ids, which allocateId does not; they and a start value that a live id uses are
+      // allocateId's own test below.
+      const nextId = [5, 7, '5', 2.5, 100, 1000][Math.floor(rand() * 6)];
       const wall = new Wall({ sections: sections.slice(), nextSectionId: nextId });
       const live = wall.sections;
       const state = { wallSections: sections.map((s) => ({ ...s })), nextSectionId: nextId };
@@ -675,6 +679,55 @@ describe('Wall', () => {
     // Ids that are not valid (unreachable since the validator; legacy gave NaN) are ignored.
     wall.replaceAll([make('abc'), make(NaN), make(3)]);
     same(wall.nextSectionId, 4);
+  });
+
+  test('allocateId: the 07 6.8 nextFree over the live ids; Add Section never reuses a live id (08 P2-3b2)', () => {
+    const make = (id) => new WallSection({ ...WallSection.createDefault(), id });
+    const ids = (wall) => wall.sections.map((s) => s.id);
+    // The normal case is the legacy `nextSectionId++`: a deleted id is not reused.
+    const wall = new Wall({ sections: [make(0), make(1), make(2)], nextSectionId: 3 });
+    wall.removeById(2);
+    assert.equal(wall.appendLikeLast(['#00f0ff']).id, 3);
+    same(wall.nextSectionId, 4);
+    // After an import at the top of the range, replaceAll falls back to the smallest unused id (0); the adds skip the
+    // live id 1 (the legacy ++ gave 0, 1: a duplicate of the imported 1).
+    wall.replaceAll([make(2147483647), make(1)]);
+    same(wall.nextSectionId, 0);
+    for (let k = 0; k < 3; k++) wall.appendLikeLast(['#00f0ff']);
+    assert.deepEqual(ids(wall), [2147483647, 1, 0, 2, 3]);
+    same(wall.nextSectionId, 4);
+    // Reaching the top by adds: the id 2^31 - 1 is handed out once, then the smallest unused ids (never 2^31).
+    wall.replaceAll([make(2147483645), make(0)]);
+    for (let k = 0; k < 4; k++) wall.appendLikeLast(['#00f0ff']);
+    assert.deepEqual(ids(wall), [2147483645, 0, 2147483646, 2147483647, 1, 2]);
+    same(wall.nextSectionId, 2147483648, 'stays above the range, so every later call takes the fallback');
+    // A nextSectionId that is not a valid id (unreachable since 08 P2-3b): the legacy value while unused, then the
+    // fallback instead of a duplicate (and never an endless loop: -Infinity++ is -Infinity).
+    for (const odd of [-Infinity, NaN, 2.5]) {
+      const w = new Wall({ sections: [make(0)], nextSectionId: odd });
+      w.appendLikeLast(['#00f0ff']);
+      w.appendLikeLast(['#00f0ff']);
+      const got = ids(w);
+      assert.equal(new Set(got).size, 3, `unique ids from ${odd}: ${got}`);
+    }
+    assert.deepEqual(ids((() => { const w = new Wall({ sections: [make(0)], nextSectionId: -Infinity });
+      w.appendLikeLast(['#a']); w.appendLikeLast(['#a']); return w; })()), [0, -Infinity, 1]);
+    // Property: random imports near the top of the range, then random adds and deletes; every id stays a unique
+    // valid id.
+    const rand = rng(68);
+    for (let run = 0; run < 300; run++) {
+      const pool = [0, 1, 2, 3, 2147483644, 2147483645, 2147483646, 2147483647];
+      const start = [...new Set(Array.from({ length: 1 + Math.floor(rand() * 5) }, () => pool[Math.floor(rand() * pool.length)]))];
+      const w = new Wall();
+      w.replaceAll(start.map(make));
+      for (let step = 0; step < 12; step++) {
+        if (rand() < 0.3 && w.count > 1) w.removeById(w.sections[Math.floor(rand() * w.count)].id);
+        else w.appendLikeLast(['#00f0ff']);
+        const all = ids(w);
+        assert.equal(new Set(all).size, all.length, `unique ids ${all}`);
+        for (const id of all) assert.ok(Number.isInteger(id) && id >= 0 && id <= 2147483647, `valid id ${id}`);
+      }
+    }
   });
 
   test('setName stores exactly what the import validator stores for any input (08 8.4 property test, 07 C28)', async () => {

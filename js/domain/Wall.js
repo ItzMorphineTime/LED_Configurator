@@ -8,7 +8,7 @@
  */
 
 import { MM_TO_M, WallSection } from './WallSection.js';
-import { createIdAllocator, isValidSectionId } from './rules.js';
+import { MAX_SECTION_ID, createIdAllocator, isValidSectionId } from './rules.js';
 
 /** Where the wall's local origin sits (Feature 3 seam). */
 export const PivotMode = Object.freeze({ BOTTOM_LEFT: 'bottom-left', MESH_CENTER: 'mesh-center', WALL_CENTER: 'wall-center' });
@@ -40,7 +40,8 @@ export class Wall {
 
   /** @type {WallSection[]} */
   #sections;
-  /** @type {number} next id handed out by appendLikeLast (legacy global 1409); recomputed by replaceAll (07 6.8) */
+  /** @type {number} where allocateId (appendLikeLast) starts looking for a free id (legacy global 1409); recomputed by
+   *  replaceAll (07 6.8) */
   nextSectionId;
   /** @type {WallPivot} */
   pivot;
@@ -75,12 +76,36 @@ export class Wall {
   }
 
   /**
+   * The id of the next added section: the `nextFree()` of spec 07 6.8 over the live ids (07 4.1 `Wall.allocateId`,
+   * delivered by the 08 P2-3b review follow-up, P2-3b2). From nextSectionId upward it skips every id a live section
+   * uses; once that would pass 2^31 - 1 it returns the smallest id no live section uses (nextSectionId then stays above
+   * the range, so every later call takes that fallback too). Whenever nextSectionId is above every live id, which holds
+   * in every state except right after an import whose ids reach the top of the range, this is exactly the legacy
+   * `nextSectionId++`. Without it, the fallback of replaceAll (the smallest unused id, which can lie below live ids)
+   * made the legacy `++` hand out ids that live sections already used (duplicate ids; Delete then removed both).
+   * Only a valid id is stepped over; a nextSectionId that is not one (NaN, -Infinity, a fraction: unreachable since
+   * 08 P2-3b, whose replaceAll always computes a valid id) is handed out with the legacy `++` while no live section
+   * uses it, and otherwise takes the fallback, so the call always terminates.
+   * Ports: index.html@cd3fd3f line 4089 (`id: nextSectionId++`).
+   * Side effects: advances nextSectionId past the returned id (not in the fallback).
+   * @returns {number} an id no live section uses (an integer in [0, 2^31 - 1] whenever nextSectionId is one)
+   */
+  allocateId() {
+    const used = new Set(this.#sections.map(s => s.id));
+    while (isValidSectionId(this.nextSectionId) && used.has(this.nextSectionId)) this.nextSectionId++;
+    if (this.nextSectionId <= MAX_SECTION_ID && !used.has(this.nextSectionId)) return this.nextSectionId++;
+    let id = 0;
+    while (used.has(id)) id++;
+    return id;
+  }
+
+  /**
    * Appends a copy of the last section's geometry with a fresh id, the next default name, no offset and the
-   * next palette colour. Evaluation order matters: `id: this.nextSectionId++` and the name are evaluated
+   * next palette colour. Evaluation order matters: `id: this.allocateId()` and the name are evaluated
    * BEFORE `last.panelCols` (on an empty wall, which legacy reached through an import of `sections: []`, B-L8, the
    * allocator was incremented before the TypeError; since 08 P2-3b the wall is never empty).
    * Ports: index.html@cd3fd3f lines 4088-4103.
-   * Side effects: increments nextSectionId; pushes onto the live sections array.
+   * Side effects: advances nextSectionId (allocateId); pushes onto the live sections array.
    * @param {ReadonlyArray<string>} sectionColors  the palette (legacy `sectionColors`)
    * @returns {WallSection} the new section
    * @throws {TypeError} on an empty wall (after the allocator was incremented)
@@ -91,9 +116,10 @@ export class Wall {
     const newColorIndex = sections.length % sectionColors.length;
     // The literal's evaluation order (id, name, then last.*) is kept. Since 08 P2-3b (B-L8 fixed) the wall is never
     // empty (the validator refuses a file without sections and deleteSection keeps one) and nextSectionId is an
-    // integer (replaceAll recomputes it from validated ids); WallController.addSection refuses a 201st section.
+    // integer (replaceAll recomputes it from validated ids); WallController.addSection refuses a 201st section. The id
+    // is the 07 6.8 next free id (allocateId, 08 P2-3b2): the legacy `nextSectionId++` unless that id is in use.
     const newSection = new WallSection({
-      id: this.nextSectionId++,
+      id: this.allocateId(),
       name: `Wall ${sections.length + 1}`,
       panelCols: last.panelCols,
       panelRows: last.panelRows,
@@ -132,7 +158,8 @@ export class Wall {
    * Replaces the whole section list (import) and recomputes the id allocator. The ids are the validator's (08 P2-3b:
    * unique integers in [0, 2^31 - 1]), and nextSectionId is the next free id of spec 07 6.8 (createIdAllocator):
    * `max(ids) + 1`, exactly the legacy `Math.max(...ids) + 1`, or the smallest unused id once that would pass
-   * 2^31 - 1. It is recomputed on every import and never stored in a file.
+   * 2^31 - 1 (that id can lie below other live ids, so appendLikeLast allocates through allocateId, which skips them).
+   * It is recomputed on every import and never stored in a file.
    * Ports: index.html@cd3fd3f lines 4976, 4989.
    * Side effects: replaces the sections array; writes nextSectionId.
    * @param {WallSection[]} sections
