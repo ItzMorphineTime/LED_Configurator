@@ -77,100 +77,110 @@
                 Add Wall Section
             </button>
 
-            <div class="global-section mt-16">
-                <div class="global-section-title">Mesh Options</div>
-                <div class="mesh-mode-select" id="mesh-mode-select">
-                    <label class="mesh-mode-option" data-mode="combined">
-                        <input type="radio" name="mesh-mode" value="combined">
-                        <span class="mesh-mode-radio"></span>
-                        <span class="mesh-mode-label">Single Combined Mesh</span>
-                    </label>
-                    <label class="mesh-mode-option active" data-mode="section">
-                        <input type="radio" name="mesh-mode" value="section" checked>
-                        <span class="mesh-mode-radio"></span>
-                        <span class="mesh-mode-label">Individual Section Meshes</span>
-                    </label>
-                    <label class="mesh-mode-option" data-mode="panel">
-                        <input type="radio" name="mesh-mode" value="panel">
-                        <span class="mesh-mode-radio"></span>
-                        <span class="mesh-mode-label">Individual Panels</span>
-                    </label>
-                </div>
-                <div class="toggle-container">
-                    <span class="toggle-label">Wireframe</span>
-                    <div class="toggle" id="toggle-wireframe"></div>
-                </div>
-                <div class="toggle-container">
-                    <span class="toggle-label">Show Panel Frames</span>
-                    <div class="toggle" id="toggle-frame"></div>
+            <div class="global-section mt-16 collapsible collapsed" id="mesh-options-section">
+                <button type="button" class="global-section-title collapsible-toggle" aria-expanded="false" aria-controls="mesh-options-body">
+                    <span class="collapsible-title">Mesh Options</span>
+                    <svg class="collapsible-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6"/></svg>
+                </button>
+                <div class="collapsible-body" id="mesh-options-body" hidden>
+                    <div class="mesh-mode-select" id="mesh-mode-select">
+                        <label class="mesh-mode-option" data-mode="combined">
+                            <input type="radio" name="mesh-mode" value="combined">
+                            <span class="mesh-mode-radio"></span>
+                            <span class="mesh-mode-label">Single Combined Mesh</span>
+                        </label>
+                        <label class="mesh-mode-option active" data-mode="section">
+                            <input type="radio" name="mesh-mode" value="section" checked>
+                            <span class="mesh-mode-radio"></span>
+                            <span class="mesh-mode-label">Individual Section Meshes</span>
+                        </label>
+                        <label class="mesh-mode-option" data-mode="panel">
+                            <input type="radio" name="mesh-mode" value="panel">
+                            <span class="mesh-mode-radio"></span>
+                            <span class="mesh-mode-label">Individual Panels</span>
+                        </label>
+                    </div>
+                    <div class="toggle-container">
+                        <span class="toggle-label">Wireframe</span>
+                        <div class="toggle" id="toggle-wireframe"></div>
+                    </div>
+                    <div class="toggle-container">
+                        <span class="toggle-label">Show Panel Frames</span>
+                        <div class="toggle" id="toggle-frame"></div>
+                    </div>
                 </div>
             </div>
 
-            <div class="global-section" id="pivot-section">
-                <div class="global-section-title">Wall Pivot</div>
-                <div class="pivot-mode-select" id="pivot-mode-select" role="radiogroup" aria-label="Pivot mode">
-                    <label class="pivot-mode-option" data-pivot-mode="bottom-left">
-                        <input type="radio" name="pivot-mode" value="bottom-left">
-                        <span class="pivot-mode-radio"></span>
-                        <span class="pivot-mode-label">Bottom-left corner</span>
-                    </label>
-                    <label class="pivot-mode-option" data-pivot-mode="mesh-center">
-                        <input type="radio" name="pivot-mode" value="mesh-center">
-                        <span class="pivot-mode-radio"></span>
-                        <span class="pivot-mode-label">Wall mesh centre on floor (bounding box)</span>
-                    </label>
-                    <label class="pivot-mode-option active" data-pivot-mode="wall-center">
-                        <input type="radio" name="pivot-mode" value="wall-center" checked>
-                        <span class="pivot-mode-radio"></span>
-                        <span class="pivot-mode-label">Wall centre on floor (first ↔ last edge)</span>
-                    </label>
-                </div>
-                <div class="section-row pivot-offset-row">
-                    <div class="input-field"><label for="pivot-offset-x">Offset X (m)</label>
-                        <input type="number" id="pivot-offset-x" step="0.001" min="-1000" max="1000" value="0"></div>
-                    <div class="input-field"><label for="pivot-offset-y">Offset Y (m)</label>
-                        <input type="number" id="pivot-offset-y" step="0.001" min="-1000" max="1000" value="0"></div>
-                    <div class="input-field"><label for="pivot-offset-z">Offset Z (m)</label>
-                        <input type="number" id="pivot-offset-z" step="0.001" min="-1000" max="1000" value="0"></div>
-                </div>
-                <div class="pivot-actions">
-                    <button class="export-btn secondary" id="pivot-reset-offset" disabled>Reset offset</button>
-                    <button class="export-btn secondary" id="pivot-select" aria-pressed="false">◎ Select pivot (O)</button>
-                </div>
-                <div class="pivot-snap-row">
-                    <label class="pivot-snap-label" for="pivot-snap">Ctrl-drag snap</label>
-                    <select id="pivot-snap" class="ui-select pivot-snap" title="Hold Ctrl (⌘ on Mac) while dragging the pivot to move in steps of this size.">
-                        <option value="0.001">1 mm</option><option value="0.01">1 cm</option>
-                        <option value="0.1" selected>10 cm</option><option value="0.5">50 cm</option><option value="1">1 m</option>
-                    </select>
-                </div>
-                <div class="pivot-orientation" id="pivot-orientation" role="group" aria-labelledby="pivot-orientation-title">
-                    <div class="pivot-subtitle" id="pivot-orientation-title">Orientation</div>
-                    <div class="section-row pivot-orientation-row">
-                        <div class="input-field"><label for="pivot-align">Alignment</label>
-                            <select id="pivot-align" class="ui-select pivot-align" title="Turn the wall about the pivot so the LED face's centre normal points along +X and the wall's centre lies toward −X.">
-                                <option value="center-neg-x" selected>Centre on −X</option>
-                                <option value="none">None</option>
-                            </select></div>
-                        <div class="input-field"><label for="pivot-yaw-offset">Yaw offset (°)</label>
-                            <input type="number" id="pivot-yaw-offset" step="0.1" min="-180" max="180" value="0"></div>
+            <div class="global-section collapsible collapsed" id="pivot-section">
+                <button type="button" class="global-section-title collapsible-toggle" aria-expanded="false" aria-controls="pivot-section-body">
+                    <span class="collapsible-title">Wall Pivot</span>
+                    <svg class="collapsible-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6"/></svg>
+                </button>
+                <div class="collapsible-body" id="pivot-section-body" hidden>
+                    <div class="pivot-mode-select" id="pivot-mode-select" role="radiogroup" aria-label="Pivot mode">
+                        <label class="pivot-mode-option" data-pivot-mode="bottom-left">
+                            <input type="radio" name="pivot-mode" value="bottom-left">
+                            <span class="pivot-mode-radio"></span>
+                            <span class="pivot-mode-label">Bottom-left corner</span>
+                        </label>
+                        <label class="pivot-mode-option" data-pivot-mode="mesh-center">
+                            <input type="radio" name="pivot-mode" value="mesh-center">
+                            <span class="pivot-mode-radio"></span>
+                            <span class="pivot-mode-label">Wall mesh centre on floor (bounding box)</span>
+                        </label>
+                        <label class="pivot-mode-option active" data-pivot-mode="wall-center">
+                            <input type="radio" name="pivot-mode" value="wall-center" checked>
+                            <span class="pivot-mode-radio"></span>
+                            <span class="pivot-mode-label">Wall centre on floor (first ↔ last edge)</span>
+                        </label>
                     </div>
-                    <div class="pivot-yaw-readout" id="pivot-yaw-readout" aria-live="polite">Wall yaw 90.0° = alignment 90.0° + offset 0.0°</div>
-                </div>
-                <div class="toggle-container">
-                    <span class="toggle-label" id="pivot-keep-stage-label">Keep stage layout on pivot change</span>
-                    <div class="toggle active" id="toggle-pivot-keep-stage" role="switch" tabindex="0" aria-checked="true" aria-labelledby="pivot-keep-stage-label"
-                         title="Move and turn the camera and props with the wall when the pivot or orientation changes, so their placement relative to the wall is kept."></div>
-                </div>
-                <div class="toggle-container">
-                    <span class="toggle-label" id="pivot-marker-label">Show pivot marker</span>
-                    <div class="toggle active" id="toggle-pivot-marker" role="switch" tabindex="0" aria-checked="true" aria-labelledby="pivot-marker-label"></div>
-                </div>
-                <div class="pivot-readout">
-                    <div id="pivot-readout">Pivot (from wall start): 1.250, 0.000, 0.000 m</div>
-                    <div class="pivot-hint">Exports: mesh origin = pivot. Viewport: grid origin = pivot on the floor.</div>
-                    <div class="pivot-hint">Session only: the pivot and orientation are not saved in project files yet.</div>
-                    <div class="pivot-status" id="pivot-status" aria-live="polite"></div>
+                    <div class="section-row pivot-offset-row">
+                        <div class="input-field"><label for="pivot-offset-x">Offset X (m)</label>
+                            <input type="number" id="pivot-offset-x" step="0.001" min="-1000" max="1000" value="0"></div>
+                        <div class="input-field"><label for="pivot-offset-y">Offset Y (m)</label>
+                            <input type="number" id="pivot-offset-y" step="0.001" min="-1000" max="1000" value="0"></div>
+                        <div class="input-field"><label for="pivot-offset-z">Offset Z (m)</label>
+                            <input type="number" id="pivot-offset-z" step="0.001" min="-1000" max="1000" value="0"></div>
+                    </div>
+                    <div class="pivot-actions">
+                        <button class="export-btn secondary" id="pivot-reset-offset" disabled>Reset offset</button>
+                        <button class="export-btn secondary" id="pivot-select" aria-pressed="false">◎ Select pivot (O)</button>
+                    </div>
+                    <div class="pivot-snap-row">
+                        <label class="pivot-snap-label" for="pivot-snap">Ctrl-drag snap</label>
+                        <select id="pivot-snap" class="ui-select pivot-snap" title="Hold Ctrl (⌘ on Mac) while dragging the pivot to move in steps of this size.">
+                            <option value="0.001">1 mm</option><option value="0.01">1 cm</option>
+                            <option value="0.1" selected>10 cm</option><option value="0.5">50 cm</option><option value="1">1 m</option>
+                        </select>
+                    </div>
+                    <div class="pivot-orientation" id="pivot-orientation" role="group" aria-labelledby="pivot-orientation-title">
+                        <div class="pivot-subtitle" id="pivot-orientation-title">Orientation</div>
+                        <div class="section-row pivot-orientation-row">
+                            <div class="input-field"><label for="pivot-align">Alignment</label>
+                                <select id="pivot-align" class="ui-select pivot-align" title="Turn the wall about the pivot so the LED face's centre normal points along +X and the wall's centre lies toward −X.">
+                                    <option value="center-neg-x" selected>Centre on −X</option>
+                                    <option value="none">None</option>
+                                </select></div>
+                            <div class="input-field"><label for="pivot-yaw-offset">Yaw offset (°)</label>
+                                <input type="number" id="pivot-yaw-offset" step="0.1" min="-180" max="180" value="0"></div>
+                        </div>
+                        <div class="pivot-yaw-readout" id="pivot-yaw-readout" aria-live="polite">Wall yaw 90.0° = alignment 90.0° + offset 0.0°</div>
+                    </div>
+                    <div class="toggle-container">
+                        <span class="toggle-label" id="pivot-keep-stage-label">Keep stage layout on pivot change</span>
+                        <div class="toggle active" id="toggle-pivot-keep-stage" role="switch" tabindex="0" aria-checked="true" aria-labelledby="pivot-keep-stage-label"
+                             title="Move and turn the camera and props with the wall when the pivot or orientation changes, so their placement relative to the wall is kept."></div>
+                    </div>
+                    <div class="toggle-container">
+                        <span class="toggle-label" id="pivot-marker-label">Show pivot marker</span>
+                        <div class="toggle active" id="toggle-pivot-marker" role="switch" tabindex="0" aria-checked="true" aria-labelledby="pivot-marker-label"></div>
+                    </div>
+                    <div class="pivot-readout">
+                        <div id="pivot-readout">Pivot (from wall start): 1.250, 0.000, 0.000 m</div>
+                        <div class="pivot-hint">Exports: mesh origin = pivot. Viewport: grid origin = pivot on the floor.</div>
+                        <div class="pivot-hint">Session only: the pivot and orientation are not saved in project files yet.</div>
+                        <div class="pivot-status" id="pivot-status" aria-live="polite"></div>
+                    </div>
                 </div>
             </div>
 

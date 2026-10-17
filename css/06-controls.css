@@ -163,3 +163,40 @@
 .export-btn--primary:hover {
     box-shadow: inset 0 0 0 2px var(--color-on-cta);
 }
+
+/* ---- collapsible cards (ui/Collapsible.js; Mesh Options and Wall Pivot, the owner's request of 2026-10-17) ----------
+   The title becomes a native button: no button chrome, the title type and red bar kept, a chevron on the right that
+   turns like the section cards' (.section-toggle), and the shared :focus-visible ring (03-layout.css). Collapsed, the
+   card is just its title bar. */
+.collapsible-toggle {
+    width: 100%;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.collapsible.collapsed .collapsible-toggle {
+    margin-bottom: 0;
+}
+
+.collapsible-toggle:hover .collapsible-chevron {
+    color: var(--color-text-primary);
+}
+
+.collapsible-chevron {
+    margin-left: auto;
+    flex: none;
+    color: var(--color-text-secondary);
+    transition: transform 0.2s ease;
+}
+
+.collapsible.collapsed .collapsible-chevron {
+    transform: rotate(-90deg);
+}
+
+.collapsible-body[hidden] {
+    display: none;
+}
