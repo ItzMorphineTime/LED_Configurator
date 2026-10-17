@@ -192,7 +192,11 @@ wall stays as it was. A wall can have at most 200 sections; Add Section says so 
 clears the section logos (a version 1.0 file has none), so a logo can no longer reappear on an imported section that
 happens to reuse an old section id.
 
-Camera settings, scene props, panel ID styling, section logos and display toggles are not saved yet; they will come with the JSON v2 format. The copy of the JSON inside the ZIP package has no angle offsets, so importing it resets every section's offset to 0.
+Camera settings, scene props, panel ID styling, section logos and display toggles are not saved yet; they will come with the JSON v2 format.
+
+Release note: the copy of the JSON inside the ZIP package used to leave out the section offsets, so importing it
+collapsed box and corner walls into a line. It is now the same document as Export JSON (plus each section's texture
+file name) and imports to the same wall.
 
 ### OBJ Export
 Industry-standard 3D mesh format compatible with:

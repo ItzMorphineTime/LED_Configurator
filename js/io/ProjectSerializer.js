@@ -11,7 +11,6 @@
  */
 
 import { zipTextureFileName } from '../geometry/PanelNaming.js';
-import { Strategies, unsupportedStrategy } from '../legacy/LegacyCompat.js';
 import { detectVersion, migrateV1toV2 } from './ProjectMigrations.js';
 import { validateProject } from './ProjectValidator.js';
 
@@ -44,12 +43,12 @@ export class ProjectSerializer {
 
   /**
    * Builds the JSON document of the project (call JSON.stringify(result, null, 2) to get the legacy file text).
-   * Two explicit object literals, so the key order is exactly the legacy one:
+   * One explicit object literal, so the key order is exactly the legacy one:
    *   'file' (Export JSON, 4943-4963): curvature carries `angle_offset_degrees: s.angleOffset || 0`;
-   *   'zip'  (Export All ZIP, 4499-4519): no angle offset (B-M3, selected through
-   *          Strategies.zipJsonIncludesAngleOffset), plus `texture_file: textures/${zipTextureFileName(s, i)}`, or null
-   *          for a section whose `skipped[i]` is true (its texture is not in the ZIP, 08 P2-1c; the name is still
-   *          computed, so a numeric name keeps throwing).
+   *   'zip'  (Export All ZIP, 4499-4519): since 08 P2-6a (B-M3 fixed) the 'file' document plus
+   *          `texture_file: textures/${zipTextureFileName(s, i)}` as the last key of each section, or null for a section
+   *          whose `skipped[i]` is true (its texture is not in the ZIP, 08 P2-1c; the name is still computed, so a
+   *          numeric name keeps throwing). Legacy's own copy dropped angle_offset_degrees.
    * Field values are copied raw (imported strings and NaN stay as they are; JSON.stringify writes NaN as null).
    * Ports: index.html@cd3fd3f lines 4943-4963 ('file') and 4499-4519 ('zip').
    * Side effects: none.
@@ -68,14 +67,7 @@ export class ProjectSerializer {
       case 'file':
         return ProjectSerializer.#fileDocument(wallSections, meshMode);
       case 'zip':
-        switch (Strategies.zipJsonIncludesAngleOffset) {
-          case false:
-            // LEGACY(B-M3): the ZIP's copy of the config drifted from Export JSON and drops angle_offset_degrees,
-            // so re-importing the ZIP JSON resets every section offset to 0.
-            return ProjectSerializer.#zipDocument(wallSections, meshMode, skipped);
-          default:
-            throw unsupportedStrategy('zipJsonIncludesAngleOffset', Strategies.zipJsonIncludesAngleOffset);
-        }
+        return ProjectSerializer.#zipDocument(wallSections, meshMode, skipped);
       default:
         throw new RangeError(`Unknown ProjectSerializer variant ${JSON.stringify(variant)}`);
     }
@@ -113,35 +105,20 @@ export class ProjectSerializer {
   }
 
   /**
-   * The ZIP's JSON document, verbatim 4499-4519 (the inner sanitizeFilename of 4496 is PanelNaming's, reached
-   * through zipTextureFileName; duplicate names collide, B-L14, tagged at PanelNaming.zipTextureFileName).
+   * The ZIP's JSON document (08 P2-6a, B-M3 fixed): the 'file' document of #fileDocument (one literal, so the two
+   * copies can no longer drift: legacy 4499-4519 built its own copy without angle_offset_degrees, and re-importing it
+   * reset every section offset) plus `texture_file` as the last key of each section: `textures/${zipTextureFileName(s, i)}`,
+   * or null where skipped[i] (08 P2-1c; the name is computed first, so a numeric name keeps throwing).
    * @param {import('../domain/WallSection.js').WallSection[]} wallSections
    * @param {*} meshMode
    * @param {boolean[]|null} skipped  texture_file is null where skipped[i] (08 P2-1c)
    * @returns {object}
    */
   static #zipDocument(wallSections, meshMode, skipped) {
-    const jsonData = {
-      version: '1.0',
-      sections: wallSections.map((s, i) => ({
-        name: s.name || `Wall ${i + 1}`,
-        id: s.id,
-        panel: { columns: s.panelCols, rows: s.panelRows, width_mm: s.panelWidth, height_mm: s.panelHeight },
-        led_resolution: { x: s.ledX, y: s.ledY, pixel_pitch_mm: parseFloat((s.panelWidth / s.ledX).toFixed(2)) },
-        curvature: {
-          type: s.curveIntensity === 0 ? 'flat' : (s.curveIntensity > 0 ? 'concave' : 'convex'),
-          angle_degrees: s.curveIntensity
-        },
-        color: s.color,
-        texture_file: unlessSkipped(`textures/${zipTextureFileName(s, i)}`, skipped, i)
-      })),
-      mesh_mode: meshMode,
-      totals: {
-        sections: wallSections.length,
-        total_panels: wallSections.reduce((sum, s) => sum + s.panelCols * s.panelRows, 0),
-        total_pixels: wallSections.reduce((sum, s) => sum + s.panelCols * s.panelRows * s.ledX * s.ledY, 0)
-      }
-    };
+    const jsonData = ProjectSerializer.#fileDocument(wallSections, meshMode);
+    jsonData.sections.forEach((section, i) => {
+      section.texture_file = unlessSkipped(`textures/${zipTextureFileName(wallSections[i], i)}`, skipped, i);
+    });
     return jsonData;
   }
 

@@ -831,6 +831,9 @@ in parentheses changes them:
   swatch gets the injected outline, and the second card's name input shows `Say ` (B-M4, B-L8, B-L16) (08 P2-3a:
   both probes are `false`, the cards and the logo list show the names as text and the input keeps `Say "hi"`; the
   injected outline stays until the colour rule of 08 P2-3b).
+- `box_corner`: the JSON inside the ZIP has no `angle_offset_degrees`, so its re-import
+  (`zipjson_roundtrip__export-json`) lays the four sections out in a line (B-M3) (08 P2-6a: the ZIP JSON is the
+  Export JSON document plus `texture_file`, and the round trip equals `final__export-json`).
 - `p2_curved_safe_distance`: each of the four exports throws the B-M1 `ReferenceError`, so no OBJ is
   produced (08 P2-5a: the four OBJs download); the `concave30` screenshot shows the folded band (B-M15) (08 P2-5b:
   the mitred, clamped band; the clamped stretches are amber, and the OBJs of `concave_offsets`, `box_corner` and

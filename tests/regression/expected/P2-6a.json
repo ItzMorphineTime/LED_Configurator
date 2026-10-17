@@ -1,0 +1,19 @@
+{
+  "commit": "P2-6a",
+  "bugs": ["B-M3"],
+  "expect": [
+    { "output": "**/*__export-zip__*.zip", "change": "modified", "each": true,
+      "reason": "ALLZIP: the JSON entry of every ZIP is the Export JSON document plus texture_file, so every section's curvature gains angle_offset_degrees (B-M3); no other entry changes" },
+    { "output": "box_corner/zipjson_roundtrip__export-json__*.json", "change": "modified",
+      "reason": "the re-imported ZIP JSON keeps the 0/90/90/-90 offsets, so the round-trip Export JSON equals final__export-json (08 criterion 24) instead of a wall laid out in a line" }
+  ],
+  "mayChange": [
+    { "output": "p2_curved_safe_distance/box_corner.screenshot.png", "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas on the preview footer label row (1 level, 1 px, seen in the 06 T6a-08 P2-5b runs); this commit changes no rendered pixel of it" },
+    { "output": "p2_shortcut_filters/pilot_view_front.screenshot.png", "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas (1 level, 2 px, seen in the 06 T6b-08 P2-5b runs); this commit changes no rendered pixel of it" },
+    { "output": "toggles/15_car_moved.screenshot.png", "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-08 P2-5b runs)" }
+  ],
+  "notes": "08 P2-6a (B-M3): ProjectSerializer's 'zip' variant is the 'file' document plus texture_file; Strategies.zipJsonIncludesAngleOffset retired. The card's box_corner/zipjson_import_result.json is not listed: it records {ok, mutated, sections} of the import, which the offsets do not change. large_wall's ZIP is in expect (each), so its bistable 1-level export-PNG pixels (P2-0b) need no mayChange entry here; the reviewer checks that only the JSON entry differs (or also those PNG pixels)."
+}

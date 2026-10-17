@@ -55,7 +55,6 @@ export const Strategies = deepFreeze({
   mtlTextureNaming: 'index',                       // B-M2
   zipTextureNaming: 'sanitized-name',              // B-L14 (no de-duplication)
   mtlDownloadDelayMs: 100,                         // B-L7
-  zipJsonIncludesAngleOffset: false,               // B-M3
   framingBounds: 'flat',                           // B-L2, B-M10
   curveBeforeFirstPanel: true,                     // B-L1
   frustumDepthM: 15,                               // B-L33
@@ -130,7 +129,7 @@ const QUIRKS = deepFreeze({
   'B-M2': ['Index-based MTL texture path (R-3)',
     'name-based'],
   'B-M3': ['ZIP JSON lacks angle offsets (U-1)',
-    '`true`'],
+    'Landed in 08 P2-6a (the ZIP JSON is the `\'file\'` document plus `texture_file` per section, so it keeps `angle_offset_degrees` and re-imports exactly; `Strategies.zipJsonIncludesAngleOffset` retired; no tag site)'],
   'B-M4': ['Unescaped names/colours/values in innerHTML (V-8)',
     'Landed in 08 P2-3a (`ui/dom.js escapeHtml` on every template interpolation of `SectionListPanel` and `SectionLogosPanel`, the live rename included; `legacyHtml` deleted; the colour validation is 08 P2-3b\'s; no tag site)'],
   'B-M5': ['Combined V full height (E-5)',
@@ -253,7 +252,7 @@ const TAG_SITES = deepFreeze([
   ['js/geometry/TextureAtlas.js#panelPxPerLed', ['B-M16']],
   ['js/geometry/PanelNaming.js#zipTextureFileName', ['B-L14']],
   ['js/geometry/PanelNaming.js#mtlTextureFile', ['B-M2']],
-  ['js/io/ProjectSerializer.js#write', ['B-M3', 'B-L31']],
+  ['js/io/ProjectSerializer.js#write', ['B-L31']],
   ['js/io/ObjExporter.js#write', ['B-M6', 'B-L6']],
   ['js/io/GltfExporter.js#write', ['B-L6']],
   ['js/io/GltfExporter.js#addMesh', ['B-M7']],

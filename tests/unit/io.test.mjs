@@ -199,7 +199,14 @@ function compareAll(project, label, tally) {
     }
   }
   r('json:file', run(() => serializer.write(project, { variant: 'file' })), run(() => L.exportJSONData(sections, meshMode)), json2);
-  r('json:zip', run(() => serializer.write(project, { variant: 'zip' })), run(() => L.exportZIPJSONData(sections, meshMode)), json2);
+  // B-M3 fixed in 08 P2-6a: the 'zip' document is the legacy 'file' document plus the legacy texture_file of each section
+  // (an explicit expected value built from the two verbatim legacy builders; legacy's own ZIP copy dropped the offsets).
+  r('json:zip', run(() => serializer.write(project, { variant: 'zip' })), run(() => {
+    const zip = L.exportZIPJSONData(sections, meshMode);
+    const file = L.exportJSONData(sections, meshMode);
+    file.sections.forEach((s, i) => { s.texture_file = zip.sections[i].texture_file; });
+    return file;
+  }), json2);
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -743,6 +750,21 @@ describe('golden files (byte-identical to the legacy downloads)', { skip: golden
 // ---------------------------------------------------------------------------------------------------------------
 
 describe('ProjectSerializer', () => {
+  test("'zip' JSON equals the 'file' JSON plus texture_file per section, over every harness config (08 8.4, P2-6a)", () => {
+    for (const [key, config] of Object.entries(CONFIGS)) {
+      const project = projectFromConfig(config);
+      const file = serializer.write(project, { variant: 'file' });
+      const zip = serializer.write(project, { variant: 'zip' });
+      assert.deepEqual(Object.keys(zip), Object.keys(file), key);
+      assert.ok(zip.sections.every((s) => typeof s.texture_file === 'string' && Object.keys(s).at(-1) === 'texture_file'), key);
+      const stripped = { ...zip, sections: zip.sections.map(({ texture_file: _t, ...rest }) => rest) };
+      assert.equal(json2(stripped), json2(file), `${key}: the same document apart from texture_file`);
+    }
+    // box_corner: the 0/90/90/-90 offsets survive, so the ZIP JSON re-imports to the same wall (08 criterion 24).
+    const box = serializer.write(projectFromConfig(CONFIGS.box_corner), { variant: 'zip' });
+    assert.deepEqual(box.sections.map((s) => s.curvature.angle_offset_degrees), [0, 90, 90, -90]);
+  });
+
   test('read refuses what is not a v1 wall (08 3.3: M-IMP-4a, M-IMP-4b, M-IMP-1, M-IMP-2, M-IMP-3), atomically and without throwing', () => {
     const refused = (data, code, message, path) => {
       const r = serializer.read(data);
@@ -824,7 +846,7 @@ describe('ProjectSerializer', () => {
       [`Section 2 "B": Panel Colour "red;outline:3px solid lime" → "${Palette.legacySectionColors[1]}"`]);
   });
 
-  test('write: legacy key order; zip drops angle_offset_degrees and adds texture_file; numeric names throw in zip', () => {
+  test('write: legacy key order; zip is the file document plus texture_file (B-M3 fixed in 08 P2-6a); numeric names throw in zip', () => {
     const project = projectOf([new WallSection({ id: 4, name: 'A B', panelCols: 2, panelRows: 3, panelWidth: 500, panelHeight: 250,
       ledX: 64, ledY: 32, curveIntensity: -3, angleOffset: 15, color: '#ff00aa' })], 'section');
     const file = serializer.write(project);
@@ -834,7 +856,7 @@ describe('ProjectSerializer', () => {
     assert.deepEqual(file.totals, { sections: 1, total_panels: 6, total_pixels: 12288 });
     const zip = serializer.write(project, { variant: 'zip' });
     assert.deepEqual(Object.keys(zip.sections[0]), ['name', 'id', 'panel', 'led_resolution', 'curvature', 'color', 'texture_file']);
-    assert.deepEqual(zip.sections[0].curvature, { type: 'convex', angle_degrees: -3 });
+    assert.deepEqual(zip.sections[0].curvature, { type: 'convex', angle_degrees: -3, angle_offset_degrees: 15 });
     assert.equal(zip.sections[0].texture_file, 'textures/A_B_PanelIDs.png');
     project.wall.sections[0].name = 42;
     assert.throws(() => serializer.write(project, { variant: 'zip' }), { name: 'TypeError', message: 'name.replace is not a function' });
