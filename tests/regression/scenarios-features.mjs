@@ -79,10 +79,23 @@ async function press(ctx, key, opts) {
     await step(ctx, `key:${key}`, async () => { await ctx.app.blurActive(); await ctx.app.keyPress(key, opts); });
 }
 
-/** A fresh page in the same tab. */
+/** A fresh page in the same tab, in the session state the pivot scenarios assume (legacySession). */
 async function freshPage(ctx, label) {
     await step(ctx, `reload:${label}`, () => ctx.app.reload());
+    await legacyStart(ctx);
 }
+
+/**
+ * The pivot scenarios were written for the identity pivot and the combined mesh mode, the defaults before 2026-10-17:
+ * they set them explicitly (and expand the Wall Pivot and Mesh Options cards, collapsed by default since then).
+ */
+async function legacyStart(ctx) {
+    await step(ctx, 'expand-sections', () => ctx.app.expandSections());
+    await step(ctx, 'legacy-session', () => ctx.app.legacySession({ combined: true }));
+}
+
+/** Runs a pivot scenario from legacyStart. */
+const fromLegacy = (fn) => async (ctx) => { await legacyStart(ctx); return fn(ctx); };
 
 // ---- pivot actions and probes ------------------------------------------------------------------------------
 
@@ -233,7 +246,11 @@ function screenshotVerdict(a, b) {
 async function pivotModesScenario(ctx) {
     const { app } = ctx;
     for (const key of ['default', 'concave_offsets', 'mixed', 'box_corner']) {
-        if (key !== 'default') await importCfg(ctx, `${key}_import`, CONFIGS[key]);
+        if (key !== 'default') {
+            await importCfg(ctx, `${key}_import`, CONFIGS[key]);
+            // a v1 import keeps the session pivot since 03 12.11: each wall starts from the identity again
+            await step(ctx, `${key}_legacy-session`, () => app.legacySession());
+        }
         const exportsOf = {};
         const capture = async (label, meshModes) => {
             const state = `${key}_${label}`;
@@ -412,8 +429,8 @@ async function pivotRoundtripScenario(ctx) {
     await setMode(ctx, 'wall-center');
     await setOffset(ctx, 'z', '2');
     await record(ctx, 'rt_01_pivot', pivotState(app));
-    await dl(ctx, 'rt_01_combined__export-obj', '#export-obj', OBJ_ZIP_DOWNLOAD);
-    await dl(ctx, 'rt_01_combined__export-gltf', '#export-gltf', GLTF_DOWNLOAD);
+    const obj1 = await dl(ctx, 'rt_01_combined__export-obj', '#export-obj', OBJ_ZIP_DOWNLOAD);
+    const gltf1 = await dl(ctx, 'rt_01_combined__export-gltf', '#export-gltf', GLTF_DOWNLOAD);
     const json1 = await dl(ctx, 'rt_01__export-json', '#export-json');
     const exported = text(json1, '.json');
     if (exported) await importCfg(ctx, 'rt_reimport', JSON.parse(exported));
@@ -426,6 +443,9 @@ async function pivotRoundtripScenario(ctx) {
         jsonIdentical: text(json1, '.json') !== null && text(json1, '.json') === text(json2, '.json'),
         objAfterImportIsIdentity: objText(idObj) !== null && objText(idObj) === objText(obj2),
         gltfAfterImportIsIdentity: text(idGltf, '.gltf') !== null && text(idGltf, '.gltf') === text(gltf2, '.gltf'),
+        // 03 12.11 (2026-10-17): a v1 import keeps the session pivot, so the exports after it equal those before it
+        objAfterImportKeepsPivot: objText(obj1) !== null && objText(obj1) === objText(obj2),
+        gltfAfterImportKeepsPivot: text(gltf1, '.gltf') !== null && text(gltf1, '.gltf') === text(gltf2, '.gltf'),
     }));
 }
 
@@ -458,22 +478,22 @@ async function pivotValidationScenario(ctx) {
 export const FEATURE_SCENARIOS = {
     pivot_modes: {
         description: '03 pivot: each mode and an offset on four walls: readout, OBJ/glTF in the export frame, screenshots, the offset post-check.',
-        run: pivotModesScenario,
+        run: fromLegacy(pivotModesScenario),
     },
     pivot_stage: {
         description: '03 pivot: keep stage layout on/off re-expression of camera and props, coverage, Distance to wall plane, wall edits, Z Position min.',
-        run: pivotStageScenario,
+        run: fromLegacy(pivotStageScenario),
     },
     pivot_gizmo: {
         description: '03 pivot: O, the X-arrow drag, Ctrl snapping, Escape cancel with gesture swallowing, rotate (translate only), radio focus.',
-        run: pivotGizmoScenario,
+        run: fromLegacy(pivotGizmoScenario),
     },
     pivot_roundtrip: {
-        description: '03 pivot (session-only): Export JSON carries no pivot; a re-import resets it; the exports after it are the identity exports.',
-        run: pivotRoundtripScenario,
+        description: '03 pivot (session-only): Export JSON carries no pivot; a re-import keeps the session pivot (03 12.11); the exports after it equal those before it.',
+        run: fromLegacy(pivotRoundtripScenario),
     },
     pivot_validation: {
         description: '03 pivot (session-only): a hand-edited pivot block in a v1 file is not applied; the offset typing rules.',
-        run: pivotValidationScenario,
+        run: fromLegacy(pivotValidationScenario),
     },
 };

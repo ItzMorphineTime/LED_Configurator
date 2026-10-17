@@ -106,7 +106,7 @@ Direction of communication:
 
 - Texture content (spec 04's UVs, spec 05's bake, panel IDs) does not depend on the frame. The trap this table prevents: spec 05's bake must read the **stage** layout, because the projection point is stored in the stage frame; the export layout would sample every texel P.y too low.
 - **There is never a wall root transform** (07 C32). Each frame is baked into the vertex positions by `layoutProject`, and the identity transform of the wall group is an invariant (Feature 3 adds its unit test, 03 §5.1). The pipeline is: the raw walk (every `postTransform` `null`), `resolvePivot` on it from generative quantities only, `translated(t)` with `t` = −O (stage), −P (export) or 0 (layout), then (F3-O2) `rotated(ψ)` when the wall yaw ψ of the stage or export frame is not 0, then spec 02's `applySectionOffsets(out)`, which builds each section matrix from the translated (and turned) layout (section 9, Feature 3 row).
-- **Orientation (03 §12, the owner's request of 2026-10-17; steps F3-O1 to F3-O7).** The stage and export frames gain the wall yaw ψ, a turn about +Y through the pivot (the sign of three.js `rotation.y`): x_S = R_y(ψ)(x_L − O) and x_E = R_y(ψ)(x_L − P) = x_S − (0, P.y, 0), with R_y(ψ)(x, y, z) = (x·cos ψ + z·sin ψ, y, −x·sin ψ + z·cos ψ). ψ = wrapDeg(ψa + yawOffsetDeg), where ψa, the alignment of `WallPivot.orientation.align = 'center-neg-x'` ("Centre on −X"), turns the LED normal at the wall's centre point (the arc-length midpoint of the bottom edge chain) to +X, and is 0 with `'none'`. `layoutProject` turns the translated raw walk (`WallLayout.rotated`) before spec 02's `applySectionOffsets`, so every consumer of the table above follows without orientation code and there is still no wall root transform. ψ = 0 (the default `'none'` with a zero offset) keeps the frames above bit for bit. Landed in F3-O2 (`geometry/WallOrientation.js`, 3.6); the yaw's cosine and sine are exact at multiples of 90° (`yawTrig`), so the default flat wall turned by 90° lies exactly on x = 0 with LED normals exactly +X.
+- **Orientation (03 §12, the owner's request of 2026-10-17; steps F3-O1 to F3-O7).** The stage and export frames gain the wall yaw ψ, a turn about +Y through the pivot (the sign of three.js `rotation.y`): x_S = R_y(ψ)(x_L − O) and x_E = R_y(ψ)(x_L − P) = x_S − (0, P.y, 0), with R_y(ψ)(x, y, z) = (x·cos ψ + z·sin ψ, y, −x·sin ψ + z·cos ψ). ψ = wrapDeg(ψa + yawOffsetDeg), where ψa, the alignment of `WallPivot.orientation.align = 'center-neg-x'` ("Centre on −X"), turns the LED normal at the wall's centre point (the arc-length midpoint of the bottom edge chain) to +X, and is 0 with `'none'`. `layoutProject` turns the translated raw walk (`WallLayout.rotated`) before spec 02's `applySectionOffsets`, so every consumer of the table above follows without orientation code and there is still no wall root transform. ψ = 0 (`'none'` with a zero offset, the class default and the legacy aggregate `Project.createDefault`) keeps the frames above bit for bit; new projects (`Project.createNew`, App) start with `wall-center`, Centre on −X and section meshes (03 12.11). The consumers (F3-O3..O6): Keep stage layout re-expresses rigidly (`stageChange`, `reexpressStage`), the aligned Reset and the view presets read the `framingBounds` fields `centre`, `aligned`, `viewYawDeg` and the posZ fallback its `frontZ`, the exports carry the orientation metadata. Landed in F3-O2 (`geometry/WallOrientation.js`, 3.6); the yaw's cosine and sine are exact at multiples of 90° (`yawTrig`), so the default flat wall turned by 90° lies exactly on x = 0 with LED normals exactly +X.
 
 ### 1.5 Code conventions
 
@@ -346,7 +346,11 @@ js/
     PropsPanel.js                          WP7   PropControls (one instance per prop prefix 'person' | 'car')
     PivotPanel.js                          03 T6  The Wall Pivot section: mode radios, offsets, Reset, Select pivot (O), the
                                                  Ctrl-drag snap, the keep-stage and marker switches; payload-derived readout
-                                                 and status (pivotReadoutText, pivotStatusText, rebuildStatusText)
+                                                 and status (pivotReadoutText, pivotStatusText, rebuildStatusText); F3-O6:
+                                                 the Orientation block (#pivot-align, #pivot-yaw-offset, yawReadoutText)
+    Collapsible.js                         F3-O8  The collapsible sidebar cards (Mesh Options, Wall Pivot; collapsed at
+                                                 start): bindCollapsibles(root), setCollapsibleExpanded(card, on); the title
+                                                 is a native button (aria-expanded, aria-controls); no model state
     ViewportToolbar.js                     WP8   View presets, grid button, gizmo buttons, selection badge, pilot banner
     ExportPanel.js                         WP5   Export buttons, #import-json -> #import-input, file input change
     DebugViewControls.js                   01 F1-2  #toggle-normals, #debug-view-btn, the debug popover, #debug-view-legend
@@ -458,10 +462,14 @@ tests/
     core.test.mjs                          WP3   EventBus semantics, LegacyCompat helpers, LEGACY_SITES shape
     domain.test.mjs                        WP3   rule tables vs legacy expressions, Wall/CineCamera/Prop/LogoLibrary semantics
     oracle/legacy-geometry.mjs             WP4   verbatim THREE-free copies of the legacy layout walks and grid builders
+    collapsible.test.mjs                   F3-O8  ui/Collapsible (click flips class, aria-expanded and hidden) and the two
+                                                 collapsed cards of index.html
     orientation.test.mjs                   F3-O1  the whole-wall orientation (03 12.12): the domain rules (test 1);
                                                  F3-O2: wallCentre, the alignment yaw (the flat wall exactly +90 on x = 0, the
                                                  symmetric concave middle on -X, asymmetric and multi-section walls, the empty
-                                                 wall), the turned stage and export frames, yawShift, stageChange (tests 2-4)
+                                                 wall), the turned stage and export frames, yawShift, stageChange (tests 2-4);
+                                                 F3-O3..O7: rigid re-expression, setAlign / setYawOffset, the turned drag, the
+                                                 aligned Reset and frontZ, the OBJ / glTF orientation metadata, createNew
     pivot.test.mjs                         03 T2  Feature 3's geometry (03 8.1 tests 1-9): the 6.8 anchors, resolvePivot,
                                                  stageShift, the frames of layoutProject, translated(), the export frame of
                                                  the grids and panel corners, the framing ('flat-pivot', then 'layout' since
@@ -1113,6 +1121,12 @@ export class Project {
       // new Project({ wall: new Wall({ sections: [WallSection.createDefault({ color: defaultSectionColor })] }),
       //   display: new DisplaySettings(), panelIdStyle: new PanelIdStyle(), logos: new LogoLibrary(), camera: new CineCamera(),
       //   person: new PersonProp(), car: new CarProp() })   (06 T7: the first section's colour injected; undefined: the default)
+      // The legacy aggregate: meshMode 'combined', the identity pivot (the oracles and most unit tests start here).
+  static NEW_PROJECT_MESH_MODE = 'section';
+  static createNew({ defaultSectionColor } = {})
+      // 03 12.11 (the owner's defaults of 2026-10-17; App's bootstrap): createDefault, then meshMode = 'section' and
+      // wall.pivot = WallPivot.createForNewProject() ('wall-center', Centre on -X). index.html's initial radio, select
+      // and readout states mirror it.
 }
 ```
 

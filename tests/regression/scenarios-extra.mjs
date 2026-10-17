@@ -888,7 +888,7 @@ function pageFocus(selector) {
 /** The S0 reference state of 8.2 (pose front is set by the steps themselves; the DOM does not show it). */
 const S0 = Object.freeze({
     lines: false, vertex: true, face: false, scale: '1', onTop: false, shading: 'content', popoverOpen: false,
-    activeElement: 'BODY', gizmoMode: null, pilot: false, selected: false, meshMode: 'combined', wireframe: false,
+    activeElement: 'BODY', gizmoMode: null, pilot: false, selected: false, meshMode: 'section', wireframe: false,
     frames: false, person: false, car: false, preview: false,
 });
 

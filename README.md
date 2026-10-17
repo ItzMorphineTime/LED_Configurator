@@ -108,16 +108,19 @@ normal lines of the debug view stay visible in pilot mode.
 - Renders on top of scene for easy interaction
 
 ### Wall Pivot (export origin)
-- Choose where the exported wall's origin (its pivot) sits: **Bottom-left corner** (as before), **Wall mesh centre on
-  floor** (the centre of the wall's bounding box, at floor level) or **Wall centre on floor** (halfway between the first
-  section's first edge and the last section's last edge, at floor level)
+- Choose where the exported wall's origin (its pivot) sits: **Bottom-left corner** (how earlier versions exported),
+  **Wall mesh centre on floor** (the centre of the wall's bounding box, at floor level) or **Wall centre on floor**
+  (halfway between the first section's first edge and the last section's last edge, at floor level; the default)
+- **Orientation**: turn the whole wall about the pivot. **Centre on −X** (the default) turns it so the LED face at the
+  wall's centre looks along +X, toward the origin, and the wall's centre lies on the −X side; a **Yaw offset** (degrees,
+  −180 to 180) adds to it, or turns the wall on its own with **None**
 - Move the pivot further with a metre offset on X, Y and Z (1 mm steps, up to ±1000 m), by typing it or by dragging the
   pivot marker in the viewport (press **O** or "Select pivot (O)"; hold Ctrl or ⌘ to drag in steps of the "Ctrl-drag
   snap" size; Escape cancels a drag)
 - Every OBJ, glTF and ZIP export is written with the pivot as the file origin; the viewport's grid and axes sit on the
   pivot projected onto the floor
-- **Keep stage layout on pivot change** moves the camera and props with the wall when you change the pivot, so their
-  placement relative to the wall is kept; turn it off to keep their coordinates instead
+- **Keep stage layout on pivot change** moves (and turns) the camera and props with the wall when you change the pivot
+  or the orientation, so their placement relative to the wall is kept; turn it off to keep their coordinates instead
 - "Distance to wall plane" in the camera panel shows the distance along the camera's optical axis to the wall plane it is
   aimed at
 
@@ -129,8 +132,12 @@ Release note: the floor grid now covers 100 m x 100 m with lines on whole metres
 pivot on the floor), where the red, green and blue axes cross; it used to be 50 m x 50 m, offset in front of the wall,
 with lines on half metres.
 
-Release note: the pivot is new. It lasts for the session only: Export JSON does not save it yet, and importing a
-project file resets it to the bottom-left corner. The camera's "Z Distance from Wall" field is now "Z Position", because
+Release note: new projects now start with the **Wall centre on floor** pivot, **Centre on −X** orientation and
+**Individual Section Meshes**; the **Mesh Options** and **Wall Pivot** cards start collapsed (click the title, or focus
+it and press Enter or Space, to open them).
+
+Release note: the pivot is new. It lasts for the session only: Export JSON does not save it (or the orientation) yet,
+and importing a project file keeps the session's pivot and orientation (a file's mesh mode still applies). The camera's "Z Distance from Wall" field is now "Z Position", because
 it is a stage coordinate measured from the pivot on the floor.
 
 ### Pilot Camera Mode
@@ -368,6 +375,21 @@ re-centre by hand after each change.
   anchor when an offset is set) is shown in the viewport only: never in the camera preview, never in pilot mode and
   never in an export. "Show pivot marker" hides it.
 
+### Orientation
+The **Orientation** block of the Wall Pivot panel turns the whole wall about the pivot's vertical axis (the floor stays
+level; nothing tilts):
+- **Alignment: Centre on −X** (the default) works out the turn on every change so that the LED face at the wall's centre
+  (the middle of the wall's bottom edge, measured along the wall) points along +X. The wall then stands on the −X side of
+  the stage origin, facing it: a flat wall lies across the X axis centred on it; a concave wall's middle sits behind the
+  origin on −X. **None** leaves the wall as it is laid out.
+- **Yaw offset** (degrees, −180 to 180, 0.1° steps) adds a turn on top (positive turns counter-clockwise seen from
+  above). The read-out under it shows the resulting wall yaw.
+- With Centre on −X, **Reset Camera** (and the first camera preview) puts the camera 5 m in front of the LED face along
+  the centre's normal, 1.5 m high, looking at the wall centre; the Front, Side, Top and Reset views turn with the wall.
+- The offsets X / Y / Z stay in the wall's own axes; dragging the pivot marker moves it along the axes you see.
+- Exports are written turned: the OBJ header adds an `# Orientation:` line and the glTF `scenes[0].extras.pivot` an
+  `orientation` object whenever the wall is turned.
+
 ### What moves in the viewport
 The viewport's floor grid and its red, green and blue axes cross at the **stage origin**: the pivot projected onto the
 floor. Camera and prop positions (X, Z Position) are measured from there, and the floor is always at height 0. With
@@ -394,9 +416,9 @@ distance along the camera's optical axis to the wall plane it is aimed at.
   floor; a floor-level pivot (every mode with Offset Y = 0) needs no height.
 
 ### Session only (for now)
-The pivot, its offset and the "Keep stage layout" and marker switches last for the session: Export JSON and Export All
-(ZIP) do not save them yet, and importing a project file resets the pivot to the bottom-left corner. They will be saved
-with the JSON v2 project format.
+The pivot, its offset, the orientation and the "Keep stage layout" and marker switches last for the session: Export JSON
+and Export All (ZIP) do not save them yet, and importing a project file keeps the session's pivot and orientation. They
+will be saved with the JSON v2 project format.
 
 ---
 

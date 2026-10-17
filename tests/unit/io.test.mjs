@@ -329,10 +329,9 @@ function fuzzProjects(seed, count) {
  * The project the harness builds by importing `config` (JSON round trip, then the validated read of 08 P2-3b and the
  * wall-scope apply: the sections, and the mesh mode when the file names one).
  */
-function projectFromConfig(config) {
+function projectFromConfig(config, project = Project.createDefault()) {
   const read = serializer.read(JSON.parse(JSON.stringify(config, null, 2)));
   assert.ok(read.ok, 'the import is accepted');
-  const project = Project.createDefault();
   project.wall.replaceAll(sectionsFromProject(read.project));
   if (read.project.mesh_mode) project.meshMode = read.project.mesh_mode;
   return project;
@@ -734,7 +733,9 @@ describe('golden files (byte-identical to the legacy downloads)', { skip: golden
 
     test(`${scenario}: JSON, OBJ, MTL and glTF in all mesh modes, ZIP entries and round trips`, { skip: missing }, (t) => withChromeMath(() => {
       const file = (name) => path.join(dir, name);
-      const project = scenario === 'default' ? Project.createDefault() : projectFromConfig(CONFIGS[scenario]);
+      // The harness page starts as a new project (03 12.11: section meshes, wall-center, Centre on -X); a v1 import keeps
+      // that pivot and orientation and applies the file's mesh mode.
+      const project = scenario === 'default' ? Project.createNew() : projectFromConfig(CONFIGS[scenario], Project.createNew());
       const sections = project.wall.sections;
       let files = 0;
       const same = (text, name) => {

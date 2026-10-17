@@ -466,6 +466,9 @@ async function uiVisualScenario(ctx) {
 
     await step(ctx, 'preload-fonts', () => ui.preloadFonts(app));
     await capture('initial', { styles: MAIN, text: true, viewport: true, sidebar: true });
+    // Mesh Options and Wall Pivot start collapsed (2026-10-17): 00_initial records them collapsed; every later state
+    // shows them open, as before.
+    await step(ctx, 'expand-sections', () => app.expandSections());
 
     // Gizmo buttons and the selection indicator, in a clean scene (default wall + person prop).
     await step(ctx, 'person-on', () => app.click('#toggle-person'));

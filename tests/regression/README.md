@@ -941,6 +941,13 @@ in parentheses changes them:
   orbit target is the centre of the real wall, and Z −3 is kept: the camera behind the wall, facing its back, reads
   "Not aimed at wall" with "—").
 
+- New-project defaults and orientation (03 12.11, 12.15; 2026-10-17): the page starts with section meshes, the `wall-center`
+  pivot and Centre on −X (the default wall is turned 90° about the pivot: it stands on x = 0 with its LED face toward
+  +X), and the Mesh Options and Wall Pivot cards start collapsed. `ui_visual`'s `00_initial` records them collapsed;
+  it then opens them (`AppPage.expandSections`). The five `pivot_*` scenarios start from the identity pivot and
+  combined meshes (`AppPage.legacySession`: keep stage layout briefly off, align None, bottom-left, Reset offset, Reset
+  view), and `pivot_modes` repeats that after each import, because a v1 import now keeps the session's pivot.
+
 A candidate that fixes these will report the missing error as a WARN, and the newly produced
 file as an EXTRA output (FAIL). Accept such a change deliberately through its expected-change
 manifest ([Phase 2 re-baselining](#phase-2-re-baselining)).

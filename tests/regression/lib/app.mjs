@@ -270,6 +270,41 @@ ${url}`;
         return result;
     }
 
+    /**
+     * Expand every collapsed sidebar card (Mesh Options and Wall Pivot start collapsed since 2026-10-17) through its
+     * header button, like a user. A no-op on a page without collapsible cards.
+     */
+    async expandSections() {
+        await this.eval(`(() => { for (const b of document.querySelectorAll('.collapsible.collapsed .collapsible-toggle')) b.click(); return true; })()`);
+        await this.settle();
+    }
+
+    /**
+     * The session state the pre-2026-10-17 scenarios assume: the bottom-left pivot with no orientation (the identity),
+     * set through the Wall Pivot panel with Keep stage layout briefly off (so the camera and props keep their bootstrap
+     * coordinates; a non-zero offset is reset too), then the Reset view (the bootstrap framed the turned wall), and with
+     * `combined` the Single Combined Mesh mode. A no-op part on a page without the control.
+     */
+    async legacySession({ combined = false } = {}) {
+        await this.eval(`(() => {
+            const keep = document.getElementById('toggle-pivot-keep-stage');
+            const on = !!keep && keep.classList.contains('active');
+            if (on) keep.click();
+            const align = document.getElementById('pivot-align');
+            if (align && align.value !== 'none') { align.value = 'none'; align.dispatchEvent(new Event('change', { bubbles: true })); }
+            const bl = document.querySelector('label.pivot-mode-option[data-pivot-mode="bottom-left"]');
+            if (bl) bl.click();
+            const reset = document.getElementById('pivot-reset-offset');
+            if (reset && !reset.disabled) reset.click();
+            if (on) keep.click();
+            const view = document.getElementById('view-reset');
+            if (view) view.click();
+            return true;
+        })()`);
+        await this.settle();
+        if (combined && await this.exists('#mesh-mode-select')) await this.selectMeshMode('combined');
+    }
+
     /** Switch mesh mode through the radio UI (#mesh-mode-select). Clicks the option label like a user. */
     async selectMeshMode(mode) {
         const ok = await this.eval(`(() => {

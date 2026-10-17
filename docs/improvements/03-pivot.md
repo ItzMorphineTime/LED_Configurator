@@ -1787,3 +1787,18 @@ Rows F3-1 to F3-4 now rebuild iff the stage origin moved or ψ changed. ψ does 
 | The alignment flips when a section edit moves the centre across a sharp corner (for example a box corner) | Deliberate: the rule is "the normal at the centre". The status line reports the turn, and the yaw offset corrects the result by hand. |
 | An asymmetric wall's middle lies off the −X axis | Documented (12.2); the `surface-center` pivot (T15) would put it on the axis. |
 | Users expect the offset inputs to follow the turned axes | Q6 keeps layout axes, and the README says so; the gizmo moves the pivot along the turned (stage) axes, as seen. |
+
+### 12.15 As built (2026-10-17): deviations from this section
+
+The orientation landed in three feature commits (geometry and consumers, defaults, collapsible cards) instead of the gated steps of 12.13, with one harness re-baseline at the end. Where the build differs from the text above:
+
+| # | Section | As built |
+|---|---|---|
+| A1 | 12.11, O9 (defaults) | The class defaults stay the identity: `new WallPivot()` is bottom-left with `'none'` and `Project.createDefault()` keeps `'combined'`, so the legacy-parity oracles and the unit tests that start from them hold. New projects get the owner's defaults through `Project.createNew()` (App's bootstrap): `meshMode = 'section'` and `WallPivot.createForNewProject()` (`NEW_PROJECT_MODE = 'wall-center'`, `NEW_PROJECT_ALIGN = 'center-neg-x'`). `index.html` starts with the same radio, select and readout states. |
+| A2 | 12.11 (import) | Landed with the defaults: a file without a pivot (every v1 file) keeps the session's pivot and orientation; a file's mesh mode still applies. |
+| A3 | 12.5 (posZ row) | The framing gains `frontZ`, the posZ fallback for a non-numeric entry: `wallZ + 5` at a zero yaw (unchanged), otherwise the z of the Reset position (aligned: C.z + 5·cos(viewYawDeg); else wallBox.center.z + 5·facing.z), so the fallback stays in front of the LED face of a turned wall. `CameraController` passes `{wallZ, frontZ}`. |
+| A4 | 12.7 (presets) | Reset is θ0 + 0.3 (as specified); at θ0 = 0 every preset uses the legacy angles bit for bit. `OrbitController` reads `viewYawDeg` from the injected framing (it may not import geometry). |
+| A5 | 12.6 (participants) | `PivotController` calls `translateStage(dx, dz)` when Δψ = 0 (so a translation under a non-zero ψ uses the turned (dx, dz)) and `reexpressStage(change)` otherwise; `CineCamera` and `Prop` implement both, the pan wrapped by `wrapDeg`. |
+| A6 | 12.9 (status) | A section edit that only turns the wall (no origin move) writes `Wall edit turned the wall by ±Δψ° about the pivot · camera and props kept their coordinates`. |
+| A7 | 12.12 (harness) | No `pivot_orientation` golden and no Blender run in this batch (owner request: speed); the unit tests cover 12.12 tests 1-8 in `tests/unit/orientation.test.mjs`. The existing pivot scenarios start from the identity pivot and combined meshes explicitly (`AppPage.legacySession`), after expanding the collapsed cards (`AppPage.expandSections`). |
+| A8 | (new) | The **Mesh Options** and **Wall Pivot** cards are collapsible and start collapsed (`ui/Collapsible.js`: a native button title with `aria-expanded` and `aria-controls`, a chevron, the shared focus ring). |
