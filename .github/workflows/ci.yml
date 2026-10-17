@@ -3,12 +3,12 @@
 # package.json. The golden-file unit tests skip when tests/regression/output/baseline is absent, as it is here.
 name: CI
 on:
-  push: { branches: ['refactor/**', 'feature/**'] }   # main is checked by pages.yml (it calls this workflow)
+  push: { branches: [main, 'refactor/**', 'feature/**'] }   # pages.yml deploys independently of these checks
   pull_request:
   workflow_call:
 permissions: { contents: read }
-# In a called workflow, github.workflow is the CALLER's name, so the run inside pages.yml ("Deploy Pages-refs/heads/main")
-# never shares a group with a direct CI run ("CI-refs/..."), and a PR or branch run can never cancel a deploy's checks.
+# A newer push to the same ref cancels an older CI run. When another workflow calls this one (workflow_call),
+# github.workflow is the caller's name, so the two never share a group.
 concurrency: { group: '${{ github.workflow }}-${{ github.ref }}', cancel-in-progress: true }
 jobs:
   checks:

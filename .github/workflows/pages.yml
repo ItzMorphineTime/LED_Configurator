@@ -1,0 +1,44 @@
+# Deploys the configurator to GitHub Pages (docs/improvements/07-platform-foundations.md, task G2).
+# The app is static files with no build step, so the job only assembles the runtime files
+# (index.html, css/, js/, assets/) into _site and publishes them; tests, docs and tools are not deployed.
+#
+# One-time setup in the repository: Settings > Pages > Build and deployment > Source = "GitHub Actions".
+# To deploy from a branch other than the default one, also allow it under
+# Settings > Environments > github-pages > Deployment branches and tags.
+name: Deploy Pages
+on:
+  push:
+    branches: [main, 'refactor/modular-architecture']
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+# One deployment at a time; a newer push waits instead of cancelling a deployment in progress.
+concurrency: { group: pages, cancel-in-progress: false }
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      # Actions are pinned by commit SHA (07 Q13); .github/dependabot.yml keeps the pins current.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - name: Assemble the site
+        run: |
+          mkdir _site
+          cp index.html _site/
+          cp -r css js assets _site/
+          touch _site/.nojekyll
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d   # v6.0.0
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9   # v5.0.0
+        with: { path: _site }
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346   # v5.0.1

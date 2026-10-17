@@ -42,6 +42,22 @@ The hosted version on [GitHub Pages](https://itzmorphinetime.github.io/LED_Confi
 
 ---
 
+## 🌐 Deploying to GitHub Pages
+
+The workflow `.github/workflows/pages.yml` publishes the app on every push to `main` or
+`refactor/modular-architecture`, and can also be run by hand from the **Actions** tab ("Deploy Pages" → *Run workflow*).
+It copies only the runtime files (`index.html`, `css/`, `js/`, `assets/`); there is no build step.
+
+One-time setup:
+1. **Settings → Pages → Build and deployment → Source:** choose **GitHub Actions**.
+2. If you deploy from a branch other than the default branch, allow it under
+   **Settings → Environments → github-pages → Deployment branches and tags** (by default only the default branch may deploy).
+3. Push, then open the URL shown in the workflow run (for this repository: https://itzmorphinetime.github.io/LED_Configurator/).
+
+Separately, `.github/workflows/ci.yml` runs the static checks and unit tests on every push and pull request.
+
+---
+
 ## ✨ Features
 
 ### Multi-Section Wall Design
@@ -463,6 +479,7 @@ will be saved with the JSON v2 project format.
 - `js/`: native ES modules in layers (`core`, `legacy`, `theme`, `domain`, `geometry`, `io`, `render`, `interaction`, `app`, `ui`); `js/app/App.js` is the composition root
 - `tests/`: unit tests (`node --test "tests/unit/**/*.test.mjs"`), static checks (`tests/static/`) and the golden-master regression harness (`tests/regression/`)
 - `tools/serve.mjs`: the local static server
+- `.github/workflows/`: `ci.yml` (static checks and unit tests) and `pages.yml` (the GitHub Pages deployment)
 - Architecture and module contracts: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); refactor plan, decisions and how to run the checks: [docs/REFACTOR_PLAN.md](docs/REFACTOR_PLAN.md)
 
 ### Browser Support
@@ -505,10 +522,14 @@ The modules use modern JavaScript class syntax (private fields and methods), so 
    - Click camera/props to select
    - Drag axes to move
 
-6. **Export your design**:
+6. **Set the pivot and orientation** (optional, Wall Pivot card):
+   - The default exports the wall centred at the origin on the floor, LED face toward +X
+   - Choose another pivot mode, an offset or a yaw offset if your pipeline needs it
+
+7. **Export your design**:
    - JSON for configuration backup
-   - OBJ/glTF for 3D software
-   - ZIP for complete package
+   - OBJ (one ZIP with `.obj`, `.mtl` and textures) or glTF for 3D software
+   - Export All (ZIP) for the complete package
 
 ---
 
@@ -534,6 +555,13 @@ Contributions are welcome! Feel free to:
 ## 📋 Changelog
 
 ### Latest Updates
+- ✅ Whole-wall orientation: "Centre on −X" alignment (the wall's centre on the −X axis, LED face toward +X) plus a yaw offset; camera and props follow the wall with Keep stage layout
+- ✅ New defaults for new projects: Individual Section Meshes, Wall centre on floor, Centre on −X; Mesh Options and Wall Pivot are collapsible and start collapsed
+- ✅ Camera preview drawn by the main renderer (one WebGL canvas, letterboxed to the filmback, no helpers in the preview); fixes a stale rectangle in the viewport when the preview was enlarged
+- ✅ True framing: coverage, frame size and status from the real wall ("Not aimed at wall"), the frustum ends at the wall, Reset and the orbit frame the actual wall
+- ✅ Correct normals: stage-facing triangles and per-vertex normals in the viewport, OBJ and glTF; a normals debug view (N, Shift+N) with face-orientation shading
+- ✅ Export OBJ downloads one ZIP (`.obj`, `.mtl` and every referenced texture), so materials load in Blender; glTF has UVs (`TEXCOORD_0`) and one material per section
+- ✅ Safer imports (names escaped, values validated and clamped), lossless ZIP bundles, working Safe Distance OBJ export, no glTF crash on large walls, clean exit from pilot mode when the preview is turned off
 - ✅ Wall pivot: export origin at the bottom-left corner, the wall mesh centre on the floor or the wall centre on the floor, plus an offset; draggable pivot marker (O); camera and props kept in place; floor grid centred on the pivot (session only for now)
 - ✅ Morph branding: dark interface, Morph colours on the 3D scene and the panel-ID textures, the Morph section palette, exports named `morph-led-wall-*`
 - ✅ 3D Gizmo system for camera and prop manipulation
