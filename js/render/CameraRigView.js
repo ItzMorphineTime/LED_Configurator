@@ -73,8 +73,8 @@ export class CameraRigView {
 
   /**
    * Side effects: none.
-   * @returns {THREE.Mesh|null} legacy `cameraBodyMesh`: set by create(), NEVER nulled by remove(), so it keeps a
-   *   stale reference after the preview is switched off (picking is gated by the preview flag instead)
+   * @returns {THREE.Mesh|null} legacy `cameraBodyMesh`: set by create(), null after remove() (08 P2-4a; legacy kept a
+   *   stale reference after the preview was switched off, and picking relied on the preview flag)
    */
   get bodyMesh() {
     return this.#bodyMesh;
@@ -199,8 +199,8 @@ export class CameraRigView {
 
   /**
    * Removes and disposes the rig (no maps). The safe-distance group is NOT touched here: it stays in the scene
-   * when the preview is switched off (B-M8, tagged at CameraController.setPreviewEnabled). bodyMesh keeps its
-   * stale reference.
+   * when the preview is switched off (B-M8, tagged at CameraController.setPreviewEnabled). bodyMesh is nulled with the
+   * group (08 P2-4a, the 08 2.2 observation: legacy kept a stale `cameraBodyMesh`).
    * Ports: index.html@cd3fd3f lines 2536-2548.
    * Side effects: removes the group helper from the scene and disposes its geometries and materials.
    * @returns {void}
@@ -210,6 +210,7 @@ export class CameraRigView {
       this.#sceneManager.removeHelper(this.#group);
       disposeObject3D(this.#group);
       this.#group = null;
+      this.#bodyMesh = null;
       this.#linesHalo = null;
       this.#linesCore = null;
       this.#fill = null;

@@ -1,0 +1,21 @@
+{
+  "commit": "P2-4a",
+  "bugs": ["B-H4"],
+  "expect": [
+    { "output": "preview_off_in_pilot/{pilot_01_preview_off,pilot_02_P_alerts_again,pilot_03_Escape_alerts_again,pilot_04_preview_on_again,pilot_05_P_exits,dialogs}.json", "change": "modified", "each": true,
+      "reason": "turning the preview off in pilot mode now leaves pilot mode with no alert (08 criterion 19: #gizmo-pilot and #pilot-info are not active, the orbit view is restored); the following P (preview still off) is an entry and alerts once, Escape is the normal deselect, the preview turned on again resets the camera outside pilot mode, and the last P enters pilot mode; the page shows one alert instead of three" },
+    { "output": "preview_off_in_pilot/{pilot_01_preview_off,pilot_05_exited}.screenshot.png", "change": "modified", "each": true,
+      "reason": "after the preview is turned off the orbit view is shown (legacy stayed in the pilot view with the banner); the last capture is in pilot mode (the last P enters it)" }
+  ],
+  "mayChange": [
+    { "output": "p2_curved_safe_distance/box_corner.screenshot.png", "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas on the preview footer label row (1 level, 1 px at (920, 912), seen in the 06 T6a-08 P2-3b runs); this commit changes no rendered pixel of it" },
+    { "output": "p2_shortcut_filters/pilot_view_front.screenshot.png", "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas (1 level, 2 px, seen in the 06 T6b-08 P2-3d runs); this commit changes no rendered pixel of it" },
+    { "output": "toggles/15_car_moved.screenshot.png", "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-08 P2-3c runs)" },
+    { "output": "large_wall/final__export-zip__morph-led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b); this commit changes no export" }
+  ],
+  "notes": "08 P2-4a (B-H4): PilotController.toggle applies the preview guard only when entering pilot mode; CameraRigView.remove nulls bodyMesh (08 2.2 observation, no output). Unchanged by construction: pilot_00_on (before the preview is turned off) and keyboard/dialogs.json (its alert is the entry guard, which stays)."
+}

@@ -265,6 +265,16 @@ describe('U12 closed dashed outlines and the two-tone frustum (06 6.6, D15)', ()
     assert.equal(linesOf(view.group).length, 2, 'no stale line stays in the group');
   });
 
+  test('remove() drops the group and nulls bodyMesh (08 P2-4a; legacy kept a stale cameraBodyMesh)', () => {
+    const { view, cine, helpers } = rig();
+    view.create(cine);
+    assert.ok(view.bodyMesh);
+    view.remove();
+    assert.equal(view.group, null);
+    assert.equal(view.bodyMesh, null);
+    assert.equal(helpers.size, 0, 'the helper is unregistered');
+  });
+
   test('the camera body is opaque Signal Red with a Morph Black edge outline child that is never picked', () => {
     const { view, cine, helpers } = rig();
     view.create(cine);

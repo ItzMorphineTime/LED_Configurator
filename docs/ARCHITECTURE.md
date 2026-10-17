@@ -1535,7 +1535,7 @@ export class CameraRigView {
   constructor({ sceneManager, bus, theme })
   get exists()       // !!group   (legacy previewCameraGroup truthiness)
   get group()
-  get bodyMesh()     // legacy cameraBodyMesh: set by create(), NEVER nulled by remove() (legacy 2536-2548)
+  get bodyMesh()     // legacy cameraBodyMesh: set by create(), nulled by remove() since 08 P2-4a (legacy kept it, 2536-2548)
   /** Verbatim 2321-2344: if (group) { sceneManager.removeHelper(group); disposeObject3D(group) }; group = new THREE.Group();
    *  bodyGeom = new THREE.BoxGeometry(0.15, 0.1, 0.2); bodyMat = MeshBasicMaterial({color, transparent: opacity < 1, opacity});
    *  bodyMesh = new THREE.Mesh(bodyGeom, bodyMat); bodyMesh.position.z = 0.15;
@@ -1560,9 +1560,9 @@ export class CameraRigView {
   /** Verbatim 2431-2449: if (!group) return; position.set(posX, posY, posZ); rotation.order = 'YXZ';
    *  rotation.set(rotX * Math.PI / 180, rotY * Math.PI / 180, rotZ * Math.PI / 180) */
   updateTransform(cine)
-  /** Verbatim 2536-2548: if (group) { sceneManager.removeHelper(group); disposeObject3D(group); group = linesHalo = linesCore = fill = null }.
-   *  Does not touch the safe-distance group (B-M8, tagged at CameraController.setPreviewEnabled). bodyMesh keeps its
-   *  stale reference. */
+  /** Verbatim 2536-2548: if (group) { sceneManager.removeHelper(group); disposeObject3D(group); group = bodyMesh = linesHalo =
+   *  linesCore = fill = null } (bodyMesh nulled since 08 P2-4a, the 08 2.2 observation). Does not touch the safe-distance
+   *  group (B-M8, tagged at CameraController.setPreviewEnabled). */
   remove()
   pickMeshes()       // [bodyMesh]
 }
@@ -1840,8 +1840,9 @@ export class PilotController {
   constructor({ sceneManager, cine, driver, orbit, keyboard, interaction, hub, bus, dialogs })
   get active()                         // interaction.pilotMode
   moveSpeed = 0.05;                    // legacy pilotMoveSpeed
-  /** 3477-3509: if (!cine.enabled) { dialogs.alert('Enable Camera Frustum Preview first to use Pilot Mode'); return }
-   *    LEGACY(B-H4): the guard also blocks EXITING once the preview is off;
+  /** 3477-3509: if (!interaction.pilotMode && !cine.enabled) { dialogs.alert('Enable Camera Frustum Preview first to use Pilot
+   *    Mode'); return }   (08 P2-4a, B-H4 fixed: the guard applies only on entry; legacy also blocked exiting once the preview
+   *    was off);
    *  interaction.pilotMode = !interaction.pilotMode; bus.emit(PILOT_CHANGED, {active});
    *  entering: saved = { position: camera.position.clone(), orbit: orbit.snapshot(), fov: camera.fov }; driver.enterView();
    *  leaving: if (saved) { camera.position.copy(saved.position); orbit.restore(saved.orbit); camera.fov = saved.fov;
@@ -2603,7 +2604,7 @@ Writers listed here are the only allowed writers (checked by `tests/static/check
 | `mouse` (1369) | `PointerRay.ndc` | `PointerRay.fromEvent` |
 | `pilotMode` (1370) | `InteractionState.pilotMode` (`PilotController.active`) | `PilotController.toggle` only |
 | `savedCameraState` (1371) | `PilotController` private `#saved` = `{position, orbit: OrbitController.snapshot(), fov}` | `PilotController.toggle` |
-| `cameraBodyMesh` (1372) | `CameraRigView.bodyMesh` (never nulled, as legacy) | `CameraRigView.create` |
+| `cameraBodyMesh` (1372) | `CameraRigView.bodyMesh` (nulled by `remove()` since 08 P2-4a; legacy never nulled it) | `CameraRigView.create`, `CameraRigView.remove` |
 | `pilotMoveSpeed` (1375) | `PilotController.moveSpeed` | `PilotController.onWheel` |
 | `isPilotLooking` (1376) | `PilotController` private `#looking` | `PilotController` mouse handlers, `toggle` |
 | `pilotLastMouse` (1377) | `PilotController` private `#lastMouse` | same |
@@ -2826,7 +2827,7 @@ preview.setVisible(on)                                       // 4234 #camera-pre
 if (on) { if (!preview.initialized) preview.init(); this.resetPose(); }          // 4235-4237 (init = renderer, camera, resize listeners)
 else {
   rig.remove()                                               // 4239  LEGACY(B-M8): the safe-distance group is left in the scene
-  if (pilot.active) pilot.toggle()                           // 4241-4243 LEGACY(B-H4): enabled is already false -> alert, stays in pilot
+  if (pilot.active) pilot.toggle()                           // 4241-4243 enabled is already false; leaves pilot mode cleanly since 08 P2-4a (B-H4)
   if (selection.isSelected('camera')) selection.deselect()   // 4245-4247
 }
 ```
@@ -3046,7 +3047,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | B-H1 | Viewport strip winding vs normals (C-5) | `Strategies.mesh.viewport.winding` (fixed; `side` stays `'double'` as a design choice) | Landed in 08 P2-2a (`mesh.viewport.winding = 'ccw'`; `mesh.viewport.side = 'double'` stays as a design choice; no tag site) |
 | B-H2 | Export winding, constant/contradicting normals, no doubleSided (R-5, S-2) | `Strategies.mesh.obj/gltf` (fixed) | Landed in 08 P2-2c (OBJ: `mesh.obj` winding `'ccw'`, normals `'averaged'`, stripNormals `'per-vertex'`) and 08 P2-2d (glTF: `mesh.gltf` winding `'ccw'`, normals `'averaged'`, panelNormal `'facing'`, attributes with `NORMAL`); no tag site |
 | B-H3 | glTF RangeError; ZIP dies silently (S-3, U-4) | `GltfExporter`'s default encoder; `ProjectIO` exports (fixed; `Strategies.gltfBase64` retired) | Landed in 08 P2-1a (`chunkedBase64` encoder; `ProjectIO.#runExport` reports every export failure; no tag site) |
-| B-H4 | Preview off in pilot: alert, stuck in pilot (O-8) | `CameraController.setPreviewEnabled` (order) + `PilotController.toggle` guard | exit pilot before clearing `enabled` |
+| B-H4 | Preview off in pilot: alert, stuck in pilot (O-8) | `PilotController.toggle` guard (fixed) | Landed in 08 P2-4a (`PilotController.toggle` applies the preview guard only when entering pilot mode, so turning the preview off leaves pilot mode cleanly; `CameraRigView.remove` nulls `bodyMesh`; no tag site) |
 | B-H5 | Wall textures leak (memory only) | `Strategies.dispose.wallTextures` | Landed in Phase 1C H1 (`dispose.wallTextures = true`; no tag site) |
 | B-M1 | Safe-distance OBJ throws ReferenceError (K-3) | `ProjectIO.exportSafeDistanceOBJ` (fixed) | Landed in 08 P2-5a (`downloader.saveBlob`; no tag site) |
 | B-M2 | Index-based MTL texture path (R-3) | `PanelNaming.mtlTextureFile` | name-based |
@@ -3148,19 +3149,19 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/interaction/TransformGizmo.js#rebuild` | B-L22, B-L26 |
 | `js/interaction/TransformGizmo.js#updatePosition` | B-L23 |
 | `js/interaction/TransformGizmo.js#onMouseMove` | B-M12 |
-| `js/interaction/PilotController.js#toggle` | B-H4, B-L26 |
+| `js/interaction/PilotController.js#toggle` | B-L26 |
 | `js/interaction/PilotController.js#tickKeyboard` | B-M13, B-L27 |
 | `js/interaction/ViewportInput.js#attachPointer` | B-M14 |
 | `js/app/WallController.js#setMeshMode` | B-L13 |
 | `js/app/CameraController.js#CameraHub.refresh` | B-L30 |
-| `js/app/CameraController.js#setPreviewEnabled` | B-H4, B-M8 |
+| `js/app/CameraController.js#setPreviewEnabled` | B-M8 |
 | `js/app/ProjectIO.js#exportOBJ` | B-L7 |
 | `js/app/ProjectIO.js#exportZIP` | B-L14 |
 | `js/ui/SectionLogosPanel.js#onUpload` | B-L35 |
 | `js/ui/WallDisplayPanel.js#bind` | B-L13 |
 | `index.html` (markup, untagged; documentation-only) | B-L36 |
 
-Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14) and B-L5 (08 P2-1b; its only site was the tag in `GltfExporter.addMesh`, which keeps B-H2 and B-M7) and B-L4 (08 P2-1c; its sites were the tags in `ProjectIO.exportPanelIds`, which has no tag left, and `ProjectIO.exportZIP`, which keeps B-L14; its viewport half never had a tag and is fixed by 08 P2-1d) and B-H1 (08 P2-2a; its sites were the tags in `WallMeshBuilder.quadIndices`, which keeps B-H2 until 08 P2-2d, and `LEDMaterialFactory.side`, whose `'double'` value is now a design choice) and B-L3 (08 P2-2b; its only site was the tag in `WallMeshBuilder.sectionGrid`, which keeps B-L15 and B-L8) and B-H2 (08 P2-2c and P2-2d; its sites were the tags in `ObjExporter.write`'s `#stripNormalLine`, which left with P2-2c (`write` keeps B-M6, B-L6 and B-L8), `WallMeshBuilder.quadIndices`, which has no tag left, and `GltfExporter.addMesh`, which keeps B-M7) and B-L11 (08 P2-9b; its sites were the tags in `InputState.isShortcutIgnoredTarget`, now a re-export of `core/typingTarget.js isTypingTarget`, and `ViewportInput.attachShortcuts`, which has no tag left) and B-L15 (08 P2-8a; its sites were the tags in `WallSection.FIELD_RULES`, which has no tag left, and `WallMeshBuilder.sectionGrid`, which keeps B-L8 for unvalidated imported counts) and B-M4 (08 P2-3a; its sites were `legacyHtml`, deleted, and the tags in `SectionListPanel.render`, which has no tag left, `SectionLogosPanel.render` and `ProjectSerializer.read`, which kept B-L8 until 08 P2-3b) and B-L21 (08 P2-3d; its sites were the tags in `WallController.applyImport` and `SectionLogosPanel`'s constructor, which have no tag left) and B-L16 (08 P2-3c; its only site was the tag in `SectionListPanel.patchCard`, now `setTitleWithWarning`) and B-L8 (08 P2-3b; its sites were `Strategies.importValidation`, retired, and the tags in `WallSection`'s constructor, `Wall.appendLikeLast` and `replaceAll`, `LogoLibrary.get`, `WallMeshBuilder.sectionGrid`, `ProjectSerializer.read`, `LEDWallView.rebuild` and `SectionLogosPanel.render`, which have no tag left, and `ObjExporter.write` and `GltfExporter.write`, which keep B-M6 / B-L6); in Phase 3, B-L24 (its `.view-btn.active` half in 01 F1-2, `css/features/debug-view.css`; its badge-overlap half in 06 T4a, `.selection-indicator` at `bottom: 64px` in `css/09-viewport-tools.css`; its two documentation-only entries, the `Legacy note B-L24` paragraphs of the `css/07-viewport.css` and `css/09-viewport-tools.css` header comments, left with 06 T4a, whose header comments now say where it landed).
+Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14) and B-L5 (08 P2-1b; its only site was the tag in `GltfExporter.addMesh`, which keeps B-H2 and B-M7) and B-L4 (08 P2-1c; its sites were the tags in `ProjectIO.exportPanelIds`, which has no tag left, and `ProjectIO.exportZIP`, which keeps B-L14; its viewport half never had a tag and is fixed by 08 P2-1d) and B-H1 (08 P2-2a; its sites were the tags in `WallMeshBuilder.quadIndices`, which keeps B-H2 until 08 P2-2d, and `LEDMaterialFactory.side`, whose `'double'` value is now a design choice) and B-L3 (08 P2-2b; its only site was the tag in `WallMeshBuilder.sectionGrid`, which keeps B-L15 and B-L8) and B-H2 (08 P2-2c and P2-2d; its sites were the tags in `ObjExporter.write`'s `#stripNormalLine`, which left with P2-2c (`write` keeps B-M6, B-L6 and B-L8), `WallMeshBuilder.quadIndices`, which has no tag left, and `GltfExporter.addMesh`, which keeps B-M7) and B-L11 (08 P2-9b; its sites were the tags in `InputState.isShortcutIgnoredTarget`, now a re-export of `core/typingTarget.js isTypingTarget`, and `ViewportInput.attachShortcuts`, which has no tag left) and B-L15 (08 P2-8a; its sites were the tags in `WallSection.FIELD_RULES`, which has no tag left, and `WallMeshBuilder.sectionGrid`, which keeps B-L8 for unvalidated imported counts) and B-M4 (08 P2-3a; its sites were `legacyHtml`, deleted, and the tags in `SectionListPanel.render`, which has no tag left, `SectionLogosPanel.render` and `ProjectSerializer.read`, which kept B-L8 until 08 P2-3b) and B-H4 (08 P2-4a; its sites were the tags in `PilotController.toggle`, which keeps B-L26, and `CameraController.setPreviewEnabled`, which keeps B-M8 until 08 P2-4b) and B-L21 (08 P2-3d; its sites were the tags in `WallController.applyImport` and `SectionLogosPanel`'s constructor, which have no tag left) and B-L16 (08 P2-3c; its only site was the tag in `SectionListPanel.patchCard`, now `setTitleWithWarning`) and B-L8 (08 P2-3b; its sites were `Strategies.importValidation`, retired, and the tags in `WallSection`'s constructor, `Wall.appendLikeLast` and `replaceAll`, `LogoLibrary.get`, `WallMeshBuilder.sectionGrid`, `ProjectSerializer.read`, `LEDWallView.rebuild` and `SectionLogosPanel.render`, which have no tag left, and `ObjExporter.write` and `GltfExporter.write`, which keep B-M6 / B-L6); in Phase 3, B-L24 (its `.view-btn.active` half in 01 F1-2, `css/features/debug-view.css`; its badge-overlap half in 06 T4a, `.selection-indicator` at `bottom: 64px` in `css/09-viewport-tools.css`; its two documentation-only entries, the `Legacy note B-L24` paragraphs of the `css/07-viewport.css` and `css/09-viewport-tools.css` header comments, left with 06 T4a, whose header comments now say where it landed).
 
 How rule 6 reads these rows (as implemented in `tests/static/check.mjs`): the comparison is per file, so a tag may sit in a private helper that only the named method calls (for example `ProjectSerializer.#readV1` for `#read`, `ObjExporter.#writeCombined` for `#write`, `GltfExporter.#writeCombined` for `#write`); a tag wrapped across JSDoc continuation lines counts as one tag (placeholders are still rejected); and a row whose `js/` file does not exist is reported, so a typo in a site path cannot bypass the check.
 
@@ -3172,7 +3173,6 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 |---|---|---|
 | In pilot mode the main camera keeps the viewport aspect, so its horizontal FOV differs from the preview and the frustum | pilot screenshots | `PilotCameraDriver.enterView` (sets only `fov`) |
 | Font-gate limitations (06 T5 loads JetBrains Mono 700 and redraws the panel IDs once when the web fonts settle, 6.2 row F6-1): text drawn after the gate has settled (for example a section renamed to a name in a font subset not yet cached) uses the fallback font until the next rebuild, which `PanelIdRenderer` prepares by requesting that subset on the first draw; the safe-distance label sprite is not redrawn by the gate, only on the next camera change | panel-ID textures, PNG/ZIP exports drawn before the font arrives; the safe-distance label | `app/fontGate.js` + `PanelIdRenderer.takePendingFonts` |
-| `cameraBodyMesh` is not nulled by `removeCameraPreview`; picking relies on the preview flag | picking | `CameraRigView.bodyMesh` / `CameraController.isPickable` |
 | The frustum geometry is built twice on the first enable (duplicate lens readout) | DOM write count only | `CameraHub.refresh` + `CameraRigView.create` |
 | Delivery timing (new with ES modules, not a legacy defect): the inline script was parser-blocking and created the renderer before the first paint; the module graph loads asynchronously, so the browser can paint the static markup (empty stats, no cards) before `App.start()` runs. The final DOM, canvas and every output are unchanged; the overlay badge text composited over the canvas can differ by 1 level in a few glyph pixels (accepted jitter, section 10) | first frames only; overlay glyph pixels in screenshots | `index.html` script tag (`blocking="render"` or a head placement would be a delivery change) |
 
@@ -3486,3 +3486,10 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 3.11, 5.2: `SectionLogosPanel` re-renders on `WALL_SECTIONS_CHANGED` for every reason when panel IDs are on, the import included.
 - 8.2: the B-L21 row is kept with a `Landed` fix cell; 8.3: the rows `WallController.js#applyImport` and `SectionLogosPanel.js#constructor` are deleted, so `LEGACY_SITES` no longer lists it.
 - 2.3: `wall-controller.test.mjs` (the reset and the installed logos, the legacy import tail edited as `IMPORT_EDITS` so the parity scenario's import, made with panel IDs on and a logo loaded, compares the reset and the logo-list render); `domain.test.mjs` (`clear`, `set`).
+
+**08 P2-4a, B-H4 landed** (manifest `tests/regression/expected/P2-4a.json`: `preview_off_in_pilot`'s states, dialogs and the screenshots after the preview is turned off):
+- 3.8: `PilotController.toggle` alerts only when entering pilot mode with the preview off (`!interaction.pilotMode && !cine.enabled`); the preview-off handler, which clears `cine.enabled` before it leaves pilot mode, now restores the orbit view with no alert, and P, Escape and the pilot button work again. Entering pilot mode with the preview off still alerts (`keyboard` is unchanged).
+- 3.7, 4, 8.4: `CameraRigView.remove` nulls `bodyMesh` (the 08 2.2 observation; picking was already gated by the preview flag), so the 8.4 row is deleted.
+- 6.5: the preview-off flow leaves pilot mode cleanly.
+- 8.2: the B-H4 row is kept with a `Landed` fix cell; 8.3: B-H4 leaves `PilotController.js#toggle` (B-L26 stays) and `CameraController.js#setPreviewEnabled` (B-M8 stays until 08 P2-4b), so `LEGACY_SITES` no longer lists it.
+- 2.3: `camera-hub.test.mjs` (the preview-off sequence leaves pilot mode with no alert; `PilotController.toggle`'s entry-only guard with fakes); `scene-overlays.test.mjs` (`remove()` nulls `bodyMesh`).

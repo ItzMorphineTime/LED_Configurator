@@ -276,7 +276,10 @@ calls the pilot toggle after the preview flag is already false, so it alerts `En
 Preview first to use Pilot Mode` and stays in pilot mode (`#gizmo-pilot.active`,
 `#pilot-info.visible`, the main camera keeps the pilot view). P and Escape alert again. Turning the
 preview back on re-drives the pilot view, and P then leaves pilot mode. Each state records the gizmo
-classes, the camera panel and the dialogs so far.
+classes, the camera panel and the dialogs so far. Since 08 P2-4a (B-H4 fixed) turning the preview off leaves pilot
+mode with no alert and restores the orbit view; the next P (preview still off) alerts once, as any entry with the
+preview off; Escape deselects; the preview turned on again resets the camera; the last P enters pilot mode. The step
+and output names keep their original wording.
 
 ### `pilot_look` (3477-3562, 3622-3631, 3835-3840, 4475-4479)
 
@@ -817,7 +820,8 @@ in parentheses changes them:
   numbers, (iii) the unknown mode, (iv) the duplicate ids and (v) the string id are corrected with one M-IMP-5 alert
   each; `{foo: 1}` alerts M-IMP-1 and `null` M-IMP-4a; the malformed file keeps its text).
 - `preview_off_in_pilot`: three alerts `Enable Camera Frustum Preview first to use Pilot Mode`, and
-  pilot mode stays on until the preview is enabled again (B-H4).
+  pilot mode stays on until the preview is enabled again (B-H4) (08 P2-4a: one alert, the entry attempt with the
+  preview off; turning the preview off leaves pilot mode).
 - `preview_resize`: the second drag produces a 1200×120 preview window (B-L32).
 - `p2_xss_names`: `xss_probe` and (after the rename) `xss_probe2` are `true`, the third card's colour
   swatch gets the injected outline, and the second card's name input shows `Say ` (B-M4, B-L8, B-L16) (08 P2-3a:

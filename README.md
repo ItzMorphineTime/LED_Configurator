@@ -132,6 +132,9 @@ The hosted version on [GitHub Pages](https://itzmorphinetime.github.io/LED_Confi
 | Scroll Wheel | Adjust movement speed |
 | Escape | Exit pilot mode |
 
+Release note: turning the camera preview off while in pilot mode used to leave the viewport stuck in pilot mode, with
+P, Escape and the pilot button only repeating an alert; it now leaves pilot mode and restores the orbit view.
+
 ---
 
 ## 📐 Configuration Options

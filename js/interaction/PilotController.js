@@ -151,15 +151,15 @@ export class PilotController {
 
   /**
    * Legacy togglePilotMode: enter (save the main camera and orbit state, drive the camera from the film
-   * camera) or leave (restore them). The only writer of interaction.pilotMode.
+   * camera) or leave (restore them). The only writer of interaction.pilotMode. The preview guard applies only when
+   * entering (08 P2-4a, B-H4 fixed: legacy also blocked leaving once the preview was off, and the preview-off handler
+   * clears the flag before it leaves pilot mode, so the app alerted and stayed in pilot mode).
    * Ports: index.html@cd3fd3f lines 3477-3509.
-   * Side effects: may alert; writes interaction.pilotMode; emits PILOT_CHANGED {active} (toolbar button and
-   * banner); writes the main camera and the orbit state.
+   * Side effects: may alert (entering only); writes interaction.pilotMode; emits PILOT_CHANGED {active} (toolbar
+   * button and banner); writes the main camera and the orbit state.
    */
   toggle() {
-    // LEGACY(B-H4): the guard also blocks EXITING pilot mode once the preview is off (the preview-off
-    // handler clears the flag before calling toggle), so the app alerts and stays in pilot mode.
-    if (!this.#cine.enabled) {
+    if (!this.#interaction.pilotMode && !this.#cine.enabled) {
       this.#dialogs.alert('Enable Camera Frustum Preview first to use Pilot Mode');
       return;
     }

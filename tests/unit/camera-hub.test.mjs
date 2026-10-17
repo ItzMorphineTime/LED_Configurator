@@ -60,7 +60,7 @@ function setup({ enabled = false, rigExists = false, showSafeDistance = false, p
     create(c) { log.push({ call: 'rig.create', arg: c }); this.exists = true; this.bodyMesh = bodyMesh; },
     rebuildFrustum(c) { log.push({ call: 'rig.rebuildFrustum', arg: c }); },
     updateTransform(c) { log.push({ call: 'rig.updateTransform', arg: c }); },
-    remove() { log.push({ call: 'rig.remove' }); this.exists = false; },  // bodyMesh is never nulled (legacy)
+    remove() { log.push({ call: 'rig.remove' }); this.exists = false; this.bodyMesh = null; },  // nulled since 08 P2-4a
     pickMeshes() { return [this.bodyMesh]; },
   };
   const preview = {
@@ -76,10 +76,11 @@ function setup({ enabled = false, rigExists = false, showSafeDistance = false, p
   const pilotDriver = { refresh() { log.push({ call: 'pilotDriver.refresh' }); } };
   const pilot = {
     active: pilotActive,
-    // Reproduces PilotController.toggle's guard (B-H4): alerts and returns while the preview is off.
+    // Reproduces PilotController.toggle's guard: since 08 P2-4a (B-H4 fixed) it alerts and returns only when ENTERING
+    // pilot mode with the preview off.
     toggle() {
       log.push({ call: 'pilot.toggle', enabled: cine.enabled });
-      if (!cine.enabled) { log.push({ call: 'dialogs.alert' }); return; }
+      if (!this.active && !cine.enabled) { log.push({ call: 'dialogs.alert' }); return; }
       this.active = !this.active;
     },
   };
@@ -237,19 +238,19 @@ describe('CameraController.setPreviewEnabled (P-PREVIEW, ARCHITECTURE.md 6.5)', 
     assert.ok(s.calls().includes('safeDistance.create'));
   });
 
-  test('off in pilot mode with the camera selected: rig removed, pilot.toggle AFTER enabled = false (B-H4), deselect', () => {
+  test('off in pilot mode with the camera selected: rig removed, pilot.toggle AFTER enabled = false leaves pilot mode (B-H4 fixed in 08 P2-4a), deselect', () => {
     const s = setup({ enabled: true, rigExists: true, previewInitialized: true, pilotActive: true, selectedId: 'camera' });
     s.controller.setPreviewEnabled(false);
     assert.deepEqual(s.calls(), [
       'emit CAMERA_PREVIEW_CHANGED', 'preview.setVisible', 'rig.remove',
-      'pilot.toggle', 'dialogs.alert',
+      'pilot.toggle',
       'selection.isSelected', 'selection.deselect',
     ]);
     assert.deepEqual(s.entry('emit CAMERA_PREVIEW_CHANGED').payload, { enabled: false });
     assert.equal(s.entry('emit CAMERA_PREVIEW_CHANGED').enabled, false);
     assert.equal(s.entry('preview.setVisible').arg, false);
     assert.equal(s.entry('pilot.toggle').enabled, false, 'toggle runs while cine.enabled is already false');
-    assert.equal(s.pilot.active, true, 'the guard alerts and the app stays in pilot mode (B-H4)');
+    assert.equal(s.pilot.active, false, 'pilot mode is left, with no alert (legacy: the guard alerted and the app stayed in pilot mode)');
     assert.equal(s.entry('selection.isSelected').arg, 'camera');
   });
 
@@ -582,4 +583,49 @@ describe('WP7 module imports follow the layer table', () => {
       assert.deepEqual(importsOf(rel), expected);
     });
   }
+});
+
+describe('PilotController.toggle: the preview guard applies only on entry (08 P2-4a, B-H4)', () => {
+  test('entering with the preview off alerts and stays out; leaving with the preview off restores the orbit view', async () => {
+    globalThis.window ??= { THREE: {} };   // PilotController imports js/vendor/three.js (window.THREE); toggle uses no THREE
+    const { PilotController } = await import('../../js/interaction/PilotController.js');
+    const log = [];
+    const camera = {
+      position: { clone: () => 'saved-position', copy: (v) => log.push(['camera.position.copy', v]) },
+      fov: 50,
+      updateProjectionMatrix: () => log.push(['camera.updateProjectionMatrix']),
+    };
+    const cine = { enabled: false };
+    const interaction = { pilotMode: false };
+    const bus = new EventBus();
+    bus.on(Events.PILOT_CHANGED, (p) => log.push(['PILOT_CHANGED', p.active]));
+    const pilot = new PilotController({
+      sceneManager: { camera },
+      cine,
+      driver: { enterView: () => log.push(['driver.enterView']) },
+      orbit: {
+        snapshot: () => 'orbit-state',
+        restore: (s) => log.push(['orbit.restore', s]),
+        updateCameraPosition: () => log.push(['orbit.updateCameraPosition']),
+      },
+      keyboard: {},
+      interaction,
+      hub: { refresh() {} },
+      bus,
+      dialogs: { alert: (m) => log.push(['alert', m]) },
+    });
+    pilot.toggle();
+    assert.deepEqual(log, [['alert', 'Enable Camera Frustum Preview first to use Pilot Mode']], 'entry is still guarded');
+    assert.equal(interaction.pilotMode, false);
+    log.length = 0;
+    cine.enabled = true;
+    pilot.toggle();
+    assert.deepEqual(log, [['PILOT_CHANGED', true], ['driver.enterView']]);
+    log.length = 0;
+    cine.enabled = false;   // the preview-off handler clears the flag before it leaves pilot mode
+    pilot.toggle();
+    assert.equal(interaction.pilotMode, false, 'left cleanly (legacy alerted and stayed in pilot mode)');
+    assert.deepEqual(log, [['PILOT_CHANGED', false], ['camera.position.copy', 'saved-position'], ['orbit.restore', 'orbit-state'],
+      ['camera.updateProjectionMatrix'], ['orbit.updateCameraPosition']]);
+  });
 });

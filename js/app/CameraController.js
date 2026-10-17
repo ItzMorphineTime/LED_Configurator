@@ -165,12 +165,13 @@ export class CameraController {
 
   /**
    * P-PREVIEW (ARCHITECTURE.md 6.5), after CameraPanel flipped the toggle class. On: the preview renderer is
-   * created on the first enable, then the pose is reset (which runs P2). Off: the rig is removed, pilot mode is
-   * (attempted to be) left and the camera is deselected.
+   * created on the first enable, then the pose is reset (which runs P2). Off: the rig is removed, pilot mode is left
+   * (cleanly since 08 P2-4a, B-H4: the pilot guard applies only on entry) and the camera is deselected.
    * Ports: index.html@cd3fd3f lines 4232-4248.
    * Side effects: writes cine.enabled; emits CAMERA_PREVIEW_CHANGED {enabled} (#camera-preview-options);
    *   preview.setVisible (#camera-preview-window); on: preview.init() (first time), resetPose();
-   *   off: rig.remove(), pilot.toggle() when in pilot mode (alerts), selection.deselect() when the camera is selected.
+   *   off: rig.remove(), pilot.toggle() when in pilot mode (restores the orbit view), selection.deselect() when the
+   *   camera is selected.
    * @param {boolean} on  the toggle's new state
    * @returns {void}
    */
@@ -186,8 +187,8 @@ export class CameraController {
       // LEGACY(B-M8): only the rig is removed; the safe-distance group (if shown) stays in the scene, stale, and
       // its toggle is hidden with the preview options.
       this.#rig.remove();
-      // LEGACY(B-H4): pilot mode is left AFTER cine.enabled was cleared, so PilotController.toggle's guard
-      // alerts 'Enable Camera Frustum Preview first to use Pilot Mode' and the app stays in pilot mode.
+      // Pilot mode is left after cine.enabled was cleared; since 08 P2-4a (B-H4 fixed) the pilot guard applies only on
+      // entry, so this exits cleanly (legacy alerted and stayed in pilot mode).
       if (this.#pilot.active) {
         this.#pilot.toggle();
       }
@@ -268,7 +269,7 @@ export class CameraController {
   // ---- Selectable 'camera' --------------------------------------------------------------------------------
 
   /**
-   * Pick gating: the preview flag and the body mesh (which is never nulled, so the flag does the gating).
+   * Pick gating: the preview flag and the body mesh (nulled by CameraRigView.remove since 08 P2-4a).
    * Ports: index.html@cd3fd3f line 3441.
    * Side effects: none.
    * @returns {boolean}
