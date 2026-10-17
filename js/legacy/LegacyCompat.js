@@ -40,7 +40,7 @@ function deepFreeze(value) {
  */
 export const Strategies = deepFreeze({
   mesh: {
-    viewport: { winding: 'ccw', normals: 'averaged', combinedUV: 'atlas-u-full-v', side: 'double' },
+    viewport: { winding: 'ccw', normals: 'averaged', combinedUV: 'atlas-pixel-accurate', side: 'double' },
     obj:      { winding: 'ccw', normals: 'averaged', stripNormals: 'per-vertex',
                 combinedUV: 'per-section-overlap', panelNormal: 'facing' },
     gltf:     { winding: 'ccw', normals: 'averaged', panelNormal: 'facing', attributes: ['POSITION', 'NORMAL'],
@@ -51,7 +51,9 @@ export const Strategies = deepFreeze({
                                                    // obj winding/normals/stripNormals since 08 P2-2c (B-H2), Phase-1
                                                    // 'legacy-cw' / 'none' / 'constant-z'; gltf winding/normals/attributes
                                                    // since 08 P2-2d (B-H2), Phase-1 'legacy-cw' / 'none' / ['POSITION'],
-                                                   // and the new leaf gltf.panelNormal (08 P2-2d)
+                                                   // and the new leaf gltf.panelNormal (08 P2-2d);
+                                                   // viewport.combinedUV: 'atlas-pixel-accurate' since 08 P2-7a (B-M5),
+                                                   // Phase-1 'atlas-u-full-v'
   exportCombinedColor: 'first-section',            // B-L6
   framingBounds: 'flat',                           // B-L2, B-M10
   curveBeforeFirstPanel: true,                     // B-L1
@@ -131,7 +133,7 @@ const QUIRKS = deepFreeze({
   'B-M4': ['Unescaped names/colours/values in innerHTML (V-8)',
     'Landed in 08 P2-3a (`ui/dom.js escapeHtml` on every template interpolation of `SectionListPanel` and `SectionLogosPanel`, the live rename included; `legacyHtml` deleted; the colour validation is 08 P2-3b\'s; no tag site)'],
   'B-M5': ['Combined V full height (E-5)',
-    'new UV strategy (Feature 4)'],
+    'Landed in 08 P2-7a (`mesh.viewport.combinedUV = \'atlas-pixel-accurate\'`: v = (row / rows) * `uvHeight`, the section\'s share of the bottom-aligned atlas from `TextureAtlas.computeAtlas`, so combined panel IDs and the LED-sim repeat are pixel-accurate on sections of different heights; no tag site)'],
   'B-M6': ['Overlapping combined OBJ UVs (R-6)',
     'atlas UVs'],
   'B-M7': ['glTF POSITION only (S-2)',
@@ -246,13 +248,12 @@ const TAG_SITES = deepFreeze([
   ['js/domain/Prop.js#rotateBy', ['B-L22']],
   ['js/geometry/WallLayout.js#computeWallLayout', ['B-L1']],
   ['js/geometry/WallLayout.js#framingBounds', ['B-L2', 'B-M10']],
-  ['js/geometry/WallMeshBuilder.js#combinedGrid', ['B-M5']],
   ['js/io/ProjectSerializer.js#write', ['B-L31']],
   ['js/io/ObjExporter.js#write', ['B-M6', 'B-L6']],
   ['js/io/GltfExporter.js#write', ['B-L6']],
   ['js/io/GltfExporter.js#addMesh', ['B-M7']],
   ['js/render/SceneManager.js#addHelper', ['B-M11']],
-  ['js/render/LEDMaterialFactory.js#combined', ['B-M5', 'B-L18']],
+  ['js/render/LEDMaterialFactory.js#combined', ['B-L18']],
   ['js/render/textures/LEDPixelTextureFactory.js#tile', ['B-L18', 'B-L20']],
   ['js/render/textures/PanelIdRenderer.js#panelCanvas', ['B-L19']],
   ['js/render/textures/PanelIdRenderer.js#sectionCanvas', ['B-L35']],

@@ -55,8 +55,8 @@ export class LEDMaterialFactory {
 
   /**
    * The material of the combined mesh.
-   * panel IDs: the atlas canvas as a CanvasTexture; LED sim: one white tile repeated over the whole atlas;
-   * colour: vertex colours.
+   * panel IDs: the atlas canvas as a CanvasTexture; LED sim: one white tile repeated over the whole atlas (one tile per
+   * LED: the pixel-accurate atlas UVs of 08 P2-7a give each section its own LED rows); colour: vertex colours.
    * Ports: index.html@cd3fd3f lines 1664-1675 (the canvas of 1667 is PanelIdRenderer.atlasCanvas).
    * Side effects: allocates the texture(s) then the material (THREE ids).
    * @param {import('../domain/WallSection.js').WallSection[]} sections  the wall's sections, in order
@@ -78,8 +78,8 @@ export class LEDMaterialFactory {
       const texture = this.#canvasTexture(combinedCanvas);
       material = new THREE.MeshBasicMaterial({ map: texture, side: this.#side(), wireframe: display.wireframe });
     } else if (display.ledSimEnabled) {
-      // LEGACY(B-L18, B-M5): white LEDs whatever the section colours, and the tile repeats over totalLedY
-      // although the combined V spans each section's own height (sections of different heights are stretched).
+      // LEGACY(B-L18): white LEDs whatever the section colours. The tile repeats totalLedX x totalLedY times over the
+      // atlas UVs, one tile per LED: since 08 P2-7a (B-M5 fixed) each section spans v in [0, uvHeight], its own LED rows.
       const ledColor = () => {
         switch (Strategies.combinedLedSimColor) {
           case 'white':

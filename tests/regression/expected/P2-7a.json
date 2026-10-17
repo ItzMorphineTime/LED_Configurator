@@ -1,0 +1,46 @@
+{
+  "commit": "P2-7a",
+  "bugs": [
+    "B-M5"
+  ],
+  "expect": [
+    {
+      "output": "mixed/panel_ids_combined.screenshot.png",
+      "change": "modified",
+      "reason": "B-M5: each section of the mixed wall (192, 270, 128 and 192 LED rows of 270) now samples only its own share of the bottom-aligned atlas, v = (row / rows) * uvHeight (08 6.7), so the panel labels of the shorter sections are no longer stretched over their full height"
+    },
+    {
+      "output": "p2_mixed_content/panel_ids_combined.screenshot.png",
+      "change": "modified",
+      "reason": "the same pixel-accurate V on the mixed wall: the combined panel IDs of each section match its rect of the Panel IDs PNG instead of being stretched over the full height"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "p2_mixed_content/ledsim_*.screenshot.png",
+      "change": "modified",
+      "reason": "the combined LED-sim tile repeat now gives every section its own LED rows (B-M5), but at this framing the 64 px tile is drawn at far below one screen pixel per LED, so the mipmapped tile averages to one flat grey on every section before and after (the first gate run showed both IDENTICAL); declared under mayChange instead of the card's expect (corrected after the first gate run)"
+    },
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-08 P2-12d runs); this commit changes no pixel of it"
+    },
+    {
+      "output": "p2_curved_safe_distance/box_corner.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas on the preview footer label row (1 level, 1 px, seen in the 06 T6a-08 P2-12d runs); this commit changes no pixel of it"
+    },
+    {
+      "output": "p2_shortcut_filters/pilot_view_front.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas (1 level, 2 px, seen in the 06 T6b-08 P2-12d runs); this commit changes no pixel of it"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b); this commit changes no export"
+    }
+  ],
+  "notes": "08 P2-7a (B-M5): mesh.viewport.combinedUV = atlas-pixel-accurate; computeAtlas entries gain uvHeight = rows * ledY / totalLedY; WallMeshBuilder adds the uv option heightV, atlasUvRect, the combined sectionRanges vertexStart/vertexCount and sectionRangeForFace (07 C52; no output change). Equal-height walls give uvHeight = 1 and the legacy v bit for bit, so every other screenshot stays identical (only mixed has different section heights in the harness)."
+}

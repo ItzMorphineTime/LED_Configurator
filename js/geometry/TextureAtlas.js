@@ -44,6 +44,8 @@ export function canvasFits(w, h, limits = CANVAS_HARD_LIMITS) {
  * @property {number} ledOffsetX  the running `xOffset` BEFORE this section (LED columns; x px = ledOffsetX * pxPerLed)
  * @property {number} uvWidth     (section.panelCols * section.ledX) / totalLedX
  * @property {number} uvOffsetX   running sum of the previous uvWidth values
+ * @property {number} uvHeight    (section.panelRows * section.ledY) / totalLedY: the share of the atlas height the
+ *   bottom-aligned section occupies (08 P2-7a, 08 6.7; exactly 1 when every section has the same LED height)
  */
 
 /**
@@ -55,6 +57,7 @@ export function canvasFits(w, h, limits = CANVAS_HARD_LIMITS) {
  *     ledOffsetX = xOffset before `xOffset += section.panelCols * section.ledX`                      (1696, 1703)
  *     uvWidth = (section.panelCols * section.ledX) / totalLedX                                        (1595-1596)
  *     uvOffsetX = the value before `uvOffsetX += uvWidth`                                             (1592, 1643)
+ *     uvHeight = (section.panelRows * section.ledY) / totalLedY       (new in 08 P2-7a, B-M5 fixed: 08 6.7)
  * Ports: index.html@cd3fd3f lines 1586-1596, 1643, 1681-1705.
  * Side effects: none.
  * @param {import('../domain/WallSection.js').WallSection[]} sections  read raw, never coerced
@@ -76,7 +79,8 @@ export function computeAtlas(sections) {
   sections.forEach((section, sectionIndex) => {
     const sectionLedX = section.panelCols * section.ledX;
     const uvWidth = sectionLedX / totalLedX;
-    entries.push({ section, sectionIndex, startCol: cumulativeCol, ledOffsetX: xOffset, uvWidth, uvOffsetX });
+    const uvHeight = (section.panelRows * section.ledY) / totalLedY;
+    entries.push({ section, sectionIndex, startCol: cumulativeCol, ledOffsetX: xOffset, uvWidth, uvOffsetX, uvHeight });
     xOffset += section.panelCols * section.ledX;
     cumulativeCol += section.panelCols;
     uvOffsetX += uvWidth;

@@ -16,7 +16,9 @@ import { Wall, PivotMode } from '../../js/domain/Wall.js';
 import { Project } from '../../js/domain/Project.js';
 import { LegacyProfiles, Strategies, unsupportedStrategy } from '../../js/legacy/LegacyCompat.js';
 import { computeWallLayout, layoutProject, framingBounds, SectionLayout, WallLayout } from '../../js/geometry/WallLayout.js';
-import { quadIndices, WallMeshBuilder, maxIndexOf, indexWidth } from '../../js/geometry/WallMeshBuilder.js';
+import {
+  quadIndices, WallMeshBuilder, maxIndexOf, indexWidth, atlasUvRect, sectionRangeForFace,
+} from '../../js/geometry/WallMeshBuilder.js';
 import { computeAtlas, sectionPxPerLed, panelPxPerLed, canvasFits, CANVAS_HARD_LIMITS } from '../../js/geometry/TextureAtlas.js';
 import {
   panelModePxPerLed, PANEL_TEXTURE_BUDGET_PX, SECTION_TEXTURE_BUDGET_PX, MAX_CANVAS_SIDE,
@@ -354,16 +356,20 @@ describe('WallMeshBuilder vs the legacy grids', () => {
     });
   });
 
-  test('combinedGrid sectionRanges partition the index array in section order', (t) => {
+  test('combinedGrid sectionRanges partition the index array in section order; vertexStart/vertexCount (08 P2-7a) follow the declared counts', (t) => {
     overAllWalls(t, ({ sections }, mm, label) => {
       const r = run(() => viewport.combinedGrid(computeWallLayout(sections), computeAtlas(sections)));
       if (!r.ok) return;
       const { sectionRanges, indices } = r.value;
       let next = 0;
+      let vertex = 0;
       sectionRanges.forEach((range, i) => {
-        compareDeep(range, { sectionId: sections[i].id, sectionIndex: i, indexStart: next, indexCount: range.indexCount },
-          `${label}.sectionRanges[${i}]`, mm);
+        const s = sections[i];
+        const declared = (s.panelCols + 1) * (s.panelRows + 1);
+        compareDeep(range, { sectionId: s.id, sectionIndex: i, indexStart: next, indexCount: range.indexCount,
+          vertexStart: vertex, vertexCount: declared }, `${label}.sectionRanges[${i}]`, mm);
         next += range.indexCount;
+        vertex += declared;
       });
       compareDeep(next, indices.length, `${label}.sectionRanges total`, mm);
     });
@@ -1285,5 +1291,78 @@ describe('panel-mode section-space UVs (B-M16, B-L19; 08 P2-12d, 08 6.15)', () =
       }
     }
     t.diagnostic(`${checked} panel corners checked`);
+  });
+});
+
+describe("pixel-accurate atlas UVs (B-M5; 08 P2-7a, 08 6.7)", () => {
+  const production = new WallMeshBuilder(Strategies.mesh.viewport);
+  const mixed = CONFIG_WALLS.find((w) => w.label === 'config:mixed').sections;
+
+  test("the production viewport profile is 'atlas-pixel-accurate'; LegacyProfiles keeps 'atlas-u-full-v'", () => {
+    assert.equal(Strategies.mesh.viewport.combinedUV, 'atlas-pixel-accurate');
+    assert.equal(LegacyProfiles.mesh.viewport.combinedUV, 'atlas-u-full-v');
+  });
+
+  test('computeAtlas uvHeight = rows * ledY / totalLedY: exactly 1 for equal heights; the mixed config shares', () => {
+    for (const { label, sections } of CONFIG_WALLS) {
+      const atlas = computeAtlas(sections);
+      atlas.entries.forEach((e, i) => {
+        const s = sections[i];
+        assert.ok(Object.is(e.uvHeight, (s.panelRows * s.ledY) / atlas.totalLedY), label);
+        if (label !== 'config:mixed') assert.equal(e.uvHeight, 1, `${label}: equal heights`);
+      });
+    }
+    // mixed: 3 x 64, 5 x 54, 2 x 64, 6 x 32 LED rows -> 192, 270, 128, 192 of 270.
+    assert.deepEqual(computeAtlas(mixed).entries.map((e) => e.uvHeight), [192 / 270, 1, 128 / 270, 192 / 270]);
+    assert.deepEqual(atlasUvRect(computeAtlas(mixed).entries[2]),
+      { offsetU: computeAtlas(mixed).entries[2].uvOffsetX, widthU: computeAtlas(mixed).entries[2].uvWidth, heightV: 128 / 270 });
+  });
+
+  test("equal heights: 'atlas-pixel-accurate' UVs are Object.is-equal to the legacy 'atlas-u-full-v' UVs (08 criterion 28)", (t) => {
+    let compared = 0;
+    for (const { label, sections } of [...HAND_WALLS, ...CONFIG_WALLS, ...FUZZ_WALLS]) {
+      const atlas = computeAtlas(sections);
+      if (!atlas.entries.every((e) => e.uvHeight === 1)) continue;
+      const a = run(() => production.combinedGrid(computeWallLayout(sections), atlas).uvs);
+      const b = run(() => viewport.combinedGrid(computeWallLayout(sections), atlas).uvs);
+      if (!a.ok || !b.ok) { assert.equal(a.ok, b.ok, label); continue; }
+      assert.equal(a.value.length, b.value.length);
+      for (let k = 0; k < a.value.length; k++) assert.ok(Object.is(a.value[k], b.value[k]), `${label} uv[${k}]`);
+      compared++;
+    }
+    t.diagnostic(`${compared} equal-height walls compared`);
+    assert.ok(compared > 50);
+  });
+
+  test('mixed heights: each section spans v 0..uvHeight, its own share of the bottom-aligned atlas (08 criterion 27)', () => {
+    const atlas = computeAtlas(mixed);
+    const g = production.combinedGrid(computeWallLayout(mixed), atlas);
+    g.sectionRanges.forEach((range, i) => {
+      const s = mixed[i];
+      const vs = [];
+      for (let k = range.vertexStart; k < range.vertexStart + range.vertexCount; k++) vs.push(g.uvs[2 * k + 1]);
+      assert.equal(Math.min(...vs), 0, 'bottom edge at v = 0 (the atlas is bottom-aligned)');
+      const vMax = Math.max(...vs);
+      assert.ok(Object.is(vMax, atlas.entries[i].uvHeight), `${s.name}: v_max = rows * ledY / totalLedY`);
+      // PanelIdRenderer.atlasCanvas draws the section at canvas y = (totalLedY - rows * ledY) * scale from the top, and
+      // CanvasTexture.flipY puts the canvas top at v = 1: the section's top edge is v = 1 - y / height.
+      const top = 1 - (atlas.totalLedY - s.panelRows * s.ledY) / atlas.totalLedY;
+      assert.ok(Math.abs(vMax - top) < 1e-12, `${s.name}: top edge ${top}`);
+      // u still covers the section's own atlas columns.
+      const us = [];
+      for (let k = range.vertexStart; k < range.vertexStart + range.vertexCount; k++) us.push(g.uvs[2 * k]);
+      assert.ok(Object.is(Math.min(...us), atlas.entries[i].uvOffsetX));
+      assert.ok(Math.abs(Math.max(...us) - (atlas.entries[i].uvOffsetX + atlas.entries[i].uvWidth)) < 1e-12);
+    });
+  });
+
+  test('sectionRangeForFace: binary search over sectionRanges (02 6.13, E12); null past the last face', () => {
+    const sections = [section({ panelCols: 5, panelRows: 3 }), section({ id: 1, panelCols: 5, panelRows: 3 }), section({ id: 2, panelCols: 8, panelRows: 2 })];
+    const { sectionRanges } = production.combinedGrid(computeWallLayout(sections), computeAtlas(sections));
+    assert.deepEqual(sectionRanges.map((r) => r.indexCount / 3), [30, 30, 32]);
+    assert.deepEqual([0, 29, 30, 59, 60, 91].map((f) => sectionRangeForFace(sectionRanges, f).sectionIndex), [0, 0, 1, 1, 2, 2]);
+    assert.equal(sectionRangeForFace(sectionRanges, 92), null);
+    assert.equal(sectionRangeForFace([], 0), null);
+    assert.equal(sectionRangeForFace(sectionRanges, 31), sectionRanges[1], 'the range object itself');
   });
 });

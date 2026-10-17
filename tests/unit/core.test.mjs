@@ -197,7 +197,7 @@ describe('Strategies', () => {
   test('has exactly the keys and values of ARCHITECTURE.md 3.3 (Phase-1 values except the Phase-2 flips)', () => {
     assert.deepEqual(Strategies, {
       mesh: {
-        viewport: { winding: 'ccw', normals: 'averaged', combinedUV: 'atlas-u-full-v', side: 'double' },
+        viewport: { winding: 'ccw', normals: 'averaged', combinedUV: 'atlas-pixel-accurate', side: 'double' },
         obj: { winding: 'ccw', normals: 'averaged', stripNormals: 'per-vertex',
                combinedUV: 'per-section-overlap', panelNormal: 'facing' },
         gltf: { winding: 'ccw', normals: 'averaged', panelNormal: 'facing', attributes: ['POSITION', 'NORMAL'],
@@ -346,7 +346,7 @@ describe('LEGACY_SITES', () => {
   // 08 commit its 8.2 fix cell names. Every landing commit adds its id here.
   const PHASE2_LANDED = { 'B-M1': 'P2-5a', 'B-H3': 'P2-1a', 'B-L5': 'P2-1b', 'B-L4': 'P2-1c', 'B-H1': 'P2-2a', 'B-L3': 'P2-2b', 'B-H2': 'P2-2c',
     'B-L11': 'P2-9b', 'B-L15': 'P2-8a', 'B-M4': 'P2-3a', 'B-L8': 'P2-3b', 'B-L16': 'P2-3c', 'B-L21': 'P2-3d', 'B-H4': 'P2-4a', 'B-M8': 'P2-4b',
-    'B-M15': 'P2-5b', 'B-L29': 'P2-5b', 'B-M3': 'P2-6a', 'B-L14': 'P2-6b', 'B-L7': 'P2-6c', 'B-M2': 'P2-6d', 'B-M16': 'P2-12d' };
+    'B-M15': 'P2-5b', 'B-L29': 'P2-5b', 'B-M3': 'P2-6a', 'B-L14': 'P2-6b', 'B-L7': 'P2-6c', 'B-M2': 'P2-6d', 'B-M16': 'P2-12d', 'B-M5': 'P2-7a' };
   // The Phase 1C clean-ups (memory only; their Strategies.dispose.* switches were retired by 08 P2-12a), with the step
   // their 8.2 fix cell names.
   const PHASE1C_LANDED = { 'B-H5': 'Phase 1C H1', 'B-L12': 'Phase 1C H2' };

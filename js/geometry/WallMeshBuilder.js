@@ -153,11 +153,15 @@ function pushAveragedNormal(normals, section, edgePositions, col) {
 
 /**
  * Resolves the sectionGrid `uv` option into a per-vertex UV writer, or null when no UVs are written.
- *   'unit'              -> (col / panelCols, row / panelRows)                          (1740)
- *   {offsetU, widthU}   -> (offsetU + (col / panelCols) * widthU, row / panelRows)     (1627; B-M5, tagged at combinedGrid)
- *   null / undefined    -> null
+ *   'unit'                     -> (col / panelCols, row / panelRows)                          (1740)
+ *   {offsetU, widthU}          -> (offsetU + (col / panelCols) * widthU, row / panelRows)     (1627, the Phase-1 atlas
+ *                                 rect of 'atlas-u-full-v', B-M5)
+ *   {offsetU, widthU, heightV} -> (offsetU + (col / panelCols) * widthU, (row / panelRows) * heightV)
+ *                                 (08 P2-7a, 08 6.7: the pixel-accurate atlas rect; heightV = 1 reproduces row / panelRows
+ *                                 bit for bit)
+ *   null / undefined           -> null
  * Module-private.
- * @param {'unit'|{offsetU: number, widthU: number}|null|undefined} uv
+ * @param {'unit'|{offsetU: number, widthU: number, heightV?: number}|null|undefined} uv
  * @returns {((uvs: number[], section: object, row: number, col: number) => void)|null}
  * @throws {TypeError} for any other value
  */
@@ -171,11 +175,53 @@ function uvWriter(uv) {
   if (typeof uv === 'object') {
     const uvOffsetX = uv.offsetU;
     const uvWidth = uv.widthU;
+    if (uv.heightV === undefined) {
+      return (uvs, section, row, col) => {
+        uvs.push(uvOffsetX + (col / section.panelCols) * uvWidth, row / section.panelRows);
+      };
+    }
+    const uvHeight = uv.heightV;
     return (uvs, section, row, col) => {
-      uvs.push(uvOffsetX + (col / section.panelCols) * uvWidth, row / section.panelRows);
+      uvs.push(uvOffsetX + (col / section.panelCols) * uvWidth, (row / section.panelRows) * uvHeight);
     };
   }
   throw new TypeError(`Unknown sectionGrid uv option ${JSON.stringify(uv)}`);
+}
+
+/**
+ * The pixel-accurate atlas rect of one section, the sectionGrid uv option of 08 6.7 (B-M5, B-M6, B-M7):
+ * {offsetU: entry.uvOffsetX, widthU: entry.uvWidth, heightV: entry.uvHeight}. Shared by the viewport combined grid
+ * (08 P2-7a), the combined OBJ (P2-7b) and the combined glTF TEXCOORD_0 (P2-7c).
+ * Side effects: none.
+ * @param {{uvOffsetX: number, uvWidth: number, uvHeight: number}} entry  a computeAtlas entry
+ * @returns {{offsetU: number, widthU: number, heightV: number}}
+ */
+export function atlasUvRect(entry) {
+  return { offsetU: entry.uvOffsetX, widthU: entry.uvWidth, heightV: entry.uvHeight };
+}
+
+/**
+ * The combined-mesh section range that holds face `faceIndex` (r128 Mesh.raycast reports faceIndex = floor(i / 3) over
+ * the whole index buffer of a single-material mesh): a binary search over sectionRanges (ordered, contiguous index
+ * ranges), or null when the face lies beyond them. The one owner of this mapping (07 C52; spec 02 6.13 picks sections
+ * with it, spec 04 6.9 resolves hover hits with it). 08 P2-7a.
+ * Side effects: none.
+ * @param {{indexStart: number, indexCount: number}[]} ranges  combinedGrid's sectionRanges
+ * @param {number} faceIndex
+ * @returns {object|null} the range object itself
+ */
+export function sectionRangeForFace(ranges, faceIndex) {
+  const i = faceIndex * 3;
+  let lo = 0;
+  let hi = ranges.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const r = ranges[mid];
+    if (i < r.indexStart) hi = mid - 1;
+    else if (i >= r.indexStart + r.indexCount) lo = mid + 1;
+    else return r;
+  }
+  return null;
 }
 
 /**
@@ -225,7 +271,8 @@ export class WallMeshBuilder {
    *     the unit bisector of the two adjacent panel normals elsewhere; 'right-panel' -> (nx, 0, nz) verbatim
    *     1607-1625; 'none' -> nothing pushed;
    *   uvs: 'unit' -> (col / panelCols, row / panelRows); {offsetU, widthU} -> (offsetU + (col / panelCols) * widthU,
-   *     row / panelRows); null -> nothing pushed.
+   *     row / panelRows); {offsetU, widthU, heightV} (08 P2-7a) -> the same u and (row / panelRows) * heightV;
+   *     null -> nothing pushed.
    * Indices: vertsPerRow = section.panelCols + 1 (raw); for row < panelRows, col < panelCols:
    *   bl = indexBase + row * vertsPerRow + col; br = bl + 1; tl = indexBase + (row + 1) * vertsPerRow + col;
    *   tr = tl + 1; indices.push(...quadIndices(bl, br, tl, tr, this.profile.winding)).
@@ -234,7 +281,7 @@ export class WallMeshBuilder {
    * 4592-4603 / 4637-4653 (OBJ, indexBase = running offset from 1), 4837-4847 / 4856-4865 (glTF).
    * Side effects: appends to the `out` arrays.
    * @param {import('./WallLayout.js').SectionLayout} sl
-   * @param {{indexBase?: number, uv?: 'unit'|{offsetU: number, widthU: number}|null,
+   * @param {{indexBase?: number, uv?: 'unit'|{offsetU: number, widthU: number, heightV?: number}|null,
    *          normals?: 'averaged'|'right-panel'|'none'}} [opts]  defaults: indexBase 0, uv null, normals
    *   this.profile.normals
    * @param {{positions: number[], normals: number[], uvs: number[], indices: number[]}} [out]  defaults to fresh arrays
@@ -330,22 +377,33 @@ export class WallMeshBuilder {
   /**
    * The combined mesh: sectionGrid for each section in order into shared arrays, with indexBase = the running
    * vertexOffset (starts 0, += vertexAdvance) and the atlas UV option chosen by this.profile.combinedUV:
-   * 'atlas-u-full-v' -> uv = {offsetU: atlas.entries[i].uvOffsetX, widthU: atlas.entries[i].uvWidth}.
+   * 'atlas-pixel-accurate' (08 P2-7a, 08 6.7; B-M5 fixed) -> uv = atlasUvRect(atlas.entries[i]): u along the section's
+   *   atlas columns and v = (row / panelRows) * uvHeight, so each bottom-aligned section samples exactly its own pixels
+   *   of the atlas (with equal heights uvHeight = 1 and v is the legacy row / panelRows bit for bit);
+   * 'atlas-u-full-v' (the Phase-1 case, kept for LegacyProfiles) -> uv = {offsetU: uvOffsetX, widthU: uvWidth}, v over
+   *   the full height.
    * Ports: index.html@cd3fd3f lines 1579-1644 (1592-1596 and 1643 come from the atlas).
    * Side effects: none.
    * @param {import('./WallLayout.js').WallLayout} layout
-   * @param {{entries: {uvOffsetX: number, uvWidth: number}[]}} atlas  computeAtlas() of the same sections
+   * @param {{entries: {uvOffsetX: number, uvWidth: number, uvHeight: number}[]}} atlas  computeAtlas() of the same sections
    * @returns {{positions: number[], normals: number[], uvs: number[], indices: number[],
-   *            sectionRanges: {sectionId: *, sectionIndex: number, indexStart: number, indexCount: number}[]}}
-   *   (sectionRanges: the Feature 2 picking seam, ranges into `indices`)
+   *            sectionRanges: {sectionId: *, sectionIndex: number, indexStart: number, indexCount: number,
+   *                            vertexStart: number, vertexCount: number}[]}}
+   *   (sectionRanges: the picking seam of Features 2 and 4, ranges into `indices` (sectionRangeForFace) and, since
+   *   08 P2-7a, into the vertex arrays: vertexStart is the section's running vertexOffset and vertexCount its declared
+   *   vertexAdvance, which equal the pushed counts for every validated wall; 07 C52)
    * @throws {Error} unsupportedStrategy('mesh.combinedUV', ...) for a foreign profile value
    */
   combinedGrid(layout, atlas) {
     let uvFor;
     switch (this.profile.combinedUV) {
+      case 'atlas-pixel-accurate':
+        // 08 P2-7a (B-M5 fixed, 08 6.7): v covers only the section's own share of the bottom-aligned atlas.
+        uvFor = (i) => atlasUvRect(atlas.entries[i]);
+        break;
       case 'atlas-u-full-v':
-        // LEGACY(B-M5): U follows the atlas columns but V = row / panelRows spans the full texture height for
-        // every section, so sections shorter than the atlas stretch its vertical content.
+        // atlas-u-full-v: Phase-1 behaviour (B-M5: V = row / panelRows spans the full texture height for every section,
+        // so sections shorter than the atlas stretch its vertical content), kept for the LegacyProfiles oracle tests.
         uvFor = (i) => ({ offsetU: atlas.entries[i].uvOffsetX, widthU: atlas.entries[i].uvWidth });
         break;
       default:
@@ -362,6 +420,8 @@ export class WallMeshBuilder {
         sectionIndex: sl.sectionIndex,
         indexStart,
         indexCount: out.indices.length - indexStart,
+        vertexStart: vertexOffset,
+        vertexCount: vertexAdvance,
       });
       vertexOffset += vertexAdvance;
     });
