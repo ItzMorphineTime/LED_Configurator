@@ -41,6 +41,9 @@ export function cameraZMinAttribute(wallZ) {
  */
 const wallZOf = (resolution) => (resolution ? 0 - resolution.stageOrigin.z : 0);
 
+/** The read-out of a distance that does not exist (no wall plane ahead of the camera, 08 3.6): an em dash. */
+const NO_VALUE = '—';
+
 /**
  * The camera-section panel: binds the camera controls to CameraController / ProjectIO (down) and mirrors the
  * camera events into its own elements (up). One instance, constructed by App before the bootstrap rebuild.
@@ -85,7 +88,8 @@ export class CameraPanel {
    *  CAMERA_FILMBACK_CHANGED({key}): #custom-filmback display; the size inputs unless custom (4254-4262)
    *  CAMERA_LENS_CHANGED({hFov, vFov, filmbackWidth, filmbackHeight}): #camera-hfov/vfov/aspect (2369-2371)
    *  CAMERA_COVERAGE_CHANGED({frameWidth, frameHeight, status, safeDistance, distToWall}): frame size, status text and
-   *    colour, max distance (2484-2533); 03 T6 (3.5): "Distance to wall plane" (#camera-wall-distance) from distToWall
+   *    colour, max distance (2484-2533); 03 T6 (3.5): "Distance to wall plane" (#camera-wall-distance) from distToWall;
+   *    08 P2-11a: "—" for a null distance, "Not aimed at wall" for 'offWall'
    *  CAMERA_POSE_CHANGED({source, axis}): the pose inputs with the per-source precision
    *  CAMERA_SAFE_DISTANCE_TOGGLED({enabled}): #export-safe-distance display (4325)
    *  WALL_PIVOT_CHANGED({resolution}) and WALL_REBUILT({layout}) (03 T4, 3.5): the `min` attribute of #camera-pos-z
@@ -235,20 +239,26 @@ export class CameraPanel {
   }
 
   /**
-   * CAMERA_COVERAGE_CHANGED mirror: the distance to the wall plane (03 T6, 3.5: posZ - wallZ, the flat-wall model of
-   * B-M10, hence the label), frame size at the wall, coverage status (text, then colour) and the maximum safe distance.
+   * CAMERA_COVERAGE_CHANGED mirror: the distance to the wall plane (03 T6, 3.5; since 08 P2-11a the analyser's D0, the
+   * distance along the optical axis to the wall plane the camera is aimed at), frame size at the wall, coverage status
+   * (text, then colour) and the maximum safe distance. Without a wall plane ahead (D0 null) the distance and the frame
+   * size read "—" (08 3.6); the status 'offWall' reads "Not aimed at wall" in the exceeds colour (M-COV-1, Q15).
    * Ports: index.html@cd3fd3f lines 2484-2485, 2515-2525, 2533.
-   * @param {{frameWidth: number, frameHeight: number, status: 'within'|'offCenter'|'exceeds',
-   *          safeDistance: number, distToWall: number}} payload
+   * @param {{frameWidth: number|null, frameHeight: number|null, status: 'offWall'|'within'|'offCenter'|'exceeds',
+   *          safeDistance: number, distToWall: number|null}} payload
    */
   #mirrorCoverage({ frameWidth, frameHeight, status, safeDistance, distToWall }) {
-    this.#wallDistance.textContent = `${distToWall.toFixed(2)}m`;
-    this.#frustumWidth.textContent = `${frameWidth.toFixed(2)}m`;
-    this.#frustumHeight.textContent = `${frameHeight.toFixed(2)}m`;
+    const metres = (v) => (v === null ? NO_VALUE : `${v.toFixed(2)}m`);
+    this.#wallDistance.textContent = metres(distToWall);
+    this.#frustumWidth.textContent = metres(frameWidth);
+    this.#frustumHeight.textContent = metres(frameHeight);
 
     const statusEl = this.#statusText;
     const colors = this.#theme.ui.status;
-    if (status === 'within') {
+    if (status === 'offWall') {
+      statusEl.textContent = 'Not aimed at wall';
+      statusEl.style.color = colors.exceeds;
+    } else if (status === 'within') {
       statusEl.textContent = 'Within bounds';
       statusEl.style.color = colors.within;
     } else if (status === 'offCenter') {

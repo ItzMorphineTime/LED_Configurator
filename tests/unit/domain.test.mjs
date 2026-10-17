@@ -208,40 +208,6 @@ function legacyCardValues(section) {
 /** The 'flat-pivot' framing bounds of a wall at the identity pivot (03 6.6): the flat bounds with minX = wallZ = +0. */
 const identityBounds = (wall) => ({ ...wall.flatBounds(), minX: 0, wallZ: 0 });
 
-/** calculateFrustumIntersection 2473-2531 without the DOM; the status text is returned instead of written. */
-function legacyCoverage(cameraSettings, wallSections) {
-  const hFov = 2 * Math.atan(cameraSettings.filmbackWidth / (2 * cameraSettings.focalLength));
-  const vFov = 2 * Math.atan(cameraSettings.filmbackHeight / (2 * cameraSettings.focalLength));
-  const distToWall = cameraSettings.posZ;
-  const frameWidth = 2 * Math.tan(hFov / 2) * distToWall;
-  const frameHeight = 2 * Math.tan(vFov / 2) * distToWall;
-  const scale = 0.001;
-  let totalWallWidth = 0, maxWallHeight = 0;
-  wallSections.forEach(s => {
-    totalWallWidth += s.panelCols * s.panelWidth * scale;
-    maxWallHeight = Math.max(maxWallHeight, s.panelRows * s.panelHeight * scale);
-  });
-  const fitsWidth = frameWidth <= totalWallWidth;
-  const fitsHeight = frameHeight <= maxWallHeight;
-  const camCenterX = cameraSettings.posX;
-  const camCenterY = cameraSettings.posY;
-  const frameLeft = camCenterX - frameWidth / 2;
-  const frameRight = camCenterX + frameWidth / 2;
-  const frameBottom = camCenterY - frameHeight / 2;
-  const frameTop = camCenterY + frameHeight / 2;
-  const withinBounds = frameLeft >= 0 && frameRight <= totalWallWidth &&
-                      frameBottom >= 0 && frameTop <= maxWallHeight;
-  let text;
-  if (withinBounds) text = 'Within bounds';
-  else if (fitsWidth && fitsHeight) text = 'Off-center';
-  else text = 'Exceeds wall';
-  const maxSafeDistWidth = totalWallWidth / (2 * Math.tan(hFov / 2));
-  const maxSafeDistHeight = maxWallHeight / (2 * Math.tan(vFov / 2));
-  const safeDistance = Math.min(maxSafeDistWidth, maxSafeDistHeight);
-  return { frameWidth, frameHeight, text, safeDistance };
-}
-const STATUS_OF_TEXT = { 'Within bounds': 'within', 'Off-center': 'offCenter', 'Exceeds wall': 'exceeds' };
-
 /** createSafeDistanceMesh 2591-2612 (D only). */
 function legacySafeDistance(cameraSettings, wallSections) {
   const scale = 0.001;
@@ -1209,67 +1175,18 @@ describe('CineCamera', () => {
     }
   });
 
-  test('coverage: the three statuses', () => {
+  // 08 P2-11a (B-M10): CineCamera.coverage is deleted; the coverage is geometry/FrustumCoverage's (frustum-coverage.test.mjs,
+  // which keeps the legacy-parity and 03 6.8 re-expression cases). maxSafeDistance stays here.
+  test('maxSafeDistance of the default camera and wall', () => {
     const cam = new CineCamera();
-    const wall = new Wall();
-    const exceeds = cam.coverage(identityBounds(wall));
-    assert.equal(exceeds.status, 'exceeds', 'default camera vs default 2.5 x 1.5 m wall');
-    assert.equal(`${exceeds.frameWidth.toFixed(2)}m`, '5.14m');
-    assert.equal(`${exceeds.frameHeight.toFixed(2)}m`, '3.43m');
-    assert.equal(`≤ ${exceeds.safeDistance.toFixed(2)}m`, '≤ 2.19m');
-
-    const big = { totalWidth: 20, maxHeight: 10, minX: 0, wallZ: 0 };
-    cam.posX = 10;
-    cam.posY = 5;
-    assert.equal(cam.coverage(big).status, 'within');
-    cam.posX = 1;
-    assert.equal(cam.coverage(big).status, 'offCenter', 'fits in both dimensions but not where it points');
-    cam.posX = 10;
-    cam.posZ = 50;
-    assert.equal(cam.coverage(big).status, 'exceeds');
-    assert.deepEqual(Object.keys(cam.coverage(big)), ['frameWidth', 'frameHeight', 'status', 'safeDistance', 'distToWall']);
-    assert.equal(cam.coverage(big).distToWall, 50);
+    assert.equal(`≤ ${cam.maxSafeDistance(identityBounds(new Wall())).toFixed(2)}m`, '≤ 2.19m');
   });
 
-  // 03 T3 (6.6, 6.8): the 'flat-pivot' rectangle x in [minX, minX + totalWidth] at z = wallZ
-  test("coverage with 'flat-pivot' bounds: the distance is posZ - wallZ and the edges are relative to minX (03 6.6, 6.8)", () => {
-    // 6.8's re-expression example: default wall, Reset, Z 1.5; bottom-left -> wall-center moves the stage origin by 1.25
-    const wall = new Wall();
-    const cam = new CineCamera();
-    cam.resetTo(identityBounds(wall));
-    cam.setField('posZ', '1.5');
-    const before = cam.coverage(identityBounds(wall));
-    assert.equal(before.status, 'within');
-    assert.deepEqual([before.frameWidth.toFixed(2), before.frameHeight.toFixed(2), before.distToWall], ['1.54', '1.03', 1.5]);
-    const centred = { ...identityBounds(wall), minX: 0 - 1.25, wallZ: 0 - 0 };
-    const kept = new CineCamera();
-    Object.assign(kept, { posX: cam.posX, posY: cam.posY, posZ: cam.posZ });
-    kept.translateStage(-1.25, -0);
-    const after = kept.coverage(centred);
-    assert.deepEqual([kept.posX, kept.posZ], [0, 1.5], 'keep stage layout: the camera moves with the wall');
-    assert.deepEqual(after, before, 're-expression keeps the coverage (posZ - wallZ and posX - minX are invariant)');
-    const notKept = cam.coverage(centred);
-    assert.equal(notKept.status, 'offCenter', 'keep off: the frame (right edge 2.02 > 1.25) is off the centred wall');
-    const pushed = { ...identityBounds(wall), minX: -1.25, wallZ: -2 };
-    const c = new CineCamera();
-    Object.assign(c, { posX: 0, posY: 0.75, posZ: -0.5 });
-    assert.equal(c.coverage(pushed).distToWall, 1.5, 'a stage origin 2 m in front of the wall: posZ -0.5 is 1.5 m from it');
-  });
-
-  test('coverage and maxSafeDistance equal calculateFrustumIntersection / createSafeDistanceMesh (fuzzed, Object.is)', () => {
+  test('maxSafeDistance equals createSafeDistanceMesh 2610-2612 (fuzzed, Object.is)', () => {
     const rand = rng(23);
-    const walls = fuzzWalls(24, 400);
-    for (const sections of walls) {
+    for (const sections of fuzzWalls(24, 400)) {
       const cam = fuzzCamera(rand);
-      const bounds = identityBounds(new Wall({ sections }));
-      const coverage = cam.coverage(bounds);
-      const legacy = legacyCoverage(cam, sections);
-      same(coverage.frameWidth, legacy.frameWidth, 'frameWidth');
-      same(coverage.frameHeight, legacy.frameHeight, 'frameHeight');
-      same(coverage.safeDistance, legacy.safeDistance, 'safeDistance');
-      same(coverage.distToWall, cam.posZ, 'distToWall (03 T3): posZ - (+0) is posZ bit for bit');
-      assert.equal(coverage.status, STATUS_OF_TEXT[legacy.text]);
-      same(cam.maxSafeDistance(bounds), legacySafeDistance(cam, sections), 'maxSafeDistance (2610-2612)');
+      same(cam.maxSafeDistance(identityBounds(new Wall({ sections }))), legacySafeDistance(cam, sections), 'maxSafeDistance (2610-2612)');
     }
   });
 

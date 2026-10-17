@@ -5,7 +5,9 @@
  * position and panel transform; every consumer reaches it through layoutProject(). Also hosts the single
  * flat-bounds switch (framingBounds) and Feature 3's pivot geometry (03 T2, docs/improvements/03-pivot.md 6.1-6.6):
  * the anchors (firstEdge, lastEdge, generativeBounds, pivotPoint), baseY, translated(), resolvePivot, stageShift and
- * the frames of layoutProject (layout, stage, export).
+ * the frames of layoutProject (layout, stage, export). 08 P2-11a adds the world-space geometry that the coverage
+ * analyser and the framing read (docs/improvements/08-bugfix-roadmap.md 6.10): columnQuads() and worldVertices()
+ * (memoised per instance, after spec 02's postTransform), extentAcross(facing) and chordFacing().
  * Legacy source: index.html@cd3fd3f 1479-1549 (walk + panel centres), 2614-2647 (flattened edges),
  * 5012-5038 + 5051-5066 (the export copy of the walk), 2489-2493 / 2553-2557 / 2598-2603 / 3758-3762 (flat bounds).
  * Layer: geometry (may import domain, legacy; THREE-free and DOM-free).
@@ -123,8 +125,18 @@ const FRAMES = Object.freeze(['stage', 'export', 'layout']);
  */
 
 /**
+ * One column of the wall as a quad (08 6.10, P2-11a): the bottom-left corner p0, the column vector a (along the walk),
+ * the height vector b (up the column) and the unit LED normal n = normalize(a × b), in the layout's frame after the
+ * section's postTransform; aa = a·a and bb = b·b. Frozen.
+ * @typedef {{p0: {x: number, y: number, z: number}, a: {x: number, y: number, z: number},
+ *            b: {x: number, y: number, z: number}, n: {x: number, y: number, z: number}, aa: number, bb: number,
+ *            sectionIndex: number, column: number}} ColumnQuad
+ */
+
+/**
  * The walk result for the whole wall. Built only by computeWallLayout and by translated(); treat it (and its edges) as
- * read-only.
+ * read-only. columnQuads() and worldVertices() are memoised on the instance (08 P2-11a): a layout is rebuilt once per
+ * WALL_REBUILT, so per-pose callers never re-derive them; a translated copy computes its own.
  */
 export class WallLayout {
   /** @type {SectionLayout[]} in wall order */
@@ -134,6 +146,10 @@ export class WallLayout {
    * @type {LayoutPivot|null}
    */
   pivot = null;
+  /** @type {ReadonlyArray<ColumnQuad>|null} the memo of columnQuads() */
+  #columnQuads = null;
+  /** @type {ReadonlyArray<Float64Array>|null} the memo of worldVertices() */
+  #worldVertices = null;
 
   /**
    * Side effects: none.
@@ -281,6 +297,167 @@ export class WallLayout {
     }
     return new WallLayout({ sections: this.sections.map((sl) => sl.translated(dx, dy, dz)) });
   }
+
+  /**
+   * The column quads of the wall (08 6.10, P2-11a; memoised per layout instance, so per-pose callers never re-derive
+   * them): per section column k, p0 = T(e[k].x, baseY, e[k].z), a = T_vec(e[k+1] - e[k]), b = T_vec(0, panelRows ·
+   * panelH, 0) and the LED normal n = normalize(a × b), where T is the section's postTransform (spec 02's seam;
+   * identity while it is null). For the walk (angle 0 runs along +X) n is the stage side of the column: +Z for a flat
+   * wall along +X, and it turns with the wall, so nothing here assumes a direction. A column whose a × b has no finite,
+   * non-zero length (a degenerate input) is left out. Read by geometry/FrustumCoverage (the five rays and the projected
+   * quads) and by chordFacing's frame (the layout's frame: the stage frame for layoutProject's stage layout).
+   * Side effects: memoises the frozen array on the instance (the first call computes it).
+   * @returns {ReadonlyArray<ColumnQuad>} frozen; the same array object on every call
+   */
+  columnQuads() {
+    if (this.#columnQuads) return this.#columnQuads;
+    const quads = [];
+    for (const sl of this.sections) {
+      const { section, edges, baseY, postTransform: m } = sl;
+      const h = section.panelRows * sl.panelH;
+      for (let k = 0; k + 1 < edges.length; k++) {
+        const e0 = edges[k];
+        const e1 = edges[k + 1];
+        let p0 = { x: e0.x, y: baseY, z: e0.z };
+        let a = { x: e1.x - e0.x, y: 0, z: e1.z - e0.z };
+        let b = { x: 0, y: h, z: 0 };
+        if (m) {
+          p0 = transformPoint(m, p0);
+          a = transformVector(m, a);
+          b = transformVector(m, b);
+        }
+        const cx = a.y * b.z - a.z * b.y;
+        const cy = a.z * b.x - a.x * b.z;
+        const cz = a.x * b.y - a.y * b.x;
+        const len = Math.hypot(cx, cy, cz);
+        if (!(len > 0) || !Number.isFinite(len)) continue;
+        quads.push(Object.freeze({
+          p0: Object.freeze(p0), a: Object.freeze(a), b: Object.freeze(b),
+          n: Object.freeze({ x: cx / len, y: cy / len, z: cz / len }),
+          aa: a.x * a.x + a.y * a.y + a.z * a.z, bb: b.x * b.x + b.y * b.y + b.z * b.z,
+          sectionIndex: sl.sectionIndex, column: k,
+        }));
+      }
+    }
+    this.#columnQuads = Object.freeze(quads);
+    return this.#columnQuads;
+  }
+
+  /**
+   * Every grid corner of the wall (08 6.10, P2-11a; memoised per layout instance): per section, in wall order, the
+   * points row = 0..panelRows (outer), col = 0..panelCols (inner), x/z from edges[col], y = baseY === 0 ? row · panelH
+   * : baseY + row · panelH (the generative order and expressions of generativeBounds() and WallMeshBuilder), after the
+   * section's postTransform. Read by the framing (once per rebuild: up to about 214,000 points at the 07 limits).
+   * Side effects: memoises the frozen array on the instance.
+   * @returns {ReadonlyArray<Float64Array>} one xyz-interleaved array per section (index = position in the wall); frozen
+   */
+  worldVertices() {
+    if (this.#worldVertices) return this.#worldVertices;
+    const lists = this.sections.map((sl) => {
+      const { section, edges, baseY, postTransform: m } = sl;
+      const out = [];
+      for (let row = 0; row <= section.panelRows; row++) {
+        const y = baseY === 0 ? row * sl.panelH : baseY + row * sl.panelH;
+        for (let col = 0; col <= section.panelCols; col++) {
+          const edge = edges[col];
+          if (!edge) continue;
+          const p = m ? transformPoint(m, { x: edge.x, y, z: edge.z }) : { x: edge.x, y, z: edge.z };
+          out.push(p.x, p.y, p.z);
+        }
+      }
+      return Float64Array.from(out);
+    });
+    this.#worldVertices = Object.freeze(lists);
+    return this.#worldVertices;
+  }
+
+  /**
+   * The wall's width as seen face-on (08 6.10): max(v·chord) - min(v·chord) over worldVertices() of the included
+   * sections, with the horizontal chord axis chord = (facing.z, 0, -facing.x). It is invariant under a rotation of the
+   * wall about the vertical axis (with the facing turned alike): a flat wall gives its length along X, along Z and at any
+   * angle (the axis-aligned max.x - min.x is 0 along Z and loses about 30 % at 45 degrees). 0 when nothing is included.
+   * Side effects: none (reads the memoised worldVertices()).
+   * @param {{x: number, z: number}} facing  a horizontal unit vector (chordFacing())
+   * @param {(sectionIndex: number) => boolean} [include]  which sections count (FramingPolicy's stageExtent filter)
+   * @returns {number} metres
+   */
+  extentAcross(facing, include = null) {
+    const cx = facing.z;
+    const cz = -facing.x;
+    let lo = Infinity;
+    let hi = -Infinity;
+    this.worldVertices().forEach((list, i) => {
+      if (include && !include(i)) return;
+      for (let k = 0; k < list.length; k += 3) {
+        const s = list[k] * cx + list[k + 2] * cz;
+        if (s < lo) lo = s;
+        if (s > hi) hi = s;
+      }
+    });
+    return hi >= lo ? hi - lo : 0;
+  }
+
+  /**
+   * The direction the wall faces as a whole (08 6.10): the horizontal normal of its chord, normalize(-(last.z -
+   * first.z), 0, last.x - first.x), from the first edge of the walk to the last (each through its section's
+   * postTransform). For a flat wall along +X it is (-0, 0, 1); it turns with the wall. (0, 0, 1) when the chord is
+   * shorter than 1e-9 m (a closed ring, an empty wall).
+   * Side effects: none.
+   * @returns {{x: number, y: number, z: number}} y is 0
+   */
+  chordFacing() {
+    const first = this.firstEdge;
+    const last = this.lastEdge;
+    if (!first) return { x: 0, y: 0, z: 1 };
+    const f = worldPoint(this.sections[0], first);
+    const l = worldPoint(this.sections[this.sections.length - 1], last);
+    const dx = l.x - f.x;
+    const dz = l.z - f.z;
+    const len = Math.hypot(dx, dz);
+    if (!(len >= 1e-9)) return { x: 0, y: 0, z: 1 };
+    return { x: -dz / len, y: 0, z: dx / len };
+  }
+}
+
+/**
+ * A column-major 4x4 matrix applied to a point (w = 1). Module-private helper of the layout geometry (spec 02's
+ * postTransform seam).
+ * @param {number[]} m
+ * @param {{x: number, y: number, z: number}} p
+ * @returns {{x: number, y: number, z: number}}
+ */
+function transformPoint(m, p) {
+  return {
+    x: m[0] * p.x + m[4] * p.y + m[8] * p.z + m[12],
+    y: m[1] * p.x + m[5] * p.y + m[9] * p.z + m[13],
+    z: m[2] * p.x + m[6] * p.y + m[10] * p.z + m[14],
+  };
+}
+
+/**
+ * A column-major 4x4 matrix applied to a direction (w = 0). Module-private.
+ * @param {number[]} m
+ * @param {{x: number, y: number, z: number}} v
+ * @returns {{x: number, y: number, z: number}}
+ */
+function transformVector(m, v) {
+  return {
+    x: m[0] * v.x + m[4] * v.y + m[8] * v.z,
+    y: m[1] * v.x + m[5] * v.y + m[9] * v.z,
+    z: m[2] * v.x + m[6] * v.y + m[10] * v.z,
+  };
+}
+
+/**
+ * The floor point of a walk edge in the layout's frame: (e.x, baseY, e.z) through the section's postTransform.
+ * Module-private helper of chordFacing.
+ * @param {SectionLayout} sl
+ * @param {LayoutEdge} e
+ * @returns {{x: number, y: number, z: number}}
+ */
+function worldPoint(sl, e) {
+  const p = { x: e.x, y: sl.baseY, z: e.z };
+  return sl.postTransform ? transformPoint(sl.postTransform, p) : p;
 }
 
 /**
@@ -496,8 +673,9 @@ function flatPivot(project, resolution) {
 }
 
 /**
- * The single switch for the four flat-bounds consumers (orbit target, camera reset, coverage status, safe-distance
- * D); they receive it injected as `frameBounds` (App passes WallController's cached resolution from 03 T3).
+ * The single switch for the four flat-bounds consumers (orbit target, camera reset, the coverage's fits test since 08
+ * P2-11a, safe-distance D); they receive it injected as `frameBounds` (App passes WallController's cached resolution
+ * from 03 T3).
  * 'flat-pivot' (03 T2, step A; the Phase-1 'flat' case is deleted): {totalWidth, maxHeight} as legacy, plus the flat
  * wall's stage placement minX = 0 - stageOrigin.x and wallZ = 0 - stageOrigin.z (both +0 at the identity, so every
  * consumer is identity-exact, 03 6.6). Step F (08 P2-11c) adds the 'layout' case.
@@ -512,7 +690,8 @@ export function framingBounds(project, resolution = resolvePivot(computeWallLayo
   switch (Strategies.framingBounds) {
     case 'flat-pivot':
       // LEGACY(B-L2, B-M10): flat bounds (the arc width sum x the tallest section), translated by the stage origin;
-      // curvature, angle offsets and camera rotation are still ignored (step F, 08 P2-11c, fixes B-L2).
+      // curvature and angle offsets are still ignored by the orbit target, Reset, D and the coverage's fits test (the
+      // coverage rays read the stage layout since 08 P2-11a; step F, 08 P2-11c, fixes the rest).
       return flatPivot(project, resolution);
     default:
       throw unsupportedStrategy('framingBounds', Strategies.framingBounds);

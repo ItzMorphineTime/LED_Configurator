@@ -8,7 +8,8 @@
  * Never imports or calls ui/: the panels mirror the emitted events (CAMERA_PREVIEW_CHANGED,
  * CAMERA_FILMBACK_CHANGED, CAMERA_COVERAGE_CHANGED, CAMERA_POSE_CHANGED, CAMERA_SAFE_DISTANCE_TOGGLED;
  * SELECTABLE_MOVED moves the gizmo). Collaborators are injected; their types appear in JSDoc only.
- * Legacy source: index.html@cd3fd3f 2451-2469 (updateCameraFrustum), 2460 / 2471-2534 (coverage readout),
+ * Legacy source: index.html@cd3fd3f 2451-2469 (updateCameraFrustum), 2460 (the coverage readout; its flat-rectangle test
+ * 2471-2534 is replaced by geometry/FrustumCoverage since 08 P2-11a, B-M10),
  * 2550-2575 (resetCameraPosition), 2778-2784 (updateSafeDistance), 3101-3137 (gizmo orientation and anchor for
  * the camera), 3337-3346 / 3375-3387 (gizmo drags on the camera), 3438-3444 (camera pick gating),
  * 4230-4327 (preview, filmback, lens, pose, reset and safe-distance handlers).
@@ -17,6 +18,7 @@
 
 import { Events } from '../core/EventBus.js';
 import { layoutProject } from '../geometry/WallLayout.js';
+import { analyzeCoverage } from '../geometry/FrustumCoverage.js';
 
 /**
  * Pipeline P2: keeps every view of the film camera in step with the model. Called after every lens or pose
@@ -35,6 +37,8 @@ export class CameraHub {
   #pilotDriver;
   /** @type {() => {totalWidth: number, maxHeight: number, minX: number, wallZ: number}} */
   #frameBounds;
+  /** @type {() => import('../geometry/WallLayout.js').WallLayout} */
+  #stageLayout;
   /** @type {import('../core/EventBus.js').EventBus} */
   #bus;
 
@@ -47,30 +51,32 @@ export class CameraHub {
    *          safeDistance: import('../render/SafeDistanceView.js').SafeDistanceView,
    *          pilotDriver: import('../interaction/PilotController.js').PilotCameraDriver,
    *          frameBounds: () => {totalWidth: number, maxHeight: number, minX: number, wallZ: number},
+   *          stageLayout: () => import('../geometry/WallLayout.js').WallLayout,
    *          bus: import('../core/EventBus.js').EventBus}} deps
    *   frameBounds: the 'flat-pivot' framing bounds (WallLayout.framingBounds of the live project with the cached pivot
-   *   resolution, 03 T3), evaluated per call
+   *   resolution, 03 T3), evaluated per call; stageLayout (08 P2-11a): the stage layout of the last rebuild
+   *   (WallController.currentLayout), whose memoised columnQuads() the coverage analyser reads
    */
-  constructor({ project, rig, preview, safeDistance, pilotDriver, frameBounds, bus }) {
+  constructor({ project, rig, preview, safeDistance, pilotDriver, frameBounds, stageLayout, bus }) {
     this.#project = project;
     this.#rig = rig;
     this.#preview = preview;
     this.#safeDistance = safeDistance;
     this.#pilotDriver = pilotDriver;
     this.#frameBounds = frameBounds;
+    this.#stageLayout = stageLayout;
     this.#bus = bus;
   }
 
   /**
    * P2 (ARCHITECTURE.md 6.3), legacy updateCameraFrustum. No-op while the preview is off. The rig is created
    * only when missing (its own frustum build publishes the lens readout once), then the frustum is rebuilt
-   * again (second readout, as legacy), the rig placed, the coverage published (B-M10, tagged at
-   * CineCamera.coverage; bounds and coverage are computed before the panel writes: PR7), the preview camera and
+   * again (second readout, as legacy), the rig placed, the coverage published (coverage(): the analyser of 08 P2-11a
+   * on the stage layout; bounds and coverage are computed before the panel writes: PR7), the preview camera and
    * labels updated, the safe-distance overlay synced, the pilot view re-driven and the gizmo told to follow.
-   * Ports: index.html@cd3fd3f lines 2451-2469 (2460: the coverage of 2471-2534).
+   * Ports: index.html@cd3fd3f lines 2451-2469 (2460: the coverage readout).
    * Side effects: rig.create (iff missing), rig.rebuildFrustum (emits CAMERA_LENS_CHANGED), rig.updateTransform;
-   *   emits CAMERA_COVERAGE_CHANGED {frameWidth, frameHeight, status, safeDistance, distToWall} (distToWall since 03 T3:
-   *   the distance to the flat wall plane, posZ - wallZ); preview.updateCamera();
+   *   emits CAMERA_COVERAGE_CHANGED coverage(); preview.updateCamera();
    *   syncSafeDistance(); pilotDriver.refresh(); emits SELECTABLE_MOVED {id: 'camera'}.
    * @returns {void}
    */
@@ -86,13 +92,36 @@ export class CameraHub {
     // pose-independent frustum geometry and the whole safe-distance group (new canvas and texture).
     this.#rig.rebuildFrustum(cine);
     this.#rig.updateTransform(cine);
-    this.#bus.emit(Events.CAMERA_COVERAGE_CHANGED, cine.coverage(this.#frameBounds()));
+    this.#bus.emit(Events.CAMERA_COVERAGE_CHANGED, this.coverage());
     this.#preview.updateCamera();
     this.syncSafeDistance();
     this.#pilotDriver.refresh();
 
     // The gizmo follows iff the camera is the selected target
     this.#bus.emit(Events.SELECTABLE_MOVED, { id: 'camera' });
+  }
+
+  /**
+   * The coverage payload (08 6.10, P2-11a, B-M10): FrustumCoverage.analyzeCoverage of the camera against the
+   * stage layout of the last rebuild (its memoised column quads; every direction from the pose and the geometry, so a
+   * rotated camera or wall is measured as it is). `fits` still compares the frame with the flat width and height of
+   * the framing bounds (totalWidth, maxHeight), and safeDistance is cine.maxSafeDistance of the same bounds (P2-11c
+   * moves both to FramingPolicy's stageExtent).
+   * Side effects: none (reads the layout's memo).
+   * @returns {{frameWidth: number|null, frameHeight: number|null, status: 'offWall'|'within'|'offCenter'|'exceeds',
+   *            safeDistance: number, distToWall: number|null}}  distToWall is the analyser's D0, the optical-axis distance
+   *   to the wall plane the camera is aimed at ("Distance to wall plane"); frameWidth, frameHeight and distToWall are
+   *   null when no wall plane lies ahead
+   */
+  coverage() {
+    const cine = this.#project.camera;
+    const bounds = this.#frameBounds();
+    const c = analyzeCoverage(this.#stageLayout(), cine, { hFov: cine.hFov(), vFov: cine.vFov() },
+      { width: bounds.totalWidth, height: bounds.maxHeight });
+    return {
+      frameWidth: c.frameWidth, frameHeight: c.frameHeight, status: c.status, safeDistance: cine.maxSafeDistance(bounds),
+      distToWall: c.distance,
+    };
   }
 
   /**

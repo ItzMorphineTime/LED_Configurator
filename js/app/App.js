@@ -118,6 +118,8 @@ export class App {
     const car = project.car;
     // 03 T3 (5.8): the cached pivot resolution of the last rebuild; evaluated lazily, after wallController exists
     const frameBounds = () => framingBounds(project, wallController.pivotResolution);
+    // 08 P2-11a (6.10): the stage layout of the last rebuild, whose memoised column quads the coverage analyser reads
+    const stageLayout = () => wallController.currentLayout;
     const colorToRgb = (s) => new THREE.Color(s);
 
     const interaction = new InteractionState();
@@ -168,7 +170,7 @@ export class App {
     const gizmo = new TransformGizmo({ sceneManager, pointerRay, interaction, bus, theme });
     const selection = new SelectionManager({ bus, gizmo, pointerRay, interaction });
     const pilotDriver = new PilotCameraDriver({ sceneManager, cine, rig, interaction });
-    const hub = new CameraHub({ project, rig, preview: previewPass, safeDistance, pilotDriver, frameBounds, bus });
+    const hub = new CameraHub({ project, rig, preview: previewPass, safeDistance, pilotDriver, frameBounds, stageLayout, bus });
     const pilot = new PilotController({
       sceneManager, cine, driver: pilotDriver, orbit, keyboard, interaction, hub, bus, dialogs,
     });

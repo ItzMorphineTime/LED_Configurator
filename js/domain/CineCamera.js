@@ -1,11 +1,11 @@
 /**
  * @module domain/CineCamera
  * The simulated film camera (legacy `cameraSettings` + `cameraPreviewEnabled`): filmback, lens and pose with the
- * legacy field names, the filmback presets, the lens/coverage/safe-distance maths, the input field rules and the
- * gizmo/pilot pose arithmetic. Angles are degrees; the Euler order used by the views is 'YXZ'
- * (tilt = rotX, pan = rotY, roll = rotZ). Feature 3 (03 T1, 4.1): the pose LIMITS, the pivot re-expression
- * translateStage and the posZ input rule's wall-plane context.
- * Legacy source: index.html@cd3fd3f 1299, 1306-1331 (state), 2471-2534 (coverage), 2550-2564 (reset),
+ * legacy field names, the filmback presets, the lens and safe-distance maths, the input field rules and the
+ * gizmo/pilot pose arithmetic. Angles are degrees; the Euler order used by the views is 'YXZ' (tilt = rotX, pan = rotY,
+ * roll = rotZ). Feature 3 (03 T1, 4.1): the pose LIMITS, the pivot re-expression translateStage and the posZ input
+ * rule's wall-plane context. The coverage (legacy 2471-2534) moved to geometry/FrustumCoverage in 08 P2-11a (B-M10).
+ * Legacy source: index.html@cd3fd3f 1299, 1306-1331 (state), 2550-2564 (reset),
  * 2597-2612 (safe distance D), 3337-3340 / 3375-3384 (gizmo), 3544-3552 / 3564-3611 (pilot),
  * 3732 (preset short name), 4251-4317 (inputs).
  * Layer: domain (may import legacy; THREE-free and DOM-free).
@@ -52,7 +52,7 @@ const WALL_PLANE_AT_ORIGIN = Object.freeze({ wallZ: 0 });
 const r3 = (v) => Math.round(v * 1000) / 1000;
 
 /**
- * The film camera: legacy `cameraSettings` field names plus the preview flag, with the lens, coverage and
+ * The film camera: legacy `cameraSettings` field names plus the preview flag, with the lens, safe-distance and
  * pose arithmetic. Written only through its methods (ARCHITECTURE.md section 4).
  */
 export class CineCamera {
@@ -204,56 +204,6 @@ export class CineCamera {
     const maxSafeDistWidth = bounds.totalWidth / (2 * Math.tan(hFov / 2));
     const maxSafeDistHeight = bounds.maxHeight / (2 * Math.tan(vFov / 2));
     return Math.min(maxSafeDistWidth, maxSafeDistHeight);
-  }
-
-  /**
-   * Frame size at the wall and the coverage status (the DOM writes of 2484-2485, 2515-2525, 2533 live in
-   * ui/CameraPanel; the status colours are Theme.UiColors.status). Since 03 T3 the flat wall is the 'flat-pivot'
-   * rectangle of framingBounds (03 6.6): x in [minX, minX + totalWidth], y in [0, maxHeight], in the plane z = wallZ, so
-   * the distance is posZ - wallZ and the edges are relative to minX. At the identity pivot minX = wallZ = +0 and every
-   * value is the legacy one bit for bit (posZ - 0 === posZ, 0 + W === W).
-   * Ports: index.html@cd3fd3f lines 2473-2531.
-   * Side effects: none.
-   * @param {{totalWidth: number, maxHeight: number, minX: number, wallZ: number}} bounds  'flat-pivot' bounds (metres)
-   * @returns {{frameWidth: number, frameHeight: number, status: 'within'|'offCenter'|'exceeds', safeDistance: number,
-   *            distToWall: number}}  distToWall (03 T3) feeds the "Distance to wall plane" readout (03 T6)
-   */
-  coverage(bounds) {
-    const hFov = this.hFov();
-    const vFov = this.vFov();
-
-    // LEGACY(B-M10): the distance is posZ - wallZ and the wall is the flat rectangle [minX, minX + totalWidth] x
-    // [0, maxHeight] at z = wallZ; rotation, curvature and angle offsets are ignored.
-    const distToWall = this.posZ - bounds.wallZ;
-    const frameWidth = 2 * Math.tan(hFov / 2) * distToWall;
-    const frameHeight = 2 * Math.tan(vFov / 2) * distToWall;
-
-    const totalWallWidth = bounds.totalWidth;
-    const maxWallHeight = bounds.maxHeight;
-    const fitsWidth = frameWidth <= totalWallWidth;
-    const fitsHeight = frameHeight <= maxWallHeight;
-
-    const camCenterX = this.posX;
-    const camCenterY = this.posY;
-    const frameLeft = camCenterX - frameWidth / 2;
-    const frameRight = camCenterX + frameWidth / 2;
-    const frameBottom = camCenterY - frameHeight / 2;
-    const frameTop = camCenterY + frameHeight / 2;
-
-    const withinBounds = frameLeft >= bounds.minX && frameRight <= bounds.minX + totalWallWidth &&
-                         frameBottom >= 0 && frameTop <= maxWallHeight;
-
-    let status;
-    if (withinBounds) {
-      status = 'within';
-    } else if (fitsWidth && fitsHeight) {
-      status = 'offCenter';
-    } else {
-      status = 'exceeds';
-    }
-
-    const safeDistance = this.maxSafeDistance(bounds);
-    return { frameWidth, frameHeight, status, safeDistance, distToWall };
   }
 
   /**

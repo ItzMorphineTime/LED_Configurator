@@ -440,6 +440,7 @@ class Vec3 { constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z =
 globalThis.window = { THREE: { Vector3: Vec3 } };
 const { OrbitController } = await import('../../js/interaction/OrbitController.js');
 const { CineCamera } = await import('../../js/domain/CineCamera.js');
+const { analyzeCoverage } = await import('../../js/geometry/FrustumCoverage.js');
 
 /** Seeded walls of 0..4 sections with numeric fields (zeros, fractions, negative curves and offsets). */
 function seededWalls(seed, count) {
@@ -464,23 +465,17 @@ function seededWalls(seed, count) {
 const LEGACY = {
   target: (b, off) => [b.totalWidth / 2 + off.x, b.maxHeight / 2 + off.y, off.z],
   reset: (b) => ({ posX: b.totalWidth / 2, posY: b.maxHeight / 2, posZ: 5 }),
-  coverage(cam, b) {
+  safeDistance(cam, b) {
     const hFov = cam.hFov(), vFov = cam.vFov();
-    const distToWall = cam.posZ;
-    const frameWidth = 2 * Math.tan(hFov / 2) * distToWall;
-    const frameHeight = 2 * Math.tan(vFov / 2) * distToWall;
-    const fitsWidth = frameWidth <= b.totalWidth, fitsHeight = frameHeight <= b.maxHeight;
-    const frameLeft = cam.posX - frameWidth / 2, frameRight = cam.posX + frameWidth / 2;
-    const frameBottom = cam.posY - frameHeight / 2, frameTop = cam.posY + frameHeight / 2;
-    const within = frameLeft >= 0 && frameRight <= b.totalWidth && frameBottom >= 0 && frameTop <= b.maxHeight;
-    const status = within ? 'within' : fitsWidth && fitsHeight ? 'offCenter' : 'exceeds';
-    return { frameWidth, frameHeight, status, safeDistance: cam.maxSafeDistance(b) };
+    return Math.min(b.totalWidth / (2 * Math.tan(hFov / 2)), b.maxHeight / (2 * Math.tan(vFov / 2)));
   },
   posZ: (raw) => Math.max(0.1, parseFloat(raw) || 5),
 };
 
 describe("03 test 6 (consumers, T3): 'flat-pivot' at the identity equals the legacy 'flat' expressions", () => {
-  test('the orbit target (Object.is in x and y, === in z), resetTo, every coverage output and the posZ rule', () => {
+  // 08 P2-11a: the coverage is the analyser's (frustum-coverage.test.mjs: the legacy numbers on flat walls and the 6.8
+  // re-expression); the flat bounds still feed the safe distance D (and fits) until P2-11c.
+  test('the orbit target (Object.is in x and y, === in z), resetTo, the safe distance and the posZ rule', () => {
     const offsets = [{ x: 0, y: 0, z: 0 }, { x: -0, y: -0, z: -0 }, { x: 1.5, y: -2.25, z: 0.75 }, { x: -3, y: 0.5, z: -0 }];
     const poses = [[0, 1.5, 5], [1.25, 0.75, 1.5], [-2, 0, 0.1], [10, 3, 25], [-0, -0, -0]];
     const raws = ['', '0', '-0', '1.5', '-5', 'abc', '0.05', '7'];
@@ -500,11 +495,7 @@ describe("03 test 6 (consumers, T3): 'flat-pivot' at the identity equals the leg
       for (const [posX, posY, posZ] of poses) {
         const cam = new CineCamera();
         Object.assign(cam, { posX, posY, posZ });
-        const got = cam.coverage(b);
-        const want = LEGACY.coverage(cam, flat);
-        for (const k of ['frameWidth', 'frameHeight', 'safeDistance']) assert.ok(Object.is(got[k], want[k]), k);
-        assert.equal(got.status, want.status);
-        assert.ok(Object.is(got.distToWall, posZ));
+        assert.ok(Object.is(cam.maxSafeDistance(b), LEGACY.safeDistance(cam, flat)), 'safeDistance');
         cam.resetTo(b);
         const r = LEGACY.reset(flat);
         assert.ok(Object.is(cam.posX, r.posX) && Object.is(cam.posY, r.posY) && Object.is(cam.posZ, r.posZ));
@@ -515,7 +506,7 @@ describe("03 test 6 (consumers, T3): 'flat-pivot' at the identity equals the leg
     assert.ok(checks > 2000);
   });
 
-  test("off the identity: the target and Reset follow the stage origin; the coverage of a re-expressed camera is unchanged (6.5, 6.8)", () => {
+  test("off the identity: the target and Reset follow the stage origin; the analyser's distance is to the moved wall (6.5, 6.8)", () => {
     const project = projectOf(WALLS.default, pivotOf('wall-center', { x: 0, y: 0, z: 2 }));
     const b = framingBounds(project);
     assert.deepEqual(b, { totalWidth: 2.5, maxHeight: 1.5, minX: -1.25, wallZ: -2 });
@@ -525,7 +516,8 @@ describe("03 test 6 (consumers, T3): 'flat-pivot' at the identity equals the leg
     const cam = new CineCamera();
     cam.resetTo(b);
     assert.deepEqual([cam.posX, cam.posY, cam.posZ], [0, 0.75, 3], '5 m in front of the wall plane');
-    assert.equal(cam.coverage(b).distToWall, 5);
+    assert.equal(analyzeCoverage(layoutProject(project), cam, { hFov: cam.hFov(), vFov: cam.vFov() },
+      { width: b.totalWidth, height: b.maxHeight }).distance, 5);
     assert.ok(Object.is(cam.setField('posZ', '0', { wallZ: b.wallZ }), 0));
     assert.equal(cam.setField('posZ', '-5', { wallZ: b.wallZ }), -1.9);
   });

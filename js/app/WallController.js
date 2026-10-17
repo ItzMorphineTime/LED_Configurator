@@ -81,6 +81,12 @@ export class WallController {
    * @type {import('../geometry/WallLayout.js').PivotResolution|null}
    */
   #pivotResolution = null;
+  /**
+   * The stage layout of the last rebuild (step 1; 08 P2-11a): the layout instance whose memoised columnQuads() the
+   * coverage analyser reads on every pose change. null before the first rebuild.
+   * @type {import('../geometry/WallLayout.js').WallLayout|null}
+   */
+  #currentLayout = null;
 
   /**
    * Stores the collaborators only (R4).
@@ -129,6 +135,18 @@ export class WallController {
   }
 
   /**
+   * The stage layout of the last rebuild (08 P2-11a, 6.10): every wall change rebuilds, so it is the live wall in the
+   * stage frame, and its memoised columnQuads() and worldVertices() are derived once per rebuild. Before the first
+   * rebuild it is computed (and cached) on demand.
+   * Side effects: on the first read before any rebuild, caches layout().
+   * @returns {import('../geometry/WallLayout.js').WallLayout}
+   */
+  get currentLayout() {
+    if (!this.#currentLayout) this.#currentLayout = this.layout();
+    return this.#currentLayout;
+  }
+
+  /**
    * The resolution of the live pivot against the live sections, without rebuilding or caching (03 6.3).
    * Side effects: none.
    * @returns {import('../geometry/WallLayout.js').PivotResolution|null}
@@ -162,7 +180,7 @@ export class WallController {
    * shift against the previously cached one; WALL_REBUILT carries both with the cause (03 5.5): 'init' (the bootstrap),
    * 'pivot' (commitPivot), 'import' (applyImport) or 'edit' (every other call site).
    * Ports: index.html@cd3fd3f lines 1457-1577 (orchestration; tail 1574-1576).
-   * Side effects: writes the pivot cache; view.rebuild (scene); emits WALL_STATS_CHANGED; orbit.updateCameraPosition
+   * Side effects: writes the layout and pivot caches; view.rebuild (scene); emits WALL_STATS_CHANGED; orbit.updateCameraPosition
    *   (main camera); hub.refresh (iff project.camera.enabled); emits WALL_REBUILT {layout, meshMode, view, cause,
    *   stageShift}.
    * @param {{cause?: 'init'|'pivot'|'import'|'edit'}} [options]
@@ -172,6 +190,7 @@ export class WallController {
     // 1. layout (PR1: computed before the view disposes the old wall; pure, no THREE ids), stage frame (03 5.6)
     const prev = this.#pivotResolution;
     const layout = this.layout();
+    this.#currentLayout = layout;
     this.#pivotResolution = layout.pivot.resolution;
     const shift = stageShift(prev, this.#pivotResolution);
     // 2. dispose + groups + build + frames + scene.add (1458-1477, 1551-1572)

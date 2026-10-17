@@ -222,9 +222,9 @@ js/
     Project.js                             WP3   Project aggregate, DisplaySettings (content enum), ContentMode, PanelIdStyle;
                                                  03 T1: DisplaySettings.showPivotMarker, DEFAULT_SHOW_PIVOT_MARKER
     LogoLibrary.js                         WP3   Section logos keyed by section id (plain-object key semantics)
-    CineCamera.js                          WP3   Film camera: lens, pose, enabled flag, FILMBACK_PRESETS, FOV/coverage/safe-D math,
+    CineCamera.js                          WP3   Film camera: lens, pose, enabled flag, FILMBACK_PRESETS, FOV/safe-D math,
                                                  field rules, gizmo/pilot pose arithmetic; 03 T1: LIMITS, translateStage, the posZ
-                                                 rule's wall-plane context
+                                                 rule's wall-plane context; 08 P2-11a: coverage() moved to FrustumCoverage
     Prop.js                                WP3   Prop base (pose, visibility, field rules, gizmo arithmetic), PersonProp, CarProp;
                                                  03 T1: LIMITS, translateStage
     DebugViewSettings.js                   01 F1-1  DebugShading, SHADING_CYCLE, DebugViewSettings (normals debug view
@@ -233,7 +233,8 @@ js/
     WallLayout.js                          WP4   The single cursor walk: computeWallLayout, layoutProject, framingBounds,
                                                  SectionLayout, WallLayout (flatEdges, firstEdge/lastEdge, bounds, pivotPoint);
                                                  03 T2: baseY, generativeBounds, translated, resolvePivot, stageShift, the
-                                                 frames of layoutProject, framingBounds 'flat-pivot'
+                                                 frames of layoutProject, framingBounds 'flat-pivot'; 08 P2-11a: columnQuads,
+                                                 worldVertices (memoised per instance), extentAcross, chordFacing
     WallMeshBuilder.js                     WP4   quadIndices + WallMeshBuilder: the one owner of winding, normals, UVs, panel quads;
                                                  maxIndexOf, indexWidth (index component width, 08 P2-1b)
     TextureAtlas.js                        WP4   computeAtlas (LED totals, px/LED, start columns, x offsets, UV offsets),
@@ -249,6 +250,11 @@ js/
                                                  polyline (every triangle +Y, clamped offsets counted); bandRunOfLayout
     PreviewFit.js                          07 R2  The preview's per-axis window clamps (B-L32), letterbox (B-M9) and the
                                                  integer device-pixel rects of the scissor pass (07 6.1); imports domain/rules
+    FrustumCoverage.js                     08 P2-11a  analyzeCoverage: the rotation-aware coverage of the film camera (five
+                                                 rays and the projected-quad overlap over WallLayout.columnQuads(), D0, the
+                                                 statuses offWall/within/offCenter/exceeds, the corner depths); cameraBasis,
+                                                 nearestHit, frameDistance, quadOverlapsFrame, MAX_FRUSTUM_DEPTH_M (imports
+                                                 nothing)
   render/
     ResourceTracker.js                     WP6   disposeObject3D(root, {maps}) + ResourceTracker
     SceneManager.js                        WP6   Scene, main camera, renderer, lights, grid, axes (explicit init()), helper registry,
@@ -510,6 +516,13 @@ tests/
                                                  validateProject row by row with the 07 issue shape and the 3.3 texts, ids
                                                  (07 6.8), idempotence over 2,000 seeded documents, the harness configs (no
                                                  correction), the reachability of every card-rule value, no prototype pollution
+    frustum-coverage.test.mjs              08 P2-11a  analyzeCoverage (08 6.10, 8.4): unrotated poses on flat3 equal the
+                                                 legacy numbers and status bit for bit (a frame off the wall is offWall), a
+                                                 90-degree pan, tilt 90 and a camera behind the wall are offWall, box-corner hits
+                                                 pick the nearest quad, the projected-quad overlap, camera-space corner depths,
+                                                 03 6.8's re-expression, equivariance under a yaw of wall and camera;
+                                                 WallLayout.columnQuads (memoised), worldVertices, extentAcross, chordFacing
+                                                 and their postTransform
     safe-distance-band.test.mjs            08 P2-5b  buildSafeDistanceBand (08 6.9, 8.4): flat walls equal the legacy quads,
                                                  the mitre invariant, the worked cases (concave30 at two D, box_corner with
                                                  its documented overlap, concave_offsets, mixed), fold-back splits, facing
@@ -1133,15 +1146,8 @@ export class CineCamera {
   /** Math.min(bounds.totalWidth / (2 * Math.tan(hFov / 2)), bounds.maxHeight / (2 * Math.tan(vFov / 2)))
    *  (2529-2531 == 2610-2612; hFov/vFov from the methods above) */
   maxSafeDistance(bounds)
-  /** LEGACY(B-M10) 2473-2531 on the 'flat-pivot' bounds (03 T3, 03 6.6): distToWall = posZ - bounds.wallZ;
-   *  frameWidth = 2 * Math.tan(hFov / 2) * distToWall; frameHeight likewise; fitsWidth/fitsHeight; frameLeft/Right/
-   *  Bottom/Top around (posX, posY); rotation ignored; wall = [minX, minX + totalWidth] x [0, maxHeight] at z = wallZ;
-   *  safeDistance = this.maxSafeDistance(bounds) (the same expressions, hFov()/vFov() recomputed: pure, identical values);
-   *  the unused legacy locals wallCenterX/Y are dropped. At the identity pivot minX = wallZ = +0, so every value is the
-   *  legacy one bit for bit (posZ - 0 === posZ, 0 + W === W).
-   *  @returns {{frameWidth, frameHeight, status: 'within'|'offCenter'|'exceeds', safeDistance, distToWall}}
-   *  (distToWall since 03 T3, for 03 T6's "Distance to wall plane") */
-  coverage(bounds)
+  // coverage(bounds) (2473-2531, LEGACY(B-M10)) was deleted by 08 P2-11a: the coverage is geometry/FrustumCoverage's
+  // analyzeCoverage, called by CameraHub.coverage() (3.6, 3.10)
   /** 2559-2564 on the 'flat-pivot' bounds (03 T3): posX = bounds.minX + bounds.totalWidth / 2; posY = bounds.maxHeight / 2;
    *  posZ = bounds.wallZ + 5; rotX = 0; rotY = 0; rotZ = 0   (identity: 0 + w / 2 === w / 2, 0 + 5 === 5) */
   resetTo(bounds)
@@ -1305,7 +1311,55 @@ export class WallLayout {
    *  if any section has a postTransform (the one composition rule, 03 5.10 #2, 07 C32); else a new WallLayout of
    *  sl.translated(dx, dy, dz) per section, with no pivot block. Pure. */
   translated(dx, dy, dz)
+  /** 08 P2-11a (6.10), memoised per instance (frozen; the same array on every call; a translated copy computes its
+   *  own): per section column k, p0 = T(e[k].x, baseY, e[k].z), a = T_vec(e[k+1] - e[k]), b = T_vec(0, panelRows *
+   *  panelH, 0), n = normalize(a x b), aa = a.a, bb = b.b, {sectionIndex, column: k}; T = the section's postTransform
+   *  (identity while null). n is the stage side of the column (+Z for a flat wall along +X) and turns with the wall; a
+   *  column with no finite, non-zero a x b is left out. Read by FrustumCoverage on every pose change. */
+  columnQuads()      // ReadonlyArray<ColumnQuad>
+  /** 08 P2-11a (6.10), memoised: one xyz-interleaved Float64Array per section of every grid corner (row 0..panelRows
+   *  outer, col 0..panelCols inner, y = baseY === 0 ? row * panelH : baseY + row * panelH, after the postTransform). */
+  worldVertices()    // ReadonlyArray<Float64Array>
+  /** 08 P2-11a (6.10): max(v.chord) - min(v.chord) over worldVertices() of the included sections, chord = (facing.z, 0,
+   *  -facing.x): the width seen face-on, invariant under a yaw of the wall (the same along X, along Z and at 45 degrees);
+   *  0 when nothing is included. */
+  extentAcross(facing, include = null)
+  /** 08 P2-11a (6.10): normalize(-(last.z - first.z), 0, last.x - first.x) from the first edge of the walk to the last
+   *  (each through its section's postTransform): (-0, 0, 1) for a flat wall along +X; (0, 0, 1) for a chord shorter than
+   *  1e-9 m (a closed ring, an empty wall). */
+  chordFacing()
 }
+```
+
+#### `js/geometry/FrustumCoverage.js`: the coverage analyser (08 P2-11a, B-M10; 08 6.10)
+```js
+export const MAX_FRUSTUM_DEPTH_M = 15;   // a corner depth with no hit and no wall plane ahead (the legacy depth, B-L33)
+export const FRAME_CORNERS;              // frozen [{sx: -1, sy: 1}, {1, 1}, {1, -1}, {-1, -1}]: TL, TR, BR, BL
+/** The columns of three.js r128 makeRotationFromEuler 'YXZ' (rotation.set(tilt, pan, roll), as CameraRigView applies
+ *  it): right = R(1, 0, 0), up = R(0, 1, 0), forward = R(0, 0, -1) = (-sin pan cos tilt, sin tilt, -cos pan cos tilt);
+ *  (-0, 0, -1), (1, 0, 0), (0, 1, 0) exactly for zero angles. */
+export function cameraBasis(rotXDeg, rotYDeg, rotZDeg)
+/** The smallest t of a front-facing quad (d.n < -1e-9, t = ((p0 - o).n) / (d.n) > 0) whose point has s, v in [0, 1]
+ *  (tolerance 1e-9, so a ray through a column joint hits); null for none. */
+export function nearestHit(o, d, quads)
+/** D0: over the front-facing column planes hit at t > 0, the t of the smallest gap between the hit and the column's
+ *  horizontal extent (0 inside, 0 <= s <= 1 at any height; else the distance outside it, (-s or s - 1) |a|), the
+ *  smallest t among equal gaps; null when no plane lies ahead. A hit inside a column wins (08 6.10's rule 1); when the
+ *  axis misses every column, the column it passes closest to gives the plane (as built; 6.10's rule 2 took the nearest
+ *  plane of any column). posZ - c for a flat wall at z = c, unrotated. */
+export function frameDistance(o, f, quads)
+/** The corners to camera space (x = v.r, y = v.u, z = v.f), clipped at z >= 1e-6, projected to (x/z, y/z), separating-axis
+ *  test against [-tx, tx] x [-ty, ty] (its two axes, then each edge normal); touching counts. */
+export function quadOverlapsFrame(q, o, basis, tx, ty)
+/** tx = tan(hFov / 2), ty = tan(vFov / 2); D0 = frameDistance; W = 2 * tx * D0, H = 2 * ty * D0 (null without D0; the
+ *  legacy expressions, so a flat wall and an unrotated camera give the legacy values bit for bit); each corner ray
+ *  normalize(f + sx tx r + sy ty u) and its nearestHit; status: 'offWall' when D0 is null or nothing touches (no ray
+ *  hit and no front-facing quad overlapping the frame), else 'within' (all four corners hit), else 'offCenter' (W <=
+ *  extent.width && H <= extent.height), else 'exceeds'; cornerDepths: t_c / sqrt(1 + tx^2 + ty^2) for a hit (the far
+ *  corner (sx tx z, sy ty z, -z) is the hit point), else D0, else MAX_FRUSTUM_DEPTH_M. Pure: reads the layout's memo.
+ *  @returns {{status, frameWidth, frameHeight, distance, cornerDepths: number[4], centreDepth, cornerHits: boolean[4]}} */
+export function analyzeCoverage(layout, pose, lens, extent)
+```
 ```
 
 #### `js/geometry/WallMeshBuilder.js`: the one owner of winding, normals and UVs
@@ -2518,6 +2572,9 @@ export class WallController {
   layout({ frame = 'stage' } = {})   // layoutProject(project, {frame})  (fresh, from live sections; 'export' for ProjectIO, 03 T3)
   /** 03 T3 (5.6): the cached resolution of the last rebuild (step 1) or commitPivot; null before the first rebuild */
   get pivotResolution()
+  /** 08 P2-11a: the stage layout of the last rebuild (cached in rebuild step 1; computed and cached on demand before the
+   *  first rebuild): its memoised columnQuads() serve every pose change of the coverage analyser */
+  get currentLayout()
   resolvePivotNow()              // 03 T3: resolvePivot(computeWallLayout(project.wall.sections), project.wall.pivot) (pure)
   /** 03 T3 (5.6; the pivot rebuild decision): stageShift(cache, after) non-zero ? rebuild({cause: 'pivot'})
    *  : cache = after (a height-only change rebuilds nothing). Called by 03 T4's PivotController. */
@@ -2575,10 +2632,16 @@ export class WallController {
 ```js
 export class CameraHub {               // legacy updateCameraFrustum + updateSafeDistance
   /** @param {{project, rig: CameraRigView, preview: PreviewPass, safeDistance: SafeDistanceView,
-   *           pilotDriver: PilotCameraDriver, frameBounds, bus}} deps   (07 R2: the hub's preview is the pass) */
-  constructor({ project, rig, preview, safeDistance, pilotDriver, frameBounds, bus })
+   *           pilotDriver: PilotCameraDriver, frameBounds, stageLayout, bus}} deps   (07 R2: the hub's preview is the
+   *           pass; 08 P2-11a: stageLayout = () => wallController.currentLayout) */
+  constructor({ project, rig, preview, safeDistance, pilotDriver, frameBounds, stageLayout, bus })
   /** P2 (section 6.3). */
   refresh()
+  /** 08 P2-11a (6.10): c = analyzeCoverage(stageLayout(), cine, {hFov, vFov}, {width: b.totalWidth, height:
+   *  b.maxHeight}) with b = frameBounds(); returns {frameWidth: c.frameWidth, frameHeight: c.frameHeight, status:
+   *  c.status, safeDistance: cine.maxSafeDistance(b), distToWall: c.distance} (fits and D read the flat bounds until
+   *  P2-11c) */
+  coverage()
   /** 2778-2784: if (display.showSafeDistance && cine.enabled) safeDistance.create({layout: layoutProject(project), cine,
    *  bounds: frameBounds()}) else safeDistance.remove(). The layout and bounds are argument expressions, so they are
    *  evaluated before create() removes the old group and allocates the new one (legacy: after; PR7).
@@ -2975,7 +3038,7 @@ Mirror formats (verbatim legacy strings; `cine = project.camera` read at event t
 - `CAMERA_PREVIEW_CHANGED({enabled})`: `#camera-preview-options` display (4233).
 - `CAMERA_FILMBACK_CHANGED({key})`: `#custom-filmback` display = `key === 'custom'`; if not custom: `#filmback-width.value = cine.filmbackWidth; #filmback-height.value = cine.filmbackHeight` (4254-4262).
 - `CAMERA_LENS_CHANGED({hFov, vFov, filmbackWidth, filmbackHeight})`: `#camera-hfov` = `` `${(hFov * 180 / Math.PI).toFixed(1)}°` ``, `#camera-vfov` likewise, `#camera-aspect` = `` `${(filmbackWidth / filmbackHeight).toFixed(2)}:1` `` (2369-2371).
-- `CAMERA_COVERAGE_CHANGED({frameWidth, frameHeight, status, safeDistance, distToWall})`: (03 T6, 3.5) `#camera-wall-distance` = `` `${distToWall.toFixed(2)}m` `` (the "Distance to wall plane" row, the flat-plane distance `posZ - wallZ`); `#frustum-width` = `` `${frameWidth.toFixed(2)}m` ``, `#frustum-height` likewise; `#frustum-status-text`: `within` -> 'Within bounds' + `statusEl.style.color = theme.ui.status.within`; `offCenter` -> 'Off-center' + `theme.ui.status.offCenter`; `exceeds` -> 'Exceeds wall' + `theme.ui.status.exceeds` (textContent then colour, as 2516-2524; `statusEl.style.color` is a DOM style write, which check rule 10 does not count); `#safe-distance` = `` `≤ ${safeDistance.toFixed(2)}m` `` (2484-2533).
+- `CAMERA_COVERAGE_CHANGED({frameWidth, frameHeight, status, safeDistance, distToWall})`: (03 T6, 3.5) `#camera-wall-distance` = `` `${distToWall.toFixed(2)}m` `` (the "Distance to wall plane" row; since 08 P2-11a the analyser's D0, the optical-axis distance to the wall plane the camera is aimed at); `#frustum-width` = `` `${frameWidth.toFixed(2)}m` ``, `#frustum-height` likewise (08 P2-11a: each of the three reads "—" when its value is null, no wall plane ahead); `#frustum-status-text`: `offWall` (08 P2-11a, M-COV-1) -> 'Not aimed at wall' + `statusEl.style.color = theme.ui.status.exceeds`; `within` -> 'Within bounds' + `statusEl.style.color = theme.ui.status.within`; `offCenter` -> 'Off-center' + `theme.ui.status.offCenter`; `exceeds` -> 'Exceeds wall' + `theme.ui.status.exceeds` (textContent then colour, as 2516-2524; `statusEl.style.color` is a DOM style write, which check rule 10 does not count); `#safe-distance` = `` `≤ ${safeDistance.toFixed(2)}m` `` (2484-2533).
 - `CAMERA_POSE_CHANGED({source, axis})` (input `.value` writes):
   - `'reset'`: pos-x `cine.posX.toFixed(1)`, pos-y `cine.posY.toFixed(1)`, pos-z `cine.posZ`, rot-x/y/z raw values (2567-2572);
   - `'gizmo-translate'`: pos-x/y/z `toFixed(2)` (3342-3344);
@@ -3128,7 +3191,7 @@ export class App {
   start()
 }
 ```
-`App` is the only module that imports `theme/Theme.js` (and, since 06 T3, `theme/ThemeBridge.js`), `vendor/jszip.js` and every class. It defines `colorToRgb = (s) => new THREE.Color(s)` and `frameBounds = () => framingBounds(project, wallController.pivotResolution)` (03 T3: the cached resolution; evaluated lazily, after `wallController` exists), and the frame tick `() => { orbit.tickKeyboard(); pilot.tickKeyboard(); sceneManager.renderFrame(); }` (legacy animate 3886-3889; since 07 R2 `renderFrame()` draws the main pass and then the injected `previewPass`, `sceneManager.setPasses([previewPass])`, inside `withPassHidden`; 08 P2-10a passed the helper set to the second renderer, which 07 R1 replaced by the preview camera's layer mask and `withPassHidden`, and 07 R2 deleted that renderer).
+`App` is the only module that imports `theme/Theme.js` (and, since 06 T3, `theme/ThemeBridge.js`), `vendor/jszip.js` and every class. It defines `colorToRgb = (s) => new THREE.Color(s)`, `frameBounds = () => framingBounds(project, wallController.pivotResolution)` (03 T3: the cached resolution; evaluated lazily, after `wallController` exists) and `stageLayout = () => wallController.currentLayout` (08 P2-11a: the hub's coverage analyser), and the frame tick `() => { orbit.tickKeyboard(); pilot.tickKeyboard(); sceneManager.renderFrame(); }` (legacy animate 3886-3889; since 07 R2 `renderFrame()` draws the main pass and then the injected `previewPass`, `sceneManager.setPasses([previewPass])`, inside `withPassHidden`; 08 P2-10a passed the helper set to the second renderer, which 07 R1 replaced by the preview camera's layer mask and `withPassHidden`, and 07 R2 deleted that renderer).
 
 
 ---
@@ -3255,7 +3318,7 @@ Writers listed here are the only allowed writers (checked by `tests/static/check
 | `camera:previewChanged` (`CAMERA_PREVIEW_CHANGED`) | `{enabled}` | `CameraController.setPreviewEnabled` after `cine.enabled = on` (4233) | `CameraPanel` (`#camera-preview-options` display) |
 | `camera:filmbackChanged` (`CAMERA_FILMBACK_CHANGED`) | `{key}` | `CameraController.setFilmback` after `cine.applyPreset` (4254-4262) | `CameraPanel` (`#custom-filmback`, size inputs) |
 | `camera:lensChanged` (`CAMERA_LENS_CHANGED`) | `{hFov, vFov, filmbackWidth, filmbackHeight}` (radians, mm) | `CameraRigView.rebuildFrustum` at the legacy readout point (2369-2371); twice on the first enable, as legacy | `CameraPanel` (`#camera-hfov/vfov/aspect`) |
-| `camera:coverageChanged` (`CAMERA_COVERAGE_CHANGED`) | `{frameWidth, frameHeight, status, safeDistance, distToWall}` (`distToWall` since 03 T3: posZ - wallZ) | `CameraHub.refresh` step 5 (2460) | `CameraPanel` (frame size, status text + colour, max distance; 03 T6: `#camera-wall-distance` from `distToWall`) |
+| `camera:coverageChanged` (`CAMERA_COVERAGE_CHANGED`) | `{frameWidth, frameHeight, status, safeDistance, distToWall}` (`distToWall` since 03 T3: posZ - wallZ; since 08 P2-11a the analyser's D0; `status` gains `'offWall'`, and `frameWidth`, `frameHeight`, `distToWall` are null when no wall plane lies ahead) | `CameraHub.refresh` step 5 (2460) | `CameraPanel` (frame size, status text + colour, max distance; 03 T6: `#camera-wall-distance` from `distToWall`) |
 | `camera:poseChanged` (`CAMERA_POSE_CHANGED`) | `{source: 'reset'\|'gizmo-translate'\|'gizmo-rotate'\|'pilot-look'\|'pilot-move'\|'pivot', axis?}` (`'pivot'` since 03 T3; its input mirror since 03 T4) | `CameraController.resetPose` (2567), `applyGizmoTranslate` (3342), `applyGizmoRotate` (3378/3381/3384), `PilotController.onMouseMove` (3554), `tickKeyboard` (3614), `CameraController.translateStage` (03 T3): always after the model write, before the hub | `CameraPanel` (input values, per-source precision) |
 | `camera:safeDistanceToggled` (`CAMERA_SAFE_DISTANCE_TOGGLED`) | `{enabled}` | `CameraController.setSafeDistanceEnabled` (4325) | `CameraPanel` (`#export-safe-distance` display) |
 | `prop:visibilityChanged` (`PROP_VISIBILITY_CHANGED`) | `{id, visible}` | `PropController.setVisible` after the model write (4335 / 4366) | `PropControls` with that prefix (`#<id>-options`) |
@@ -3362,7 +3425,7 @@ if (!cine.enabled) return                                            // 2452
 if (!rig.exists) rig.create(cine)                                    // 2454-2456: builds the frustum once (emits CAMERA_LENS_CHANGED)
 rig.rebuildFrustum(cine)                                             // 2458: emits CAMERA_LENS_CHANGED again (kept, as legacy)
 rig.updateTransform(cine)                                            // 2459
-emit CAMERA_COVERAGE_CHANGED cine.coverage(frameBounds())            // 2460  B-M10 (tagged at CineCamera.coverage); PR7
+emit CAMERA_COVERAGE_CHANGED this.coverage()                         // 2460  08 P2-11a: analyzeCoverage on stageLayout(); PR7
 preview.updateCamera()                                               // 2461  (preview camera and labels; PreviewPass since 07 R2)
 this.syncSafeDistance()                                              // 2462  LEGACY(B-L30) rebuilt on every call
 pilotDriver.refresh()                                                // 2463  re-drives the main camera iff pilot
@@ -3519,6 +3582,7 @@ theme = buildTheme(Theme, (name) => win.getComputedStyle(doc.documentElement).ge
 brand = theme.brand; bus = new EventBus(); dialogs = createDialogs(win)
 project = Project.createDefault({ defaultSectionColor: theme.palette.defaultSectionColor })   // 06 T7
 frameBounds = () => framingBounds(project, wallController.pivotResolution); colorToRgb = (s) => new THREE.Color(s)   // 03 T3
+stageLayout = () => wallController.currentLayout                                // 08 P2-11a
 interaction = new InteractionState(); keyboard = new KeyboardState({ doc, win })
 sceneManager = new SceneManager({ canvas: byId(doc, 'three-canvas'), win, display: project.display, theme })
 pointerRay = new PointerRay({ sceneManager })
@@ -3541,7 +3605,7 @@ orbit = new OrbitController({ sceneManager, keyboard, interaction, frameBounds }
 gizmo = new TransformGizmo({ sceneManager, pointerRay, interaction, bus, theme })
 selection = new SelectionManager({ bus, gizmo, pointerRay, interaction })
 pilotDriver = new PilotCameraDriver({ sceneManager, cine, rig, interaction })
-hub = new CameraHub({ project, rig, preview, safeDistance, pilotDriver, frameBounds, bus })
+hub = new CameraHub({ project, rig, preview, safeDistance, pilotDriver, frameBounds, stageLayout, bus })
 pilot = new PilotController({ sceneManager, cine, driver: pilotDriver, orbit, keyboard, interaction, hub, bus, dialogs })
 cameraController = new CameraController({ project, rig, preview, hub, pilot, selection, frameBounds, bus })
 personController = new PropController({ prop: person, view: personView, selection, bus })
@@ -3630,7 +3694,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `mesh.gltf.combinedUV = 'atlas-pixel-accurate'` (new leaf in 08 P2-7c; absent from `LegacyProfiles`, whose attributes have no `TEXCOORD_0`) | B-M7 | The combined `TEXCOORD_0`: the viewport's pixel-accurate atlas UVs (`atlasUvRect`, 08 6.7) | `GltfExporter.#combinedUvOption()`, only when the attributes list `TEXCOORD_0`: `profile.combinedUV` | switch | 04 UV-8b later adds `'plan'` and selects it |
 | `mesh.gltf.indexType = 'auto'` (08 P2-1b; Phase-1 value `'uint16'`, kept as a case for `LegacyProfiles`) | B-L5 (fixed) | Landed: Uint32 (5125) as soon as the largest index reaches 65,535 (`indexWidth`, 08 6.2); `'uint16'` always wrote 5123 and wrapped above 65,535 vertices | `GltfExporter.#addMesh`: `profile.indexType` | switch | landed in 08 P2-1b (invariance gate: every harness glTF is unchanged); the viewport index attribute (untagged) landed in 08 P2-1e |
 | `mesh.gltf.doubleSided = 'omit'` | – (correct since 08 P2-2d) | The material object has **no** `doubleSided` key: single-sided, which shows the `'ccw'` wall from the stage and keeps a wrongly facing wall visible as an error (08 Q2) | `GltfExporter.#doubleSided()` (called first by `#addMesh`): `profile.doubleSided` | switch | `case 'true'` (08 P2-2d) writes `doubleSided: true`, for a later export option; no profile uses it |
-| `framingBounds = 'flat-pivot'` (03 T2; Phase-1 value `'flat'`, whose case is deleted: the key has one read site) | B-L2, B-M10 | Orbit target, camera reset, coverage status and safe-distance D use the flat bounds (the arc width sum x the tallest section), translated by the stage origin: `{totalWidth, maxHeight, minX: 0 - so.x, wallZ: 0 - so.z}` (03 6.6; identity-exact at the default pivot, +0 offsets) | `WallLayout.framingBounds`: `Strategies.framingBounds` (the 4 consumers get it injected as `frameBounds`) | switch | step F = 08 P2-11c: `'layout'` (true bounds of the stage layout, `FramingPolicy`'s named boxes) |
+| `framingBounds = 'flat-pivot'` (03 T2; Phase-1 value `'flat'`, whose case is deleted: the key has one read site) | B-L2, B-M10 | Orbit target, camera reset, the coverage's fits test (the status rays read the stage layout since 08 P2-11a) and safe-distance D use the flat bounds (the arc width sum x the tallest section), translated by the stage origin: `{totalWidth, maxHeight, minX: 0 - so.x, wallZ: 0 - so.z}` (03 6.6; identity-exact at the default pivot, +0 offsets) | `WallLayout.framingBounds`: `Strategies.framingBounds` (the 4 consumers get it injected as `frameBounds`) | switch | step F = 08 P2-11c: `'layout'` (true bounds of the stage layout, `FramingPolicy`'s named boxes) |
 | `curveBeforeFirstPanel = true` | B-L1 | Curve step applied before the first panel's move | `WallLayout.computeWallLayout` (first statement): `Strategies.curveBeforeFirstPanel` | switch (`case true`) | owner decision: **kept** (2026-10-16, 1.4); 08 P2-13f retires the switch with no output change |
 | `frustumDepthM = 15` | B-L33 | Frustum drawn to 15 m | `CameraRigView.rebuildFrustum`: `frustumDepth = Strategies.frustumDepthM` | value | clip at the wall |
 | `gizmoRotateSign = -1` | B-M12 | Rotation opposite to the drag | `TransformGizmo.onMouseMove`: `Strategies.gizmoRotateSign * angle` | value | `+1` |
@@ -3656,7 +3720,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | B-M7 | glTF POSITION only (S-2) | `Strategies.mesh.gltf.attributes` (fixed) | Landed in 08 P2-7c (`TEXCOORD_0` on every primitive, written (u, 1 - v): combined the pixel-accurate atlas UVs of the new leaf `mesh.gltf.combinedUV = 'atlas-pixel-accurate'`, section 0..1 per section, panel `PANEL_UVS`; `NORMAL` landed in 08 P2-2d; no tag site) |
 | B-M8 | Safe-distance group survives preview off (K-2) | `CameraController.setPreviewEnabled` (fixed) | Landed in 08 P2-4b (`CameraController.setPreviewEnabled(false)` calls `hub.syncSafeDistance()` after `rig.remove()`, which removes the floor; the next enable rebuilds it; no tag site) |
 | B-M9 | Preview 320x180 stretch (L-1) | `PreviewPass.render` (fixed; `Strategies.previewRendererSize` retired) | Landed in 07 R2 (the second renderer is deleted: the main renderer draws the preview into the main canvas by scissor at the client rect of the placeholder `#camera-preview-canvas`, letterboxed to the filmback aspect with black bars, `PreviewPass` and `PreviewFit.letterboxRect`; no window refit; `Strategies.previewRendererSize` retired; no tag site) |
-| B-M10 | Coverage from posZ against a flat rectangle (J-7, J-8) | `CineCamera.coverage` + `framingBounds` | layout-aware analyser |
+| B-M10 | Coverage from posZ against a flat rectangle (J-7, J-8) | `framingBounds` (the flat width and height of `fits`) | layout-aware analyser: the ray analysis landed in 08 P2-11a (`FrustumCoverage.analyzeCoverage` over the memoised `WallLayout.columnQuads()`; `CineCamera.coverage` deleted; status `offWall`); the flat width and height that `fits` still reads go with 08 P2-11c |
 | B-M11 | Preview renders helpers and tint (L-4) | `PreviewWindow.render` (fixed; `Strategies.previewRendersHelpers` retired) | Landed in 08 P2-10a (`PreviewWindow.render(scene, helpers)` sets `visible = false` on every helper registered through `SceneManager.addHelper` for the preview render only and restores each flag afterwards (08 6.14), so the preview shows no grid, axes, rig, frustum tint, safe-distance floor or gizmo; no layer is assigned; `Strategies.previewRendersHelpers` retired; no tag site). Mechanism replaced by 07 R1: the preview camera's layer mask `DEFAULT \| ENVIRONMENT` and `SceneManager.withPassHidden` for the gizmo |
 | B-M12 | Rotate gizmo direction inverted (N-9) | `Strategies.gizmoRotateSign` | `+1` |
 | B-M13 | Pilot vertical inverted (O-5) | `Strategies.pilotForwardYSign` | `+1` |
@@ -3711,7 +3775,6 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/legacy/LegacyCompat.js#orDefault` | B-L9 |
 | `js/domain/WallSection.js#exceeds4K` | B-L17 |
 | `js/domain/Wall.js#flatBounds` | B-L2, B-M10 |
-| `js/domain/CineCamera.js#coverage` | B-M10 |
 | `js/domain/CineCamera.js#presetShortName` | B-L34 |
 | `js/domain/CineCamera.js#translateBy` | B-L10 |
 | `js/domain/CineCamera.js#rotateBy` | B-L28 |
@@ -4278,3 +4341,11 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 
 **B3-0, the true-framing scenario before 08 P2-11** (docs/improvements/08-bugfix-roadmap.md 6.10, 8.3, AC 40-43; manifest `tests/regression/expected/B3-0.json`: the `p2_true_framing` outputs added, every existing output identical):
 - 2.3: `tests/regression/scenarios-phase2.mjs` gains `p2_true_framing`, registered after `p2_project_v2`: the 18-degree half circle of 03 6.6 (Reset, the safe distance, a 90-degree pan), a flat 5 x 3 section turned 90 degrees by its section offset (the wall along +Z: Reset and D, 08 AC 42) and the default wall seen from behind (Pan 180, Z -3). Each state is `cameraState()` plus the `#camera-wall-distance` text; two screenshots show the orbit target, the Reset pose and the frustum. Captured on the build before 08 P2-11, so its baseline documents B-L2, B-M10, B-L33 and the Z minimum of Q13; each P2-11 commit changes it on purpose. The harness README documents it.
+
+**08 P2-11a, the rotation-aware coverage analyser (B-M10's rays)** (docs/improvements/08-bugfix-roadmap.md 6.10, 8.4, AC 40; manifest `tests/regression/expected/P2-11a.json`: the rotated camera states (`camera/cam_{08,09,10}`, `gizmo_drag/camera_02_rotated`, `pilot_look/look_0{1,3}`, `p2_project_v2/camera_01_setup`), the four `p2_true_framing` states and the `#camera-wall-distance` tooltip in seven `ui_visual` text snapshots change; every unrotated state in front of a flat wall is identical):
+- 2.2, 3.6: `geometry/FrustumCoverage.js` (new, pure): `analyzeCoverage(layout, pose, lens, extent)` (five rays and the projected-quad overlap over the memoised column quads; D0; the statuses `offWall`, `within`, `offCenter`, `exceeds`; the camera-space corner depths), `cameraBasis`, `nearestHit`, `frameDistance`, `quadOverlapsFrame`, `MAX_FRUSTUM_DEPTH_M`, `FRAME_CORNERS`. `WallLayout` gains `columnQuads()` and `worldVertices()` (memoised per instance, after the postTransform seam), `extentAcross(facing, include)` and `chordFacing()`.
+- 3.5: `CineCamera.coverage` is deleted (LEGACY(B-M10) site removed). 3.10: `WallController.currentLayout` (the stage layout of the last rebuild); `CameraHub` takes `stageLayout` and its `coverage()` builds the payload (`fits` and `safeDistance` still from the flat framing bounds until P2-11c). 3.11: `CameraPanel` shows "Not aimed at wall" (exceeds colour, M-COV-1) for `offWall` and "—" for a null distance or frame size; `#camera-wall-distance` is D0 and its tooltip says so. 3.12, 7: `stageLayout = () => wallController.currentLayout`. 5.2: the payload row. 6.3: step 5.
+- 8.1: the `framingBounds` row (the coverage rays no longer read it). 8.2: the B-M10 row (the rays landed; `fits` waits for P2-11c); 8.3: the `CineCamera.js#coverage` row is deleted.
+- Deviations from 08 6.10, recorded in 08 10 (P2-11 as built): the fourth argument `extent` and the `cornerHits` result; only front-facing quads count for the overlap; s and v accept 1e-9 at column joints; D0's second rule takes the plane of the column the optical axis passes closest to, not the nearest plane of any column (the first gate run showed the nearest plane, of a far column of the half circle, passing 0.07 m in front of the camera and giving a 0.07 m frame).
+- `README.md`: the coverage release note and the two "Distance to wall plane" sentences. 03 3.5 and 6.6: as-built notes.
+- 2.3: `frustum-coverage.test.mjs` (new); `camera-hub.test.mjs` (the hub's `stageLayout`, the analyser payload, a 90-degree pan, the import list); `domain.test.mjs` (the `coverage()` tests leave; `maxSafeDistance` stays); `pivot.test.mjs` (test 6's consumers without `coverage()`, the analyser's distance to the moved wall).

@@ -80,6 +80,12 @@ The image keeps the filmback's proportions, with black bars instead of a stretch
 corners, and dragging its resize handle with an extreme custom filmback no longer blows the window up beyond
 800 x 600 px.
 
+Release note: the frame status now looks where the camera looks. It used to measure the frame straight ahead along Z
+against a flat rectangle, whatever the pan, tilt and roll and the shape of the wall; now it traces the four frame
+corners and the optical axis against the real wall, so a turned camera shows the frame size on the wall it is aimed at,
+and a camera aimed past the wall, or at its back, shows "Not aimed at wall" (with "—" for the distance and the frame
+size when no wall lies ahead). "Distance to wall plane" is the distance along the camera's optical axis.
+
 Release note: pilot mode is now a clean camera view: the floor grid, the axes, the camera's own frustum (whose fill tinted
 the whole pilot view) and the safe-distance floor are hidden while piloting and come back when you leave it. The
 normal lines of the debug view stay visible in pilot mode.
@@ -102,7 +108,8 @@ normal lines of the debug view stay visible in pilot mode.
   pivot projected onto the floor
 - **Keep stage layout on pivot change** moves the camera and props with the wall when you change the pivot, so their
   placement relative to the wall is kept; turn it off to keep their coordinates instead
-- "Distance to wall plane" in the camera panel shows the camera's distance to the wall's start plane
+- "Distance to wall plane" in the camera panel shows the distance along the camera's optical axis to the wall plane it is
+  aimed at
 
 Release note: the pivot marker (a small cross at the pivot, with a dashed line to the floor when the pivot is raised and
 a grey cross at the anchor when an offset is set) is shown by default; "Show pivot marker" hides it. It never appears in
@@ -358,7 +365,7 @@ floor. Camera and prop positions (X, Z Position) are measured from there, and th
 wall, so their placement relative to the wall stays the same and only their coordinates change; with it off they keep
 their coordinates and the wall moves relative to them. Editing sections never moves the camera or props: with the
 centred modes a growing wall stays centred on the stage origin. "Distance to wall plane" in the camera panel is the
-camera's distance to the wall's start plane.
+distance along the camera's optical axis to the wall plane it is aimed at.
 
 ### Exports and placement in a 3D tool
 - **OBJ, glTF and the ZIP** are written with the pivot at the file origin (0, 0, 0): Y up, metres. The wall's position

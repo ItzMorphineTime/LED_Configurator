@@ -313,7 +313,7 @@ export class Wall {
    * @returns {{totalWidth: number, maxHeight: number}} metres
    */
   flatBounds() {
-    // LEGACY(B-L2, B-M10): flat bounds feed the orbit target, camera reset, coverage status and safe distance.
+    // LEGACY(B-L2, B-M10): flat bounds feed the orbit target, camera reset, the coverage's fits test and safe distance.
     let totalWidth = 0, maxHeight = 0;
     this.#sections.forEach(s => {
       totalWidth += s.panelCols * s.panelWidth * MM_TO_M;

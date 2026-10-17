@@ -58,7 +58,9 @@ export const Strategies = deepFreeze({
                                                    // since 08 P2-7b (B-M6), Phase-1 'per-section-overlap';
                                                    // gltf.attributes + 'TEXCOORD_0' and the new leaf gltf.combinedUV since
                                                    // 08 P2-7c (B-M7)
-  framingBounds: 'flat-pivot',                     // B-L2, B-M10; Phase-1 'flat' (03 T2: translated by the stage origin)
+  framingBounds: 'flat-pivot',                     // B-L2, B-M10 (the flat width and height of fits; the coverage rays
+                                                   // landed in 08 P2-11a); Phase-1 'flat' (03 T2: translated by the stage
+                                                   // origin)
   curveBeforeFirstPanel: true,                     // B-L1
   frustumDepthM: 15,                               // B-L33
   gizmoRotateSign: -1,                             // B-M12
@@ -147,7 +149,7 @@ const QUIRKS = deepFreeze({
   'B-M9': ['Preview 320x180 stretch (L-1)',
     'Landed in 07 R2 (the second renderer is deleted: the main renderer draws the preview into the main canvas by scissor at the client rect of the placeholder `#camera-preview-canvas`, letterboxed to the filmback aspect with black bars, `PreviewPass` and `PreviewFit.letterboxRect`; no window refit; `Strategies.previewRendererSize` retired; no tag site)'],
   'B-M10': ['Coverage from posZ against a flat rectangle (J-7, J-8)',
-    'layout-aware analyser'],
+    'layout-aware analyser: the ray analysis landed in 08 P2-11a (`FrustumCoverage.analyzeCoverage` over the memoised `WallLayout.columnQuads()`; `CineCamera.coverage` deleted; status `offWall`); the flat width and height that `fits` still reads go with 08 P2-11c'],
   'B-M11': ['Preview renders helpers and tint (L-4)',
     'Landed in 08 P2-10a (`PreviewWindow.render(scene, helpers)` sets `visible = false` on every helper registered through `SceneManager.addHelper` for the preview render only and restores each flag afterwards (08 6.14), so the preview shows no grid, axes, rig, frustum tint, safe-distance floor or gizmo; no layer is assigned; `Strategies.previewRendersHelpers` retired; no tag site). Mechanism replaced by 07 R1: the preview camera\'s layer mask `DEFAULT | ENVIRONMENT` and `SceneManager.withPassHidden` for the gizmo'],
   'B-M12': ['Rotate gizmo direction inverted (N-9)',
@@ -243,7 +245,6 @@ const TAG_SITES = deepFreeze([
   ['js/legacy/LegacyCompat.js#orDefault', ['B-L9']],
   ['js/domain/WallSection.js#exceeds4K', ['B-L17']],
   ['js/domain/Wall.js#flatBounds', ['B-L2', 'B-M10']],
-  ['js/domain/CineCamera.js#coverage', ['B-M10']],
   ['js/domain/CineCamera.js#presetShortName', ['B-L34']],
   ['js/domain/CineCamera.js#translateBy', ['B-L10']],
   ['js/domain/CineCamera.js#rotateBy', ['B-L28']],

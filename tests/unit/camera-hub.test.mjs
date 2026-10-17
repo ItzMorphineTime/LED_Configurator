@@ -14,7 +14,8 @@ import { fileURLToPath } from 'node:url';
 import { Events, EventBus } from '../../js/core/EventBus.js';
 import { Project } from '../../js/domain/Project.js';
 import { WallPivot } from '../../js/domain/Wall.js';
-import { WallLayout, framingBounds } from '../../js/geometry/WallLayout.js';
+import { WallLayout, framingBounds, layoutProject } from '../../js/geometry/WallLayout.js';
+import { analyzeCoverage } from '../../js/geometry/FrustumCoverage.js';
 import { CameraHub, CameraController } from '../../js/app/CameraController.js';
 import { PropController } from '../../js/app/PropController.js';
 
@@ -91,17 +92,20 @@ function setup({ enabled = false, rigExists = false, showSafeDistance = false, p
     deselect() { log.push({ call: 'selection.deselect' }); this.selectedId = null; },
   };
   const frameBounds = () => { log.push({ call: 'frameBounds' }); return framingBounds(project); };
+  // 08 P2-11a: the stage layout of the last rebuild (WallController.currentLayout); here one layout per setup
+  const layout = layoutProject(project);
+  const stageLayout = () => layout;
 
   const hub = spyHub
     ? {
         refresh() { log.push({ call: 'hub.refresh', enabled: cine.enabled }); },
         syncSafeDistance() { log.push({ call: 'hub.syncSafeDistance' }); },
       }
-    : new CameraHub({ project, rig, preview, safeDistance, pilotDriver, frameBounds, bus });
+    : new CameraHub({ project, rig, preview, safeDistance, pilotDriver, frameBounds, stageLayout, bus });
   const controller = new CameraController({ project, rig, preview, hub, pilot, selection, frameBounds, bus });
 
   return {
-    log, project, cine, bus, rig, preview, safeDistance, pilotDriver, pilot, selection, hub, controller, bodyMesh,
+    log, project, cine, bus, rig, preview, safeDistance, pilotDriver, pilot, selection, hub, controller, bodyMesh, layout,
     calls: () => log.map((e) => e.call),
     entry: (call) => log.find((e) => e.call === call),
   };
@@ -132,15 +136,26 @@ describe('CameraHub.refresh (P2, ARCHITECTURE.md 6.3)', () => {
     }
   });
 
-  test('the coverage payload is cine.coverage(frameBounds()) and the gizmo event names the camera', () => {
+  test('the coverage payload is the analyser on the stage layout (08 P2-11a) and the gizmo event names the camera', () => {
     const s = setup({ enabled: true, rigExists: true });
     s.cine.posZ = 7.25;
     s.hub.refresh();
-    assert.deepEqual(s.entry('emit CAMERA_COVERAGE_CHANGED').payload, s.cine.coverage(framingBounds(s.project)));
-    assert.deepEqual(Object.keys(s.entry('emit CAMERA_COVERAGE_CHANGED').payload),
-      ['frameWidth', 'frameHeight', 'status', 'safeDistance', 'distToWall']);
-    assert.equal(s.entry('emit CAMERA_COVERAGE_CHANGED').payload.distToWall, 7.25, '03 T3: posZ - wallZ, wallZ +0 here');
+    const payload = s.entry('emit CAMERA_COVERAGE_CHANGED').payload;
+    const b = framingBounds(s.project);
+    const c = analyzeCoverage(s.layout, s.cine, { hFov: s.cine.hFov(), vFov: s.cine.vFov() }, { width: b.totalWidth, height: b.maxHeight });
+    assert.deepEqual(payload, {
+      frameWidth: c.frameWidth, frameHeight: c.frameHeight, status: c.status, safeDistance: s.cine.maxSafeDistance(b),
+      distToWall: c.distance,
+    });
+    assert.deepEqual(Object.keys(payload), ['frameWidth', 'frameHeight', 'status', 'safeDistance', 'distToWall']);
+    assert.equal(payload.distToWall, 7.25, 'an unrotated camera in front of the flat wall: D0 = posZ');
+    assert.equal(payload.status, 'exceeds');
     assert.deepEqual(s.entry('emit SELECTABLE_MOVED').payload, { id: 'camera' });
+    s.cine.rotY = 90;
+    s.hub.refresh();
+    const turned = s.log.filter((e) => e.call === 'emit CAMERA_COVERAGE_CHANGED')[1].payload;
+    assert.deepEqual([turned.status, turned.distToWall, turned.frameWidth, turned.frameHeight], ['offWall', null, null, null],
+      'a 90-degree pan: no wall plane ahead (M-COV-1)');
   });
 
   test('creates the rig only when it is missing', () => {
@@ -611,7 +626,7 @@ describe('WP7 module imports follow the layer table', () => {
   const importsOf = (rel) => [...readFileSync(join(ROOT, rel), 'utf8').matchAll(/^\s*import\s+[^'"]*from\s+['"]([^'"]+)['"]/gm)]
     .map((m) => m[1]);
   const cases = {
-    'js/app/CameraController.js': ['../core/EventBus.js', '../geometry/WallLayout.js'],
+    'js/app/CameraController.js': ['../core/EventBus.js', '../geometry/WallLayout.js', '../geometry/FrustumCoverage.js'],
     'js/app/PropController.js': ['../core/EventBus.js'],
     'js/ui/CameraPanel.js': ['../core/EventBus.js', '../domain/CineCamera.js', './dom.js'],
     'js/ui/PropsPanel.js': ['../core/EventBus.js', '../domain/Prop.js', './dom.js'],

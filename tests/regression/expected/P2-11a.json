@@ -1,0 +1,67 @@
+{
+  "commit": "P2-11a",
+  "bugs": [
+    "B-M10"
+  ],
+  "expect": [
+    {
+      "output": "camera/cam_{08_rotation,09_far,10_clamps}.json",
+      "change": "modified",
+      "each": true,
+      "reason": "08 6.10: the rotated states. cam_08/cam_09 (rot 5, -10, 2): D0 is the optical-axis distance to the wall plane (posZ / (cos pan cos tilt)), so the frame size grows; cam_10 (tilt 90, looking straight up): no wall plane ahead, so 'Not aimed at wall' with the frame size '—' (M-COV-1)"
+    },
+    {
+      "output": "gizmo_drag/camera_02_rotated.json",
+      "change": "modified",
+      "each": true,
+      "reason": "08 6.10: pan -44 degrees; the frame is measured along the optical axis and the status comes from the rays"
+    },
+    {
+      "output": "pilot_look/look_0{1_after_drag,3_pilot_off}.json",
+      "change": "modified",
+      "each": true,
+      "reason": "08 6.10: tilt -10.8, pan -36; the centre ray meets the wall plane at about 6.3 m instead of posZ = 5 m"
+    },
+    {
+      "output": "p2_project_v2/camera_01_setup.json",
+      "change": "modified",
+      "each": true,
+      "reason": "08 P2-11a row: the rotated camera state of p2_project_v2 (pose (2, 1.2, 4) / (5, -10, 2)); the restored states 06 and 07 are unrotated (the v1 files restore no camera) and stay identical"
+    },
+    {
+      "output": "p2_true_framing/{arc18_reset,arc18_pan_90,offset90_reset,behind_wall}.json",
+      "change": "modified",
+      "each": true,
+      "reason": "B3-0's scenario: arc18_reset (the camera stands beside the half circle at x = 2.5 facing -Z: the frame is measured on the plane of the column the optical axis passes closest to, D0 = 3.37 m, and the status comes from the real columns: 'Exceeds wall' still, the frame now 3.47 x 2.31 m), arc18_pan_90 and offset90_reset (looking past the wall: 'Not aimed at wall' with '—'), behind_wall (Z clamped to 0.1, facing away: 'Not aimed at wall' with '—' instead of 'Within bounds'); each with the analyser's D0 as 'Distance to wall plane'"
+    },
+    {
+      "output": "ui_visual/{00_initial,02_selection_visible,04_options_ledsim_camera_props,05_gizmo_pilot,06_options_panelids_logo,07_two_sections,08_collapsed_and_4k_warning}.text.json",
+      "change": "modified",
+      "each": true,
+      "reason": "the #camera-wall-distance tooltip (titleAttributes): 'Distance along the camera's optical axis to the wall plane it is aimed at (— when no wall plane is ahead)' instead of the flat-plane text; the seven states that record the camera panel's title attributes (01, 03 and 09 record none of them). Corrected after the first gate run: the first draft declared these as mayChange for the coverage read-outs, which none of them records"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-03 T3 runs)"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; textures/L2_PanelIDs.png); this commit changes no texture"
+    },
+    {
+      "output": "pivot_stage/*.screenshot.png",
+      "change": "modified",
+      "reason": "the overlay-glyph jitter seen in the F3-T8b to B2-0 runs (1 level, at most 9 px, on the help badge and the camera preview footer labels over the canvas); this commit changes no rendered pixel of the scene"
+    },
+    {
+      "output": "ui_visual/{00_initial,07_two_sections}.sidebar.screenshot.png",
+      "change": "modified",
+      "reason": "one sidebar pixel of these DOM-only captures has differed by up to 7 levels between runs (DOM text antialiasing; P2-7e and F3-T8b runs)"
+    }
+  ],
+  "notes": "08 P2-11a (B-M10): geometry/FrustumCoverage.js (new, pure) analyses the coverage with five rays and the projected-quad overlap over the memoised WallLayout.columnQuads() of the stage layout of the last rebuild (WallController.currentLayout); WallLayout gains columnQuads, worldVertices, extentAcross and chordFacing; CineCamera.coverage is deleted; the new status offWall reads 'Not aimed at wall' and a missing D0 '—'. fits and D still read the flat framing bounds until P2-11c. Every unrotated state in front of a flat wall must stay identical (08 AC 40): camera cam_00..07, 09b, 09c, 11..15, gizmo_drag/camera_01, pilot_look/look_00, preview_off_in_pilot, preview_resize, import_edge, pivot_stage, p2_zero_inputs and the restored p2_project_v2 states."
+}
