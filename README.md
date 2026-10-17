@@ -73,6 +73,10 @@ Release note: the live camera view window now shows only what the film camera se
 camera's own frustum (which tinted the whole image orange), the safe-distance floor and the gizmo no longer appear in
 it; the main viewport still shows them.
 
+Release note: pilot mode is now a clean camera view: the floor grid, the axes, the camera's own frustum (whose fill tinted
+the whole pilot view) and the safe-distance floor are hidden while piloting and come back when you leave it. The
+normal lines of the debug view stay visible in pilot mode.
+
 ### 3D Gizmo Controls
 - **Translate Mode (G)**: Move objects along X/Y/Z axes
 - **Rotate Mode (R)**: Rotate objects around X/Y/Z axes

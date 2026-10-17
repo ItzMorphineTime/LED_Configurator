@@ -2,8 +2,8 @@
 // U13 render/frameColor.js (the adaptive panel frames, and LEDWallView giving each section's frames its colour) and
 // U12 for the frustum of render/CameraRigView.js (a dashed outline is LineSegments or a closed Line, never a LineLoop
 // with a LineDashedMaterial; the closing segment's line distances increase), plus the rest of the two-tone frustum and
-// the camera body's edge outline; and 08 P2-10a (B-M11): render/PreviewWindow.js hides every registered helper for the
-// preview render only. A recording fake THREE is installed as window.THREE before the render modules are imported
+// the camera body's edge outline; and B-M11 (08 P2-10a, mechanism since 07 R1): render/PreviewWindow.js draws through a
+// camera whose layer mask is DEFAULT | ENVIRONMENT. A recording fake THREE is installed as window.THREE before the render modules are imported
 // (js/vendor/three.js reads window.THREE when it is evaluated); its computeLineDistances follow three r128.
 // Run: node --test tests/unit/scene-overlays.test.mjs   (zero dependencies)
 
@@ -97,7 +97,7 @@ const FakeTHREE = {
     render(scene, camera) { if (this.onRender) this.onRender(scene, camera); }
   },
   PerspectiveCamera: class extends FakeObject3D {
-    constructor(fov, aspect, near, far) { super(); Object.assign(this, { fov, aspect, near, far }); }
+    constructor(fov, aspect, near, far) { super(); Object.assign(this, { fov, aspect, near, far }); this.layers = { mask: 1 }; }
     updateProjectionMatrix() {}
   },
 };
@@ -314,7 +314,7 @@ describe('U12 closed dashed outlines and the two-tone frustum (06 6.6, D15)', ()
   });
 });
 
-// ---- 08 P2-10a (B-M11): the preview hides the registered helpers (08 6.14) ------------------------------------------
+// ---- B-M11 (08 P2-10a; mechanism since 07 R1): the preview camera sees DEFAULT and ENVIRONMENT only ------------------
 
 /** An initialised PreviewWindow over fake elements, with the real CineCamera of a default project. */
 function preview() {
@@ -327,54 +327,35 @@ function preview() {
   return { win, cine };
 }
 
-describe('PreviewWindow.render hides every registered helper for the preview render only (08 P2-10a, B-M11)', () => {
-  /** The helpers of the live app: the grid, the axes (hidden here, as the grid toggle hides the grid), the rig, a gizmo. */
-  function helperSet() {
-    const { view, cine, helpers } = rig();
-    view.create(cine);
-    const grid = new FakeTHREE.Group();
-    const axes = new FakeTHREE.Group();
-    axes.visible = false;
-    const gizmo = new FakeTHREE.Group();
-    for (const h of [grid, axes, gizmo]) helpers.add(h);
-    return { helpers, rigGroup: view.group, grid, axes, gizmo };
-  }
+describe('PreviewWindow.render draws through a DEFAULT | ENVIRONMENT camera (B-M11; 07 R1)', () => {
+  test('the preview camera\'s layer mask is LAYER_MASKS.PREVIEW (0b0101): no HELPERS, no DEBUG', async () => {
+    const { LAYER_MASKS } = await import('../../js/render/SceneManager.js');
+    const { win } = preview();
+    assert.equal(win.camera.layers.mask, LAYER_MASKS.PREVIEW);
+    assert.equal(win.camera.layers.mask, 0b0101);
+  });
 
-  test('every helper is invisible during the draw, and each keeps its own flag afterwards', () => {
+  test('one draw of the scene through the preview camera, touching no helper flag', () => {
     const { win, cine } = preview();
-    const { helpers, rigGroup, axes } = helperSet();
+    const { view, cine: rigCine } = rig();
+    view.create(rigCine);
     const scene = new FakeTHREE.Group();
     const seen = [];
-    win.renderer.onRender = (s, camera) => seen.push({ s, camera, visible: [...helpers].map((h) => h.visible) });
+    win.renderer.onRender = (s, camera) => seen.push({ s, camera, rigVisible: view.group.visible });
     cine.enabled = true;
-    win.render(scene, helpers);
+    win.render(scene);
     assert.equal(seen.length, 1, 'one preview draw');
     assert.equal(seen[0].s, scene);
     assert.equal(seen[0].camera, win.camera, 'through the preview camera');
-    assert.deepEqual(seen[0].visible, [false, false, false, false], 'rig, grid, axes and gizmo hidden during the draw');
-    assert.deepEqual([...helpers].map((h) => h.visible), [true, true, false, true], 'restored: the hidden axes stay hidden');
-    assert.ok(helpers.has(rigGroup) && rigGroup.visible, 'the rig with its frustum fill is visible again for the main view');
-    assert.equal(axes.visible, false);
+    assert.equal(seen[0].rigVisible, true, 'the layer mask, not a visible flag, keeps the rig out');
   });
 
-  test('nothing is drawn or touched while the preview is off', () => {
+  test('nothing is drawn while the preview is off', () => {
     const { win, cine } = preview();
-    const { helpers } = helperSet();
     let draws = 0;
     win.renderer.onRender = () => { draws++; };
     cine.enabled = false;
-    const before = [...helpers].map((h) => h.visible);
-    win.render(new FakeTHREE.Group(), helpers);
+    win.render(new FakeTHREE.Group());
     assert.equal(draws, 0);
-    assert.deepEqual([...helpers].map((h) => h.visible), before);
-  });
-
-  test('a draw that throws still restores every flag', () => {
-    const { win, cine } = preview();
-    const { helpers } = helperSet();
-    win.renderer.onRender = () => { throw new Error('context lost'); };
-    cine.enabled = true;
-    assert.throws(() => win.render(new FakeTHREE.Group(), helpers), /context lost/);
-    assert.deepEqual([...helpers].map((h) => h.visible), [true, true, false, true]);
   });
 });

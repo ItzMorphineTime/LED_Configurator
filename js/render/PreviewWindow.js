@@ -10,6 +10,7 @@
 
 import THREE from '../vendor/three.js';
 import { Strategies } from '../legacy/LegacyCompat.js';
+import { LAYER_MASKS } from './SceneManager.js';
 
 /**
  * @typedef {object} PreviewElements  the six preview elements, looked up by App
@@ -117,9 +118,9 @@ export class PreviewWindow {
    * Matches the preview camera to the film camera (vertical FOV in degrees, filmback aspect, pose with Euler
    * order 'YXZ') and writes the three preview labels.
    * Ports: index.html@cd3fd3f lines 3702-3740.
-   * Side effects: creates the PerspectiveCamera on the first call, else updates fov/aspect and its projection;
-   *   writes the camera pose; writes the textContent of #camera-preview-info, #camera-preview-fov and
-   *   #camera-preview-res.
+   * Side effects: creates the PerspectiveCamera on the first call (its layer mask LAYER_MASKS.PREVIEW, DEFAULT and
+   *   ENVIRONMENT: 07 R1), else updates fov/aspect and its projection; writes the camera pose; writes the textContent
+   *   of #camera-preview-info, #camera-preview-fov and #camera-preview-res.
    * @returns {void}
    */
   updateCamera() {
@@ -130,6 +131,8 @@ export class PreviewWindow {
 
     if (!this.#camera) {
       this.#camera = new THREE.PerspectiveCamera(vFov, aspect, 0.1, 100);
+      // 07 R1 (6.2): the preview sees DEFAULT and ENVIRONMENT only, never a helper or a debug overlay (B-M11)
+      this.#camera.layers.mask = LAYER_MASKS.PREVIEW;
     } else {
       this.#camera.fov = vFov;
       this.#camera.aspect = aspect;
@@ -167,34 +170,20 @@ export class PreviewWindow {
   }
 
   /**
-   * Draws the scene through the preview camera (every frame, after the main render) without the helpers, so the
-   * preview shows only what the film camera would see. Every registered helper (grid, axes, camera rig with its
-   * frustum fill, safe-distance floor, gizmo, normal lines) is hidden for this render only and its own `visible`
-   * flag is restored afterwards, in order (08 P2-10a, B-M11 fixed; 08 6.14). No layer is assigned, so the main
-   * view, picking of the gizmo handles and the camera body, and a helper hidden by the user (the grid toggle) are
-   * unaffected.
-   * Ports: index.html@cd3fd3f lines 3742-3745, minus the helpers (legacy rendered the whole scene, so the frustum
-   *   fill's near quad tinted the full frame orange).
-   * Side effects: draws into the preview canvas; sets `visible = false` on each helper during the draw and
-   *   restores each saved flag afterwards (also when the draw throws).
+   * Draws the scene through the preview camera (every frame, after the main render), so the preview shows only what
+   * the film camera would see (B-M11, fixed by 08 P2-10a; mechanism since 07 R1): the camera's layer mask
+   * (LAYER_MASKS.PREVIEW) leaves out every HELPERS and DEBUG object (grid, axes, camera rig with its frustum fill,
+   * safe-distance floor, pivot marker, normal lines), and App runs this inside SceneManager.withPassHidden, which hides
+   * the 'default' helper (the gizmo) for the draw.
+   * Ports: index.html@cd3fd3f lines 3742-3745 (legacy rendered the whole scene, so the frustum fill's near quad tinted
+   *   the full frame orange).
+   * Side effects: draws into the preview canvas.
    * @param {THREE.Scene} scene
-   * @param {Iterable<THREE.Object3D>} helpers  the registered helpers (`SceneManager.helpers`)
    * @returns {void}
    */
-  render(scene, helpers) {
+  render(scene) {
     if (!this.#cine.enabled || !this.#renderer || !this.#camera) return;
-    const hidden = [];
-    const saved = [];
-    for (const helper of helpers) {
-      hidden.push(helper);
-      saved.push(helper.visible);
-      helper.visible = false;
-    }
-    try {
-      this.#renderer.render(scene, this.#camera);
-    } finally {
-      for (let i = 0; i < hidden.length; i++) hidden[i].visible = saved[i];
-    }
+    this.#renderer.render(scene, this.#camera);
   }
 
   /**

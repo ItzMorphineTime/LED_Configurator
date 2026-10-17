@@ -3,7 +3,8 @@
  * The film-camera rig in the viewport (legacy `previewCameraGroup`): the body box (the pick target) with its edge
  * outline, the frustum lines and the translucent frustum fill, and the rig transform. Publishes the lens readout
  * (CAMERA_LENS_CHANGED) at the legacy DOM-write point of updateFrustumGeometry. The rig is a registered helper
- * (SceneManager.addHelper), on layer 0 like every helper in Phase 1.
+ * (SceneManager.addHelper) on LAYERS.HELPERS (07 R1): out of the camera preview and the pilot view; the body stays
+ * pickable (PointerRay tests every layer).
  * 06 T5 (docs/improvements/06-morph-branding.md 3.8, 5.7, 6.6, D15): the body is Signal Red (opaque at the theme's
  * opacity 1.0) with a 1 px Morph Black edge outline, a child LineSegments of the body that is never picked; the
  * frustum lines are two-tone: a solid Morph Black halo (LineBasicMaterial, render order DEFAULT) under a dashed light

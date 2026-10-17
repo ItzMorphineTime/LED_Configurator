@@ -225,7 +225,8 @@ export class App {
       orbit.tickKeyboard();
       pilot.tickKeyboard();
       sceneManager.render();
-      preview.render(sceneManager.scene, sceneManager.helpers);   // 08 P2-10a: the preview hides the helpers (B-M11)
+      // 07 R1: the preview camera's layer mask leaves out the HELPERS and DEBUG layers; withPassHidden hides the gizmo
+      sceneManager.withPassHidden(() => preview.render(sceneManager.scene));
     };
 
     // ---- legacy init() (1426-1455) ----

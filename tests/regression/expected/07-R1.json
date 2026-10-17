@@ -1,0 +1,53 @@
+{
+  "commit": "07-R1",
+  "bugs": [],
+  "expect": [
+    {
+      "output": "keyboard/pilot_view.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "07 R1, Q7: the pilot view no longer draws the HELPERS layer: the floor grid, the axes, the camera rig (its frustum fill tinted the whole pilot view orange) are gone; the person's gizmo stays (a 'default' helper, B-L26 is 08 P2-9j's)"
+    },
+    {
+      "output": "pilot_look/look_0{1_after_drag,2_after_wheel}.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same: the two captures taken while piloting (look_03_pilot_off is taken after leaving pilot mode and is unchanged)"
+    },
+    {
+      "output": "preview_off_in_pilot/pilot_0{0_on,5_exited}.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same: the two captures taken while piloting. pilot_01_preview_off leaves pilot mode (since 08 P2-4a, B-H4), and the scenario's last P, named after the legacy behaviour ('P exits'), now enters pilot mode again, so pilot_05_exited is a pilot view too (its state shows the pilot banner); the first manifest draft listed only pilot_00_on and the gate caught the second"
+    },
+    {
+      "output": "p2_shortcut_filters/pilot_view_front.screenshot.png",
+      "change": "modified",
+      "each": true,
+      "reason": "the same: the Front view preset applied in pilot mode (B-L25) is drawn without the grid, the axes and the rig"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-03 T3 runs); this commit changes no pixel of it"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b; seen again in the 03 T2 gate, the 03 T3 review run and the 03 review run of 2026-10-17, textures/L2_PanelIDs.png); this commit changes no texture"
+    },
+    {
+      "output": "pivot_stage/*.screenshot.png",
+      "change": "modified",
+      "reason": "the overlay-glyph jitter seen in the F3-T8b, F3-T12, F3-T6b, F3-T6c, B1-pivot-floor and B2-0 runs (1 level, at most 9 px, on the help badge and the camera preview footer labels over the canvas); this commit changes no pixel of them"
+    },
+    {
+      "output": "ui_visual/{00_initial,07_two_sections}.sidebar.screenshot.png",
+      "change": "modified",
+      "reason": "one sidebar pixel of these DOM-only captures has differed by up to 7 levels between runs (DOM text antialiasing; P2-7e and F3-T8b runs); this commit changes no markup or style"
+    }
+  ],
+  "notes": "07 R1 (render layers, after 08 P2-10a; 07 8.4 row 'R1 layers, after 08 P2-10a-c': only screenshots taken while piloting change). LAYERS gains ENVIRONMENT (2) and DEBUG (3); SceneManager.addHelper(o, {layer}) registers each helper root with its layer and re-tags its subtree at the start of every rendered frame; the main camera mask is 0b1111, 0b1101 while piloting (PilotController.toggle -> setHelpersVisibleInMain), the preview camera's 0b0101. The grid, axes, camera rig, safe-distance floor and pivot marker are HELPERS; the normal lines DEBUG; the hand-written gizmo a 'default' helper hidden around the preview pass by withPassHidden (it stays drawn in pilot mode: B-L26 is 08 P2-9j's). P2-10a's visibility loop and SceneManager.helpers are deleted: the preview camera's mask does the same job, so every preview rectangle must stay identical, as must every screenshot outside pilot mode, every export and every state."
+}

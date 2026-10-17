@@ -618,7 +618,7 @@ describe('WP7 module imports follow the layer table', () => {
     'js/render/CameraRigView.js': ['../vendor/three.js', '../core/EventBus.js', '../legacy/LegacyCompat.js', './ResourceTracker.js',
       '../core/renderOrder.js'],
     'js/render/SafeDistanceView.js': ['../vendor/three.js', '../geometry/SafeDistanceBand.js', './ResourceTracker.js'],
-    'js/render/PreviewWindow.js': ['../vendor/three.js', '../legacy/LegacyCompat.js'],
+    'js/render/PreviewWindow.js': ['../vendor/three.js', '../legacy/LegacyCompat.js', './SceneManager.js'],
     'js/render/PropViews.js': ['../vendor/three.js', './ResourceTracker.js'],
   };
   for (const [rel, expected] of Object.entries(cases)) {
@@ -643,7 +643,7 @@ describe('PilotController.toggle: the preview guard applies only on entry (08 P2
     const bus = new EventBus();
     bus.on(Events.PILOT_CHANGED, (p) => log.push(['PILOT_CHANGED', p.active]));
     const pilot = new PilotController({
-      sceneManager: { camera },
+      sceneManager: { camera, setHelpersVisibleInMain: (on) => log.push(['setHelpersVisibleInMain', on]) },
       cine,
       driver: { enterView: () => log.push(['driver.enterView']) },
       orbit: {
@@ -663,12 +663,12 @@ describe('PilotController.toggle: the preview guard applies only on entry (08 P2
     log.length = 0;
     cine.enabled = true;
     pilot.toggle();
-    assert.deepEqual(log, [['PILOT_CHANGED', true], ['driver.enterView']]);
+    assert.deepEqual(log, [['PILOT_CHANGED', true], ['setHelpersVisibleInMain', false], ['driver.enterView']]);
     log.length = 0;
     cine.enabled = false;   // the preview-off handler clears the flag before it leaves pilot mode
     pilot.toggle();
     assert.equal(interaction.pilotMode, false, 'left cleanly (legacy alerted and stayed in pilot mode)');
-    assert.deepEqual(log, [['PILOT_CHANGED', false], ['camera.position.copy', 'saved-position'], ['orbit.restore', 'orbit-state'],
+    assert.deepEqual(log, [['PILOT_CHANGED', false], ['setHelpersVisibleInMain', true], ['camera.position.copy', 'saved-position'], ['orbit.restore', 'orbit-state'],
       ['camera.updateProjectionMatrix'], ['orbit.updateCameraPosition']]);
   });
 });

@@ -47,6 +47,7 @@ export class Layers {
   mask = 1;
   set(n) { this.mask = (1 << n) | 0; }
   enable(n) { this.mask |= (1 << n) | 0; }
+  disable(n) { this.mask &= ~((1 << n) | 0); }
   enableAll() { this.mask = 0xffffffff | 0; }
   test(l) { return (this.mask & l.mask) !== 0; }
 }

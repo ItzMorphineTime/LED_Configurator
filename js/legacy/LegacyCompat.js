@@ -149,7 +149,7 @@ const QUIRKS = deepFreeze({
   'B-M10': ['Coverage from posZ against a flat rectangle (J-7, J-8)',
     'layout-aware analyser'],
   'B-M11': ['Preview renders helpers and tint (L-4)',
-    'Landed in 08 P2-10a (`PreviewWindow.render(scene, helpers)` sets `visible = false` on every helper registered through `SceneManager.addHelper` for the preview render only and restores each flag afterwards (08 6.14), so the preview shows no grid, axes, rig, frustum tint, safe-distance floor or gizmo; no layer is assigned; `Strategies.previewRendersHelpers` retired; no tag site)'],
+    'Landed in 08 P2-10a (`PreviewWindow.render(scene, helpers)` sets `visible = false` on every helper registered through `SceneManager.addHelper` for the preview render only and restores each flag afterwards (08 6.14), so the preview shows no grid, axes, rig, frustum tint, safe-distance floor or gizmo; no layer is assigned; `Strategies.previewRendersHelpers` retired; no tag site). Mechanism replaced by 07 R1: the preview camera\'s layer mask `DEFAULT | ENVIRONMENT` and `SceneManager.withPassHidden` for the gizmo'],
   'B-M12': ['Rotate gizmo direction inverted (N-9)',
     '`+1`'],
   'B-M13': ['Pilot vertical inverted (O-5)',

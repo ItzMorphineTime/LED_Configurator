@@ -1,12 +1,13 @@
 /**
  * @module render/NormalsDebugView
  * The normal lines of the normals debug view (docs/improvements/01-normals.md 3.3, 5.2, 6.7): one merged
- * LineSegments on LAYERS.HELPERS holding the vertex normals (lime, what lighting uses) and the face normals derived
+ * LineSegments on LAYERS.DEBUG (07 R1) holding the vertex normals (lime, what lighting uses) and the face normals derived
  * from the winding (magenta, what culling uses) of every LED mesh, each line fading from 35 % at the surface to full
  * colour at the tip. It is the first subscriber of the WALL_REBUILT seam. Nothing is allocated while the lines are
  * off: the first sync() with the lines on creates the geometry; later syncs rewrite the buffers in place and upload
  * only the written prefix (updateRange). The lines are never pickable (raycast is a no-op, they are in no pick list),
- * never in the camera preview (its camera sees layer 0 only) and never exported (exporters read the layout).
+ * never in the camera preview (its camera sees DEFAULT and ENVIRONMENT only, 07 R1), visible in pilot mode (DEBUG stays
+ * on there) and never exported (exporters read the layout).
  * Legacy source: none (Feature 1).
  * Layer: render (may import vendor/three, core, legacy, domain, geometry). Collaborators and the theme are injected.
  */
@@ -184,13 +185,13 @@ export class NormalsDebugView {
     const material = this.#materials.lineMaterial({ onTop: s.onTop });
     if (!this.#lines) {
       const lines = new THREE.LineSegments(this.#geometry, material);
-      lines.layers.set(LAYERS.HELPERS);
+      lines.layers.set(LAYERS.DEBUG);
       lines.raycast = () => {};
       lines.frustumCulled = false;
       lines.matrixAutoUpdate = false;
       lines.userData.helper = true;
       this.#lines = lines;
-      this.#sceneManager.addHelper(lines);
+      this.#sceneManager.addHelper(lines, { layer: LAYERS.DEBUG });
     } else {
       this.#lines.geometry = this.#geometry;
       this.#lines.material = material;

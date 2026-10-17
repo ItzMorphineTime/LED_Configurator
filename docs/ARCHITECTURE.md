@@ -135,7 +135,7 @@ Direction of communication:
 | R3 | **Events are mirrors only.** A subscriber may only update DOM elements or THREE objects that its own module owns, idempotently, from the payload and current state. It never mutates domain state, never calls a controller or use case, never emits. Subscribers of the same event touch disjoint targets. **Single declared exception:** `SectionListPanel.render()`, which runs inside its `WALL_SECTIONS_CHANGED` subscriber, calls `section.ensureName(index)` (the legacy render-time fill, 3901). It is idempotent and in practice never writes, because names are always truthy after `createDefault`, `appendLikeLast`, `rename` and import; and even if it wrote, the only later reader in the same emit (`SectionLogosPanel`) runs after it, which is the legacy `renderWallSections` -> `renderSectionLogosUI` order (4105-4106, 4134-4135). | Subscriber order cannot matter, so the bus cannot reorder legacy behaviour. |
 | R4 | **Constructors are side-effect free:** they store dependencies, may look up DOM elements by id (ui and `App.js` only, no mutation), may subscribe to the bus. They never allocate THREE `Object3D`/`Material`/`BufferGeometry`/`Texture`, never touch the DOM otherwise, never add listeners, timers or rAF. (`Vector2/3`, `Plane`, `Raycaster`, `Color`, `Euler` carry no ids and may be created anywhere.) | three r128 sorts render items by `program.id`, `material.id`, `z`, `object.id`; all ids come from global counters, so allocation order must equal legacy order. |
 | R5 | **THREE allocation and `scene.add` order equal legacy order** in every builder (geometry -> texture -> material -> mesh, exactly as the legacy statement order). | Same as R4 (draw-order ties at section junctions and at the grid line z = 0). |
-| R6 | **No new renderables, no new scene-graph parents, no layers in Phase 1.** Helpers are *registered* (`SceneManager.addHelper`) but stay on layer 0. Since 08 P2-10a (B-M11 fixed) the camera preview hides the registered helpers during its own render (`PreviewWindow.render`), still without a layer. | Preview pixels (B-M11) and draw order stay identical. |
+| R6 | **No new renderables, no new scene-graph parents in Phase 1.** Helpers are *registered* (`SceneManager.addHelper`). **Replaced by 07 R1 (render layers):** each registered helper root carries a layer of 07 5.2.1's table (`LAYERS`: DEFAULT 0, HELPERS 1, ENVIRONMENT 2, DEBUG 3), re-applied to its whole subtree at the start of every rendered frame; camera masks: main `0b1111`, main while piloting `0b1101`, preview `0b0101`. The hand-written gizmo is a `'default'` helper (layer 0) hidden around the preview pass by `withPassHidden`. | Preview pixels (B-M11) and draw order stay identical: layers never change the sort order; only the pilot view loses the HELPERS layer (07 Q7). |
 | R7 | **Every output-affecting quirk lives at exactly one site:** a `Strategies` key read by code or a registered `LEGACY(B-xx)` tag. | Each later fix is a one-place change. |
 | R8 | **Markup is byte-identical; CSS is contiguous slices** of the original `<style>` in original order. Inline `style=""` attributes stay. **A Phase-1 rule: it ended with 06 T1**, which moved the static inline styles to `css/99-utilities.css` (computed styles unchanged, proved by the harness), deleted the dead CSS and switched `css-slices.mjs` to `--report-only` (07 S7). | The cascade is identical by construction; `ui_visual` stays identical. |
 | R9 | **No globals, call-time browser globals** (section 1.5). | Constraint: no app state on `window`; legacy semantics of `alert` etc. |
@@ -250,7 +250,9 @@ js/
   render/
     ResourceTracker.js                     WP6   disposeObject3D(root, {maps}) + ResourceTracker
     SceneManager.js                        WP6   Scene, main camera, renderer, lights, grid, axes (explicit init()), helper registry,
-                                                 LAYERS, grid toggle, resize, render loop; 03 T5: addPreRender (07 C46)
+                                                 LAYERS, grid toggle, resize, render loop; 03 T5: addPreRender (07 C46); 07 R1:
+                                                 LAYER_MASKS, addHelper(o, {layer}), tagHelper, per-frame layer enforcement,
+                                                 withPassHidden, setHelpersVisibleInMain, the ?debug=1 helper audit
     LEDWallView.js                         WP6   Wall + frame groups from a WallLayout; mode dispatch; mesh tagging; section nodes;
                                                  debug-shading override and withContentMaterials (01 F1-1); 06 T5: each
                                                  section's frames in its adaptive frame colour
@@ -258,7 +260,7 @@ js/
                                                  colour (06 6.7; pure, imports nothing)
     MaterialOverride.js                    01 F1-1  Stash / restore of mesh materials under a shared override material
     DebugMaterials.js                      01 F1-1  Lazily created face-orientation and normal-colour ShaderMaterials, line material
-    NormalsDebugView.js                    01 F1-1  Merged normal-line LineSegments on LAYERS.HELPERS (WALL_REBUILT subscriber)
+    NormalsDebugView.js                    01 F1-1  Merged normal-line LineSegments on LAYERS.DEBUG since 07 R1 (WALL_REBUILT subscriber)
     LEDMaterialFactory.js                  WP6   The only constructor of wall materials (panel IDs > LED sim > colour)
     textures/LEDPixelTextureFactory.js     WP6   installCanvasPolyfills, LED tile cache, 5 tile painters, tiled clones
     textures/PanelIdRenderer.js            WP6   Panel / section / atlas panel-ID canvases (styling, section names, logos);
@@ -540,10 +542,13 @@ tests/
                                                  frame colours; U12 the two-tone frustum of CameraRigView (LineSegments
                                                  sharing one geometry, halo then dashed core, line distances increasing on
                                                  every segment, no LineLoop with a LineDashedMaterial) and the body's edge
-                                                 outline (fake THREE with r128's computeLineDistances); 08 P2-10a:
-                                                 PreviewWindow.render hides every registered helper during the draw only
-                                                 and restores each flag (a hidden helper stays hidden, also when the draw
-                                                 throws; nothing is touched while the preview is off)
+                                                 outline (fake THREE with r128's computeLineDistances); B-M11 (08 P2-10a,
+                                                 mechanism since 07 R1): the preview camera's mask is DEFAULT | ENVIRONMENT,
+                                                 one draw through it, nothing drawn while the preview is off
+    render-layers.test.mjs                 07 R1  LAYERS and the masks; addHelper's layer and per-frame enforcement,
+                                                 tagHelper, 'default' roots and withPassHidden (a hidden root stays hidden,
+                                                 restored when fn throws), removeHelper, setHelpersVisibleInMain, the
+                                                 ?debug=1 audit; PilotController.toggle's call; the views' and App's wiring
     font-gate.test.mjs                     06 T5  runFontGate with fakes (0 or exactly 1 rebuildIfPanelIds, each pending
                                                  pair loaded with its text, failures tolerated, never rejects) and
                                                  PanelIdRenderer.takePendingFonts (checked with the actual texts,
@@ -1528,9 +1533,8 @@ Policies: `LEDWallView` tracks only its two group roots with `disposeMaps: true`
 
 #### `js/render/SceneManager.js`
 ```js
-export const LAYERS = Object.freeze({ DEFAULT: 0, HELPERS: 1 });   // Feature 1/5 seam; existing helpers stay on layer 0 (R6);
-                                                                   // since 01 F1-1 the normal lines live on HELPERS; since
-                                                                   // 08 P2-10a the preview hides every registered helper
+export const LAYERS = Object.freeze({ DEFAULT: 0, HELPERS: 1, ENVIRONMENT: 2, DEBUG: 3 });   // 07 R1 (07 5.2.1 layer table)
+export const LAYER_MASKS = Object.freeze({ MAIN: 0b1111, MAIN_PILOT: 0b1101, PREVIEW: 0b0101 });   // 07 6.2
 
 export class SceneManager {
   /** deps only (R4): no THREE allocation in the constructor.
@@ -1540,7 +1544,8 @@ export class SceneManager {
   /** Legacy init body 1427-1449, same statement order:
    *  container = canvas.parentElement; scene = new THREE.Scene(); scene.background = new THREE.Color(theme.scene.background);
    *  camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000); camera.position.set(0, 0, 8);
-   *  camera.layers.enable(LAYERS.HELPERS)   (01 F1-1, 5.5: only the normal lines are on HELPERS; no id, no pixel change)
+   *  camera.layers.mask = LAYER_MASKS.MAIN   (07 R1: every layer; no id, no pixel change outside pilot mode);
+   *  audit = /[?&]debug=1(?:&|$)/.test(win.location?.search ?? '')
    *  renderer = new THREE.WebGLRenderer({ canvas, antialias: true }); renderer.setSize(container.clientWidth, container.clientHeight);
    *  renderer.setPixelRatio(Math.min(win.devicePixelRatio, 2));
    *  scene.add(new THREE.AmbientLight(0xffffff, 0.3)); pointLight = new THREE.PointLight(0xffffff, 0.8); pointLight.position.set(5, 5, 10);
@@ -1553,11 +1558,20 @@ export class SceneManager {
   /** scene.add / scene.remove for content objects (wall, frames, props). */
   add(object3D)
   remove(object3D)
-  /** scene.add / scene.remove plus membership in #helpers (grid, axes, camera rig, safe-distance group, gizmo, normal
-   *  lines). No layer is assigned; the camera preview hides every member during its render (08 P2-10a, B-M11 fixed). */
-  addHelper(object3D)
+  /** 07 R1 (5.2.1, 6.2): #helperRoots.set(o, layer); layer === 'default' -> #passHidden.add(o); scene.add(o); unless
+   *  'default', o.traverse(n => n.layers.set(layer)). Layers: HELPERS (default: grid, axes, camera rig, safe-distance
+   *  group, pivot marker), DEBUG (normal lines), ENVIRONMENT (Feature 5's dome), 'default' (the hand-written gizmo:
+   *  layer 0, hidden around the preview pass, still drawn in pilot mode until 08 P2-9j, B-L26). */
+  addHelper(object3D, { layer = LAYERS.HELPERS } = {})
+  /** Re-tags the subtree of o now with the layer of the registered root that contains it (no-op otherwise or under a
+   *  'default' root); optional, the per-frame enforcement covers it. */
+  tagHelper(object3D)
+  /** scene.remove(o); #helperRoots.delete(o); #passHidden.delete(o) */
   removeHelper(object3D)
-  get helpers()                     // ReadonlySet<Object3D>  (passed by the App tick to preview.render; Feature 1/5 seam)
+  /** on ? camera.layers.enable(HELPERS) : camera.layers.disable(HELPERS)   (07 Q7; PilotController.toggle) */
+  setHelpersVisibleInMain(on)
+  /** saved = each #passHidden root's visible; all false; try { return fn() } finally { restore each saved value } */
+  withPassHidden(fn)
   /** showGrid = !showGrid; if (grid) grid.visible = showGrid  (2578-2583). Mutates display.showGrid. */
   toggleGrid()
   /** win.addEventListener('resize', () => this.onResize())  (1453) */
@@ -1569,11 +1583,13 @@ export class SceneManager {
   startLoop(tick)
   /** 03 T5 (07 C46; 07 R3 moves it onto the frame graph): registers a hook run before every main render with the main camera */
   addPreRender(hook)
-  /** for (hook of #preRender) hook(camera); renderer.render(scene, camera)   (03 T5: the pivot marker's updateScale) */
+  /** #enforceHelperLayers() (every registered root's subtree re-tagged, 07 6.2); under ?debug=1 every 120th frame the
+   *  audit (a node with userData.helper === true under no registered root: win.console.warn('unregistered helper', n));
+   *  for (hook of #preRender) hook(camera); renderer.render(scene, camera)   (03 T5: the pivot marker's updateScale) */
   render()
 }
 ```
-State: `#scene`, `#camera`, `#renderer`, `#grid`, `#axes`, `#helpers: Set`, `#preRender` (03 T5). The main camera is shared by reference with `OrbitController`, `PilotCameraDriver`, `PilotController` and `PointerRay` (they read `sceneManager.camera` at use time).
+State: `#scene`, `#camera`, `#renderer`, `#grid`, `#axes`, `#helperRoots: Map<Object3D, layer>` and `#passHidden: Set` (07 R1; `get helpers()` and P2-10a's visibility loop are gone), `#audit`, `#framesRendered`, `#preRender` (03 T5). The main camera is shared by reference with `OrbitController`, `PilotCameraDriver`, `PilotController` and `PointerRay` (they read `sceneManager.camera` at use time).
 
 #### `js/render/LEDWallView.js`
 ```js
@@ -1661,9 +1677,9 @@ export class NormalsDebugView {
   get object3D(); get stats()
   /** Off or no rebuild seen: remove. On: count, stride, length (keepLength for live drags), grow buffers to
    *  min(150,000, max(1024, nextPow2(kept))) lines, write vertex then face lines per mesh with one running counter, upload
-   *  the written prefix (updateRange), setDrawRange; the LineSegments is on LAYERS.HELPERS only, raycast no-op,
-   *  frustumCulled false, matrixAutoUpdate false, userData.helper, renderOrder RENDER_ORDER.NORMAL_LINES_ON_TOP or
-   *  DEFAULT, added with sceneManager.addHelper; timed by performance mark/measure 'normals:sync' (latest only). */
+   *  the written prefix (updateRange), setDrawRange; the LineSegments is on LAYERS.DEBUG only (07 R1; visible in pilot
+   *  mode, never in the preview), raycast no-op, frustumCulled false, matrixAutoUpdate false, userData.helper, renderOrder
+   *  RENDER_ORDER.NORMAL_LINES_ON_TOP or DEFAULT, added with sceneManager.addHelper(lines, { layer: LAYERS.DEBUG }); timed by performance mark/measure 'normals:sync' (latest only). */
   sync({ keepLength = false } = {})
   dispose()                 // removeHelper, geometry.dispose(); the shared line material stays
 }
@@ -1871,13 +1887,15 @@ export class PreviewWindow {   // owns #camera-preview-window and its children (
    *  res.textContent = `${Math.round(1080 * aspect)}×1080` (as `const baseHeight = 1080; width = Math.round(baseHeight * aspect)`).
    *  LEGACY(B-L34) fake resolution, first-word preset name. */
   updateCamera()
-  /** 3742-3745 without the helpers (08 P2-10a, B-M11 fixed; 08 6.14): if (!cine.enabled || !renderer || !camera) return;
+  /** 07 R1: if (!cine.enabled || !renderer || !camera) return; renderer.render(scene, camera). The camera's layer mask is
+   *  LAYER_MASKS.PREVIEW (set when updateCamera creates it), so no HELPERS or DEBUG object reaches the preview, and App calls
+   *  this inside sceneManager.withPassHidden (the gizmo). Until 07 R1 (08 P2-10a, B-M11 fixed; 08 6.14):
    *  for each helper: save helper.visible, then helper.visible = false; try { renderer.render(scene, camera) } finally
    *  { restore every saved flag in order }. helpers = sceneManager.helpers (the App tick). No layer is assigned, so the
    *  main view, picking (gizmo handles, camera body) and a helper hidden by the user (the grid toggle) are unaffected.
    *  `Strategies.previewRendersHelpers` is retired; legacy rendered the whole scene, so the frustum fill's near quad
    *  tinted the full frame orange and the grid, axes, rig, safe-distance floor and gizmo showed. */
-  render(scene, helpers)
+  render(scene)
   /** private #setupResize(): verbatim 3647-3700 (handle mousedown with preventDefault + stopPropagation, doc mousemove and
    *  doc mouseup listeners added on the FIRST init only: init() calls it while the private #resize state, which it creates
    *  (the legacy closure state of 3650-3651), is null; body cursor; clamps 200-800 / 120-600 with the filmback aspect;
@@ -1976,7 +1994,8 @@ export class KeyboardState {     // legacy keysPressed (3753)
 export class PointerRay {        // legacy shared `raycaster` + `mouse` (1368-1369): ONE instance shared by gizmo and picking
   /** @param {{sceneManager: SceneManager}} deps   (creates one THREE.Raycaster and one THREE.Vector2: no ids);
    *  03 T5: raycaster.layers.enableAll(), so the pivot marker's pick proxy on LAYERS.HELPERS is pickable (picking and
-   *  hover raycast only their explicit lists, all on layer 0 before, so no other pick changes) */
+   *  hover raycast only their explicit lists, all on layer 0 before, so no other pick changes); since 07 R1 the camera
+   *  body (HELPERS) relies on it too */
   constructor({ sceneManager })
   get raycaster(); get ndc()
   /** canvas = sceneManager.renderer.domElement; rect = canvas.getBoundingClientRect();
@@ -2108,7 +2127,8 @@ export class TransformGizmo {
    *  (03 T5: an axis with axes[k] === false gets no arrow or ring; legacy targets have no allowedAxes);
    *  translate arrows / rotate tori built in the exact legacy allocation order (material per axis via the private
    *  material(color) factory: MeshBasicMaterial{color, transparent: true, opacity: idleOpacity, depthTest: false, depthWrite: false});
-   *  updateOrientation(); updatePosition(); sceneManager.addHelper(group).
+   *  updateOrientation(); updatePosition(); sceneManager.addHelper(group, { layer: 'default' }) (07 R1: layer 0, hidden
+   *  around the preview pass by withPassHidden, still drawn in pilot mode: B-L26 is 08 P2-9j's).
    *  MUST NOT reset hoveredAxis (legacy keeps a stale hover across rebuilds). LEGACY(B-L22): every handle is built for props too.
    *  LEGACY(B-L26): pilot mode does not hide the gizmo. */
   rebuild()
@@ -2174,6 +2194,8 @@ export class PilotController {
    *    Mode'); return }   (08 P2-4a, B-H4 fixed: the guard applies only on entry; legacy also blocked exiting once the preview
    *    was off);
    *  interaction.pilotMode = !interaction.pilotMode; bus.emit(PILOT_CHANGED, {active});
+   *  sceneManager.setHelpersVisibleInMain(!interaction.pilotMode)   (07 R1, Q7: no grid, axes, rig, safe distance or marker
+   *    in the pilot view);
    *  entering: saved = { position: camera.position.clone(), orbit: orbit.snapshot(), fov: camera.fov }; driver.enterView();
    *  leaving: if (saved) { camera.position.copy(saved.position); orbit.restore(saved.orbit); camera.fov = saved.fov;
    *           camera.updateProjectionMatrix(); orbit.updateCameraPosition() } looking = false.
@@ -3044,7 +3066,7 @@ export class App {
   start()
 }
 ```
-`App` is the only module that imports `theme/Theme.js` (and, since 06 T3, `theme/ThemeBridge.js`), `vendor/jszip.js` and every class. It defines `colorToRgb = (s) => new THREE.Color(s)` and `frameBounds = () => framingBounds(project, wallController.pivotResolution)` (03 T3: the cached resolution; evaluated lazily, after `wallController` exists), and the frame tick `() => { orbit.tickKeyboard(); pilot.tickKeyboard(); sceneManager.render(); preview.render(sceneManager.scene, sceneManager.helpers); }` (legacy animate 3886-3889; the helpers argument since 08 P2-10a).
+`App` is the only module that imports `theme/Theme.js` (and, since 06 T3, `theme/ThemeBridge.js`), `vendor/jszip.js` and every class. It defines `colorToRgb = (s) => new THREE.Color(s)` and `frameBounds = () => framingBounds(project, wallController.pivotResolution)` (03 T3: the cached resolution; evaluated lazily, after `wallController` exists), and the frame tick `() => { orbit.tickKeyboard(); pilot.tickKeyboard(); sceneManager.render(); sceneManager.withPassHidden(() => preview.render(sceneManager.scene)); }` (legacy animate 3886-3889; 08 P2-10a passed the helper set, which 07 R1 replaced by the preview camera's layer mask and `withPassHidden`).
 
 
 ---
@@ -3416,7 +3438,7 @@ e.target.value = ''                                // synchronous reset (5009)
 
 ### 6.12 P3: frame tick
 
-`SceneManager.startLoop(tick)`: `requestAnimationFrame(frame)` first, then `orbit.tickKeyboard()` -> `pilot.tickKeyboard()` (may run P2) -> `sceneManager.render()` -> `preview.render(scene, helpers)` (guarded; the registered helpers hidden for that render only since 08 P2-10a, B-M11 fixed) (3884-3890). The first frame runs synchronously inside the init phase.
+`SceneManager.startLoop(tick)`: `requestAnimationFrame(frame)` first, then `orbit.tickKeyboard()` -> `pilot.tickKeyboard()` (may run P2) -> `sceneManager.render()` (07 R1: the helper layers re-tagged first) -> `sceneManager.withPassHidden(() => preview.render(scene))` (guarded; the preview camera's mask leaves out HELPERS and DEBUG, and `withPassHidden` the gizmo: B-M11, fixed by 08 P2-10a, mechanism since 07 R1) (3884-3890). The first frame runs synchronously inside the init phase.
 
 ### 6.13 Exports
 
@@ -3483,7 +3505,7 @@ viewportInput = new ViewportInput({ doc, win, sceneManager, interaction, gizmo, 
                                    onPivotShortcut: () => pivotController.toggleSelect() })   // 03 T5: the O key
 exportPanel = new ExportPanel({ doc, projectIO })
 debugControls = new DebugViewControls({ doc, win, controller: debugController, bus, theme })   // subscribes DEBUG_VIEW_CHANGED
-tick = () => { orbit.tickKeyboard(); pilot.tickKeyboard(); sceneManager.render(); preview.render(sceneManager.scene, sceneManager.helpers) }
+tick = () => { orbit.tickKeyboard(); pilot.tickKeyboard(); sceneManager.render(); sceneManager.withPassHidden(() => preview.render(sceneManager.scene)) }
 
 // ---- legacy init() (1426-1455) ----
 sceneManager.init()                       // 1427-1449: scene, camera, renderer, lights, grid, axes
@@ -3573,7 +3595,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | B-M8 | Safe-distance group survives preview off (K-2) | `CameraController.setPreviewEnabled` (fixed) | Landed in 08 P2-4b (`CameraController.setPreviewEnabled(false)` calls `hub.syncSafeDistance()` after `rig.remove()`, which removes the floor; the next enable rebuilds it; no tag site) |
 | B-M9 | Preview 320x180 stretch (L-1) | `Strategies.previewRendererSize` | client-box sizing |
 | B-M10 | Coverage from posZ against a flat rectangle (J-7, J-8) | `CineCamera.coverage` + `framingBounds` | layout-aware analyser |
-| B-M11 | Preview renders helpers and tint (L-4) | `PreviewWindow.render` (fixed; `Strategies.previewRendersHelpers` retired) | Landed in 08 P2-10a (`PreviewWindow.render(scene, helpers)` sets `visible = false` on every helper registered through `SceneManager.addHelper` for the preview render only and restores each flag afterwards (08 6.14), so the preview shows no grid, axes, rig, frustum tint, safe-distance floor or gizmo; no layer is assigned; `Strategies.previewRendersHelpers` retired; no tag site) |
+| B-M11 | Preview renders helpers and tint (L-4) | `PreviewWindow.render` (fixed; `Strategies.previewRendersHelpers` retired) | Landed in 08 P2-10a (`PreviewWindow.render(scene, helpers)` sets `visible = false` on every helper registered through `SceneManager.addHelper` for the preview render only and restores each flag afterwards (08 6.14), so the preview shows no grid, axes, rig, frustum tint, safe-distance floor or gizmo; no layer is assigned; `Strategies.previewRendersHelpers` retired; no tag site). Mechanism replaced by 07 R1: the preview camera's layer mask `DEFAULT \| ENVIRONMENT` and `SceneManager.withPassHidden` for the gizmo |
 | B-M12 | Rotate gizmo direction inverted (N-9) | `Strategies.gizmoRotateSign` | `+1` |
 | B-M13 | Pilot vertical inverted (O-5) | `Strategies.pilotForwardYSign` | `+1` |
 | B-M14 | Select on mousedown; misses deselect (N-5) | `ViewportInput.attachPointer` (tag) | select on click under 4 px travel |
@@ -4176,3 +4198,8 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 
 **B2-0, the camera-preview scenarios before the single renderer** (the owner's report of 2026-10-17: a rectangle of the main viewport, the preview's size mirrored vertically, stops updating after the preview window is enlarged and the view orbited; docs/improvements/07-platform-foundations.md 8.3, AC 1-4; manifest `tests/regression/expected/B2-0.json`: the `preview_compositing` and `preview_clean` outputs added, every existing output identical):
 - 2.3: `tests/regression/lib/inject.mjs` hooks `HTMLCanvasElement.prototype.getContext` and exposes `window.__glCanvases()` (each canvas that received a WebGL context; the returned context is unchanged). `tests/regression/scenarios-platform.mjs` (new, `PLATFORM_SCENARIOS`, registered last): `preview_compositing` (the owner's steps; the WebGL canvases, full-page screenshots, the pure-black share of the mirrored rectangle) and 07 8.3's `preview_clean` (moved from 07 R2's commit to this one, so its baseline documents the two-canvas preview). Neither headless SwiftShader nor a one-off headless GPU run (ANGLE D3D11) reproduces the stale rectangle, so the structural check is the canvas list: two WebGL canvases here, one after 07 R2 (AC 1). `#camera-preview-canvas` is read only through its client rect, which stays the preview rectangle when 07 R2 makes the canvas a layout placeholder. The harness README documents both.
+
+**07 R1, render layers** (docs/improvements/07-platform-foundations.md 5.2.1, 6.2, 8.4 row "R1 layers, after 08 P2-10a-c" (P2-10b/c have not landed; they touch no layer), Q7; manifest `tests/regression/expected/07-R1.json`: the five canvas screenshots taken while piloting change (`keyboard/pilot_view`, `pilot_look/look_0{1,2}`, `preview_off_in_pilot/pilot_0{0,5}`, `p2_shortcut_filters/pilot_view_front`); every preview rectangle, every other screenshot, export and state is identical):
+- 1.6 R6 is replaced by the layer table. 3.7 `SceneManager`: `LAYERS` gains `ENVIRONMENT` (2) and `DEBUG` (3); `LAYER_MASKS` (main `0b1111`, pilot `0b1101`, preview `0b0101`); `addHelper(o, {layer})` (HELPERS by default; `'default'` keeps layer 0 and joins the pass-hidden set), `tagHelper`, `removeHelper`, `setHelpersVisibleInMain`, `withPassHidden`; `render()` re-tags every registered root first; the `?debug=1` audit; `get helpers()` is gone. `PreviewWindow`: the preview camera's mask is `LAYER_MASKS.PREVIEW`; `render(scene)` loses P2-10a's visibility loop. `NormalsDebugView`: the lines are `DEBUG` (visible in pilot mode, never in the preview). `CameraRigView`, `SafeDistanceView`, `PivotMarkerView`, the grid and the axes: `HELPERS`. 3.8 `TransformGizmo`: the hand-written gizmo is a `'default'` helper (still drawn in pilot mode: B-L26 stays with 08 P2-9j); `PilotController.toggle` calls `setHelpersVisibleInMain(!pilotMode)` (Q7: no grid, axes, rig with its frustum fill or safe-distance floor in the pilot view; the pivot marker was already hidden there by 03 T9); `PointerRay` already tests every layer (03 T5). 3.12, 6.12, 7: the tick runs the preview inside `sceneManager.withPassHidden`. 8.2: the B-M11 row names the new mechanism.
+- `README.md`: the pilot-view release note. 07 5.2.1: the as-built note.
+- 2.3: `render-layers.test.mjs` (new), `scene-overlays.test.mjs` (the preview camera's mask replaces the P2-10a hiding tests), `camera-hub.test.mjs` (`PilotController.toggle` order, the `PreviewWindow` imports), `fixtures/fake-three.mjs` (`Layers.disable`).

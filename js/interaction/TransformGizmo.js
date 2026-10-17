@@ -234,7 +234,9 @@ export class TransformGizmo {
 
     this.updateOrientation();
     this.updatePosition();
-    this.#sceneManager.addHelper(gizmoGroup);
+    // 07 R1: a 'default' helper (layer 0): hidden around the preview pass (withPassHidden), still drawn in pilot mode
+    // until 08 P2-9j (B-L26)
+    this.#sceneManager.addHelper(gizmoGroup, { layer: 'default' });
   }
 
   /**

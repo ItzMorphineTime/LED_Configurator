@@ -156,7 +156,8 @@ export class PilotController {
    * clears the flag before it leaves pilot mode, so the app alerted and stayed in pilot mode).
    * Ports: index.html@cd3fd3f lines 3477-3509.
    * Side effects: may alert (entering only); writes interaction.pilotMode; emits PILOT_CHANGED {active} (toolbar
-   * button and banner); writes the main camera and the orbit state.
+   * button and banner); turns the main camera's HELPERS layer off while piloting and on again on leaving
+   * (sceneManager.setHelpersVisibleInMain, 07 R1, Q7); writes the main camera and the orbit state.
    */
   toggle() {
     if (!this.#interaction.pilotMode && !this.#cine.enabled) {
@@ -167,6 +168,8 @@ export class PilotController {
     const interaction = this.#interaction;
     interaction.pilotMode = !interaction.pilotMode;
     this.#bus.emit(Events.PILOT_CHANGED, { active: interaction.pilotMode });
+    // 07 R1 (Q7): a clean camera view; the grid, axes, rig, safe-distance floor and pivot marker leave the pilot view
+    this.#sceneManager.setHelpersVisibleInMain(!interaction.pilotMode);
 
     // LEGACY(B-L26): the gizmo is left untouched, so it stays visible (centred on the eye) in pilot mode.
     const camera = this.#sceneManager.camera;
