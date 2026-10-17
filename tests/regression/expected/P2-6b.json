@@ -1,0 +1,19 @@
+{
+  "commit": "P2-6b",
+  "bugs": ["B-L14"],
+  "expect": [
+    { "output": "p2_xss_names/*__export-zip__*.zip", "change": "modified",
+      "reason": "six unique texture names (textureFileNames): A_B_2_PanelIDs.png and Dup_2_PanelIDs.png join the texture folder, and the JSON texture_file of the later A_B and Dup sections names them (legacy wrote four textures for six sections, B-L14)" }
+  ],
+  "mayChange": [
+    { "output": "p2_curved_safe_distance/box_corner.screenshot.png", "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas on the preview footer label row (1 level, 1 px, seen in the 06 T6a-08 P2-5b runs); this commit changes no rendered pixel of it" },
+    { "output": "p2_shortcut_filters/pilot_view_front.screenshot.png", "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas (1 level, 2 px, seen in the 06 T6b-08 P2-5b runs); this commit changes no rendered pixel of it" },
+    { "output": "toggles/15_car_moved.screenshot.png", "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-08 P2-6a runs)" },
+    { "output": "large_wall/final__export-zip__morph-led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b); this commit changes no name of it (its sections L1-L4 are unique)" }
+  ],
+  "notes": "08 P2-6b (B-L14): PanelNaming.textureFileNames replaces zipTextureFileName; ProjectIO.exportZIP computes the names once for the texture entries, the JSON (ProjectSerializer.write's textureNames) and M-EXP-4. Every other ZIP's section names are unique (case-insensitively), so their names, entries and JSON are unchanged: p2_zip_section_mode (Left, Center Stage, Right), the configs, logos, p2_oversize_canvas and p2_project_v2."
+}

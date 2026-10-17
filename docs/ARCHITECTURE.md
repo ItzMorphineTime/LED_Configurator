@@ -627,7 +627,6 @@ export const Strategies = deepFreeze({
                                                    // and the new leaf gltf.panelNormal (08 P2-2d)
   exportCombinedColor: 'first-section',            // B-L6
   mtlTextureNaming: 'index',                       // B-M2
-  zipTextureNaming: 'sanitized-name',              // B-L14 (no de-duplication)
   mtlDownloadDelayMs: 100,                         // B-L7
   framingBounds: 'flat',                           // B-L2, B-M10
   curveBeforeFirstPanel: true,                     // B-L1
@@ -667,7 +666,7 @@ export const orDefault = (v, d) => v || d;
  *  Entries whose site is not under js/ (CSS, markup) are documentation-only. */
 export const LEGACY_SITES
 ```
-`deepFreeze` is module-private. `LegacyProfiles` is not a switch: it has no read site in `js/` and is not covered by the `Strategies` rule of the static check; when a Phase-2 commit flips a `Strategies.mesh.*` key, the builder keeps the legacy case for it (08 5.1 rule 3), and global keys (`exportCombinedColor`, ...) cannot be injected, so the oracle cases that depend on a retired global key become explicit expected-value tests in that commit (08 P2-1a retired `gltfBase64` and deleted `legacySpreadBase64`; `tests/unit/io.test.mjs` injects a verbatim copy of that encoder into its oracle exporter). The `behaviour` and `fix` strings of each `LEGACY_SITES` entry are the 8.2 cell texts with only the markdown escape `\|` unescaped to `|` (inline backticks are kept as written); the 8.2 register is stored once and expanded per 8.3 site. Phase 1 implements only the legacy value of every key, except the `dispose.*` keys flipped by the non-observable Phase 1C clean-ups (8.1; a landed fix keeps its 8.2 row and loses its 8.3 rows, so `LEGACY_SITES` no longer lists it). Phase 2 retires keys as 08 4.1 lists them (the key, its switch and its 8.1 row are deleted in the fixing commit); retired so far: `gltfBase64` (08 P2-1a), `importValidation` (08 P2-3b), `safeDistanceBand` (08 P2-5b), `zipJsonIncludesAngleOffset` (08 P2-6a); flipped so far: `mesh.gltf.indexType` (`'auto'`, 08 P2-1b), `mesh.viewport.winding` (`'ccw'`, 08 P2-2a), `mesh.viewport.normals` (`'averaged'`, 08 P2-2b), `mesh.obj.winding` / `.normals` / `.stripNormals` (`'ccw'` / `'averaged'` / `'per-vertex'`, 08 P2-2c), `mesh.gltf.winding` / `.normals` / `.attributes` (`'ccw'` / `'averaged'` / `['POSITION', 'NORMAL']`, 08 P2-2d); added: `mesh.gltf.panelNormal` (`'facing'`, 08 P2-2d). Every leaf key (arrays such as `mesh.gltf.attributes` and `previewRendererSize` are leaves) has the read site given in section 8.1 and spelled out in that module's entry below; how it is read (switch-and-throw, value, array comparison) follows section 1.5.
+`deepFreeze` is module-private. `LegacyProfiles` is not a switch: it has no read site in `js/` and is not covered by the `Strategies` rule of the static check; when a Phase-2 commit flips a `Strategies.mesh.*` key, the builder keeps the legacy case for it (08 5.1 rule 3), and global keys (`exportCombinedColor`, ...) cannot be injected, so the oracle cases that depend on a retired global key become explicit expected-value tests in that commit (08 P2-1a retired `gltfBase64` and deleted `legacySpreadBase64`; `tests/unit/io.test.mjs` injects a verbatim copy of that encoder into its oracle exporter). The `behaviour` and `fix` strings of each `LEGACY_SITES` entry are the 8.2 cell texts with only the markdown escape `\|` unescaped to `|` (inline backticks are kept as written); the 8.2 register is stored once and expanded per 8.3 site. Phase 1 implements only the legacy value of every key, except the `dispose.*` keys flipped by the non-observable Phase 1C clean-ups (8.1; a landed fix keeps its 8.2 row and loses its 8.3 rows, so `LEGACY_SITES` no longer lists it). Phase 2 retires keys as 08 4.1 lists them (the key, its switch and its 8.1 row are deleted in the fixing commit); retired so far: `gltfBase64` (08 P2-1a), `importValidation` (08 P2-3b), `safeDistanceBand` (08 P2-5b), `zipJsonIncludesAngleOffset` (08 P2-6a), `zipTextureNaming` (08 P2-6b); flipped so far: `mesh.gltf.indexType` (`'auto'`, 08 P2-1b), `mesh.viewport.winding` (`'ccw'`, 08 P2-2a), `mesh.viewport.normals` (`'averaged'`, 08 P2-2b), `mesh.obj.winding` / `.normals` / `.stripNormals` (`'ccw'` / `'averaged'` / `'per-vertex'`, 08 P2-2c), `mesh.gltf.winding` / `.normals` / `.attributes` (`'ccw'` / `'averaged'` / `['POSITION', 'NORMAL']`, 08 P2-2d); added: `mesh.gltf.panelNormal` (`'facing'`, 08 P2-2d). Every leaf key (arrays such as `mesh.gltf.attributes` and `previewRendererSize` are leaves) has the read site given in section 8.1 and spelled out in that module's entry below; how it is read (switch-and-throw, value, array comparison) follows section 1.5.
 
 ### 3.4 `js/theme/Theme.js`
 
@@ -1255,12 +1254,14 @@ export function exportPanelName(i, row, col)  // `Wall_${i + 1}_Panel_R${row + 1
 /** name.replace(/[^a-zA-Z0-9_-]/g, '_')   (4496). The parameter MUST stay named `name` (R1): a numeric imported
  *  section name throws `TypeError: name.replace is not a function`, which reaches the console baseline. */
 export function sanitizeFilename(name)
-/** LEGACY(B-L14): no de-duplication. switch (Strategies.zipTextureNaming) { case 'sanitized-name':
- *  return `${sanitizeFilename(section.name || `Wall_${i + 1}`)}_PanelIDs.png`;  (4511, 4540)
- *  default: throw unsupportedStrategy('zipTextureNaming', Strategies.zipTextureNaming) } */
-export function zipTextureFileName(section, i)
+/** 08 6.6 (B-L14 fixed in 08 P2-6b; zipTextureFileName and Strategies.zipTextureNaming are gone): per section the legacy
+ *  name (4511, 4540) `${sanitizeFilename(s.name || `Wall_${i + 1}`)}_PanelIDs.png`, made unique case-insensitively by
+ *  appending _2, _3, ... to a base already used (names without a collision are unchanged). The one list of the ZIP texture
+ *  entries and the ZIP JSON texture_file; never null (a caller nulls a left-out texture, 08 6.3).
+ *  @returns {string[]} one unique name per section */
+export function textureFileNames(sections)
 /** LEGACY(B-M2): switch (Strategies.mtlTextureNaming) { case 'index': return `textures/Wall_${i + 1}_PanelIDs.png`; (4612)
- *  default: throw unsupportedStrategy('mtlTextureNaming', Strategies.mtlTextureNaming) }. Does not match zipTextureFileName. */
+ *  default: throw unsupportedStrategy('mtlTextureNaming', Strategies.mtlTextureNaming) }. Does not match textureFileNames. */
 export function mtlTextureFile(i)
 ```
 
@@ -1944,7 +1945,7 @@ export class ProjectSerializer {
    *                   angle_degrees: s.curveIntensity,
    *                   angle_offset_degrees: s.angleOffset || 0 },          // both variants since 08 P2-6a
    *      color: s.color,
-   *      texture_file: `textures/${zipTextureFileName(s, i)}` })),           // 'zip' only (added to the 'file' document)
+   *      texture_file: textureNames[i] === null ? null : `textures/${textureNames[i]}` })),   // 'zip' only (added to the 'file' document)
    *    mesh_mode: project.meshMode,
    *    totals: { sections: sections.length,
    *              total_panels: sections.reduce((sum, s) => sum + s.panelCols * s.panelRows, 0),
@@ -1952,11 +1953,11 @@ export class ProjectSerializer {
    *  LEGACY(B-L31): v1 saves only sections, mesh_mode and totals.
    *  Any other variant throws RangeError('Unknown ProjectSerializer variant ...') (no legacy counterpart; App and
    *  ProjectIO pass only 'file' and 'zip').
-   *  'zip' with `skipped` (08 P2-1c, B-L4): texture_file is null for a section whose skipped[i] is true (its texture is not
-   *  in the ZIP); the path is computed first anyway, so a numeric name still throws. 08 P2-6 replaces skipped with null
-   *  textureNames.
-   *  @param {Project} project  @param {{variant?: 'file'|'zip', skipped?: boolean[]|null}} [options]  @returns {object} */
-  write(project, { variant = 'file', skipped = null } = {})
+   *  'zip' requires textureNames (08 P2-6b): one entry per section, PanelNaming.textureFileNames with null for a texture the
+   *  ZIP left out (08 P2-1c, B-L4: texture_file null); otherwise it throws TypeError. The caller computes the names once
+   *  for the texture entries, this document and the MTL.
+   *  @param {Project} project  @param {{variant?: 'file'|'zip', textureNames?: (string|null)[]|null}} [options]  @returns {object} */
+  write(project, { variant = 'file', textureNames = null } = {})
   /** 08 P2-3b (B-L8 fixed; 08 4.3, 07 5.5.1): d = detectVersion(data) (07 4.6); an error returns
    *  { ok: false, project: null, issues: [d.error], sourceVersion: null, scope: 'wall' }. A v1 document:
    *  m = migrateV1toV2(data, { palette }) (the verbatim legacy || mapping of 4975-4988 into the v2 section shape; a
@@ -2269,16 +2270,18 @@ export class ProjectIO {
    *  M-EXP-2/3 are the exact 08 3.3 texts (CANVAS_HARD_LIMITS: 32767 px per side, Math.round(maxArea / 1e6) = 268 MP). */
   async exportPanelIds()
   /** 4491-4554, same order, with the 08 6.3 size guard (B-L4 fixed in 08 P2-1c): zip = new JSZip();
+   *  0. names = textureFileNames(sections)  (unique, 08 P2-6b: B-L14 fixed);
    *  1. skipped[i] = !canvasFits(panelIds.sectionSize(sections[i], null))  (pure arithmetic, before anything is written);
-   *  2. zip.file(brand.files.json, JSON.stringify(serializer.write(project, {variant: 'zip', skipped}), null, 2));
+   *     textureNames[i] = skipped[i] ? null : names[i];
+   *  2. zip.file(brand.files.json, JSON.stringify(serializer.write(project, {variant: 'zip', textureNames}), null, 2));
    *     layout = wallController.layout(); OBJ + MTL files (objExporter.write({..., skipped})); glTF file;
    *  3. folder = zip.folder('textures'); atlas = computeAtlas(sections); for i not skipped: canvas = panelIds.sectionCanvas(
    *     sections[i], i, null, atlas.entries[i].startCol); dataUrl = canvas.toDataURL('image/png'); `data:,` (a device limit
-   *     below the hard limit) -> late.push(i); else folder.file(zipTextureFileName(sections[i], i), base64, {base64: true})
-   *     (LEGACY(B-L14): same names overwrite);
-   *  4. if late: skipped[i] = true for each, then the JSON and MTL entries are written again (JSZip keeps their position);
+   *     below the hard limit) -> late.push(i); else folder.file(names[i], base64, {base64: true});
+   *  4. if late: skipped[i] = true and textureNames[i] = null for each, then the JSON and MTL entries are written again
+   *     (JSZip keeps their position);
    *  content = await zip.generateAsync({type: 'blob'}); downloader.saveBlob(content, brand.files.zip);
-   *  5. if any skipped: dialogs.alert(M-EXP-4) with every left-out entry name `textures/${zipTextureFileName(s, i)}`.
+   *  5. if any skipped: dialogs.alert(M-EXP-4) with every left-out entry name `textures/${names[i]}`.
    *  Before 08 P2-7f the ZIP holds no atlas, so only section textures are guarded. The body is the private #writeZip(),
    *  run by #runExport (08 P2-1a: a failure is the M-EXP-1 alert instead of an unhandled rejection). */
   async exportZIP()
@@ -3065,8 +3068,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `mesh.gltf.indexType = 'auto'` (08 P2-1b; Phase-1 value `'uint16'`, kept as a case for `LegacyProfiles`) | B-L5 (fixed) | Landed: Uint32 (5125) as soon as the largest index reaches 65,535 (`indexWidth`, 08 6.2); `'uint16'` always wrote 5123 and wrapped above 65,535 vertices | `GltfExporter.#addMesh`: `profile.indexType` | switch | landed in 08 P2-1b (invariance gate: every harness glTF is unchanged); the viewport index attribute (untagged) landed in 08 P2-1e |
 | `mesh.gltf.doubleSided = 'omit'` | – (correct since 08 P2-2d) | The material object has **no** `doubleSided` key: single-sided, which shows the `'ccw'` wall from the stage and keeps a wrongly facing wall visible as an error (08 Q2) | `GltfExporter.#doubleSided()` (called first by `#addMesh`): `profile.doubleSided` | switch | `case 'true'` (08 P2-2d) writes `doubleSided: true`, for a later export option; no profile uses it |
 | `exportCombinedColor = 'first-section'` | B-L6 | Combined MTL Kd and glTF baseColor from `sections[0]` (TypeError on an empty wall) | `ObjExporter.write` (first statement of the combined branch) and `GltfExporter.write` (after the combined loop): `Strategies.exportCombinedColor`, each at its legacy colour point | switch | per-section materials or COLOR_0 |
-| `mtlTextureNaming = 'index'` | B-M2 | `map_Kd textures/Wall_<i>_PanelIDs.png` | `PanelNaming.mtlTextureFile`: `Strategies.mtlTextureNaming` | switch | use `zipTextureFileName` |
-| `zipTextureNaming = 'sanitized-name'` | B-L14 | Colliding sanitised names overwrite in the ZIP | `PanelNaming.zipTextureFileName`: `Strategies.zipTextureNaming` | switch | de-duplicate |
+| `mtlTextureNaming = 'index'` | B-M2 | `map_Kd textures/Wall_<i>_PanelIDs.png` | `PanelNaming.mtlTextureFile`: `Strategies.mtlTextureNaming` | switch | use `textureFileNames` (08 P2-6d) |
 | `mtlDownloadDelayMs = 100` | B-L7 | MTL as a second download 100 ms later; textures not delivered | `ProjectIO.exportOBJ`: `win.setTimeout(..., Strategies.mtlDownloadDelayMs)` | value | bundle (ZIP) |
 | `framingBounds = 'flat'` | B-L2, B-M10 | Orbit target, camera reset, coverage status and safe-distance D use flat bounds | `WallLayout.framingBounds`: `Strategies.framingBounds` (the 4 consumers get it injected as `frameBounds`) | switch | true bounds or the pivot (Feature 3) |
 | `curveBeforeFirstPanel = true` | B-L1 | Curve step applied before the first panel's move | `WallLayout.computeWallLayout` (first statement): `Strategies.curveBeforeFirstPanel` | switch (`case true`) | owner decision: **kept** (2026-10-16, 1.4); 08 P2-13f retires the switch with no output change |
@@ -3119,7 +3121,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | B-L11 | Shortcuts ignore SELECT focus, modifiers, repeat (W-1) | `core/typingTarget.js isTypingTarget` + `ViewportInput.attachShortcuts` (fixed) | Landed in 08 P2-9b (`core/typingTarget.js isTypingTarget` with the 07 3.8 truth table, re-exported by `InputState` as `isShortcutIgnoredTarget`; `ViewportInput.attachShortcuts` also ignores Ctrl, Meta, Alt and auto-repeat; no tag site) |
 | B-L12 | Gizmo resources leak (memory only) | `Strategies.dispose.gizmo` | Landed in Phase 1C H2 (`dispose.gizmo = true`; no tag site) |
 | B-L13 | Mesh-mode handler fires twice (C-4) | `WallDisplayPanel.bind` (tag + warning) | "mode unchanged -> no-op" guard, never radio `change` |
-| B-L14 | Colliding ZIP texture names (U-3) | `Strategies.zipTextureNaming` | de-duplicate |
+| B-L14 | Colliding ZIP texture names (U-3) | `PanelNaming.textureFileNames` (fixed; `Strategies.zipTextureNaming` retired) | Landed in 08 P2-6b (`PanelNaming.textureFileNames`: the legacy names made unique case-insensitively with `_2`, `_3` suffixes, the one list of the ZIP texture entries and the JSON `texture_file`; `zipTextureFileName` deleted; `Strategies.zipTextureNaming` retired; no tag site) |
 | B-L15 | Fractional integer fields (D-8); declared vertex advance | `WallSection.FIELD_RULES` (fixed; the imported half of `WallMeshBuilder.sectionGrid` is B-L8's) | Landed in 08 P2-8a (`WallSection.LIMITS`; the card rules round columns, rows and LEDs and cap panel height, LEDs and curve; `step="1"` and the `max` attributes on the card inputs; no tag site) |
 | B-L16 | 4K ⚠ via `/Wall \d+/` (D-10) | `SectionListPanel.#patchCard` (fixed) | Landed in 08 P2-3c (`ui/dom.js setTitleWithWarning`: the live rename and `SectionListPanel#patchCard` rebuild the title from the model; no tag site) |
 | B-L17 | 4K check per section only | `WallSection.exceeds4K` (tag) | wall-level check |
@@ -3165,7 +3167,6 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/geometry/WallLayout.js#framingBounds` | B-L2, B-M10 |
 | `js/geometry/WallMeshBuilder.js#combinedGrid` | B-M5 |
 | `js/geometry/TextureAtlas.js#panelPxPerLed` | B-M16 |
-| `js/geometry/PanelNaming.js#zipTextureFileName` | B-L14 |
 | `js/geometry/PanelNaming.js#mtlTextureFile` | B-M2 |
 | `js/io/ProjectSerializer.js#write` | B-L31 |
 | `js/io/ObjExporter.js#write` | B-M6, B-L6 |
@@ -3194,12 +3195,11 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/app/WallController.js#setMeshMode` | B-L13 |
 | `js/app/CameraController.js#CameraHub.refresh` | B-L30 |
 | `js/app/ProjectIO.js#exportOBJ` | B-L7 |
-| `js/app/ProjectIO.js#exportZIP` | B-L14 |
 | `js/ui/SectionLogosPanel.js#onUpload` | B-L35 |
 | `js/ui/WallDisplayPanel.js#bind` | B-L13 |
 | `index.html` (markup, untagged; documentation-only) | B-L36 |
 
-Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14) and B-L5 (08 P2-1b; its only site was the tag in `GltfExporter.addMesh`, which keeps B-H2 and B-M7) and B-L4 (08 P2-1c; its sites were the tags in `ProjectIO.exportPanelIds`, which has no tag left, and `ProjectIO.exportZIP`, which keeps B-L14; its viewport half never had a tag and is fixed by 08 P2-1d) and B-H1 (08 P2-2a; its sites were the tags in `WallMeshBuilder.quadIndices`, which keeps B-H2 until 08 P2-2d, and `LEDMaterialFactory.side`, whose `'double'` value is now a design choice) and B-L3 (08 P2-2b; its only site was the tag in `WallMeshBuilder.sectionGrid`, which keeps B-L15 and B-L8) and B-H2 (08 P2-2c and P2-2d; its sites were the tags in `ObjExporter.write`'s `#stripNormalLine`, which left with P2-2c (`write` keeps B-M6, B-L6 and B-L8), `WallMeshBuilder.quadIndices`, which has no tag left, and `GltfExporter.addMesh`, which keeps B-M7) and B-L11 (08 P2-9b; its sites were the tags in `InputState.isShortcutIgnoredTarget`, now a re-export of `core/typingTarget.js isTypingTarget`, and `ViewportInput.attachShortcuts`, which has no tag left) and B-L15 (08 P2-8a; its sites were the tags in `WallSection.FIELD_RULES`, which has no tag left, and `WallMeshBuilder.sectionGrid`, which keeps B-L8 for unvalidated imported counts) and B-M4 (08 P2-3a; its sites were `legacyHtml`, deleted, and the tags in `SectionListPanel.render`, which has no tag left, `SectionLogosPanel.render` and `ProjectSerializer.read`, which kept B-L8 until 08 P2-3b) and B-H4 (08 P2-4a; its sites were the tags in `PilotController.toggle`, which keeps B-L26, and `CameraController.setPreviewEnabled`, which kept B-M8 until 08 P2-4b) and B-M8 (08 P2-4b; its only site was the tag in `CameraController.setPreviewEnabled`, which has no tag left) and B-M15 and B-L29 (08 P2-5b; their sites were `Strategies.safeDistanceBand`, retired, and the tags in `SafeDistanceView.create` (both ids) and `WallLayout.flatEdges` (B-M15), which have no tag left) and B-M3 (08 P2-6a; its sites were `Strategies.zipJsonIncludesAngleOffset`, retired, and the tag in `ProjectSerializer.write`, which keeps B-L31) and B-L21 (08 P2-3d; its sites were the tags in `WallController.applyImport` and `SectionLogosPanel`'s constructor, which have no tag left) and B-L16 (08 P2-3c; its only site was the tag in `SectionListPanel.patchCard`, now `setTitleWithWarning`) and B-L8 (08 P2-3b; its sites were `Strategies.importValidation`, retired, and the tags in `WallSection`'s constructor, `Wall.appendLikeLast` and `replaceAll`, `LogoLibrary.get`, `WallMeshBuilder.sectionGrid`, `ProjectSerializer.read`, `LEDWallView.rebuild` and `SectionLogosPanel.render`, which have no tag left, and `ObjExporter.write` and `GltfExporter.write`, which keep B-M6 / B-L6); in Phase 3, B-L24 (its `.view-btn.active` half in 01 F1-2, `css/features/debug-view.css`; its badge-overlap half in 06 T4a, `.selection-indicator` at `bottom: 64px` in `css/09-viewport-tools.css`; its two documentation-only entries, the `Legacy note B-L24` paragraphs of the `css/07-viewport.css` and `css/09-viewport-tools.css` header comments, left with 06 T4a, whose header comments now say where it landed).
+Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14) and B-L5 (08 P2-1b; its only site was the tag in `GltfExporter.addMesh`, which keeps B-H2 and B-M7) and B-L4 (08 P2-1c; its sites were the tags in `ProjectIO.exportPanelIds`, which has no tag left, and `ProjectIO.exportZIP`, which keeps B-L14; its viewport half never had a tag and is fixed by 08 P2-1d) and B-H1 (08 P2-2a; its sites were the tags in `WallMeshBuilder.quadIndices`, which keeps B-H2 until 08 P2-2d, and `LEDMaterialFactory.side`, whose `'double'` value is now a design choice) and B-L3 (08 P2-2b; its only site was the tag in `WallMeshBuilder.sectionGrid`, which keeps B-L15 and B-L8) and B-H2 (08 P2-2c and P2-2d; its sites were the tags in `ObjExporter.write`'s `#stripNormalLine`, which left with P2-2c (`write` keeps B-M6, B-L6 and B-L8), `WallMeshBuilder.quadIndices`, which has no tag left, and `GltfExporter.addMesh`, which keeps B-M7) and B-L11 (08 P2-9b; its sites were the tags in `InputState.isShortcutIgnoredTarget`, now a re-export of `core/typingTarget.js isTypingTarget`, and `ViewportInput.attachShortcuts`, which has no tag left) and B-L15 (08 P2-8a; its sites were the tags in `WallSection.FIELD_RULES`, which has no tag left, and `WallMeshBuilder.sectionGrid`, which keeps B-L8 for unvalidated imported counts) and B-M4 (08 P2-3a; its sites were `legacyHtml`, deleted, and the tags in `SectionListPanel.render`, which has no tag left, `SectionLogosPanel.render` and `ProjectSerializer.read`, which kept B-L8 until 08 P2-3b) and B-H4 (08 P2-4a; its sites were the tags in `PilotController.toggle`, which keeps B-L26, and `CameraController.setPreviewEnabled`, which kept B-M8 until 08 P2-4b) and B-M8 (08 P2-4b; its only site was the tag in `CameraController.setPreviewEnabled`, which has no tag left) and B-M15 and B-L29 (08 P2-5b; their sites were `Strategies.safeDistanceBand`, retired, and the tags in `SafeDistanceView.create` (both ids) and `WallLayout.flatEdges` (B-M15), which have no tag left) and B-M3 (08 P2-6a; its sites were `Strategies.zipJsonIncludesAngleOffset`, retired, and the tag in `ProjectSerializer.write`, which keeps B-L31) and B-L14 (08 P2-6b; its sites were `Strategies.zipTextureNaming` and `PanelNaming.zipTextureFileName`, both deleted, and the tag in `ProjectIO.exportZIP`, which has no tag left) and B-L21 (08 P2-3d; its sites were the tags in `WallController.applyImport` and `SectionLogosPanel`'s constructor, which have no tag left) and B-L16 (08 P2-3c; its only site was the tag in `SectionListPanel.patchCard`, now `setTitleWithWarning`) and B-L8 (08 P2-3b; its sites were `Strategies.importValidation`, retired, and the tags in `WallSection`'s constructor, `Wall.appendLikeLast` and `replaceAll`, `LogoLibrary.get`, `WallMeshBuilder.sectionGrid`, `ProjectSerializer.read`, `LEDWallView.rebuild` and `SectionLogosPanel.render`, which have no tag left, and `ObjExporter.write` and `GltfExporter.write`, which keep B-M6 / B-L6); in Phase 3, B-L24 (its `.view-btn.active` half in 01 F1-2, `css/features/debug-view.css`; its badge-overlap half in 06 T4a, `.selection-indicator` at `bottom: 64px` in `css/09-viewport-tools.css`; its two documentation-only entries, the `Legacy note B-L24` paragraphs of the `css/07-viewport.css` and `css/09-viewport-tools.css` header comments, left with 06 T4a, whose header comments now say where it landed).
 
 How rule 6 reads these rows (as implemented in `tests/static/check.mjs`): the comparison is per file, so a tag may sit in a private helper that only the named method calls (for example `ProjectSerializer.#readV1` for `#read`, `ObjExporter.#writeCombined` for `#write`, `GltfExporter.#writeCombined` for `#write`); a tag wrapped across JSDoc continuation lines counts as one tag (placeholders are still rejected); and a row whose `js/` file does not exist is reported, so a typo in a site path cannot bypass the check.
 
@@ -3553,3 +3553,10 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 3.9: `ProjectSerializer.write(project, {variant: 'zip'})` is the `'file'` document plus `texture_file` as the last key of each section: one literal for both variants, so the ZIP JSON keeps `angle_offset_degrees` and re-imports to the same wall (08 criterion 24). The legacy ZIP literal is gone.
 - 3.3, 8.1: `Strategies.zipJsonIncludesAngleOffset` is retired; 8.2 keeps the B-M3 row with a `Landed` fix cell; 8.3: `ProjectSerializer.js#write` keeps B-L31 only.
 - 2.3: `io.test.mjs` (the oracle's `json:zip` expectation is the legacy file document plus the legacy `texture_file`; the 08 8.4 test "the 'zip' JSON equals the 'file' JSON plus `texture_file`" over every harness config); `core.test.mjs`.
+
+**08 P2-6b, B-L14 landed** (manifest `tests/regression/expected/P2-6b.json`: the ZIP of `p2_xss_names`, whose `A B`/`A_B` and `Dup`/`Dup` textures no longer overwrite each other):
+- 3.6: `PanelNaming.textureFileNames(sections)` (08 6.6): the legacy names made unique case-insensitively with `_2`, `_3` suffixes; names without a collision are unchanged. `zipTextureFileName` is deleted.
+- 3.9: `ProjectSerializer.write(project, {variant: 'zip', textureNames})`: the names come from the caller (required for `'zip'`); a `null` entry writes `texture_file: null`. The `skipped` option is gone.
+- 3.10: `exportZIP` computes `names = textureFileNames(sections)` once and uses it for the texture entries, the JSON (`textureNames`, null where skipped) and M-EXP-4; the OBJ writer keeps `skipped` until 08 P2-6c/d.
+- 3.3, 8.1: `Strategies.zipTextureNaming` is retired; 8.2 keeps the B-L14 row with a `Landed` fix cell; 8.3: the rows `PanelNaming.js#zipTextureFileName` and `ProjectIO.js#exportZIP` are deleted.
+- 2.3: `geometry.test.mjs` (the legacy names wherever they were unique, otherwise a suffixed legacy base, always unique; the 08 8.4 cases), `io.test.mjs` (the serializer's `textureNames`, the ZIP use cases), `core.test.mjs`.

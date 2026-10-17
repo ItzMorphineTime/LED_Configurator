@@ -15,7 +15,7 @@
  */
 
 import { computeAtlas, canvasFits, CANVAS_HARD_LIMITS } from '../geometry/TextureAtlas.js';
-import { zipTextureFileName } from '../geometry/PanelNaming.js';
+import { textureFileNames } from '../geometry/PanelNaming.js';
 import { Strategies } from '../legacy/LegacyCompat.js';
 import { MAX_IMPORT_BYTES } from '../domain/rules.js';
 
@@ -279,13 +279,18 @@ export class ProjectIO {
     const project = this.#project;
     const sections = project.wall.sections;
 
-    // 08 6.3 step 1: the pre-check, pure arithmetic before anything is written. Before 08 P2-6 the MTL keeps the
-    // index naming (B-M2), so the left-out textures travel as a boolean per section, not as null names.
+    // The texture file names, unique (08 6.6; B-L14 fixed in 08 P2-6b): the texture entries, the JSON texture_file and
+    // the M-EXP-4 list all come from this one list.
+    const names = textureFileNames(sections);
+    // 08 6.3 step 1: the pre-check, pure arithmetic before anything is written. A left-out texture's textureNames entry
+    // is null (JSON texture_file null). Before 08 P2-6c/d the MTL keeps the index naming (B-M2), so the OBJ writer
+    // still takes the left-out textures as a boolean per section.
     const skipped = sections.map((section) => {
       const { width, height } = this.#panelIds.sectionSize(section, null);
       return !canvasFits(width, height);
     });
-    const jsonText = () => JSON.stringify(this.#serializer.write(project, { variant: 'zip', skipped }), null, 2);
+    const textureNames = names.map((name, i) => (skipped[i] ? null : name));
+    const jsonText = () => JSON.stringify(this.#serializer.write(project, { variant: 'zip', textureNames }), null, 2);
 
     // Step 2: JSON (texture_file null when skipped), OBJ + MTL (no map_Kd when skipped), glTF.
     zip.file(brand.files.json, jsonText());
@@ -313,15 +318,15 @@ export class ProjectIO {
         continue;
       }
       const base64Data = dataUrl.split(',')[1];
-      // LEGACY(B-L14): duplicate (or equally sanitised) section names give the same path, and JSZip silently
-      // replaces the earlier texture.
-      const filename = zipTextureFileName(section, i);
-      texturesFolder.file(filename, base64Data, { base64: true });
+      texturesFolder.file(names[i], base64Data, { base64: true });
     }
 
     // Step 4: re-write the JSON and MTL entries without the late textures (JSZip keeps an entry's position).
     if (late.length) {
-      for (const i of late) skipped[i] = true;
+      for (const i of late) {
+        skipped[i] = true;
+        textureNames[i] = null;
+      }
       zip.file(brand.files.json, jsonText());
       zip.file(brand.files.mtl, this.#objExporter.write({ ...objArgs, skipped }).mtlContent);
     }
@@ -331,8 +336,8 @@ export class ProjectIO {
 
     // Step 5: name every left-out entry (the ZIP entry names, in section order).
     const leftOut = [];
-    sections.forEach((section, i) => {
-      if (skipped[i]) leftOut.push(`textures/${zipTextureFileName(section, i)}`);
+    names.forEach((name, i) => {
+      if (skipped[i]) leftOut.push(`textures/${name}`);
     });
     if (leftOut.length) this.#dialogs.alert(ExportMessages.zipTexturesLeftOut(leftOut));
   }

@@ -219,6 +219,10 @@ Complete export bundle containing:
 - Panel ID textures (PNG)
 - Per-section exports
 
+Release note: sections with the same name, or with names that only differ in spaces, punctuation or upper and lower
+case, now each get their own texture in the ZIP (`Dup_PanelIDs.png`, `Dup_2_PanelIDs.png`, ...); they used to overwrite
+each other, so one texture was missing.
+
 ### Panel IDs PNG
 High-resolution texture map showing:
 - Panel numbering

@@ -2,8 +2,8 @@
  * @module geometry/PanelNaming
  * Column letters, panel labels, export object names, filename sanitising and texture file names.
  * Legacy source: index.html@cd3fd3f 1991-1999 (getColumnLabel), 2022-2024 / 2083-2084 (panel labels),
- * 4496 (sanitizeFilename), 4511 / 4540 (ZIP texture names), 4609 / 4612 / 4622 (MTL and OBJ section names),
- * 4676 / 4888 (panel object names), 4867 (glTF section names).
+ * 4496 (sanitizeFilename), 4511 / 4540 (ZIP texture names, unique since 08 P2-6b), 4609 / 4612 / 4622 (MTL and OBJ
+ * section names), 4676 / 4888 (panel object names), 4867 (glTF section names).
  * Layer: geometry (may import domain, legacy; THREE-free and DOM-free).
  */
 
@@ -77,24 +77,31 @@ export function sanitizeFilename(name) {
 }
 
 /**
- * File name of a section's panel-ID texture inside the ZIP `textures/` folder (also the JSON `texture_file` stem).
- * Ports: index.html@cd3fd3f lines 4511, 4540.
+ * The panel-ID texture file names of the sections, unique (08 6.6; B-L14 fixed in 08 P2-6b): per section
+ * `${candidate}_PanelIDs.png` with candidate = sanitizeFilename(section.name || `Wall_${i + 1}`), the legacy name, made
+ * unique case-insensitively (archives are unpacked onto case-insensitive file systems on Windows and macOS) by appending
+ * `_2`, `_3`, ... to a base already used. Names without a collision are the legacy names, so existing ZIP texture
+ * entries keep their names. The single source of the ZIP texture entries and the ZIP JSON `texture_file` (and of the
+ * MTL `map_Kd` once 08 P2-6d lands). It never returns null: a caller that leaves a texture out replaces that entry with
+ * null (08 6.3).
+ * Ports: index.html@cd3fd3f lines 4511, 4540 (the legacy name of each section; legacy did not de-duplicate, so equal or
+ *   equally sanitised names overwrote each other in the ZIP).
  * Side effects: none.
- * @param {import('../domain/WallSection.js').WallSection} section
- * @param {number} i  section index
- * @returns {string} `${sanitizeFilename(section.name || `Wall_${i + 1}`)}_PanelIDs.png`
- * @throws {Error} unsupportedStrategy if Strategies.zipTextureNaming is not the Phase-1 value; the sanitizeFilename
- *   TypeError for a non-string truthy name
+ * @param {import('../domain/WallSection.js').WallSection[]} sections
+ * @returns {string[]} one unique file name per section, in section order
+ * @throws {TypeError} name.replace is not a function (sanitizeFilename) for a non-string truthy name
  */
-export function zipTextureFileName(section, i) {
-  switch (Strategies.zipTextureNaming) {
-    case 'sanitized-name':
-      // LEGACY(B-L14): no de-duplication; duplicate names, or names that sanitise to the same string, collide and
-      // overwrite each other in the ZIP.
-      return `${sanitizeFilename(section.name || `Wall_${i + 1}`)}_PanelIDs.png`;
-    default:
-      throw unsupportedStrategy('zipTextureNaming', Strategies.zipTextureNaming);
-  }
+export function textureFileNames(sections) {
+  const used = new Set();
+  const names = [];
+  sections.forEach((section, i) => {
+    const base = sanitizeFilename(section.name || `Wall_${i + 1}`);
+    let candidate = base;
+    for (let k = 2; used.has(candidate.toLowerCase()); k++) candidate = `${base}_${k}`;
+    used.add(candidate.toLowerCase());
+    names.push(`${candidate}_PanelIDs.png`);
+  });
+  return names;
 }
 
 /**
@@ -108,7 +115,7 @@ export function zipTextureFileName(section, i) {
 export function mtlTextureFile(i) {
   switch (Strategies.mtlTextureNaming) {
     case 'index':
-      // LEGACY(B-M2): index based, so it does not match zipTextureFileName for named sections.
+      // LEGACY(B-M2): index based, so it does not match textureFileNames for named sections.
       return `textures/Wall_${i + 1}_PanelIDs.png`;
     default:
       throw unsupportedStrategy('mtlTextureNaming', Strategies.mtlTextureNaming);

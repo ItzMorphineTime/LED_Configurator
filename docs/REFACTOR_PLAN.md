@@ -125,7 +125,7 @@ The authoritative plan is `docs/improvements/08-bugfix-roadmap.md` (batch cards 
 6. **P2-3** **B-M4, B-L8, B-L16, B-L21**: escaped names and validated imports. **P2-3a landed** (manifest `P2-3a`: B-M4). **P2-3b landed** (manifest `P2-3b`: B-L8). **P2-3c landed** (manifest `P2-3c`: B-L16). **P2-3d landed** (manifest `P2-3d`: B-L21); P2-3 is complete. Review follow-up **P2-3b2** (manifest `P2-3b2`, invariance: `Wall.allocateId`, so Add Section never reuses a live id after an import at the top of the id range).
 7. **P2-4** **B-H4, B-M8**: a clean preview-off (no stuck pilot mode, no stale safe-distance floor). **P2-4a landed** (manifest `P2-4a`: B-H4). **P2-4b landed** (manifest `P2-4b`: B-M8); P2-4 is complete.
 8. **P2-5b** **B-L29, B-M15**: the mitred, clamped safe-distance band. **Landed** (manifest `P2-5b`).
-9. **P2-6** **B-M3, B-L14, B-L7, B-M2**: consistent, lossless bundles (ZIP JSON offsets, texture names, MTL delivery). **P2-6a landed** (manifest `P2-6a`: B-M3).
+9. **P2-6** **B-M3, B-L14, B-L7, B-M2**: consistent, lossless bundles (ZIP JSON offsets, texture names, MTL delivery). **P2-6a landed** (manifest `P2-6a`: B-M3). **P2-6b landed** (manifest `P2-6b`: B-L14).
 10. **P2-12d** **B-M16, B-L19**: panel-mode textures (P2-12a is not needed: B-H5 and B-L12 landed in Phase 1C, H1 and H2).
 11. **P2-7** **B-M5, B-M6, B-M7, B-L6, B-L18**: UVs match textures (prerequisite for Feature 4).
 

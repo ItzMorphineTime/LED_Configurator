@@ -10,21 +10,8 @@
  * Layer: io (may import domain, geometry, legacy; THREE-free and DOM-free; the palette is injected).
  */
 
-import { zipTextureFileName } from '../geometry/PanelNaming.js';
 import { detectVersion, migrateV1toV2 } from './ProjectMigrations.js';
 import { validateProject } from './ProjectValidator.js';
-
-/**
- * The 'zip' texture_file value: the path, or null when the ZIP left that texture out (08 P2-1c, B-L4). The path is
- * computed first in both cases, so a numeric imported name keeps throwing `name.replace is not a function`.
- * @param {string} path
- * @param {boolean[]|null} skipped
- * @param {number} i
- * @returns {string|null}
- */
-function unlessSkipped(path, skipped, i) {
-  return skipped && skipped[i] ? null : path;
-}
 
 /** Writes and reads the project JSON (schema v1). */
 export class ProjectSerializer {
@@ -46,19 +33,20 @@ export class ProjectSerializer {
    * One explicit object literal, so the key order is exactly the legacy one:
    *   'file' (Export JSON, 4943-4963): curvature carries `angle_offset_degrees: s.angleOffset || 0`;
    *   'zip'  (Export All ZIP, 4499-4519): since 08 P2-6a (B-M3 fixed) the 'file' document plus
-   *          `texture_file: textures/${zipTextureFileName(s, i)}` as the last key of each section, or null for a section
-   *          whose `skipped[i]` is true (its texture is not in the ZIP, 08 P2-1c; the name is still computed, so a
-   *          numeric name keeps throwing). Legacy's own copy dropped angle_offset_degrees.
+   *          `texture_file: 'textures/' + textureNames[i]` as the last key of each section, or null where textureNames[i] is
+   *          null (its texture is not in the ZIP, 08 P2-1c). The names are PanelNaming.textureFileNames (08 P2-6b, B-L14
+   *          fixed: unique), computed once by the caller for the ZIP entries, this document and the MTL. Legacy's own
+   *          copy dropped angle_offset_degrees.
    * Field values are copied raw (imported strings and NaN stay as they are; JSON.stringify writes NaN as null).
    * Ports: index.html@cd3fd3f lines 4943-4963 ('file') and 4499-4519 ('zip').
    * Side effects: none.
    * @param {import('../domain/Project.js').Project} project  reads project.wall.sections and project.meshMode
-   * @param {{variant?: 'file'|'zip', skipped?: boolean[]|null}} [options]  skipped: 'zip' only (08 P2-1c)
+   * @param {{variant?: 'file'|'zip', textureNames?: (string|null)[]|null}} [options]  textureNames: required by 'zip'
+   *   (one entry per section: a file name of the ZIP's textures folder, or null for a texture left out)
    * @returns {object} the plain JSON document
-   * @throws {TypeError} 'zip' variant with a non-string truthy section name: `name.replace is not a function`
-   *   (sanitizeFilename, as legacy); RangeError for an unknown variant
+   * @throws {TypeError} 'zip' variant without one textureNames entry per section; RangeError for an unknown variant
    */
-  write(project, { variant = 'file', skipped = null } = {}) {
+  write(project, { variant = 'file', textureNames = null } = {}) {
     // LEGACY(B-L31): v1 saves only sections, mesh_mode and totals (no camera, props, panel-ID styling, logos or
     // display toggles), although the legacy README promised the full project state (README.md now lists what v1 saves).
     const wallSections = project.wall.sections;
@@ -67,7 +55,10 @@ export class ProjectSerializer {
       case 'file':
         return ProjectSerializer.#fileDocument(wallSections, meshMode);
       case 'zip':
-        return ProjectSerializer.#zipDocument(wallSections, meshMode, skipped);
+        if (!Array.isArray(textureNames) || textureNames.length !== wallSections.length) {
+          throw new TypeError("ProjectSerializer.write: the 'zip' variant needs one textureNames entry per section");
+        }
+        return ProjectSerializer.#zipDocument(wallSections, meshMode, textureNames);
       default:
         throw new RangeError(`Unknown ProjectSerializer variant ${JSON.stringify(variant)}`);
     }
@@ -107,17 +98,17 @@ export class ProjectSerializer {
   /**
    * The ZIP's JSON document (08 P2-6a, B-M3 fixed): the 'file' document of #fileDocument (one literal, so the two
    * copies can no longer drift: legacy 4499-4519 built its own copy without angle_offset_degrees, and re-importing it
-   * reset every section offset) plus `texture_file` as the last key of each section: `textures/${zipTextureFileName(s, i)}`,
-   * or null where skipped[i] (08 P2-1c; the name is computed first, so a numeric name keeps throwing).
+   * reset every section offset) plus `texture_file` as the last key of each section: `textures/${textureNames[i]}`, or
+   * null where textureNames[i] is null (a texture the ZIP left out, 08 P2-1c).
    * @param {import('../domain/WallSection.js').WallSection[]} wallSections
    * @param {*} meshMode
-   * @param {boolean[]|null} skipped  texture_file is null where skipped[i] (08 P2-1c)
+   * @param {(string|null)[]} textureNames  PanelNaming.textureFileNames, with null for a texture left out
    * @returns {object}
    */
-  static #zipDocument(wallSections, meshMode, skipped) {
+  static #zipDocument(wallSections, meshMode, textureNames) {
     const jsonData = ProjectSerializer.#fileDocument(wallSections, meshMode);
     jsonData.sections.forEach((section, i) => {
-      section.texture_file = unlessSkipped(`textures/${zipTextureFileName(wallSections[i], i)}`, skipped, i);
+      section.texture_file = textureNames[i] === null ? null : `textures/${textureNames[i]}`;
     });
     return jsonData;
   }

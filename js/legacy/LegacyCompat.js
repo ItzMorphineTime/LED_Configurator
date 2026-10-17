@@ -53,7 +53,6 @@ export const Strategies = deepFreeze({
                                                    // and the new leaf gltf.panelNormal (08 P2-2d)
   exportCombinedColor: 'first-section',            // B-L6
   mtlTextureNaming: 'index',                       // B-M2
-  zipTextureNaming: 'sanitized-name',              // B-L14 (no de-duplication)
   mtlDownloadDelayMs: 100,                         // B-L7
   framingBounds: 'flat',                           // B-L2, B-M10
   curveBeforeFirstPanel: true,                     // B-L1
@@ -183,7 +182,7 @@ const QUIRKS = deepFreeze({
   'B-L13': ['Mesh-mode handler fires twice (C-4)',
     '"mode unchanged -> no-op" guard, never radio `change`'],
   'B-L14': ['Colliding ZIP texture names (U-3)',
-    'de-duplicate'],
+    'Landed in 08 P2-6b (`PanelNaming.textureFileNames`: the legacy names made unique case-insensitively with `_2`, `_3` suffixes, the one list of the ZIP texture entries and the JSON `texture_file`; `zipTextureFileName` deleted; `Strategies.zipTextureNaming` retired; no tag site)'],
   'B-L15': ['Fractional integer fields (D-8); declared vertex advance',
     'Landed in 08 P2-8a (`WallSection.LIMITS`; the card rules round columns, rows and LEDs and cap panel height, LEDs and curve; `step="1"` and the `max` attributes on the card inputs; no tag site)'],
   'B-L16': ['4K ⚠ via `/Wall \\d+/` (D-10)',
@@ -250,7 +249,6 @@ const TAG_SITES = deepFreeze([
   ['js/geometry/WallLayout.js#framingBounds', ['B-L2', 'B-M10']],
   ['js/geometry/WallMeshBuilder.js#combinedGrid', ['B-M5']],
   ['js/geometry/TextureAtlas.js#panelPxPerLed', ['B-M16']],
-  ['js/geometry/PanelNaming.js#zipTextureFileName', ['B-L14']],
   ['js/geometry/PanelNaming.js#mtlTextureFile', ['B-M2']],
   ['js/io/ProjectSerializer.js#write', ['B-L31']],
   ['js/io/ObjExporter.js#write', ['B-M6', 'B-L6']],
@@ -279,7 +277,6 @@ const TAG_SITES = deepFreeze([
   ['js/app/WallController.js#setMeshMode', ['B-L13']],
   ['js/app/CameraController.js#CameraHub.refresh', ['B-L30']],
   ['js/app/ProjectIO.js#exportOBJ', ['B-L7']],
-  ['js/app/ProjectIO.js#exportZIP', ['B-L14']],
   ['js/ui/SectionLogosPanel.js#onUpload', ['B-L35']],
   ['js/ui/WallDisplayPanel.js#bind', ['B-L13']],
   ['index.html', ['B-L36']],                   // markup, untagged; documentation-only

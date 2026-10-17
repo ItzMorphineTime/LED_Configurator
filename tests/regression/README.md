@@ -830,7 +830,9 @@ in parentheses changes them:
 - `p2_xss_names`: `xss_probe` and (after the rename) `xss_probe2` are `true`, the third card's colour
   swatch gets the injected outline, and the second card's name input shows `Say ` (B-M4, B-L8, B-L16) (08 P2-3a:
   both probes are `false`, the cards and the logo list show the names as text and the input keeps `Say "hi"`; the
-  injected outline stays until the colour rule of 08 P2-3b).
+  injected outline stays until the colour rule of 08 P2-3b). Its ZIP holds four textures for six sections: `A B` and
+  `A_B`, and the two `Dup`, share a name and overwrite each other (B-L14) (08 P2-6b: six unique names, `A_B_2` and
+  `Dup_2` for the later ones, in the texture folder and the JSON `texture_file`).
 - `box_corner`: the JSON inside the ZIP has no `angle_offset_degrees`, so its re-import
   (`zipjson_roundtrip__export-json`) lays the four sections out in a line (B-M3) (08 P2-6a: the ZIP JSON is the
   Export JSON document plus `texture_file`, and the round trip equals `final__export-json`).

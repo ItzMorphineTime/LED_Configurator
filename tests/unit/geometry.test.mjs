@@ -19,7 +19,7 @@ import { computeWallLayout, layoutProject, framingBounds, SectionLayout, WallLay
 import { quadIndices, WallMeshBuilder, maxIndexOf, indexWidth } from '../../js/geometry/WallMeshBuilder.js';
 import { computeAtlas, sectionPxPerLed, panelPxPerLed, canvasFits, CANVAS_HARD_LIMITS } from '../../js/geometry/TextureAtlas.js';
 import {
-  columnLabel, panelLabel, exportSectionName, exportPanelName, sanitizeFilename, zipTextureFileName, mtlTextureFile,
+  columnLabel, panelLabel, exportSectionName, exportPanelName, sanitizeFilename, textureFileNames, mtlTextureFile,
 } from '../../js/geometry/PanelNaming.js';
 import * as L from './oracle/legacy-geometry.mjs';
 import { CONFIGS } from '../regression/configs.mjs';
@@ -573,18 +573,45 @@ describe('PanelNaming', () => {
     });
   });
 
-  test('zipTextureFileName + start columns == exportZIP texture_file (4511) and texture loop (4534-4543)', (t) => {
+  test('textureFileNames + start columns: the legacy ZIP names (4511, 4534-4543) where those were unique, always unique (B-L14 fixed in 08 P2-6b)', (t) => {
+    let collided = 0;
     overAllWalls(t, ({ sections }, mm, label) => {
       const legacy = run(() => L.legacyZipTextures(sections));
-      const mine = run(() => {
-        const { entries } = computeAtlas(sections);
-        return {
-          jsonTextureFiles: sections.map((s, i) => ({ texture_file: `textures/${zipTextureFileName(s, i)}` })),
-          files: sections.map((s, i) => ({ filename: zipTextureFileName(s, i), startCol: entries[i].startCol })),
-        };
-      });
-      compareOutcome(mine, legacy, `${label}.zip names`, mm);
+      const names = run(() => textureFileNames(sections));
+      if (!legacy.ok || !names.ok) {
+        compareOutcome(names, legacy, `${label}.zip names (outcome)`, mm);
+        return;
+      }
+      const legacyNames = legacy.value.files.map((f) => f.filename);
+      const lower = names.value.map((n) => n.toLowerCase());
+      compareDeep(new Set(lower).size, sections.length, `${label}.unique (case-insensitive)`, mm);
+      if (new Set(legacyNames.map((n) => n.toLowerCase())).size === sections.length) {
+        compareDeep(names.value, legacyNames, `${label}.names`, mm);
+      } else {
+        collided++;
+        // A repeated name keeps the legacy base and gains a _2, _3, ... suffix.
+        names.value.forEach((n, i) => {
+          const base = legacyNames[i].slice(0, -'_PanelIDs.png'.length);
+          const suffixed = n.startsWith(`${base}_`) && /^[0-9]+_PanelIDs[.]png$/.test(n.slice(base.length + 1));
+          compareDeep(n === legacyNames[i] || suffixed, true, `${label}[${i}].suffixed legacy base`, mm);
+        });
+      }
+      const { entries } = computeAtlas(sections);
+      compareDeep(entries.map((e) => e.startCol), legacy.value.files.map((f) => f.startCol), `${label}.startCol`, mm);
     });
+    t.diagnostic(`${collided} walls with colliding legacy names`);
+  });
+
+  test('textureFileNames (08 8.4): no collisions, case-insensitive, stable for unique names', () => {
+    const named = (...names) => names.map((name) => section({ name }));
+    assert.deepEqual(textureFileNames(named('A B', 'A_B', 'Dup', 'Dup', 'dup')),
+      ['A_B_PanelIDs.png', 'A_B_2_PanelIDs.png', 'Dup_PanelIDs.png', 'Dup_2_PanelIDs.png', 'dup_3_PanelIDs.png']);
+    assert.deepEqual(textureFileNames(named('Back', 'Side Right', 'Front', 'Return')),
+      ['Back_PanelIDs.png', 'Side_Right_PanelIDs.png', 'Front_PanelIDs.png', 'Return_PanelIDs.png']);
+    assert.deepEqual(textureFileNames(named('A_B_2', 'A B', 'A_B')), ['A_B_2_PanelIDs.png', 'A_B_PanelIDs.png', 'A_B_3_PanelIDs.png'],
+      'a suffix never reuses a name already taken');
+    assert.deepEqual(textureFileNames(named('', '', 'Wall_1')), ['Wall_1_PanelIDs.png', 'Wall_2_PanelIDs.png', 'Wall_1_2_PanelIDs.png']);
+    assert.deepEqual(textureFileNames([]), []);
   });
 
   test('exportSectionName + mtlTextureFile == the MTL section block (4607-4613)', (t) => {
@@ -602,16 +629,16 @@ describe('PanelNaming', () => {
   test('sanitizeFilename keeps the legacy callee text: a numeric name throws "name.replace is not a function"', () => {
     assert.equal(sanitizeFilename('A B/c-d_e.f'), 'A_B_c-d_e_f');
     assert.throws(() => sanitizeFilename(42), { name: 'TypeError', message: 'name.replace is not a function' });
-    assert.throws(() => zipTextureFileName(section({ name: 7 }), 0), { name: 'TypeError', message: 'name.replace is not a function' });
-    assert.equal(zipTextureFileName(section({ name: 0 }), 2), 'Wall_3_PanelIDs.png');
-    assert.equal(zipTextureFileName(section({ name: '' }), 0), 'Wall_1_PanelIDs.png');
+    assert.throws(() => textureFileNames([section({ name: 7 })]), { name: 'TypeError', message: 'name.replace is not a function' });
+    assert.equal(textureFileNames([section({ name: 'a' }), section({ name: 'b' }), section({ name: 0 })])[2], 'Wall_3_PanelIDs.png');
+    assert.equal(textureFileNames([section({ name: '' })])[0], 'Wall_1_PanelIDs.png');
   });
 
   test('names: exportSectionName, exportPanelName, mtlTextureFile (B-M2: index based)', () => {
     assert.equal(exportSectionName(0), 'Wall_1');
     assert.equal(exportPanelName(1, 2, 3), 'Wall_2_Panel_R3_C4');
     assert.equal(mtlTextureFile(4), 'textures/Wall_5_PanelIDs.png');
-    assert.notEqual(mtlTextureFile(0), `textures/${zipTextureFileName(section({ name: 'Main' }), 0)}`);
+    assert.notEqual(mtlTextureFile(0), `textures/${textureFileNames([section({ name: 'Main' })])[0]}`);
   });
 });
 

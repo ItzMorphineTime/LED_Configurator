@@ -30,7 +30,7 @@ import { WallMeshBuilder, maxIndexOf } from '../../js/geometry/WallMeshBuilder.j
 import { checkGltfDocument } from '../../tools/check-gltf.mjs';
 import { checkObjText, checkGltfOrientation } from '../../tools/check-orientation.mjs';
 import { computeAtlas } from '../../js/geometry/TextureAtlas.js';
-import { zipTextureFileName } from '../../js/geometry/PanelNaming.js';
+import { textureFileNames } from '../../js/geometry/PanelNaming.js';
 import { ProjectSerializer } from '../../js/io/ProjectSerializer.js';
 import { sectionsFromProject } from '../../js/io/ProjectSchema.js';
 import { validateProject } from '../../js/io/ProjectValidator.js';
@@ -199,12 +199,13 @@ function compareAll(project, label, tally) {
     }
   }
   r('json:file', run(() => serializer.write(project, { variant: 'file' })), run(() => L.exportJSONData(sections, meshMode)), json2);
-  // B-M3 fixed in 08 P2-6a: the 'zip' document is the legacy 'file' document plus the legacy texture_file of each section
-  // (an explicit expected value built from the two verbatim legacy builders; legacy's own ZIP copy dropped the offsets).
-  r('json:zip', run(() => serializer.write(project, { variant: 'zip' })), run(() => {
-    const zip = L.exportZIPJSONData(sections, meshMode);
+  // B-M3 fixed in 08 P2-6a: the 'zip' document is the legacy 'file' document plus a texture_file per section; B-L14 fixed
+  // in 08 P2-6b: that file name is the unique textureFileNames entry (an explicit expected value; legacy's own ZIP copy
+  // dropped the offsets and repeated colliding names). A numeric name throws the same TypeError in both.
+  r('json:zip', run(() => serializer.write(project, { variant: 'zip', textureNames: textureFileNames(sections) })), run(() => {
+    const names = textureFileNames(sections);
     const file = L.exportJSONData(sections, meshMode);
-    file.sections.forEach((s, i) => { s.texture_file = zip.sections[i].texture_file; });
+    file.sections.forEach((s, i) => { s.texture_file = `textures/${names[i]}`; });
     return file;
   }), json2);
 }
@@ -412,7 +413,10 @@ describe('oracle equality (byte for byte)', () => {
     // writes: fidelity, 07 4.7), and the 200-section cap wall.
     for (const config of Object.values(CONFIGS)) docs.push(JSON.parse(JSON.stringify(config)));
     for (const [, project] of integerProjects(0x1d, 200)) {
-      for (const variant of ['file', 'zip']) docs.push(JSON.parse(JSON.stringify(serializer.write(project, { variant }))));
+      for (const variant of ['file', 'zip']) {
+        const textureNames = variant === 'zip' ? textureFileNames(project.wall.sections) : null;
+        docs.push(JSON.parse(JSON.stringify(serializer.write(project, { variant, textureNames }))));
+      }
     }
     docs.push(JSON.parse(fs.readFileSync(path.join(REPO, 'tests', 'fixtures', 'normals-max-wall.json'), 'utf8')));
 
@@ -715,14 +719,14 @@ describe('golden files (byte-identical to the legacy downloads)', { skip: golden
       same(json2(serializer.write(project, { variant: 'file' })), golden('final', 'json', 'json'));
       const entries = `${golden('final', 'zip', 'zip')}.entries`;
       const layout = layoutProject(project);
-      same(json2(serializer.write(project, { variant: 'zip' })), `${entries}/${FILES.json}`);
+      same(json2(serializer.write(project, { variant: 'zip', textureNames: textureFileNames(sections) })), `${entries}/${FILES.json}`);
       const zipObj = OBJ.write({ sections, meshMode: 'combined', layout });
       same(zipObj.objContent, `${entries}/${FILES.obj}`);
       same(zipObj.mtlContent, `${entries}/${FILES.mtl}`);
       same(json2(GLTF.write({ sections, meshMode: 'combined', layout })), `${entries}/${FILES.gltf}`);
-      // The ZIP's texture names (B-L14 naming) are the files the archive holds.
+      // The ZIP's texture names (textureFileNames, unique since 08 P2-6b) are the files the archive holds.
       const textureDir = file(`${entries}/textures`);
-      const expectedNames = [...new Set(sections.map((s, i) => zipTextureFileName(s, i)))].sort();
+      const expectedNames = textureFileNames(sections).slice().sort();
       assert.deepEqual(fs.readdirSync(textureDir).sort(), expectedNames);
 
       // Round trip: re-import the golden Export JSON and export again.
@@ -754,14 +758,15 @@ describe('ProjectSerializer', () => {
     for (const [key, config] of Object.entries(CONFIGS)) {
       const project = projectFromConfig(config);
       const file = serializer.write(project, { variant: 'file' });
-      const zip = serializer.write(project, { variant: 'zip' });
+      const zip = serializer.write(project, { variant: 'zip', textureNames: textureFileNames(project.wall.sections) });
       assert.deepEqual(Object.keys(zip), Object.keys(file), key);
       assert.ok(zip.sections.every((s) => typeof s.texture_file === 'string' && Object.keys(s).at(-1) === 'texture_file'), key);
       const stripped = { ...zip, sections: zip.sections.map(({ texture_file: _t, ...rest }) => rest) };
       assert.equal(json2(stripped), json2(file), `${key}: the same document apart from texture_file`);
     }
     // box_corner: the 0/90/90/-90 offsets survive, so the ZIP JSON re-imports to the same wall (08 criterion 24).
-    const box = serializer.write(projectFromConfig(CONFIGS.box_corner), { variant: 'zip' });
+    const boxProject = projectFromConfig(CONFIGS.box_corner);
+    const box = serializer.write(boxProject, { variant: 'zip', textureNames: textureFileNames(boxProject.wall.sections) });
     assert.deepEqual(box.sections.map((s) => s.curvature.angle_offset_degrees), [0, 90, 90, -90]);
   });
 
@@ -854,12 +859,14 @@ describe('ProjectSerializer', () => {
     assert.deepEqual(Object.keys(file.sections[0]), ['name', 'id', 'panel', 'led_resolution', 'curvature', 'color']);
     assert.deepEqual(file.sections[0].curvature, { type: 'convex', angle_degrees: -3, angle_offset_degrees: 15 });
     assert.deepEqual(file.totals, { sections: 1, total_panels: 6, total_pixels: 12288 });
-    const zip = serializer.write(project, { variant: 'zip' });
+    const zip = serializer.write(project, { variant: 'zip', textureNames: textureFileNames(project.wall.sections) });
     assert.deepEqual(Object.keys(zip.sections[0]), ['name', 'id', 'panel', 'led_resolution', 'curvature', 'color', 'texture_file']);
     assert.deepEqual(zip.sections[0].curvature, { type: 'convex', angle_degrees: -3, angle_offset_degrees: 15 });
     assert.equal(zip.sections[0].texture_file, 'textures/A_B_PanelIDs.png');
     project.wall.sections[0].name = 42;
-    assert.throws(() => serializer.write(project, { variant: 'zip' }), { name: 'TypeError', message: 'name.replace is not a function' });
+    assert.throws(() => textureFileNames(project.wall.sections), { name: 'TypeError', message: 'name.replace is not a function' });
+    assert.throws(() => serializer.write(project, { variant: 'zip' }), { name: 'TypeError', message: "ProjectSerializer.write: the 'zip' variant needs one textureNames entry per section" });
+    assert.throws(() => serializer.write(project, { variant: 'zip', textureNames: [] }), TypeError);
     assert.doesNotThrow(() => serializer.write(project, { variant: 'file' }));
     assert.throws(() => serializer.write(project, { variant: 'csv' }), RangeError);
   });
@@ -960,16 +967,14 @@ describe("ProjectSerializer and ObjExporter: textures the ZIP left out (B-L4, 08
   ], 'section');
   const args = (meshMode, skipped) => ({ sections: project.wall.sections, meshMode, layout: layoutProject(project), skipped });
 
-  test("'zip' JSON: texture_file null where skipped; the names are still computed (a numeric name still throws)", () => {
-    const plain = serializer.write(project, { variant: 'zip' });
-    const doc = serializer.write(project, { variant: 'zip', skipped: [false, true] });
+  test("'zip' JSON: texture_file null where the textureNames entry is null (08 P2-6b: the names come from the caller)", () => {
+    const names = textureFileNames(project.wall.sections);
+    const plain = serializer.write(project, { variant: 'zip', textureNames: names });
+    const doc = serializer.write(project, { variant: 'zip', textureNames: [names[0], null] });
     assert.deepEqual(doc.sections.map((s) => s.texture_file), ['textures/A_PanelIDs.png', null]);
     assert.equal(json2({ ...doc, sections: doc.sections.map((s) => ({ ...s, texture_file: 'x' })) }),
       json2({ ...plain, sections: plain.sections.map((s) => ({ ...s, texture_file: 'x' })) }), 'nothing else changes');
-    assert.equal(json2(serializer.write(project, { variant: 'zip', skipped: [false, false] })), json2(plain));
-    assert.equal(json2(serializer.write(project, { variant: 'file', skipped: [true, true] })), json2(serializer.write(project)));
-    const named = projectOf([new WallSection({ ...project.wall.sections[0], name: 7 })], 'section');
-    assert.throws(() => serializer.write(named, { variant: 'zip', skipped: [true] }), { message: 'name.replace is not a function' });
+    assert.equal(json2(serializer.write(project, { variant: 'file', textureNames: [null, null] })), json2(serializer.write(project)));
   });
 
   test('section-mode MTL: no map_Kd for a skipped section, the rest byte-identical; other modes ignore skipped', () => {
@@ -1228,7 +1233,7 @@ describe('ProjectIO use cases', () => {
     const atlas = computeAtlas(sections);
     const expected = [
       ['new JSZip'],
-      ['zip.file', FILES.json, undefined, json2(serializer.write(project, { variant: 'zip' }))],
+      ['zip.file', FILES.json, undefined, json2(serializer.write(project, { variant: 'zip', textureNames: textureFileNames(sections) }))],
       ['layout'],
       ['zip.file', FILES.obj, undefined, objContent],
       ['zip.file', FILES.mtl, undefined, mtlContent],
@@ -1237,7 +1242,7 @@ describe('ProjectIO use cases', () => {
       ...sections.flatMap((s, i) => [
         ['sectionCanvas', i, null, atlas.entries[i].startCol],
         ['toDataURL', 'image/png'],
-        ['folder.file', `textures/${zipTextureFileName(s, i)}`, { base64: true }, 'QUJD'],
+        ['folder.file', `textures/${textureFileNames(sections)[i]}`, { base64: true }, 'QUJD'],
       ]),
       ['generateAsync', { type: 'blob' }],
       ['saveBlob', FILES.zip, 'ZIP-BLOB'],
@@ -1272,7 +1277,7 @@ describe('ProjectIO use cases', () => {
     await fakeIO(project, log, { sectionSize: (s) => (s === tooBig ? { width: 70000, height: 128 } : { width: 640, height: 384 }) }).exportZIP();
     const skipped = sections.map((s) => s === tooBig);
     const layout = layoutProject(project);
-    const json = json2(serializer.write(project, { variant: 'zip', skipped }));
+    const json = json2(serializer.write(project, { variant: 'zip', textureNames: textureFileNames(sections).map((n, i) => (skipped[i] ? null : n)) }));
     assert.equal(JSON.parse(json).sections[1].texture_file, null);
     assert.equal(JSON.parse(json).sections[0].texture_file, 'textures/Left_PanelIDs.png');
     const { objContent, mtlContent } = OBJ.write({ sections, meshMode: 'section', layout, skipped });
@@ -1290,7 +1295,7 @@ describe('ProjectIO use cases', () => {
       ...[0, 2].flatMap((i) => [
         ['sectionCanvas', i, null, atlas.entries[i].startCol],
         ['toDataURL', 'image/png'],
-        ['folder.file', `textures/${zipTextureFileName(sections[i], i)}`, { base64: true }, 'QUJD'],
+        ['folder.file', `textures/${textureFileNames(sections)[i]}`, { base64: true }, 'QUJD'],
       ]),
       ['generateAsync', { type: 'blob' }],
       ['saveBlob', FILES.zip, 'ZIP-BLOB'],
@@ -1310,7 +1315,7 @@ describe('ProjectIO use cases', () => {
     assert.deepEqual(files, [FILES.json, FILES.obj, FILES.mtl, FILES.gltf,
       'textures/Left_PanelIDs.png', 'textures/Center_PanelIDs.png', FILES.json, FILES.mtl]);
     const rewrites = log.filter((e) => e[0] === 'zip.file').slice(-2);
-    assert.equal(rewrites[0][3], json2(serializer.write(project, { variant: 'zip', skipped })));
+    assert.equal(rewrites[0][3], json2(serializer.write(project, { variant: 'zip', textureNames: textureFileNames(sections).map((n, i) => (skipped[i] ? null : n)) })));
     assert.equal(rewrites[1][3], OBJ.write({ sections, meshMode: 'section', layout, skipped }).mtlContent);
     assert.deepEqual(log.slice(-2), [['saveBlob', FILES.zip, 'ZIP-BLOB'], ['alert', mExp4(['textures/Right_PanelIDs.png'])]]);
     // No left-out texture: no alert at all.
