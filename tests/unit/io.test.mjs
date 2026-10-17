@@ -3,8 +3,10 @@
 // 1. Oracle equality: ObjExporter, GltfExporter and ProjectSerializer produce BYTE-identical text / JSON to the
 //    verbatim legacy oracle (tests/unit/oracle/legacy-io.mjs, copied from index.html@cd3fd3f) over hand-picked walls,
 //    the harness configurations and seeded fuzzed walls (fractional and string fields, NaN / duplicate / string ids,
-//    numeric names, odd colours, unknown mesh modes, empty walls). Where legacy throws, both throw the same error
-//    type and message. ProjectSerializer.read equals the legacy import mapping over fuzzed documents. (NaN byte
+//    numeric names, odd colours, empty walls). Where legacy throws, both throw the same error type and message. An
+//    unknown mesh mode is an explicit expected-value case since 08 P2-3b (the exporters throw 'Unknown mesh mode';
+//    legacy wrote panels). ProjectSerializer.read equals the legacy import mapping on every fuzzed document whose
+//    mapped wall is valid, with no correction, and corrects or refuses every other one (08 P2-3b). (NaN byte
 //    encodings in the glTF Float32 buffer are canonicalised first: they are implementation-defined, see gltfText.)
 // 2. Golden files: the projects of the 'default' scenario and of every config in tests/regression/configs.mjs are
 //    rebuilt in Node and every export is compared byte for byte with the golden-master downloads in GOLDEN_DIR
@@ -30,6 +32,8 @@ import { checkObjText, checkGltfOrientation } from '../../tools/check-orientatio
 import { computeAtlas } from '../../js/geometry/TextureAtlas.js';
 import { zipTextureFileName } from '../../js/geometry/PanelNaming.js';
 import { ProjectSerializer } from '../../js/io/ProjectSerializer.js';
+import { sectionsFromProject } from '../../js/io/ProjectSchema.js';
+import { validateProject } from '../../js/io/ProjectValidator.js';
 import { ObjExporter } from '../../js/io/ObjExporter.js';
 import { GltfExporter, chunkedBase64 } from '../../js/io/GltfExporter.js';
 import { ProjectIO, Downloader } from '../../js/app/ProjectIO.js';
@@ -179,10 +183,21 @@ function compareAll(project, label, tally) {
     const outcome = assertSameOutcome(actual, expected, `${label} ${key}`, toText);
     tally[outcome]++;
   };
-  r('obj', run(() => LEGACY_OBJ.write({ sections, meshMode, layout: layoutProject(project) })),
-    run(() => L.generateOBJContent(legacyGeometry(sections), 0.001, sections, meshMode, colorToRgb)), objText);
-  r('gltf', run(() => LEGACY_GLTF.write({ sections, meshMode, layout: layoutProject(project) })),
-    run(() => L.generateGLTFContent(legacyGeometry(sections), sections, meshMode, colorToRgb)), gltfText);
+  if (MODES.includes(meshMode)) {
+    r('obj', run(() => LEGACY_OBJ.write({ sections, meshMode, layout: layoutProject(project) })),
+      run(() => L.generateOBJContent(legacyGeometry(sections), 0.001, sections, meshMode, colorToRgb)), objText);
+    r('gltf', run(() => LEGACY_GLTF.write({ sections, meshMode, layout: layoutProject(project) })),
+      run(() => L.generateGLTFContent(legacyGeometry(sections), sections, meshMode, colorToRgb)), gltfText);
+  } else {
+    // B-L8 fixed in 08 P2-3b: the three-mode dispatch (legacy wrote any other mode as panels; the validator now maps an
+    // unknown imported mode to 'combined', so this throw is unreachable from the app). The 'combined' empty-wall
+    // TypeError cannot occur here, because the dispatch runs before any section is read.
+    for (const exporter of [LEGACY_OBJ, LEGACY_GLTF]) {
+      const out = run(() => exporter.write({ sections, meshMode, layout: layoutProject(project) }));
+      assert.ok(!out.ok && out.error.message === `Unknown mesh mode ${JSON.stringify(meshMode)}`, `${label}: ${out.ok ? 'returned' : describeError(out.error)}`);
+      tally.threw++;
+    }
+  }
   r('json:file', run(() => serializer.write(project, { variant: 'file' })), run(() => L.exportJSONData(sections, meshMode)), json2);
   r('json:zip', run(() => serializer.write(project, { variant: 'zip' })), run(() => L.exportZIPJSONData(sections, meshMode)), json2);
 }
@@ -248,13 +263,38 @@ function fuzzProjects(seed, count) {
   return projects;
 }
 
-/** The project the harness builds by importing CONFIGS[key] (JSON round trip, then the import mapping). */
+/**
+ * The project the harness builds by importing `config` (JSON round trip, then the validated read of 08 P2-3b and the
+ * wall-scope apply: the sections, and the mesh mode when the file names one).
+ */
 function projectFromConfig(config) {
-  const parsed = serializer.read(JSON.parse(JSON.stringify(config, null, 2)));
+  const read = serializer.read(JSON.parse(JSON.stringify(config, null, 2)));
+  assert.ok(read.ok, 'the import is accepted');
   const project = Project.createDefault();
-  project.wall.replaceAll(parsed.sections);
-  if (parsed.meshMode) project.meshMode = parsed.meshMode;
+  project.wall.replaceAll(sectionsFromProject(read.project));
+  if (read.project.mesh_mode) project.meshMode = read.project.mesh_mode;
   return project;
+}
+
+/**
+ * Is a wall of the legacy import mapping already valid (08 4.3, 07 4.3): 1..200 sections, unique integer ids in
+ * [0, 2^31 - 1], names that are strings of 1..32 UTF-16 units without controls, numbers of the right type inside
+ * WallSection.LIMITS (integers where required) and #rrggbb colours (any case)?
+ */
+function legacyWallIsValid(wall) {
+  if (wall.length < 1 || wall.length > 200) return false;
+  const ids = new Set();
+  for (const s of wall) {
+    if (!Number.isInteger(s.id) || s.id < 0 || s.id > 2147483647 || ids.has(s.id)) return false;
+    ids.add(s.id);
+    if (typeof s.name !== 'string' || s.name.length > 32 || /[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]/.test(s.name)) return false;
+    for (const [field, { min, max, int }] of Object.entries(WallSection.LIMITS)) {
+      const v = s[field];
+      if (typeof v !== 'number' || !Number.isFinite(v) || v < min || v > max || (int && !Number.isInteger(v))) return false;
+    }
+    if (typeof s.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(s.color)) return false;
+  }
+  return true;
 }
 
 const handPicked = () => [
@@ -330,7 +370,7 @@ describe('oracle equality (byte for byte)', () => {
     assert.ok(tally.threw > 0);
   });
 
-  test('ProjectSerializer.read equals the legacy import mapping (fields, order, Object.is)', (t) => {
+  test('ProjectSerializer.read equals the legacy import mapping on every valid mapped wall with no correction, and corrects or refuses every other document (08 P2-3b)', (t) => {
     const docs = [];
     // Round trips of exported documents (both variants) of fuzzed walls.
     for (const project of fuzzProjects(0xbeef, 150)) {
@@ -361,35 +401,53 @@ describe('oracle equality (byte for byte)', () => {
     docs.push(5, 'text', [], true, {}, { foo: 1 }, { sections: 'x' }, { sections: {} }, { sections: [] }, { sections: [null] },
       { sections: [{}], mesh_mode: 'panel' }, null);
 
-    let compared = 0;
+    // Every v1 document of the harness configurations, both exports of 200 seeded integer walls (files the app
+    // writes: fidelity, 07 4.7), and the 200-section cap wall.
+    for (const config of Object.values(CONFIGS)) docs.push(JSON.parse(JSON.stringify(config)));
+    for (const [, project] of integerProjects(0x1d, 200)) {
+      for (const variant of ['file', 'zip']) docs.push(JSON.parse(JSON.stringify(serializer.write(project, { variant }))));
+    }
+    docs.push(JSON.parse(fs.readFileSync(path.join(REPO, 'tests', 'fixtures', 'normals-max-wall.json'), 'utf8')));
+
+    let compared = 0, valid = 0, corrected = 0, refused = 0;
     for (const [k, data] of docs.entries()) {
-      const actual = run(() => serializer.read(data));
+      const actual = serializer.read(data);   // never throws
+      assert.equal(actual.ok, !actual.issues.some((i) => i.severity === 'error'), `doc #${k}: ok iff no error`);
+      if (actual.ok) {
+        assert.deepEqual(validateProject(actual.project, { palette: { sectionColors: Palette.legacySectionColors } }).issues, [],
+          `doc #${k}: the validated project validates again with no issue (idempotence, 07 4.7)`);
+      } else {
+        assert.equal(actual.project, null);
+      }
       // The legacy global `sectionColors` is the Phase-1 palette, which fills v1 colours since 06 T7 (4.3).
       const expected = run(() => L.importJSONMapping(data, Palette.legacySectionColors));
-      if (!expected.ok || !actual.ok) {
-        assert.equal(actual.ok, expected.ok, `doc #${k}`);
-        assert.equal(describeError(actual.error), describeError(expected.error), `doc #${k}`);
-        continue;
+      const wall = expected.ok && expected.value ? expected.value.wallSections : null;
+      if (wall && legacyWallIsValid(wall) && (!expected.value.meshMode || MODES.includes(expected.value.meshMode))) {
+        // A file legacy imported into a valid wall imports silently and identically (08 R4), except that a #RRGGBB
+        // colour is lower-cased (07 6.7 hex, no issue).
+        valid++;
+        assert.ok(actual.ok, `doc #${k}: a valid wall is accepted`);
+        assert.deepEqual(actual.issues.filter((i) => i.severity !== 'info'), [], `doc #${k}: no correction`);
+        assert.equal(actual.project.mesh_mode, expected.value.meshMode || null, `doc #${k} mesh mode`);
+        const sections = sectionsFromProject(actual.project);
+        sections.forEach((s, i) => {
+          const e = wall[i];
+          assert.ok(s instanceof WallSection);
+          for (const key of Object.keys(e)) {
+            compared++;
+            const want = key === 'color' ? e.color.toLowerCase() : e[key];
+            assert.ok(Object.is(s[key], want), `doc #${k} section ${i}.${key}: ${String(s[key])} vs ${String(want)}`);
+          }
+        });
+      } else if (actual.ok) {
+        corrected++;
+        assert.ok(actual.issues.some((i) => i.severity === 'warning'), `doc #${k}: an invalid legacy wall is corrected with at least one warning`);
+      } else {
+        refused++;
       }
-      if (expected.value === null) {
-        assert.equal(actual.value, null, `doc #${k}`);
-        continue;
-      }
-      assert.ok(Object.is(actual.value.meshMode, expected.value.meshMode), `doc #${k} meshMode`);
-      assert.deepEqual(Object.keys(actual.value), ['sections', 'meshMode']);
-      assert.equal(actual.value.sections.length, expected.value.wallSections.length, `doc #${k}`);
-      actual.value.sections.forEach((s, i) => {
-        const e = expected.value.wallSections[i];
-        assert.ok(s instanceof WallSection);
-        assert.deepEqual(Object.keys(s), Object.keys(e), `doc #${k} section ${i} key order`);
-        for (const key of Object.keys(e)) {
-          compared++;
-          assert.ok(Object.is(s[key], e[key]), `doc #${k} section ${i}.${key}: ${String(s[key])} vs ${String(e[key])}`);
-        }
-      });
     }
-    t.diagnostic(`${docs.length} documents, ${compared} fields compared with Object.is`);
-    assert.ok(compared > 2000);
+    t.diagnostic(`${docs.length} documents: ${valid} valid (${compared} fields compared with Object.is), ${corrected} corrected, ${refused} refused`);
+    assert.ok(valid >= 8 && corrected > 50 && refused > 5, 'every outcome is exercised');
   });
 
   test('writeSafeDistance equals the legacy text over a duck-typed group', () => {
@@ -662,10 +720,11 @@ describe('golden files (byte-identical to the legacy downloads)', { skip: golden
 
       // Round trip: re-import the golden Export JSON and export again.
       const reimport = (name) => {
-        const parsed = serializer.read(JSON.parse(fs.readFileSync(file(name), 'utf8')));
+        const read = serializer.read(JSON.parse(fs.readFileSync(file(name), 'utf8')));
+        assert.deepEqual(read.issues.filter((i) => i.severity !== 'info'), [], `${name}: the app's own file imports with no correction (fidelity)`);
         const p = Project.createDefault();
-        p.wall.replaceAll(parsed.sections);
-        if (parsed.meshMode) p.meshMode = parsed.meshMode;
+        p.wall.replaceAll(sectionsFromProject(read.project));
+        if (read.project.mesh_mode) p.meshMode = read.project.mesh_mode;
         return p;
       };
       same(json2(serializer.write(reimport(golden('final', 'json', 'json')), { variant: 'file' })),
@@ -684,18 +743,40 @@ describe('golden files (byte-identical to the legacy downloads)', { skip: golden
 // ---------------------------------------------------------------------------------------------------------------
 
 describe('ProjectSerializer', () => {
-  test('read(null) throws the TypeError the import alert shows; non-section documents give null', () => {
-    assert.throws(() => serializer.read(null), (e) => e instanceof TypeError && e.message === "Cannot read properties of null (reading 'sections')");
-    assert.throws(() => serializer.read(undefined), TypeError);
-    assert.equal(serializer.read({ foo: 1 }), null);
-    assert.equal(serializer.read({ sections: 'abc' }), null);
-    assert.equal(serializer.read({ sections: {} }), null);
-    assert.equal(serializer.read(42), null);
-    assert.deepEqual(serializer.read({ sections: [] }), { sections: [], meshMode: undefined });
+  test('read refuses what is not a v1 wall (08 3.3: M-IMP-4a, M-IMP-4b, M-IMP-1, M-IMP-2, M-IMP-3), atomically and without throwing', () => {
+    const refused = (data, code, message, path) => {
+      const r = serializer.read(data);
+      assert.equal(r.ok, false, JSON.stringify(data)?.slice(0, 60));
+      assert.equal(r.project, null);
+      assert.deepEqual(r.issues.filter((i) => i.severity === 'error'), [{ path, code, severity: 'error', message }],
+        'exactly one error (a v1 document refused by the validator also carries the migrated info)');
+      assert.ok(r.issues.every((i) => i.severity !== 'warning'), 'no correction is reported for a refused file');
+    };
+    const notProject = 'Import failed: this is not an LED wall project file.';
+    for (const data of [null, undefined, 42, 'text', true, [], [{ sections: [] }]]) refused(data, 'unsupported-format', notProject, '');
+    refused({ format: 'x', sections: [{}] }, 'unsupported-format', notProject, 'format');
+    refused({ format: null, sections: [{}] }, 'unsupported-format', notProject, 'format');
+    const newer = (v) => `Import failed: this project was saved by a newer version of the app (version ${v}).`;
+    for (const v of ['2.0', '2.1', '3.0', '10.4']) refused({ version: v, sections: [{}] }, 'newer-version', newer(v), 'version');
+    const noList = 'Import failed: the file does not contain a "sections" list.';
+    for (const data of [{ foo: 1 }, { sections: 'abc' }, { sections: {} }, { sections: null }, { version: '1.0' }]) {
+      refused(data, 'no-sections', noList, 'sections');
+    }
+    refused({ sections: [] }, 'no-sections', 'Import failed: the file contains no wall sections.', 'sections');
+    refused({ sections: Array.from({ length: 201 }, () => ({})) }, 'limit-exceeded', 'Import failed: 201 sections is more than the maximum of 200.', 'sections');
+    // version "1.0", absent, a number, "1" or "x" with a sections array: v1 (legacy ignored the version)
+    for (const version of ['1.0', undefined, 1, 2, '1', 'x', '1.9']) {
+      const r = serializer.read({ version, sections: [{}] });
+      assert.ok(r.ok, String(version));
+      assert.equal(r.sourceVersion, 1);
+      assert.equal(r.scope, 'wall');
+      assert.deepEqual(r.issues, [{ path: '', code: 'migrated', severity: 'info', message: 'Converted from a version 1 project file.' }]);
+    }
+    assert.ok(serializer.read({ format: 'morph-led-project', sections: [{}] }).ok, 'the v2 format name is accepted on a v1 document');
   });
 
-  test('read keeps string fields raw, falls back to the index id, defaults with ||, and returns the raw mesh_mode', () => {
-    const parsed = serializer.read({
+  test('read coerces numeric strings, applies the legacy || defaults silently, renumbers duplicate and invalid ids and maps an unknown mesh mode to combined (08 4.3)', () => {
+    const r = serializer.read({
       version: '7',
       sections: [
         { name: 'S', panel: { columns: '10', rows: '0', width_mm: '500' }, led_resolution: { x: '64', y: 0 }, curvature: { angle_degrees: '5' } },
@@ -704,26 +785,43 @@ describe('ProjectSerializer', () => {
       ],
       mesh_mode: 'weird',
     });
-    assert.equal(parsed.meshMode, 'weird');
-    const [a, b, c] = parsed.sections;
+    assert.ok(r.ok);
+    assert.equal(r.project.mesh_mode, 'combined');
+    const [a, b, c] = sectionsFromProject(r.project);
     assert.ok(a instanceof WallSection && b instanceof WallSection);
-    assert.deepEqual({ ...a }, { id: 0, name: 'S', panelCols: '10', panelRows: '0', panelWidth: '500', panelHeight: 500,
-      ledX: '64', ledY: 32, curveIntensity: '5', angleOffset: 0, color: Palette.legacySectionColors[0] });
-    assert.deepEqual({ ...b }, { id: 'abc', name: 'Wall 2', panelCols: 5, panelRows: 3, panelWidth: 500, panelHeight: 500,
-      ledX: 32, ledY: 32, curveIntensity: 0, angleOffset: '15', color: '#123456' });
-    assert.equal(c.id, 0);
-    assert.equal(c.name, 'Wall 3');
-    assert.equal(c.color, Palette.legacySectionColors[2]);
+    assert.deepEqual({ ...a }, { id: 0, name: 'S', panelCols: 10, panelRows: 1, panelWidth: 500, panelHeight: 500,
+      ledX: 64, ledY: 32, curveIntensity: 5, angleOffset: 0, color: Palette.legacySectionColors[0] });
+    assert.deepEqual({ ...b }, { id: 1, name: 'Wall 2', panelCols: 5, panelRows: 3, panelWidth: 500, panelHeight: 500,
+      ledX: 32, ledY: 32, curveIntensity: 0, angleOffset: 15, color: '#123456' });
+    assert.deepEqual([c.id, c.name, c.color], [2, 'Wall 3', Palette.legacySectionColors[2]],
+      'section 3 names id 0, which section 1 (the index id of its || default) holds first, so it is renumbered after section 2');
+    assert.deepEqual(r.issues.filter((i) => i.severity === 'warning').map((i) => i.message), [
+      'Section 1 "S": Columns "10" → 10',
+      'Section 1 "S": Rows "0" → 0',
+      'Section 1 "S": Rows 0 → 1',
+      'Section 1 "S": Width (mm) "500" → 500',
+      'Section 1 "S": Pixels X "64" → 64',
+      'Section 1 "S": Panel Angle (°) "5" → 5',
+      'Section 2 "Wall 2": Section Offset (°) "15" → 15',
+      'Section 2 "Wall 2": id "abc" → 1',
+      'Section 3 "Wall 3": id 0 → 2',
+      'Mesh mode: "weird" → "combined"',
+    ]);
   });
 
-  test('a v1 section without a colour gets the legacy palette colour, wrapping with i % length (06 T7, 4.3)', () => {
-    const parsed = serializer.read({ sections: Array.from({ length: 10 }, () => ({})) });
-    assert.deepEqual(parsed.sections.map((s) => s.color), Array.from({ length: 10 }, (_, i) => Palette.legacySectionColors[i % 8]));
-    assert.equal(parsed.sections[0].color, '#00f0ff', 'the Phase-1 first colour, as the file looked when authored');
-    const kept = serializer.read({ sections: [{ color: '#123456' }, { color: '#d9d9d6' }] });
-    assert.deepEqual(kept.sections.map((s) => s.color), ['#123456', '#d9d9d6'], 'colours in the file are kept verbatim');
+  test('a v1 section without a colour gets the legacy palette colour, wrapping with i % length (06 T7, 4.3); valid colours are kept', () => {
+    const colors = (data, s = serializer) => sectionsFromProject(s.read(data).project).map((x) => x.color);
+    assert.deepEqual(colors({ sections: Array.from({ length: 10 }, () => ({})) }), Array.from({ length: 10 }, (_, i) => Palette.legacySectionColors[i % 8]));
+    assert.equal(colors({ sections: [{}] })[0], '#00f0ff', 'the Phase-1 first colour, as the file looked when authored');
+    assert.deepEqual(colors({ sections: [{ color: '#123456' }, { color: '#d9d9d6' }, { color: '#ABCDEF' }] }), ['#123456', '#d9d9d6', '#abcdef'],
+      'colours in the file are kept (lower-cased, silently)');
     const noLegacy = new ProjectSerializer({ palette: { sectionColors: Palette.sectionColors } });
-    assert.equal(noLegacy.read({ sections: [{}] }).sections[0].color, Palette.sectionColors[0], 'without a legacy list: sectionColors');
+    assert.equal(colors({ sections: [{}] }, noLegacy)[0], Palette.sectionColors[0], 'without a legacy list: sectionColors');
+    // an invalid colour (a CSS injection) takes the same default, with a warning (B-M4 defence in depth)
+    const r = serializer.read({ sections: [{ name: 'A' }, { name: 'B', color: 'red;outline:3px solid lime' }] });
+    assert.equal(sectionsFromProject(r.project)[1].color, Palette.legacySectionColors[1]);
+    assert.deepEqual(r.issues.filter((i) => i.severity === 'warning').map((i) => i.message),
+      [`Section 2 "B": Panel Colour "red;outline:3px solid lime" → "${Palette.legacySectionColors[1]}"`]);
   });
 
   test('write: legacy key order; zip drops angle_offset_degrees and adds texture_file; numeric names throw in zip', () => {
@@ -1004,7 +1102,7 @@ function fakeIO(project, log, extra = {}) {
   const dialogs = { alert: (msg) => log.push(['alert', msg]) };
   const safeDistance = { object3D: extra.group ?? null };
   return new ProjectIO({ project, wallController, serializer: extra.serializer ?? serializer, objExporter: OBJ,
-    gltfExporter: GLTF, panelIds, safeDistance, downloader, JSZip: FakeZip, dialogs, brand: Brand, win });
+    gltfExporter: GLTF, panelIds, safeDistance, downloader, JSZip: FakeZip, dialogs, brand: Brand, win, sectionsFromProject });
 }
 
 /** The M-EXP-1 text of 08 3.3. */
@@ -1248,7 +1346,7 @@ describe('ProjectIO use cases', () => {
     assert.deepEqual(log4, [['alert', mExp1('Export JSON', 'plain')], ['warn', 'plain']]);
   });
 
-  test('importFromInputEvent: P-IMPORT (read, reset input synchronously; try/catch only around parse + read + apply)', async () => {
+  test('importFromInputEvent: P-IMPORT (size check, read, reset input synchronously; refusals and corrections alerted, 08 P2-3b)', async () => {
     const readers = [];
     class FakeFileReader {
       constructor() { readers.push(this); }
@@ -1264,7 +1362,7 @@ describe('ProjectIO use cases', () => {
       assert.equal(empty.target.value, 'C:\\fakepath\\none.json');
 
       const load = (text) => {
-        const e = { target: { files: [{ name: 'wall.json' }], value: 'C:\\fakepath\\wall.json' } };
+        const e = { target: { files: [{ name: 'wall.json', size: text.length }], value: 'C:\\fakepath\\wall.json' } };
         io.importFromInputEvent(e);
         const reader = readers.at(-1);
         assert.equal(reader.file, e.target.files[0]);
@@ -1281,11 +1379,44 @@ describe('ProjectIO use cases', () => {
       assert.equal(ok[0][1].meshMode, 'combined');
       assert.deepEqual(ok[0][1].sections.map((s) => s.name), ['Left', 'Center', 'Right']);
 
-      assert.deepEqual(load('{"foo": 1}'), []);
-      assert.deepEqual(load('null'), [['alert', "Error parsing JSON file: Cannot read properties of null (reading 'sections')"]]);
+      assert.deepEqual(load('{"foo": 1}'), [['alert', 'Import failed: the file does not contain a "sections" list.']]);
+      assert.deepEqual(load('null'), [['alert', 'Import failed: this is not an LED wall project file.']]);
+      assert.deepEqual(load('{"sections": []}'), [['alert', 'Import failed: the file contains no wall sections.']]);
+      assert.deepEqual(load('{"version": "2.0", "sections": [{}]}'),
+        [['alert', 'Import failed: this project was saved by a newer version of the app (version 2.0).']]);
       const syntax = run(() => JSON.parse('{oops')).error.message;
       assert.deepEqual(load('{oops'), [['alert', 'Error parsing JSON file: ' + syntax]]);
-      assert.deepEqual(load('{"sections": [null]}'), [['alert', "Error parsing JSON file: Cannot read properties of null (reading 'id')"]]);
+      // A corrected import is applied first, then M-IMP-5 lists the corrections (at most 10 lines, then a count).
+      const fixed = load('{"sections": [null], "mesh_mode": "panel"}');
+      assert.equal(fixed[0][0], 'applyImport');
+      assert.equal(fixed[0][1].meshMode, 'panel');
+      assert.deepEqual(fixed.slice(1), [['alert', 'Imported with 1 correction(s):\n• Section 1 "Wall 1": not a section, replaced by a default section']]);
+      const many = load(JSON.stringify({ sections: Array.from({ length: 12 }, (_, i) => ({ id: 1, name: `S${i}` })) }));
+      assert.equal(many[1][0], 'alert');
+      const lines = many[1][1].split('\n');
+      assert.equal(lines[0], 'Imported with 11 correction(s):');
+      assert.equal(lines.length, 12, 'the header, 10 corrections and the count');
+      assert.equal(lines[1], '• Section 2 "S1": id 1 → 2');
+      assert.equal(lines[11], '• …and 1 more');
+      // A file over MAX_IMPORT_BYTES is refused before it is read (M-IMP-6); a read error alerts M-IMP-7.
+      log.length = 0;
+      const big = { target: { files: [{ name: 'big.json', size: 187347713 }], value: 'C:\\fakepath\\big.json' } };
+      const before = readers.length;
+      io.importFromInputEvent(big);
+      assert.equal(readers.length, before, 'never read');
+      assert.equal(big.target.value, '');
+      assert.deepEqual(log, [['alert', 'Import failed: the file is larger than 179 MB, the maximum for a project file.']]);
+      const atCap = { target: { files: [{ name: 'cap.json', size: 187347712 }], value: 'x' } };
+      io.importFromInputEvent(atCap);
+      assert.equal(readers.length, before + 1, 'a file of exactly MAX_IMPORT_BYTES is read');
+      log.length = 0;
+      readers.at(-1).error = { name: 'NotReadableError' };
+      readers.at(-1).onerror();
+      assert.deepEqual(log, [['alert', 'Import failed: the file could not be read (NotReadableError).']]);
+      log.length = 0;
+      readers.at(-1).error = null;
+      readers.at(-1).onerror();
+      assert.deepEqual(log, [['alert', 'Import failed: the file could not be read (unknown error).']]);
     });
   });
 });
@@ -1378,18 +1509,20 @@ describe('structure', () => {
   const source = (rel) => fs.readFileSync(path.join(REPO, rel), 'utf8');
   const code = (rel) => source(rel).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
 
-  test('io/ modules import only domain, geometry and legacy, and name no THREE / document / window', () => {
-    for (const rel of ['js/io/ProjectSerializer.js', 'js/io/ObjExporter.js', 'js/io/GltfExporter.js']) {
+  test('io/ modules import only domain, geometry, legacy and io itself, and name no THREE / document / window', () => {
+    for (const rel of ['js/io/ProjectSerializer.js', 'js/io/ObjExporter.js', 'js/io/GltfExporter.js', 'js/io/ProjectValidator.js',
+      'js/io/ProjectMigrations.js', 'js/io/ProjectSchema.js']) {
       const text = code(rel);
       for (const m of text.matchAll(/^\s*import\s[^;]*?from\s+'([^']+)'/gm)) {
-        assert.match(m[1], /^\.\.\/(domain|geometry|legacy)\/[A-Za-z]+\.js$/, `${rel} imports ${m[1]}`);
+        assert.match(m[1], /^(\.\.\/(domain|geometry|legacy)|\.)\/[A-Za-z]+\.js$/, `${rel} imports ${m[1]}`);
       }
       assert.doesNotMatch(text, /\b(THREE|document|window)\b/, rel);
     }
   });
 
   test('no try/catch except #runExport (R13 amendment, 08 P2-1a) and the legacy import one; exportZIP and exportPanelIds stay async', () => {
-    for (const rel of ['js/io/ProjectSerializer.js', 'js/io/ObjExporter.js', 'js/io/GltfExporter.js', 'js/ui/ExportPanel.js']) {
+    for (const rel of ['js/io/ProjectSerializer.js', 'js/io/ObjExporter.js', 'js/io/GltfExporter.js', 'js/io/ProjectValidator.js',
+      'js/io/ProjectMigrations.js', 'js/io/ProjectSchema.js', 'js/ui/ExportPanel.js']) {
       assert.doesNotMatch(code(rel), /\btry\s*\{|\bcatch\s*[({]/, rel);
     }
     const io = code('js/app/ProjectIO.js');

@@ -1,0 +1,145 @@
+{
+  "commit": "P2-3b",
+  "bugs": [
+    "B-L8"
+  ],
+  "expect": [
+    {
+      "output": "import_edge/{i_empty_import,i_empty_state,i_after_add,i_dialogs,i__export-json__*}.json",
+      "change": "modified",
+      "each": true,
+      "reason": "(i) `sections: []` is refused with M-IMP-2: the previous wall (one default section, preview and safe distance on) remains, Add Section adds a second section, and Export JSON writes those two sections (08 criterion 15 i)"
+    },
+    {
+      "output": "import_edge/i_empty.screenshot.png",
+      "change": "modified",
+      "reason": "(i) the default wall stays visible after the refused empty import (legacy showed an empty scene)"
+    },
+    {
+      "output": "import_edge/i__export-{obj,gltf}__*",
+      "change": "added",
+      "each": true,
+      "reason": "(i) Export OBJ (OBJ and MTL) and Export glTF now succeed on the kept two-section wall (legacy threw on sections[0] of the empty wall, M-EXP-1 since 08 P2-1a)"
+    },
+    {
+      "output": "import_edge/{ii_strings_import,ii_dialogs,ii__export-json__*}.json",
+      "change": "modified",
+      "each": true,
+      "reason": "(ii) the string numbers are coerced (M-IMP-5 with one `coerced` line per field), so the exported JSON holds numbers (08 criterion 15 ii). ii_strings_state and ii_final_stats are unchanged: the card values print the same text, and the legacy totals already multiplied the strings numerically"
+    },
+    {
+      "output": "import_edge/ii_{combined,section}__export-{obj,gltf}__*.{obj,gltf}",
+      "change": "modified",
+      "each": true,
+      "reason": "(ii) the 10-column strip meshes: integer indices within the vertex count (legacy concatenated '10' + 1 = '101'); the objects now pass check-orientation, so the B-L8 OPEN_DEFECTS row is deleted. The panel-mode OBJ and glTF are unchanged: per-panel geometry compared the string counts numerically"
+    },
+    {
+      "output": "import_edge/{iii_weird_mode_import,iii_mesh_modes_after_import,iii_dialogs}.json",
+      "change": "modified",
+      "each": true,
+      "reason": "(iii) `mesh_mode: \"weird\"` becomes `combined` with M-IMP-5 `Mesh mode: \"weird\" → \"combined\"`; the combined label is active (08 criterion 15 iii)"
+    },
+    {
+      "output": "import_edge/iii_weird__export-{obj,gltf}__*",
+      "change": "modified",
+      "each": true,
+      "reason": "(iii) the exports are in combined mode (OBJ, MTL and glTF)"
+    },
+    {
+      "output": "import_edge/{iv_duplicate_ids_import,iv_after_import,iv_after_delete,iv_dialogs,iv__export-json__*}.json",
+      "change": "modified",
+      "each": true,
+      "reason": "(iv) ids [1, 1, 2, missing] become [1, 4, 2, 3] with one `reassigned-id` line (07 6.8); deleting the first card removes only id 1 (08 criterion 15 iv)"
+    },
+    {
+      "output": "import_edge/{v_string_id_import,v_after_add,v_dialogs,v__export-json__*}.json",
+      "change": "modified",
+      "each": true,
+      "reason": "(v) the id 'abc' becomes 0 with one `reassigned-id` line; Add Section then gives id 1 (no NaN allocator) and the new card is expanded (08 criterion 15 v). v_after_import is unchanged: a one-section wall has no delete button, so the snapshot records no id"
+    },
+    {
+      "output": "import_edge/{vi_no_sections_import,vi_viii_dialogs}.json",
+      "change": "modified",
+      "each": true,
+      "reason": "(vi) `{foo: 1}` alerts M-IMP-1 (legacy ignored it silently, V-6); (vii) `null` alerts M-IMP-4a instead of the TypeError text; (viii) the malformed file keeps the legacy parse-error text (08 criterion 15 vi-viii)"
+    },
+    {
+      "output": "import_edge/{console,dialogs,downloads}.json",
+      "change": "modified",
+      "each": true,
+      "reason": "the Add Section TypeError of (i) is gone (console); the last page's dialogs are the vi-viii messages; (i) downloads its OBJ, MTL and glTF"
+    },
+    {
+      "output": "p2_xss_names/{dialogs,sections_initial,sections_renamed}.json",
+      "change": "modified",
+      "each": true,
+      "reason": "the CSS-injecting colour `red;outline:3px solid lime` of section 3 is replaced by the default colour with M-IMP-5 `Section 3 \"A B\": Panel Colour ... → \"#00ff66\"` (B-M4 defence in depth, 08 6.5)"
+    },
+    {
+      "output": "p2_xss_names/xss_probe_*.json",
+      "change": "modified",
+      "each": true,
+      "reason": "color_outline_injected is false for every card: the colour no longer reaches style"
+    },
+    {
+      "output": "p2_xss_names/section__export-obj__*.mtl",
+      "change": "modified",
+      "reason": "section 3's Kd follows the corrected colour"
+    },
+    {
+      "output": "p2_xss_names/section__export-zip__*.zip",
+      "change": "modified",
+      "reason": "the ZIP's JSON, MTL and glTF carry section 3's corrected colour"
+    },
+    {
+      "output": "p2_project_v2/{v2_hostile_import_result,dialogs_page3_after_hostile_import,dialogs}.json",
+      "change": "modified",
+      "each": true,
+      "reason": "step 8: the inline `\"version\": \"2.0\"` file is refused with M-IMP-4b until 08 P2-13e (the owner decided on 2026-10-17 that no v2 file is built now), so the restored wall of step 7 stays (legacy imported it as v1). logos_08_hostile is unchanged: the logo list was not re-rendered by the legacy import either (B-L21, 08 P2-3d)"
+    },
+    {
+      "output": "p2_project_v2/combined__export-{panel-ids,zip}__*",
+      "change": "modified",
+      "each": true,
+      "reason": "step 8's exports are of the kept wall, not of the refused inline one"
+    },
+    {
+      "output": "p2_oversize_canvas/dialogs.json",
+      "change": "modified",
+      "reason": "the 70-column section is above the 50-column limit: the import clamps it to 50 with M-IMP-5 `Section 1 \"Oversize\": Columns 70 → 50`; the 50,000 px wall is still beyond CANVAS_HARD_LIMITS, so M-EXP-2 and M-EXP-4 follow as before"
+    },
+    {
+      "output": "p2_oversize_canvas/section__export-zip__*.zip",
+      "change": "modified",
+      "reason": "the ZIP of the 50-column wall (OBJ, glTF and JSON; the oversize texture is still left out)"
+    },
+    {
+      "output": "p2_oversize_canvas/panel_ids_viewport.screenshot.png",
+      "change": "modified",
+      "reason": "the viewport shows the 50-column (25 m) wall in its section colour (the panel-ID canvas still does not fit, 08 P2-1d)"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "p2_curved_safe_distance/box_corner.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas on the preview footer label row (1 level, 1 px at (920, 912), seen in the 06 T6a-08 P2-3a runs); this commit changes no rendered pixel of it"
+    },
+    {
+      "output": "p2_shortcut_filters/pilot_view_front.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas (1 level, 2 px, seen in the 06 T6b-08 P2-8a runs); this commit changes no rendered pixel of it"
+    },
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-08 P2-3a runs)"
+    },
+    {
+      "output": "large_wall/final__export-zip__morph-led-wall-export.zip",
+      "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b); large_wall imports with no correction"
+    }
+  ],
+  "notes": "08 P2-3b (B-L8; the wall subset of 07 D2/D3): io/ProjectSchema.js, io/ProjectMigrations.js, io/ProjectValidator.js; ProjectSerializer.read = detectVersion -> migrateV1toV2 -> validateProject; Strategies.importValidation retired; Wall.MAX_SECTIONS and M-SEC-1; MAX_IMPORT_BYTES (M-IMP-6) and reader.onerror (M-IMP-7); the three-mode dispatch of LEDWallView, ObjExporter and GltfExporter; WallSection.setName. Every CFG7 config imports with zero warnings, so their outputs are unchanged. Manifest corrected after the first gate (08 8.1 rules): five over-declared outputs did not change, each for the reason given in its entry (ii_strings_state, ii_final_stats, the ii panel-mode OBJ and glTF, iii_weird_mode.screenshot (a combined wall and its panels draw the same pixels without frames), v_after_import, logos_08_hostile)."
+}

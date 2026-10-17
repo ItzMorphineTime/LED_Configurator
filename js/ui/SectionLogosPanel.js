@@ -127,10 +127,10 @@ export class SectionLogosPanel {
 
       const sectionDiv = this.#doc.createElement('div');
       sectionDiv.className = 'logo-row';
-      // The section name and ids are escaped (B-M4 fixed in 08 P2-3a).
-      // LEGACY(B-L8): the raw section id is written to data-section-id and parsed back with parseInt by the handlers, while
-      // this render (and the panel-ID renderer) read the entry with the raw id: an id whose parseInt has a different
-      // property key ('a', '07', 1.5; every non-numeric string shares the key "NaN") never shows its logo.
+      // The section name and ids are escaped (B-M4 fixed in 08 P2-3a). The id is written to data-section-id and
+      // parsed back with parseInt by the handlers, while this render (and the panel-ID renderer) read the entry with
+      // the id itself; since 08 P2-3b (B-L8 fixed) every id is a validated integer, for which both give the same key
+      // (legacy ids such as 'a', '07' or 1.5 never showed their logo).
       sectionDiv.innerHTML = logoRowHtml(section, index, hasLogo, logoData);
       container.appendChild(sectionDiv);
     });

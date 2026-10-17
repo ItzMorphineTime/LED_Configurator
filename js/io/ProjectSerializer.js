@@ -1,22 +1,19 @@
 /**
  * @module io/ProjectSerializer
  * Project JSON v1: the writer of the two legacy JSON documents (the 'file' download of Export JSON and the 'zip'
- * copy inside Export All ZIP) and the reader of imported documents. The reader is the version-dispatch seam:
- * Phase 1 reads every document as v1, exactly like legacy (which ignores `version`).
+ * copy inside Export All ZIP) and the reader of imported documents. The reader is the version-dispatch seam: since
+ * 08 P2-3b (B-L8 fixed) it detects the version, migrates a v1 document with the legacy `||` defaults and validates it
+ * (io/ProjectMigrations, io/ProjectValidator; spec 07 4.6, 4.7), so an import is corrected and reported, or refused
+ * atomically, never accepted raw.
  * Legacy source: index.html@cd3fd3f 4942-4965 (exportJSON builder), 4499-4519 (exportZIP builder),
- * 4974-4988 (importJSON section mapping).
+ * 4974-4988 (importJSON section mapping, now io/ProjectMigrations.migrateV1toV2).
  * Layer: io (may import domain, geometry, legacy; THREE-free and DOM-free; the palette is injected).
  */
 
-import { WallSection } from '../domain/WallSection.js';
 import { zipTextureFileName } from '../geometry/PanelNaming.js';
 import { Strategies, unsupportedStrategy } from '../legacy/LegacyCompat.js';
-
-/**
- * The parsed content of an imported document.
- * @typedef {{sections: WallSection[], meshMode: *}} ParsedProject  meshMode is the raw `data.mesh_mode` (may be
- *   undefined or any JSON value; WallController.applyImport applies it only when truthy)
- */
+import { detectVersion, migrateV1toV2 } from './ProjectMigrations.js';
+import { validateProject } from './ProjectValidator.js';
 
 /**
  * The 'zip' texture_file value: the path, or null when the ZIP left that texture out (08 P2-1c, B-L4). The path is
@@ -86,7 +83,7 @@ export class ProjectSerializer {
 
   /**
    * The Export JSON document, verbatim 4943-4963.
-   * @param {WallSection[]} wallSections
+   * @param {import('../domain/WallSection.js').WallSection[]} wallSections
    * @param {*} meshMode
    * @returns {object}
    */
@@ -118,7 +115,7 @@ export class ProjectSerializer {
   /**
    * The ZIP's JSON document, verbatim 4499-4519 (the inner sanitizeFilename of 4496 is PanelNaming's, reached
    * through zipTextureFileName; duplicate names collide, B-L14, tagged at PanelNaming.zipTextureFileName).
-   * @param {WallSection[]} wallSections
+   * @param {import('../domain/WallSection.js').WallSection[]} wallSections
    * @param {*} meshMode
    * @param {boolean[]|null} skipped  texture_file is null where skipped[i] (08 P2-1c)
    * @returns {object}
@@ -149,54 +146,29 @@ export class ProjectSerializer {
   }
 
   /**
-   * Reads a parsed JSON document (the value of JSON.parse). This is the version-dispatch seam: Phase 1 reads
-   * EVERY document as v1, because legacy ignores `version`. A later schema adds its reader here, dispatching
-   * only AFTER the `data.sections` guard has been evaluated (reading `data.version` first would change the
-   * TypeError message for `null`).
-   * Ports: index.html@cd3fd3f lines 4975-4988.
-   * Side effects: none.
+   * Reads a parsed JSON document (the value of JSON.parse) through the import pipeline of 08 4.3 (P2-3b; 07 5.5.1):
+   * `detectVersion` (07 4.6: not a project, a newer version or no `sections` list is an error), then for a v1 document
+   * `migrateV1toV2` (the legacy `||` defaults; a missing colour from `palette.legacySectionColors ?? sectionColors`,
+   * 06 4.3) and `validateProject` over the migrated wall keys, with the same colour list as the default of an invalid
+   * colour (07 4.3). A v1 import is wall-only (`scope: 'wall'`): the caller replaces the sections and, when
+   * `project.mesh_mode` is not null, the mesh mode, and keeps everything else.
+   * Before 08 P2-13e every version 2.x and above is refused (newer-version, M-IMP-4b).
+   * Ports: index.html@cd3fd3f lines 4975-4988 (the `data.sections` guard and the `||` mapping, now in migrateV1toV2).
+   * Side effects: none (never throws for a JSON value; never writes `data`).
    * @param {*} data  the parsed document
-   * @returns {ParsedProject|null} null when `data.sections` is not a truthy array (legacy: silently ignored)
-   * @throws {TypeError} when data is null or undefined (`Cannot read properties of null (reading 'sections')`),
-   *   or when a section entry is null; the import's try/catch turns it into the legacy alert
+   * @param {{exportLimits?: {maxSide: number, maxArea: number}}} [options]  passed to the validator (07 signature;
+   *   unused in Phase 2, which raises no `budget` warning)
+   * @returns {{ok: boolean, project: {sections: object[], mesh_mode: string|null}|null,
+   *            issues: import('./ProjectValidator.js').Issue[], sourceVersion: 1|null, scope: 'wall'}}
+   *   ok === false (some issue has severity 'error') => project === null; sourceVersion is null when detection failed
    */
-  read(data) {
-    return this.#readV1(data);
-  }
-
-  /**
-   * Schema v1 (and, in Phase 1, every other version): verbatim 4975-4988.
-   * @param {*} data
-   * @returns {ParsedProject|null}
-   */
-  #readV1(data) {
-    if (data.sections && Array.isArray(data.sections)) {
-      switch (Strategies.importValidation) {
-        case 'none':
-          break;
-        default:
-          throw unsupportedStrategy('importValidation', Strategies.importValidation);
-      }
-      // 06 T7 (4.3, Q20; spec 07 C11 carries the rule into migrateV1toV2): the Phase-1 palette fills missing colours.
-      const sectionColors = this.#palette.legacySectionColors ?? this.#palette.sectionColors;
-      // LEGACY(B-L8): no validation and no coercion: imported strings, NaN or duplicate ids, empty walls and unknown
-      // mesh modes are accepted; `|| default` turns 0 and '' into the default. (Names are escaped where they are
-      // rendered since 08 P2-3a, B-M4.)
-      const sections = data.sections.map((s, i) => new WallSection({
-        id: s.id !== undefined ? s.id : i,
-        name: s.name || `Wall ${i + 1}`,
-        panelCols: s.panel?.columns || 5,
-        panelRows: s.panel?.rows || 3,
-        panelWidth: s.panel?.width_mm || 500,
-        panelHeight: s.panel?.height_mm || 500,
-        ledX: s.led_resolution?.x || 32,
-        ledY: s.led_resolution?.y || 32,
-        curveIntensity: s.curvature?.angle_degrees || 0,
-        angleOffset: s.curvature?.angle_offset_degrees || 0,
-        color: s.color || sectionColors[i % sectionColors.length]
-      }));
-      return { sections, meshMode: data.mesh_mode };
-    }
-    return null;
+  read(data, { exportLimits } = {}) {
+    const detected = detectVersion(data);
+    if (detected.error) return { ok: false, project: null, issues: [detected.error], sourceVersion: null, scope: 'wall' };
+    const migrated = migrateV1toV2(data, { palette: this.#palette });
+    const colors = this.#palette.legacySectionColors ?? this.#palette.sectionColors;
+    const result = validateProject({ sections: migrated.wall.sections, mesh_mode: migrated.wall.mesh_mode },
+      { palette: { sectionColors: colors }, exportLimits });
+    return { ok: result.ok, project: result.project, issues: [...migrated.issues, ...result.issues], sourceVersion: 1, scope: 'wall' };
   }
 }

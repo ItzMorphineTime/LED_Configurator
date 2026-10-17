@@ -42,6 +42,7 @@ import { TransformGizmo } from '../interaction/TransformGizmo.js';
 import { PilotCameraDriver, PilotController } from '../interaction/PilotController.js';
 import { ViewportInput } from '../interaction/ViewportInput.js';
 import { ProjectSerializer } from '../io/ProjectSerializer.js';
+import { sectionsFromProject } from '../io/ProjectSchema.js';
 import { ObjExporter } from '../io/ObjExporter.js';
 import { GltfExporter } from '../io/GltfExporter.js';
 import { WallController } from './WallController.js';
@@ -169,7 +170,7 @@ export class App {
     selection.register(personController);
     selection.register(carController);
     const wallController = new WallController({
-      project, view: wallView, ledTiles, orbit, hub, bus, palette: theme.palette,
+      project, view: wallView, ledTiles, orbit, hub, bus, palette: theme.palette, dialogs,
     });
     const serializer = new ProjectSerializer({ palette: theme.palette });
     const objExporter = new ObjExporter({ brand, colorToRgb, builder: new WallMeshBuilder(Strategies.mesh.obj) });
@@ -187,6 +188,7 @@ export class App {
       dialogs,
       brand,
       win,
+      sectionsFromProject,
     });
     // Panels: WALL_SECTIONS_CHANGED runs SectionListPanel then SectionLogosPanel, and DISPLAY_CONTENT_CHANGED runs
     // WallDisplayPanel then SectionLogosPanel (construction order = subscription order, ARCHITECTURE.md 5.2).

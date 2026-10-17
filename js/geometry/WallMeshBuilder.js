@@ -270,14 +270,14 @@ export class WallMeshBuilder {
 
     this.#pushVertices(sl, writeNormal, writeUv, out);
 
-    // LEGACY(B-L8): vertsPerRow is the raw `panelCols + 1` (an imported string '10' gives '101', an imported 2.5
-    // gives 3.5), so unvalidated imported strings and fractional counts produce the legacy (garbage) indices. The card
-    // rules round the counts since 08 P2-8a (B-L15 fixed), so only an import can still bring such values.
+    // vertsPerRow is the raw `panelCols + 1`. Since 08 P2-8a (the card rules) and 08 P2-3b (the import validator) every
+    // count is an integer number (B-L15, B-L8 fixed); a string '10' (giving '101') or a fraction can no longer arrive,
+    // and the arithmetic is kept verbatim for the LegacyProfiles oracle tests, which feed such values.
     const vertsPerRow = section.panelCols + 1;
     this.#pushIndices(section, indexBase, vertsPerRow, winding, out.indices);
 
-    // The DECLARED vertex count; for an unvalidated imported fractional count (B-L8, tagged above) it differs from the
-    // vertices actually pushed, and the next section's indexBase advances by it.
+    // The DECLARED vertex count; it equals the vertices pushed for integer counts (for the fractional counts of the
+    // oracle tests it does not, and the next section's indexBase advances by it).
     const vertexAdvance = (section.panelCols + 1) * (section.panelRows + 1);
     return { positions: out.positions, normals: out.normals, uvs: out.uvs, indices: out.indices, vertexAdvance };
   }
@@ -305,8 +305,9 @@ export class WallMeshBuilder {
 
   /**
    * The index loops of sectionGrid. Every index keeps the exact left-to-right association
-   * `indexBase + row * vertsPerRow + col` (B-L8, tagged at sectionGrid): with the OBJ base 1,
-   * `(1 + row * vpr) + col` differs from `(row * vpr + col) + 1` in the last ulp for imported fractional counts.
+   * `indexBase + row * vertsPerRow + col`: with the OBJ base 1, `(1 + row * vpr) + col` differs from
+   * `(row * vpr + col) + 1` in the last ulp for fractional counts (no longer reachable from the app, B-L8 and B-L15
+   * fixed; kept for the oracle tests).
    * @param {import('../domain/WallSection.js').WallSection} section
    * @param {number} indexBase
    * @param {number|string} vertsPerRow  the raw `section.panelCols + 1`

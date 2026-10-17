@@ -19,7 +19,7 @@
  * | 3  | 4010   | custom colour `input`            | setSectionColor                      | always                                  | clear swatches, dot (PR4)                               |
  * | 4  | 4021   | name `input`                     | renameSection, commitRename          | iff panel IDs                           | title patch; WALL_SECTION_RENAMED iff panel IDs         |
  * | 5  | 4074   | number `change`                  | setSectionField, commitSectionEdit   | always, stats first                     | write-back, card patch, WALL_STATS_CHANGED twice        |
- * | 6  | 4118   | #add-section-btn                 | addSection                           | always                                  | WALL_SECTIONS_CHANGED{add}                              |
+ * | 6  | 4118   | #add-section-btn                 | addSection                           | always, unless 200 sections (M-SEC-1)   | WALL_SECTIONS_CHANGED{add}                              |
  * | 7  | 4145   | .section-delete                  | deleteSection                        | always unless count <= 1 (then nothing) | logo entry removed, WALL_SECTIONS_CHANGED{delete}       |
  * | 8  | 4161   | mesh-mode label click (x2)       | setMeshMode x2                       | always, twice per click (B-L13)         | label classes, WALL_MESH_MODE_CHANGED                   |
  * | 9  | 4165   | #toggle-wireframe                | setWireframe                         | always                                  | toggle class                                            |
@@ -46,6 +46,7 @@
  */
 import { Events } from '../core/EventBus.js';
 import { layoutProject } from '../geometry/WallLayout.js';
+import { Wall } from '../domain/Wall.js';
 
 /**
  * Wall use cases and the P1 rebuild pipeline.
@@ -65,6 +66,8 @@ export class WallController {
   #bus;
   /** @type {{sectionColors: ReadonlyArray<string>}} */
   #palette;
+  /** @type {{alert(msg: string): void}} the dialogs facade (ui/dom.js createDialogs) */
+  #dialogs;
 
   /**
    * Stores the collaborators only (R4).
@@ -75,9 +78,11 @@ export class WallController {
    *          orbit: import('../interaction/OrbitController.js').OrbitController,
    *          hub: import('./CameraController.js').CameraHub,
    *          bus: import('../core/EventBus.js').EventBus,
-   *          palette: {sectionColors: ReadonlyArray<string>}}} deps
+   *          palette: {sectionColors: ReadonlyArray<string>},
+   *          dialogs: {alert(msg: string): void}}} deps
+   *   dialogs: for M-SEC-1 (08 P2-3b)
    */
-  constructor({ project, view, ledTiles, orbit, hub, bus, palette }) {
+  constructor({ project, view, ledTiles, orbit, hub, bus, palette, dialogs }) {
     this.#project = project;
     this.#view = view;
     this.#ledTiles = ledTiles;
@@ -85,6 +90,7 @@ export class WallController {
     this.#hub = hub;
     this.#bus = bus;
     this.#palette = palette;
+    this.#dialogs = dialogs;
   }
 
   /**
@@ -132,14 +138,18 @@ export class WallController {
 
   /**
    * P-ADD (ARCHITECTURE.md 6.4): appends a copy of the last section, lets the panels re-render (the card list
-   * snapshots and restores the collapse states, PR2/PR3), then rebuilds.
-   * On an empty wall appendLikeLast increments the id allocator and throws TypeError before anything else
-   * happens (B-L8, tagged at Wall.appendLikeLast), exactly like legacy.
+   * snapshots and restores the collapse states, PR2/PR3), then rebuilds. A wall that already has Wall.MAX_SECTIONS
+   * (200) sections gets the M-SEC-1 alert and nothing else (08 P2-3b: the validator refuses a file with more, so the app
+   * never writes one). The wall is never empty since 08 P2-3b (B-L8 fixed: an import without sections is refused).
    * Ports: index.html@cd3fd3f lines 4081-4119.
    * Side effects: model (wall.sections, wall.nextSectionId); emits WALL_SECTIONS_CHANGED {reason: 'add', addedId};
-   *   rebuild().
+   *   rebuild(); or, at the cap, one alert.
    */
   addSection() {
+    if (!this.#project.wall.canAddSection()) {
+      this.#dialogs.alert(`A wall can have at most ${Wall.MAX_SECTIONS} sections.`);
+      return;
+    }
     const newSection = this.#project.wall.appendLikeLast(this.#palette.sectionColors);
     this.#bus.emit(Events.WALL_SECTIONS_CHANGED, { reason: 'add', addedId: newSection.id });
     this.rebuild();

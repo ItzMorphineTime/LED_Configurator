@@ -2,8 +2,9 @@
  * @module domain/WallSection
  * One section of the LED wall with the legacy field names (so ported code reads `section.panelCols` unchanged),
  * the card input rules (legacy number `change` handler) and the derived labels shown on the section card.
- * The constructor never coerces or validates (ARCHITECTURE.md R12): imported strings and NaN stay as they are. The card
- * rules round the integer fields and clamp every field to `LIMITS` since 08 P2-8a (B-L15).
+ * The constructor never coerces (ARCHITECTURE.md R12); since 08 P2-3b imports reach it only through the validator. The
+ * card rules round the integer fields and clamp every field to `LIMITS` since 08 P2-8a (B-L15), and `setName` applies
+ * the validator's text rule since 08 P2-3b.
  * Legacy source: index.html@cd3fd3f 1395-1407 (default section), 3897-3908, 3958 (card derived values),
  * 4016 (rename), 4026-4054 (field rules and card patch values); `const scale = 0.001` at 1479, 2488, 2552, 2591,
  * 3757, 4493, 4912, 4920 (MM_TO_M).
@@ -11,7 +12,7 @@
  */
 
 import { orDefault } from '../legacy/LegacyCompat.js';
-import { clamp, deepFreeze, roundInt } from './rules.js';
+import { clamp, deepFreeze, roundInt, sanitizeText } from './rules.js';
 
 /**
  * One card rule after its fallback (08 P2-8a, 4.4): the value rounded when the field is an integer field, then
@@ -46,7 +47,8 @@ export class WallSection {
    *          curveIntensity: *, angleOffset: *, color: *}} fields
    */
   constructor(fields) {
-    // LEGACY(B-L8): no coercion or validation; imported strings/NaN stay as they are.
+    // No coercion here (R12). Since 08 P2-3b (B-L8 fixed) an import reaches the constructor only through the validator
+    // (io/ProjectSchema.sectionsFromProject), and the card rules and setName normalise every typed value.
     for (const key of SECTION_FIELDS) this[key] = fields[key];
   }
 
@@ -168,15 +170,30 @@ export class WallSection {
   }
 
   /**
-   * Name input handler: an empty input falls back to the default name (the input itself stays empty).
+   * Stores a section name through the one text rule of the validator (08 P2-3b, spec 07 C28): sanitizeText(String(raw),
+   * 32) strips the C0, C1 and bidi controls and truncates to 32 UTF-16 code units without splitting a surrogate pair,
+   * without trimming, so a typed or pasted name is stored exactly as an import of the saved file would store it.
+   * Side effects: writes this.name.
+   * @param {*} raw
+   * @returns {string} the stored name (may be '')
+   */
+  setName(raw) {
+    this.name = sanitizeText(String(raw), 32);
+    return this.name;
+  }
+
+  /**
+   * Name input handler: the name goes through setName, and an empty result falls back to the default name (the input
+   * itself stays empty). For a name without controls this stores exactly what the legacy `raw || Wall <index + 1>` did
+   * (the input's maxlength is 32).
    * Ports: index.html@cd3fd3f line 4016.
    * Side effects: writes this.name.
    * @param {string} raw    the input's value
    * @param {number} index  the card index captured at render time
-   * @returns {*} the stored name
+   * @returns {string} the stored name
    */
   rename(raw, index) {
-    this.name = raw || WallSection.defaultName(index);
+    if (!this.setName(raw)) this.name = WallSection.defaultName(index);
     return this.name;
   }
 

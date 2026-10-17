@@ -32,9 +32,8 @@ export class LogoLibrary {
    * @returns {LogoEntry|undefined}
    */
   get(sectionId) {
-    // LEGACY(B-L8): plain-object key coercion. The UI handlers key by parseInt(dataset.sectionId), so an id matches
-    // only when String(parseInt(String(id))) === String(id): numeric-string ids such as '7' and NaN ids match,
-    // ids such as 'a', '07' or 1.5 never do.
+    // Plain-object key coercion (R12). The UI handlers key by parseInt(dataset.sectionId) and the renderers by the raw
+    // id; since 08 P2-3b (B-L8 fixed) every id is a validated integer, for which both give the same key.
     return this.#entries[sectionId];
   }
 

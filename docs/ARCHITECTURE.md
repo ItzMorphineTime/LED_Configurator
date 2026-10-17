@@ -56,7 +56,7 @@ Phase 1 turns the 3,800-line inline script and the 860-line inline stylesheet in
         |                                                                                         |
         +-------------------------------------+---------------------------------------------------+
                                               v
-      io/        pure writers/readers: ProjectSerializer (v1), ObjExporter, GltfExporter          (THREE-free, DOM-free)
+      io/        pure writers/readers: ProjectSerializer (v1), ObjExporter, GltfExporter, ProjectValidator (THREE-free, DOM-free)
       geometry/  pure: WallLayout, WallMeshBuilder, TextureAtlas, PanelNaming, NormalLines        (THREE-free, DOM-free)
       domain/    pure entities: Project, Wall, WallSection, CineCamera, Prop, LogoLibrary, ...     (THREE-free, DOM-free)
       core/ EventBus + Events, typingTarget, renderOrder     legacy/ LegacyCompat (Strategies, legacy helpers, LEGACY_SITES)     theme/ Theme constants, ThemeBridge (pure)
@@ -141,7 +141,7 @@ Direction of communication:
 | R9 | **No globals, call-time browser globals** (section 1.5). | Constraint: no app state on `window`; legacy semantics of `alert` etc. |
 | R10 | **Pure layers are Node-testable:** `core`, `legacy`, `theme`, `domain`, `geometry`, `io` import no THREE and touch no DOM. | Exporters are byte-compared against golden files in plain Node before any wiring. |
 | R11 | **Listener registration order is reproduced:** orbit canvas listeners and keyboard-state listeners in the init phase; panel listeners, shortcut keys and canvas pointer routing in the setupUI phase, in legacy statement order (section 7). | Same handler order on shared targets (`mousedown`, `keydown`, ...). |
-| R12 | **Domain values are never coerced or validated in Phase 1** (B-L8). Id-keyed lookups use plain-object property-key semantics (`obj[id]`, i.e. `String(id)` for primitives). | Imported strings, NaN and duplicate ids behave exactly as today. |
+| R12 | **Domain values are never coerced or validated in Phase 1** (B-L8). **Phase 2 (08 P2-3b):** an import is validated before it reaches the domain (`io/ProjectValidator.js`, B-L8 fixed); the domain constructors still never coerce. Id-keyed lookups use plain-object property-key semantics (`obj[id]`, i.e. `String(id)` for primitives). | Imported strings, NaN and duplicate ids behave exactly as today. |
 | R13 | **Exceptions are never caught** except where legacy caught them (the import `try/catch`). Sync/async shape of every export function is preserved (`exportZIP` and `exportPanelIds` stay `async`). **Amended by 08 P2-1a:** `ProjectIO.#runExport`, which wraps every export and reports a failure as the M-EXP-1 alert, and the export size guards (08 P2-1c) are the sanctioned exceptions. | Console baseline (uncaught errors, unhandled rejections) and import alerts stay identical. |
 | R14 | **Reorderings are allowed only if listed in section 6.0**, each with its proof of non-observability. | Keeps "verbatim" auditable. |
 
@@ -208,10 +208,13 @@ js/
                                                  parseHexColor, parseCssColor (pure, imports nothing; wired in App by 06 T3)
   domain/
     rules.js                               08 P2-8a  clamp, roundInt, deepFreeze: the shared numeric rules of the UI rule
-                                                 tables and (from 08 P2-3b) the import validator (08 4.4; imports nothing)
+                                                 tables and (from 08 P2-3b) the import validator (08 4.4; imports nothing);
+                                                 08 P2-3b: sanitizeText (stripControls, truncateUnits), MAX_SECTION_ID,
+                                                 isValidSectionId, createIdAllocator (07 6.8), MAX_IMPORT_BYTES and its parts
     WallSection.js                         WP3   WallSection entity (legacy field names, field rules, derived labels), MM_TO_M;
                                                  08 P2-8a: LIMITS, the rounding and capped field rules
-    Wall.js                                WP3   Wall (ordered sections, id allocator, totals, legacy flat bounds), WallPivot, PivotMode
+    Wall.js                                WP3   Wall (ordered sections, id allocator, totals, legacy flat bounds), WallPivot, PivotMode;
+                                                 08 P2-3b: MAX_SECTIONS, canAddSection, the 07 6.8 nextSectionId
     Project.js                             WP3   Project aggregate, DisplaySettings (content enum), ContentMode, PanelIdStyle
     LogoLibrary.js                         WP3   Section logos keyed by section id (plain-object key semantics)
     CineCamera.js                          WP3   Film camera: lens, pose, enabled flag, FILMBACK_PRESETS, FOV/coverage/safe-D math,
@@ -259,7 +262,12 @@ js/
     PilotController.js                     WP8   PilotCameraDriver (drives the main camera) + PilotController (toggle, look, fly, speed)
     ViewportInput.js                       WP8   Shortcut keys (G/R/L/P/Esc) + canvas pointer routing (pilot | gizmo | pick)
   io/
-    ProjectSerializer.js                   WP5   Project JSON v1 write ('file' | 'zip' variants) and read; version dispatch seam
+    ProjectSerializer.js                   WP5   Project JSON v1 write ('file' | 'zip' variants) and read; version dispatch seam;
+                                                 08 P2-3b: read = detectVersion -> migrateV1toV2 -> validateProject
+    ProjectSchema.js                       08 P2-3b  The validator's rows (FORMAT, MESH_MODES, LIMITS = WallSection.LIMITS,
+                                                 SECTION_NUMBER_ROWS, labels) and sectionsFromProject (07 4.4 rule 3)
+    ProjectMigrations.js                   08 P2-3b  detectVersion (07 4.6), migrateV1toV2 (07 6.9), ImportMessages, isPlainObject
+    ProjectValidator.js                    08 P2-3b  validateProject (07 4.7, 6.7, 6.8; the wall subset of 07 D2), formatValue
     ObjExporter.js                         WP5   OBJ + MTL text (combined / section / panel) + safe-distance OBJ text
     GltfExporter.js                        WP5   glTF 2.0 JSON with embedded base64 buffer (combined / section / panel)
   app/
@@ -414,6 +422,10 @@ tests/
                                                  and 500 seeded integer walls through the OBJ and glTF writers, all modes
     typing-target.test.mjs                 08 P2-9b  the 07 3.8 truth table of core/typingTarget.js (plain objects) and the
                                                  InputState re-exports (fake THREE)
+    validator.test.mjs                     08 P2-3b  the import pipeline (08 4.3, 8.4): detectVersion, migrateV1toV2 and
+                                                 validateProject row by row with the 07 issue shape and the 3.3 texts, ids
+                                                 (07 6.8), idempotence over 2,000 seeded documents, the harness configs (no
+                                                 correction), the reachability of every card-rule value, no prototype pollution
     materials.test.mjs                     08 P2-1d  PanelIdRenderer sizes and null canvases, LEDMaterialFactory's colour
                                                  fallback and its warning, LEDWallView's index attribute (08 P2-1e)
                                                  (fake THREE installed as window.THREE)
@@ -610,7 +622,6 @@ export const Strategies = deepFreeze({
   zipTextureNaming: 'sanitized-name',              // B-L14 (no de-duplication)
   mtlDownloadDelayMs: 100,                         // B-L7
   zipJsonIncludesAngleOffset: false,               // B-M3
-  importValidation: 'none',                        // B-L8
   framingBounds: 'flat',                           // B-L2, B-M10
   curveBeforeFirstPanel: true,                     // B-L1
   safeDistanceBand: 'per-column-own-normal',       // B-M15, B-L29
@@ -754,7 +765,8 @@ export const SECTION_FIELDS = Object.freeze(['id', 'name', 'panelCols', 'panelRo
 
 export class WallSection {
   /** Assigns exactly the SECTION_FIELDS keys from `fields`, in SECTION_FIELDS order, as own enumerable
-   *  properties, with NO coercion or validation (LEGACY(B-L8): imported strings/NaN stay as they are). */
+   *  properties, with NO coercion (R12). Since 08 P2-3b (B-L8 fixed) an import reaches it only through the validator
+   *  (io/ProjectSchema.sectionsFromProject). */
   constructor(fields)
 
   /** {id: 0, name: 'Wall 1', panelCols: 5, panelRows: 3, panelWidth: 500, panelHeight: 500, ledX: 32, ledY: 32,
@@ -787,9 +799,13 @@ export class WallSection {
 
   /** this[field] = WallSection.parseField(field, raw); returns the stored value. */
   setField(field, raw)
+  /** 08 P2-3b (07 C28, 08 A3): this.name = sanitizeText(String(raw), 32) (the 07 strip set removed, 32 UTF-16 units
+   *  without splitting a surrogate pair, never trimmed: the validator's own rule); returns the stored name. */
+  setName(raw)
   /** this.color = color */
   setColor(color)
-  /** this.name = raw || WallSection.defaultName(index); returns this.name (4016). */
+  /** if (!this.setName(raw)) this.name = WallSection.defaultName(index); returns this.name (4016; for a name without
+   *  controls the legacy raw || default; 08 P2-3b). */
   rename(raw, index)
   /** if (!this.name) this.name = WallSection.defaultName(index)  (render-time fill, 3901). */
   ensureName(index)
@@ -825,12 +841,14 @@ export class Wall {
   /** The live array (legacy `wallSections`). Mutated by push in appendLikeLast; REPLACED (new array) by
    *  removeById and replaceAll, exactly like legacy. Callers that need a stable copy must slice(). */
   get sections()
+  static MAX_SECTIONS = 200        // 08 P2-3b (07 4.1, 4.3): Add Section refuses a 201st (M-SEC-1), the validator a file with more
   nextSectionId                    // public field (legacy global 1409)
   pivot                            // public field (WallPivot)
   get count()                      // sections.length
 
   /** Verbatim 4088-4103. Evaluation order matters: `id: this.nextSectionId++` and the name are evaluated
-   *  BEFORE `last.panelCols`, so an empty wall increments the allocator and then throws TypeError (B-L8).
+   *  BEFORE `last.panelCols` (an empty wall, which legacy reached through an import of `sections: []`, B-L8, incremented
+   *  the allocator before the TypeError; since 08 P2-3b the wall is never empty).
    *  const last = sections[sections.length - 1]; const newColorIndex = sections.length % sectionColors.length;
    *  new WallSection({ id: this.nextSectionId++, name: `Wall ${sections.length + 1}`, panelCols: last.panelCols,
    *    panelRows: last.panelRows, panelWidth: last.panelWidth, panelHeight: last.panelHeight, ledX: last.ledX,
@@ -841,9 +859,12 @@ export class Wall {
   /** this.#sections = this.#sections.filter(s => s.id !== id)  (removes every duplicate, B-L8; 4133). */
   removeById(id)
 
-  /** this.#sections = sections; this.nextSectionId = Math.max(...sections.map(s => s.id)) + 1  (4976, 4989;
-   *  -Infinity for [] and NaN for non-numeric ids are preserved, B-L8). */
+  /** this.#sections = sections; this.nextSectionId = createIdAllocator(new Set(valid ids)).next()  (4976, 4989; 08 P2-3b,
+   *  07 6.8: max + 1, the legacy Math.max(...ids) + 1 for the validator's ids, or the smallest unused id once that would
+   *  pass 2^31 - 1; recomputed on every import, never stored; legacy kept -Infinity for [] and NaN for string ids, B-L8). */
   replaceAll(sections)
+  /** this.count < Wall.MAX_SECTIONS  (08 P2-3b) */
+  canAddSection()
 
   /** Verbatim 2309-2313 in section order:
    *  totalPixels += cols*rows*ledX*ledY; totalPanels += cols*rows; totalArc += cols*Math.abs(curveIntensity);
@@ -895,7 +916,7 @@ export class PanelIdStyle {
 export class Project {
   constructor({ wall, meshMode = 'combined', display, panelIdStyle, logos, camera, person, car })
   wall;          // Wall
-  meshMode;      // 'combined' | 'section' | 'panel' | any imported string (B-L8: unknown renders as panels; tagged at LEDWallView.rebuild)
+  meshMode;      // 'combined' | 'section' | 'panel' (since 08 P2-3b an import maps an unknown mode to 'combined'; legacy kept it, B-L8)
   display;       // DisplaySettings
   panelIdStyle;  // PanelIdStyle
   logos;         // LogoLibrary
@@ -915,9 +936,8 @@ Logos are deliberately **not** stored on `WallSection`: legacy keys them by id a
 export class LogoLibrary {
   // #entries = {} : a plain object; every method indexes it with the given key unchanged, so keys follow
   // JS property-key coercion exactly like legacy `sectionLogos[id]` (UI handlers pass parseInt(dataset.sectionId),
-  // the renderer and delete pass section.id; LEGACY(B-L8): an id matches a parseInt key only when
-  // String(parseInt(String(id))) === String(id), so numeric-string ids such as '7' and NaN ids match, while ids
-  // such as 'a', '07' or 1.5 never do).
+  // the renderer and delete pass section.id; both give the same key for the validated integer ids of 08 P2-3b, B-L8
+  // fixed; legacy ids such as 'a', '07' or 1.5 never matched a parseInt key).
   get(sectionId)                    // this.#entries[sectionId]
   hasImage(sectionId)               // this.#entries[sectionId] && this.#entries[sectionId].image   (verbatim 2196 expression)
   ensure(sectionId)                 // if (!entries[id]) entries[id] = { position: 'center', scale: 0.3 } (a fresh object); return entries[id]
@@ -1331,8 +1351,9 @@ export class LEDWallView {
    *     #tracker.track(wallGroup, {detach: () => sceneManager.remove(wallGroup)}); the same for frameGroup
    *  3. sections = layout.sections.map(sl => sl.section); atlas = computeAtlas(sections)   (pure, no THREE ids);
    *     materials.beginRebuild()   (08 P2-1d: the panel-ID fallback warning is given once per section and rebuild)
-   *     meshMode === 'combined' -> #buildCombined; === 'section' -> #buildSections;
-   *     ELSE -> #buildPanels   LEGACY(B-L8): any unknown imported mode renders as panels   (1551-1557)
+   *     meshMode === 'combined' -> #buildCombined; === 'section' -> #buildSections; === 'panel' -> #buildPanels;
+   *     else throw Error('Unknown mesh mode "<mode>"') (08 P2-3b, B-L8 fixed: unreachable after the validator; legacy
+   *     rendered any unknown mode as panels)   (1551-1557)
    *  4. if (display.showFrame) #buildFrames(layout, display)   (06 T5: adaptive colours)     (1559-1569)
    *  5. sceneManager.add(wallGroup); if (display.showFrame) sceneManager.add(frameGroup)    (1571-1572)
    *  6. (01 F1-1) if (#shading !== 'content') #applyShading()   (a direct step, not a subscription, R2)
@@ -1897,21 +1918,48 @@ export class ProjectSerializer {
    *  textureNames.
    *  @param {Project} project  @param {{variant?: 'file'|'zip', skipped?: boolean[]|null}} [options]  @returns {object} */
   write(project, { variant = 'file', skipped = null } = {})
-  /** Verbatim 4975-4988. Phase 1 reads EVERY version as v1 (legacy ignores `version`); this is the version-dispatch seam.
-   *  Evaluates `data.sections && Array.isArray(data.sections)` first, so `data === null` throws TypeError inside the
-   *  caller's try (V-5 alert); returns null otherwise (V-6: silently ignored). Then, before the map:
-   *  switch (Strategies.importValidation) { case 'none': break; default: throw unsupportedStrategy('importValidation', ...) }
-   *  (the Phase 2 ProjectValidator becomes a new case here).
-   *  sections = data.sections.map((s, i) => new WallSection({ id: s.id !== undefined ? s.id : i, name: s.name || `Wall ${i + 1}`,
-   *    panelCols: s.panel?.columns || 5, panelRows: s.panel?.rows || 3, panelWidth: s.panel?.width_mm || 500,
-   *    panelHeight: s.panel?.height_mm || 500, ledX: s.led_resolution?.x || 32, ledY: s.led_resolution?.y || 32,
-   *    curveIntensity: s.curvature?.angle_degrees || 0, angleOffset: s.curvature?.angle_offset_degrees || 0,
-   *    color: s.color || colors[i % colors.length] }))   with colors = palette.legacySectionColors ?? palette.sectionColors
-   *    (06 T7, 4.3: a v1 file without colours looks as authored; spec 07 C11 carries the rule into migrateV1toV2)
-   *  LEGACY(B-L8): no validation (names are escaped where they are rendered since 08 P2-3a, B-M4).
-   *  @returns {{sections: WallSection[], meshMode: any} | null}  meshMode = data.mesh_mode (raw, may be undefined) */
-  read(data)
+  /** 08 P2-3b (B-L8 fixed; 08 4.3, 07 5.5.1): d = detectVersion(data) (07 4.6); an error returns
+   *  { ok: false, project: null, issues: [d.error], sourceVersion: null, scope: 'wall' }. A v1 document:
+   *  m = migrateV1toV2(data, { palette }) (the verbatim legacy || mapping of 4975-4988 into the v2 section shape; a
+   *  missing colour from palette.legacySectionColors ?? palette.sectionColors, 06 T7, 4.3), then
+   *  r = validateProject({ sections: m.wall.sections, mesh_mode: m.wall.mesh_mode }, { palette: { sectionColors: that
+   *  same list }, exportLimits }) and returns { ok: r.ok, project: r.project, issues: [...m.issues, ...r.issues],
+   *  sourceVersion: 1, scope: 'wall' }. Never throws for a JSON value; never writes data. Every version 2.x and above is
+   *  refused as newer until 08 P2-13e (owner decision 2026-10-17: no v2 file now). Strategies.importValidation is retired.
+   *  @returns {{ok, project: {sections: object[], mesh_mode: string|null}|null, issues: Issue[], sourceVersion: 1|null, scope: 'wall'}} */
+  read(data, { exportLimits } = {})
 }
+```
+
+#### `js/io/ProjectSchema.js`, `js/io/ProjectMigrations.js`, `js/io/ProjectValidator.js` (08 P2-3b; the wall subset of 07 D2/D3, in 07's final modules and signatures)
+```js
+// ProjectSchema.js (pure; imports domain): the rows the validator walks (07 4.4 rule 3)
+export const FORMAT = 'morph-led-project';
+export const MESH_MODES = ['combined', 'section', 'panel'];
+export const LIMITS = { sections: WallSection.LIMITS, maxSections: Wall.MAX_SECTIONS, nameMaxLength: 32 };   // no copy of a range
+export const SECTION_NUMBER_ROWS   // [{group: 'panel', key: 'columns', field: 'panelCols', label: 'Columns'}, ... 8 rows in file key order]
+export const SECTION_GROUP_LABELS, SECTION_LABELS   // the 08 3.3 labels ('Panel Angle (°)', 'Panel Colour': the 06 T4c card labels)
+export function sectionsFromProject(project) -> WallSection[]   // the inverse v1 mapping over a validated project (app/ gets it injected)
+
+// ProjectMigrations.js (pure)
+export function detectVersion(data) -> { kind: 'v1' } | { error: Issue }
+  // not a plain object -> unsupported-format (M-IMP-4a); an own `format` key !== FORMAT -> unsupported-format; a `version`
+  // string /^(\d+)\.(\d+)$/ with major >= 2 -> newer-version (M-IMP-4b; every major >= 2 until 08 P2-13e); a sections
+  // array -> v1 (any other version: legacy ignored it); otherwise no-sections (M-IMP-1; legacy ignored the file, V-6)
+export function migrateV1toV2(data, { palette }) -> { scope: 'wall', wall: { sections, mesh_mode: data.mesh_mode || null },
+                                                      issues: [migrated info, defaulted per non-object section] }
+export const ImportMessages   // the M-IMP-1..4 texts of 08 3.3
+
+// ProjectValidator.js (pure)
+export function validateProject(input, { limits = LIMITS, palette, knownRevision, exportLimits } = {}) -> { ok, project, issues }
+  // errors (project null, atomic): not an object, no sections list, 0 sections (M-IMP-2), > MAX_SECTIONS (M-IMP-3);
+  // corrections (warnings, 08 3.3 line `Section <i+1> "<name>": <label> <from> → <to>`), per section in file key order:
+  // name (coerced / sanitized / truncated / defaulted; sanitizeText, no trim), a non-object group (defaulted), the eight
+  // numbers over WallSection.LIMITS (07 6.7: coerced, rounded, clamped, defaulted; a missing field is silent), colour
+  // (#rgb coerced, anything but #rrggbb sanitized to palette.sectionColors[i % n]; #RRGGBB lower-cased silently); then the
+  // ids (07 6.8: first occurrence keeps it, others reassigned-id from max + 1); then mesh_mode (null keeps the mode,
+  // unknown -> 'combined' defaulted). Builds fresh objects field by field (no spread), reads no __proto__ key; idempotent.
+export function formatValue(v)   // strings JSON.stringify-ed, numbers as they are, else '(invalid)'; at most 40 characters
 ```
 
 #### `js/io/ObjExporter.js`
@@ -1926,10 +1974,11 @@ export class ObjExporter {
    *  with brand.mtlHeader. private #faceConventionLine() (01 CR-3, 08 P2-2c): switch (profile.winding) { case 'ccw': return
    *  '# Faces: counter-clockwise front faces; vn point out of the LED surface (toward the stage)\n'; case 'legacy-cw':
    *  return ''; default: throw unsupportedStrategy('mesh.obj.winding', ...) }.
-   *  Dispatch: 'combined' / 'section' / else panel (LEGACY(B-L8)).
+   *  Dispatch: 'combined' / 'section' / 'panel', else throw Error('Unknown mesh mode "<mode>"') (08 P2-3b, B-L8 fixed;
+   *  legacy wrote any other mode as panels).
    *  combined: FIRST the colour, LEGACY(B-L6): switch (Strategies.exportCombinedColor) { case 'first-section':
    *    color = colorToRgb(sections[0].color); break; default: throw unsupportedStrategy('exportCombinedColor', ...) }
-   *    (throws TypeError on an empty wall, B-L8); then uv = switch (profile.combinedUV) { case 'per-section-overlap':
+   *    (throws TypeError on an empty wall, which the validator never lets in since 08 P2-3b); then uv = switch (profile.combinedUV) { case 'per-section-overlap':
    *    'unit'; default: throw unsupportedStrategy('mesh.obj.combinedUV', ...) };
    *    mtl `newmtl LED_Wall_Combined\nKd r g b (toFixed(4))\nKa 0.1 0.1 0.1\nKs 0.5 0.5 0.5\nNs 100\nd 1.0\n\n`;
    *    obj `mtllib ${brand.files.mtl}\n\n`, `o LED_Wall_Combined\n`, `usemtl LED_Wall_Combined\n`;
@@ -2016,14 +2065,16 @@ The module header contains the rebuild-policy table of section 6.2 (it is the on
 ```js
 export class WallController {
   /** @param {{project: Project, view: LEDWallView, ledTiles: LEDPixelTextureFactory, orbit: OrbitController,
-   *           hub: CameraHub, bus: EventBus, palette: {sectionColors: string[]}}} deps */
-  constructor({ project, view, ledTiles, orbit, hub, bus, palette })
+   *           hub: CameraHub, bus: EventBus, palette: {sectionColors: string[]}, dialogs: Dialogs}} deps
+   *  dialogs: M-SEC-1 (08 P2-3b) */
+  constructor({ project, view, ledTiles, orbit, hub, bus, palette, dialogs })
   layout()                       // layoutProject(project)  (fresh, from live sections)
   /** P1 (section 6.1): legacy createLEDWall. */
   rebuild()
   /** bus.emit(WALL_STATS_CHANGED, project.wall.totals())  (legacy updateStats call sites 1574, 4073) */
   publishStats()
-  /** P-ADD (section 6.4). */
+  /** P-ADD (section 6.4). 08 P2-3b: if (!project.wall.canAddSection()) { dialogs.alert(`A wall can have at most
+   *  ${Wall.MAX_SECTIONS} sections.`) (M-SEC-1); return } */
   addSection()
   /** P-DEL (section 6.4). No-op when project.wall.count <= 1. */
   deleteSection(id)
@@ -2150,8 +2201,9 @@ export class Downloader {              // the single anchor sequence (5082-5091 
 export class ProjectIO {
   /** @param {{project, wallController: WallController, serializer: ProjectSerializer, objExporter: ObjExporter,
    *           gltfExporter: GltfExporter, panelIds: PanelIdRenderer, safeDistance: SafeDistanceView, downloader: Downloader,
-   *           JSZip, dialogs, brand: Brand, win: Window}} deps */
-  constructor({ project, wallController, serializer, objExporter, gltfExporter, panelIds, safeDistance, downloader, JSZip, dialogs, brand, win })
+   *           JSZip, dialogs, brand: Brand, win: Window, sectionsFromProject}} deps
+   *  sectionsFromProject: io/ProjectSchema.sectionsFromProject (08 P2-3b; injected by App, app/ may not import io/) */
+  constructor({ project, wallController, serializer, objExporter, gltfExporter, panelIds, safeDistance, downloader, JSZip, dialogs, brand, win, sectionsFromProject })
   /** 08 P2-1a (B-H3), 08 3.3 M-EXP-1: every export body below runs as #runExport(label, fn), label = 'Export JSON' |
    *  'Export OBJ' | 'Export glTF' | 'Export Panel IDs' | 'Export All (ZIP)' | 'Export Safe Distance OBJ'. A synchronous throw
    *  or a rejection of the promise fn returns is caught: dialogs.alert(`${label} failed: ${err.message}. No file was
@@ -2674,7 +2726,7 @@ This table is the documentation of `WallController`'s rebuild policy and is repe
 | 3 | 4010 | custom colour `input` | `SectionListPanel` | `setSectionColor` | always | clear swatches, dot (PR4) |
 | 4 | 4021 | name `input` | `SectionListPanel` | `renameSection`, `commitRename` | iff panel IDs | title patch; `WALL_SECTION_RENAMED` (logo list) iff panel IDs |
 | 5 | 4074 | number `change` | `SectionListPanel` | `setSectionField`, `commitSectionEdit` | always, stats first | write-back, card patch, `WALL_STATS_CHANGED` twice (before and inside the rebuild) |
-| 6 | 4118 | `#add-section-btn` | `SectionListPanel.bindAddButton` | `addSection` | always | `WALL_SECTIONS_CHANGED{add}` (cards, collapse, logo list iff panel IDs) |
+| 6 | 4118 | `#add-section-btn` | `SectionListPanel.bindAddButton` | `addSection` | always, unless the wall has `Wall.MAX_SECTIONS` (M-SEC-1 alert, nothing else; 08 P2-3b) | `WALL_SECTIONS_CHANGED{add}` (cards, collapse, logo list iff panel IDs) |
 | 7 | 4145 | `.section-delete` | `SectionListPanel` card | `deleteSection` | always unless `count <= 1` (then nothing at all) | logo entry removed, `WALL_SECTIONS_CHANGED{delete}` |
 | 8 | 4161 | mesh-mode label click (fires twice) | `WallDisplayPanel` | `setMeshMode` x2 | always, twice per click (LEGACY(B-L13)) | label classes, `WALL_MESH_MODE_CHANGED` |
 | 9 | 4165 | `#toggle-wireframe` | `WallDisplayPanel` | `setWireframe` | always | toggle class |
@@ -2692,7 +2744,7 @@ This table is the documentation of `WallController`'s rebuild policy and is repe
 | 21 | 2285 | logo clear | `SectionLogosPanel` | `rebuildIfPanelIds` | iff panel IDs | entry deleted, logo list render |
 | 22 | 2292 | logo position change | `SectionLogosPanel` | `rebuildIfPanelIds` | iff the entry exists and panel IDs | - |
 | 23 | 2303 | logo scale change | `SectionLogosPanel` | `rebuildIfPanelIds` | iff the entry exists and panel IDs | write-back always |
-| 24 | 5002 | import `FileReader.onload` | `ExportPanel` -> `ProjectIO` | `applyImport` | always, inside the `try` | labels iff `mesh_mode`, `WALL_SECTIONS_CHANGED{import}` |
+| 24 | 5002 | import `FileReader.onload` | `ExportPanel` -> `ProjectIO` | `applyImport` | iff the validated read is ok (08 P2-3b), inside the `try` | labels iff `mesh_mode`, `WALL_SECTIONS_CHANGED{import}`; then M-IMP-5 iff corrected |
 | F6-1 | - | web fonts settled (06 5.6, the font gate) | `App.start` (`runFontGate`, fire-and-forget after the reset view) | `rebuildIfPanelIds` | iff a panel-ID canvas was drawn with a pending (font, text) **and** panel IDs are on (at most once; never in the harness) | none |
 
 No other path calls `rebuild()` (row F6-1 is the one call site added since Phase 1 so far). Never de-duplicate or debounce (row 8 rebuilds twice per click; rows 3, 16, 19 rebuild on every `input` event).
@@ -2742,7 +2794,8 @@ The 16 legacy `updateCameraFrustum()` call sites:
 
 **P-ADD** `WallController.addSection()` (4081-4119):
 ```
-s = project.wall.appendLikeLast(palette.sectionColors)       // 4088-4103 (throws TypeError on an empty wall, after nextSectionId++)
+if (!project.wall.canAddSection()) { dialogs.alert(M-SEC-1); return }   // 08 P2-3b (Wall.MAX_SECTIONS = 200)
+s = project.wall.appendLikeLast(palette.sectionColors)       // 4088-4103 (the wall is never empty since 08 P2-3b)
 emit WALL_SECTIONS_CHANGED { reason: 'add', addedId: s.id }  // SectionListPanel: snapshot (PR2) -> render -> restore (expand iff id === addedId)
                                                              // SectionLogosPanel: render iff panel IDs (PR3)
 this.rebuild()                                               // 4118
@@ -2815,15 +2868,20 @@ Upload: `FileReader.onload` -> `Image.onload` -> `logos.setImage(parseInt(id), i
 **P-IMPORT** `ProjectIO.importFromInputEvent(e)` (4967-5010):
 ```
 file = e.target.files[0]; if (!file) return
+if (file.size > MAX_IMPORT_BYTES) { dialogs.alert(M-IMP-6); e.target.value = ''; return }   // 08 P2-3b: never read
 reader = new FileReader()
 reader.onload = (event) => {
   try {
-    data = JSON.parse(event.target.result)
-    parsed = serializer.read(data)                 // null -> silently ignored (V-6); data === null -> TypeError -> alert
-    if (parsed) wallController.applyImport(parsed) // replaceAll (+ nextSectionId) -> [meshMode iff truthy: model + emit
-                                                   // WALL_MESH_MODE_CHANGED] -> emit WALL_SECTIONS_CHANGED{import} -> P1
+    data = JSON.parse(event.target.result)          // a parse error keeps the legacy alert text (V-5)
+    r = serializer.read(data)                       // 08 P2-3b: detectVersion -> migrateV1toV2 -> validateProject
+    if (!r.ok) { dialogs.alert(first error issue's message); return }   // M-IMP-1..4; nothing changes (atomic)
+    wallController.applyImport({ sections: sectionsFromProject(r.project), meshMode: r.project.mesh_mode })
+                                                    // replaceAll (+ nextSectionId, 07 6.8) -> [meshMode iff not null: model +
+                                                    // emit WALL_MESH_MODE_CHANGED] -> emit WALL_SECTIONS_CHANGED{import} -> P1
+    if (r has warnings) dialogs.alert(M-IMP-5)      // up to 10 correction lines, then "…and n more"
   } catch (err) { dialogs.alert('Error parsing JSON file: ' + err.message) }
 }                                                  // B-L21 (tagged at WallController.applyImport): logos neither reset nor re-rendered
+reader.onerror = () => dialogs.alert(M-IMP-7)      // 08 P2-3b (legacy had no handler)
 reader.readAsText(file)
 e.target.value = ''                                // synchronous reset (5009)
 ```
@@ -2883,12 +2941,12 @@ cameraController = new CameraController({ project, rig, preview, hub, pilot, sel
 personController = new PropController({ prop: person, view: personView, selection, bus })
 carController = new PropController({ prop: car, view: carView, selection, bus })
 selection.register(cameraController); selection.register(personController); selection.register(carController)   // pick tie order
-wallController = new WallController({ project, view: wallView, ledTiles, orbit, hub, bus, palette: theme.palette })
+wallController = new WallController({ project, view: wallView, ledTiles, orbit, hub, bus, palette: theme.palette, dialogs })
 serializer = new ProjectSerializer({ palette: theme.palette })
 objExporter = new ObjExporter({ brand, colorToRgb, builder: new WallMeshBuilder(Strategies.mesh.obj) })
 gltfExporter = new GltfExporter({ brand, colorToRgb, builder: new WallMeshBuilder(Strategies.mesh.gltf) })
 projectIO = new ProjectIO({ project, wallController, serializer, objExporter, gltfExporter, panelIds, safeDistance,
-                            downloader: new Downloader({ doc, win }), JSZip, dialogs, brand, win })
+                            downloader: new Downloader({ doc, win }), JSZip, dialogs, brand, win, sectionsFromProject })
 sectionList = new SectionListPanel({ doc, project, wallController, bus, palette: theme.palette })   // 06 T7: the swatches
 displayPanel = new WallDisplayPanel({ doc, wallController, bus })
 logosPanel = new SectionLogosPanel({ doc, project, wallController, bus })     // after sectionList and displayPanel (5.2)
@@ -2960,7 +3018,6 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `zipTextureNaming = 'sanitized-name'` | B-L14 | Colliding sanitised names overwrite in the ZIP | `PanelNaming.zipTextureFileName`: `Strategies.zipTextureNaming` | switch | de-duplicate |
 | `mtlDownloadDelayMs = 100` | B-L7 | MTL as a second download 100 ms later; textures not delivered | `ProjectIO.exportOBJ`: `win.setTimeout(..., Strategies.mtlDownloadDelayMs)` | value | bundle (ZIP) |
 | `zipJsonIncludesAngleOffset = false` | B-M3 | ZIP JSON lacks `angle_offset_degrees` | `ProjectSerializer.write`, `'zip'` variant: `Strategies.zipJsonIncludesAngleOffset` | switch (`case false`) | `true` |
-| `importValidation = 'none'` | B-L8 | `\|\|` defaults only; strings, NaN/duplicate ids, empty walls, unknown modes accepted | `ProjectSerializer.read`, after the `data.sections` guard: `Strategies.importValidation` (`Wall.replaceAll` reads no strategy; it carries its own B-L8 tag) | switch | `ProjectValidator` inside `read()` |
 | `framingBounds = 'flat'` | B-L2, B-M10 | Orbit target, camera reset, coverage status and safe-distance D use flat bounds | `WallLayout.framingBounds`: `Strategies.framingBounds` (the 4 consumers get it injected as `frameBounds`) | switch | true bounds or the pivot (Feature 3) |
 | `curveBeforeFirstPanel = true` | B-L1 | Curve step applied before the first panel's move | `WallLayout.computeWallLayout` (first statement): `Strategies.curveBeforeFirstPanel` | switch (`case true`) | owner decision: **kept** (2026-10-16, 1.4); 08 P2-13f retires the switch with no output change |
 | `safeDistanceBand = 'per-column-own-normal'` | B-M15, B-L29 | Un-mitred per-column quads; faces point -Y; outline = first safeLeft + every safeRight | `SafeDistanceView.create` (first statement): `Strategies.safeDistanceBand` | switch | mitred offsets, flipped index order |
@@ -3007,7 +3064,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | B-L5 | Uint16 glTF indices | `Strategies.mesh.gltf.indexType`, `LEDWallView` index attribute (fixed) | Landed in 08 P2-1b (glTF `mesh.gltf.indexType = 'auto'`, `indexWidth`) and 08 P2-1e (viewport: Uint32 index attribute from a largest index of 65,535); no tag site |
 | B-L6 | Combined exports use section 0's colour | `Strategies.exportCombinedColor` | per-section |
 | B-L7 | MTL second download, textures missing | `Strategies.mtlDownloadDelayMs` | bundle |
-| B-L8 | No import validation; unknown mode renders as panels; raw coercion | `Strategies.importValidation` + `LEDWallView.rebuild` dispatch `else` (tag) + `WallSection` constructor (tag) | validator |
+| B-L8 | No import validation; unknown mode renders as panels; raw coercion | `ProjectSerializer.read` + `io/ProjectValidator.js` (fixed) | Landed in 08 P2-3b (`ProjectSerializer.read`: `detectVersion`, `migrateV1toV2` and `validateProject` of `io/ProjectMigrations.js`, `io/ProjectValidator.js`, `io/ProjectSchema.js`; `Strategies.importValidation` retired; `Wall.MAX_SECTIONS` with M-SEC-1; the size limit and the read error; the three-mode dispatch; `WallSection.setName`; no tag site) |
 | B-L9 | `\|\| default` turns 0 into the default (D-7, J-5, V-3) | `orDefault` | change `orDefault` or per rule |
 | B-L10 | Gizmo posY >= 0 vs pilot >= 0.1 per frame; Z unclamped | `CineCamera.translateBy`, `CineCamera.pilotFly` (tags) | validated setter |
 | B-L11 | Shortcuts ignore SELECT focus, modifiers, repeat (W-1) | `core/typingTarget.js isTypingTarget` + `ViewportInput.attachShortcuts` (fixed) | Landed in 08 P2-9b (`core/typingTarget.js isTypingTarget` with the 07 3.8 truth table, re-exported by `InputState` as `isShortcutIgnoredTarget`; `ViewportInput.attachShortcuts` also ignores Ctrl, Meta, Alt and auto-repeat; no tag site) |
@@ -3046,12 +3103,8 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | Site | Ids |
 |---|---|
 | `js/legacy/LegacyCompat.js#orDefault` | B-L9 |
-| `js/domain/WallSection.js#constructor` | B-L8 |
 | `js/domain/WallSection.js#exceeds4K` | B-L17 |
-| `js/domain/Wall.js#appendLikeLast` | B-L8 |
-| `js/domain/Wall.js#replaceAll` | B-L8 |
 | `js/domain/Wall.js#flatBounds` | B-L2, B-M10 |
-| `js/domain/LogoLibrary.js#get` | B-L8 |
 | `js/domain/CineCamera.js#coverage` | B-M10 |
 | `js/domain/CineCamera.js#presetShortName` | B-L34 |
 | `js/domain/CineCamera.js#translateBy` | B-L10 |
@@ -3062,18 +3115,15 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/geometry/WallLayout.js#computeWallLayout` | B-L1 |
 | `js/geometry/WallLayout.js#flatEdges` | B-M15 |
 | `js/geometry/WallLayout.js#framingBounds` | B-L2, B-M10 |
-| `js/geometry/WallMeshBuilder.js#sectionGrid` | B-L8 |
 | `js/geometry/WallMeshBuilder.js#combinedGrid` | B-M5 |
 | `js/geometry/TextureAtlas.js#panelPxPerLed` | B-M16 |
 | `js/geometry/PanelNaming.js#zipTextureFileName` | B-L14 |
 | `js/geometry/PanelNaming.js#mtlTextureFile` | B-M2 |
 | `js/io/ProjectSerializer.js#write` | B-M3, B-L31 |
-| `js/io/ProjectSerializer.js#read` | B-L8 |
-| `js/io/ObjExporter.js#write` | B-M6, B-L6, B-L8 |
-| `js/io/GltfExporter.js#write` | B-L6, B-L8 |
+| `js/io/ObjExporter.js#write` | B-M6, B-L6 |
+| `js/io/GltfExporter.js#write` | B-L6 |
 | `js/io/GltfExporter.js#addMesh` | B-M7 |
 | `js/render/SceneManager.js#addHelper` | B-M11 |
-| `js/render/LEDWallView.js#rebuild` | B-L8 |
 | `js/render/LEDMaterialFactory.js#combined` | B-M5, B-L18 |
 | `js/render/textures/LEDPixelTextureFactory.js#tile` | B-L18, B-L20 |
 | `js/render/textures/PanelIdRenderer.js#panelCanvas` | B-L19, B-M16 |
@@ -3101,13 +3151,12 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/app/ProjectIO.js#exportOBJ` | B-L7 |
 | `js/app/ProjectIO.js#exportZIP` | B-L14 |
 | `js/ui/SectionListPanel.js#patchCard` | B-L16 |
-| `js/ui/SectionLogosPanel.js#render` | B-L8 |
 | `js/ui/SectionLogosPanel.js#onUpload` | B-L35 |
 | `js/ui/SectionLogosPanel.js#constructor` | B-L21 |
 | `js/ui/WallDisplayPanel.js#bind` | B-L13 |
 | `index.html` (markup, untagged; documentation-only) | B-L36 |
 
-Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14) and B-L5 (08 P2-1b; its only site was the tag in `GltfExporter.addMesh`, which keeps B-H2 and B-M7) and B-L4 (08 P2-1c; its sites were the tags in `ProjectIO.exportPanelIds`, which has no tag left, and `ProjectIO.exportZIP`, which keeps B-L14; its viewport half never had a tag and is fixed by 08 P2-1d) and B-H1 (08 P2-2a; its sites were the tags in `WallMeshBuilder.quadIndices`, which keeps B-H2 until 08 P2-2d, and `LEDMaterialFactory.side`, whose `'double'` value is now a design choice) and B-L3 (08 P2-2b; its only site was the tag in `WallMeshBuilder.sectionGrid`, which keeps B-L15 and B-L8) and B-H2 (08 P2-2c and P2-2d; its sites were the tags in `ObjExporter.write`'s `#stripNormalLine`, which left with P2-2c (`write` keeps B-M6, B-L6 and B-L8), `WallMeshBuilder.quadIndices`, which has no tag left, and `GltfExporter.addMesh`, which keeps B-M7) and B-L11 (08 P2-9b; its sites were the tags in `InputState.isShortcutIgnoredTarget`, now a re-export of `core/typingTarget.js isTypingTarget`, and `ViewportInput.attachShortcuts`, which has no tag left) and B-L15 (08 P2-8a; its sites were the tags in `WallSection.FIELD_RULES`, which has no tag left, and `WallMeshBuilder.sectionGrid`, which keeps B-L8 for unvalidated imported counts) and B-M4 (08 P2-3a; its sites were `legacyHtml`, deleted, and the tags in `SectionListPanel.render`, which has no tag left, `SectionLogosPanel.render` and `ProjectSerializer.read`, which keep B-L8); in Phase 3, B-L24 (its `.view-btn.active` half in 01 F1-2, `css/features/debug-view.css`; its badge-overlap half in 06 T4a, `.selection-indicator` at `bottom: 64px` in `css/09-viewport-tools.css`; its two documentation-only entries, the `Legacy note B-L24` paragraphs of the `css/07-viewport.css` and `css/09-viewport-tools.css` header comments, left with 06 T4a, whose header comments now say where it landed).
+Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14) and B-L5 (08 P2-1b; its only site was the tag in `GltfExporter.addMesh`, which keeps B-H2 and B-M7) and B-L4 (08 P2-1c; its sites were the tags in `ProjectIO.exportPanelIds`, which has no tag left, and `ProjectIO.exportZIP`, which keeps B-L14; its viewport half never had a tag and is fixed by 08 P2-1d) and B-H1 (08 P2-2a; its sites were the tags in `WallMeshBuilder.quadIndices`, which keeps B-H2 until 08 P2-2d, and `LEDMaterialFactory.side`, whose `'double'` value is now a design choice) and B-L3 (08 P2-2b; its only site was the tag in `WallMeshBuilder.sectionGrid`, which keeps B-L15 and B-L8) and B-H2 (08 P2-2c and P2-2d; its sites were the tags in `ObjExporter.write`'s `#stripNormalLine`, which left with P2-2c (`write` keeps B-M6, B-L6 and B-L8), `WallMeshBuilder.quadIndices`, which has no tag left, and `GltfExporter.addMesh`, which keeps B-M7) and B-L11 (08 P2-9b; its sites were the tags in `InputState.isShortcutIgnoredTarget`, now a re-export of `core/typingTarget.js isTypingTarget`, and `ViewportInput.attachShortcuts`, which has no tag left) and B-L15 (08 P2-8a; its sites were the tags in `WallSection.FIELD_RULES`, which has no tag left, and `WallMeshBuilder.sectionGrid`, which keeps B-L8 for unvalidated imported counts) and B-M4 (08 P2-3a; its sites were `legacyHtml`, deleted, and the tags in `SectionListPanel.render`, which has no tag left, `SectionLogosPanel.render` and `ProjectSerializer.read`, which kept B-L8 until 08 P2-3b) and B-L8 (08 P2-3b; its sites were `Strategies.importValidation`, retired, and the tags in `WallSection`'s constructor, `Wall.appendLikeLast` and `replaceAll`, `LogoLibrary.get`, `WallMeshBuilder.sectionGrid`, `ProjectSerializer.read`, `LEDWallView.rebuild` and `SectionLogosPanel.render`, which have no tag left, and `ObjExporter.write` and `GltfExporter.write`, which keep B-M6 / B-L6); in Phase 3, B-L24 (its `.view-btn.active` half in 01 F1-2, `css/features/debug-view.css`; its badge-overlap half in 06 T4a, `.selection-indicator` at `bottom: 64px` in `css/09-viewport-tools.css`; its two documentation-only entries, the `Legacy note B-L24` paragraphs of the `css/07-viewport.css` and `css/09-viewport-tools.css` header comments, left with 06 T4a, whose header comments now say where it landed).
 
 How rule 6 reads these rows (as implemented in `tests/static/check.mjs`): the comparison is per file, so a tag may sit in a private helper that only the named method calls (for example `ProjectSerializer.#readV1` for `#read`, `ObjExporter.#writeCombined` for `#write`, `GltfExporter.#writeCombined` for `#write`); a tag wrapped across JSDoc continuation lines counts as one tag (placeholders are still rejected); and a row whose `js/` file does not exist is reported, so a typo in a site path cannot bypass the check.
 
@@ -3410,3 +3459,13 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 3.9: the B-M4 id leaves `ProjectSerializer.read`'s tag (B-L8 stays until 08 P2-3b).
 - 8.2: the B-M4 row is kept with a `Landed` fix cell; 8.3: the rows `LegacyCompat.js#legacyHtml` and `SectionListPanel.js#render` are deleted, and B-M4 leaves `SectionLogosPanel.js#render` and `ProjectSerializer.js#read` (both keep B-L8), so `LEGACY_SITES` no longer lists it.
 - 2.3, 11 item 6: `wall-controller.test.mjs` applies the escaping to the legacy templates and the live rename as `TEMPLATE_EDITS` (escapeHtml is passed into the legacy closure), so the parity tests keep comparing every other byte; `core.test.mjs` tests `escapeHtml`.
+
+**08 P2-3b, B-L8 landed** (manifest `tests/regression/expected/P2-3b.json`: `import_edge` (every case's import result, states, dialogs and exports that the validator changes; the (i) OBJ, MTL and glTF are new downloads), `p2_xss_names` (the corrected colour: dialogs, cards, probes, MTL, ZIP), `p2_project_v2` step 8 (the inline v2 file is refused), `p2_oversize_canvas` (70 columns clamped to 50); the wall subset of 07 D2/D3, in 07's final modules and signatures):
+- 1.3, 2.2, 3.9: `io/ProjectSchema.js` (the rows: `FORMAT`, `MESH_MODES`, `LIMITS` = `WallSection.LIMITS` + `Wall.MAX_SECTIONS` + the 32-unit name, `SECTION_NUMBER_ROWS`, the 08 3.3 labels; `sectionsFromProject`), `io/ProjectMigrations.js` (`detectVersion`, 07 4.6; `migrateV1toV2`, the legacy `||` mapping, 07 6.9; `ImportMessages`), `io/ProjectValidator.js` (`validateProject`, 07 4.7, 6.7, 6.8; `formatValue`). `ProjectSerializer.read(data, {exportLimits})` returns `{ok, project, issues, sourceVersion, scope}`; every version 2.x and above is refused (M-IMP-4b) while no v2 reader exists (owner decision 2026-10-17: no v2 file now).
+- 3.3, 8.1: `Strategies.importValidation` is retired (`core.test.mjs` asserts it is gone).
+- 2.2, 3.5: `domain/rules.js` gains `sanitizeText` (`stripControls`, `truncateUnits`; 07 C28, 08 A3: no trim), `MAX_SECTION_ID`, `isValidSectionId`, `createIdAllocator` (07 6.8) and `MAX_IMPORT_BYTES` with its parts (08 4.3, A1); `Wall.MAX_SECTIONS = 200`, `canAddSection()`, and `replaceAll` recomputes `nextSectionId` with the 07 6.8 allocator (the legacy `max + 1` for valid ids); `WallSection.setName(raw)` (`sanitizeText(String(raw), 32)`) and `rename` through it.
+- 3.7, 3.9: `LEDWallView.rebuild`, `ObjExporter.write` and `GltfExporter.write` dispatch on the three modes and throw `Unknown mesh mode` otherwise (unreachable after the validator).
+- 3.10, 6.2 rows 6 and 24, 6.4, 6.10, 7: `WallController` takes `dialogs` and `addSection` alerts M-SEC-1 at 200 sections; `ProjectIO` takes `sectionsFromProject` (app/ may not import io/), refuses a file over `MAX_IMPORT_BYTES` before reading (M-IMP-6), alerts a read error (M-IMP-7), alerts the first error of a refused file and applies a valid one, then M-IMP-5 lists the corrections.
+- 1.6 R12: an import is validated before it reaches the domain; the domain constructors still never coerce.
+- 8.2: the B-L8 row is kept with a `Landed` fix cell; 8.3: the B-L8 rows at `WallSection.js#constructor`, `Wall.js#appendLikeLast`, `Wall.js#replaceAll`, `LogoLibrary.js#get`, `WallMeshBuilder.js#sectionGrid`, `ProjectSerializer.js#read`, `LEDWallView.js#rebuild` and `SectionLogosPanel.js#render` are deleted and B-L8 leaves `ObjExporter.js#write` and `GltfExporter.js#write`, so `LEGACY_SITES` no longer lists it.
+- 2.3: `validator.test.mjs` (new); `io.test.mjs` (the read oracle becomes "identical on every valid legacy wall with no correction, corrected or refused otherwise", the unknown-mode exports an explicit expected value, the import use case with every message); `domain.test.mjs` (`setName` equals the validator on 1,000 random strings, `MAX_SECTIONS`, the allocator); `wall-controller.test.mjs` (M-SEC-1, the 200-section round trip of criterion 16, the parity import of the validated document); `export-orientation.test.mjs` loses the B-L8 `OPEN_DEFECTS` row.

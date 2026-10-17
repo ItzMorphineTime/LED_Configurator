@@ -40,8 +40,6 @@ const MODES = ['combined', 'section', 'panel'];
 const OPEN_DEFECTS = Object.freeze([
   { pattern: /(^|\/|__)export-safe-distance__[^/ ]+\.obj :: /, bug: 'B-L29', fixedBy: '08 P2-5b',
     why: 'the safe-distance floor OBJ has no vn lines (and its triangles face -Y)' },
-  { pattern: /^import_edge\/ii_(combined|section)__export-(obj|gltf)__[^/ ]+\.(obj|gltf) :: /, bug: 'B-L8', fixedBy: '08 P2-3b',
-    why: 'counts imported as strings give a vertsPerRow of "101", so indices run past the vertex count' },
 ]);
 
 /** Deterministic PRNG (mulberry32), the generator of the other unit tests. */

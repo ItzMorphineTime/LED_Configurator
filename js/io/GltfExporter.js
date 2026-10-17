@@ -110,13 +110,16 @@ export class GltfExporter {
     /** @type {BufferState} */
     const state = { gltf, allBufferData: [], byteOffset: 0, accessorIndex: 0, meshIndex: 0 };
 
+    // The three mesh modes (B-L8 fixed in 08 P2-3b: the validator maps an unknown imported mode to 'combined', so the
+    // throw is unreachable from the app; legacy wrote any unknown mode as panels).
     if (meshMode === 'combined') {
       this.#writeCombined(state, sections, layout);
     } else if (meshMode === 'section') {
       this.#writeSections(state, layout);
-    } else {
-      // LEGACY(B-L8): any other mesh mode (an unvalidated imported string) is written as individual panels.
+    } else if (meshMode === 'panel') {
       this.#writePanels(state, layout);
+    } else {
+      throw new Error(`Unknown mesh mode ${JSON.stringify(meshMode)}`);
     }
 
     const totalLength = state.allBufferData.reduce((sum, arr) => sum + arr.length, 0);

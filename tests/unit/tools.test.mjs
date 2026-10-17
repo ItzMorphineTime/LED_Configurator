@@ -19,6 +19,7 @@ import { checkObjText, checkGltfOrientation, checkOrientationZip, checkOrientati
 import { checkGltfDocument } from '../../tools/check-gltf.mjs';
 import { CAP_WALL, DEFAULT_OUT as CAP_WALL_FILE, capWallText } from '../../tools/make-cap-wall.mjs';
 import { ProjectSerializer } from '../../js/io/ProjectSerializer.js';
+import { sectionsFromProject } from '../../js/io/ProjectSchema.js';
 import { Project } from '../../js/domain/Project.js';
 import { Palette } from '../../js/theme/Theme.js';
 import { Strategies } from '../../js/legacy/LegacyCompat.js';
@@ -324,8 +325,10 @@ describe('tools/make-cap-wall.mjs and tests/fixtures/normals-max-wall.json (01 T
     assert.equal(doc.version, '1.0');
     assert.equal(doc.mesh_mode, 'combined');
     assert.deepEqual(CAP_WALL, { sections: 200, panelCols: 50, panelRows: 20, panelWidth: 500, panelHeight: 500, ledX: 32, ledY: 32 });
-    const { sections, meshMode } = new ProjectSerializer({ palette: Palette }).read(doc);
-    assert.equal(meshMode, 'combined');
+    const read = new ProjectSerializer({ palette: Palette }).read(doc);
+    assert.deepEqual(read.issues.filter((i) => i.severity !== 'info'), [], 'the cap wall imports with no correction (08 P2-3b)');
+    const sections = sectionsFromProject(read.project);
+    assert.equal(read.project.mesh_mode, 'combined');
     assert.equal(sections.length, 200);
     assert.ok(sections.every((s) => s.panelCols === 50 && s.panelRows === 20 && s.curveIntensity === 0), 'every section is 50 x 20, flat');
     const project = Project.createDefault();

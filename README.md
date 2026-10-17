@@ -178,6 +178,12 @@ Export and import wall configurations. The JSON file (format version 1.0) contai
 Release note: a section name is always shown as plain text. A project file shared by someone else could hide HTML or
 script in a section name, which the page used to run on import; such a name is now displayed exactly as written.
 
+Release note: imported files are checked before anything changes. A value the app can repair (a number written as
+text, a fractional column count, a value outside its range, an invalid colour, a duplicate section id, an unknown mesh
+mode) is corrected, and one message lists every correction. A file that is not a project, has no sections, has more
+than 200 sections, was saved by a newer version or is larger than 179 MB is refused with a message, and the current
+wall stays as it was. A wall can have at most 200 sections; Add Section says so at the limit.
+
 Camera settings, scene props, panel ID styling, section logos and display toggles are not saved yet; they will come with the JSON v2 format. The copy of the JSON inside the ZIP package has no angle offsets, so importing it resets every section's offset to 0.
 
 ### OBJ Export

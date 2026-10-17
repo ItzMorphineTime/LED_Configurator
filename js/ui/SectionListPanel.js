@@ -65,8 +65,8 @@ function swatchesHtml(section, swatches) {
 
 /**
  * The card's inner markup. Every interpolation of a section value goes through escapeHtml() (B-M4 fixed in 08 P2-3a):
- * name (title and input), colour (dot and colour input), id, the eight numeric field values (imported strings are not
- * coerced until 08 P2-3b, B-L8), summary and hint. The swatches come from the palette (06 T7).
+ * name (title and input), colour (dot and colour input), id, the eight numeric field values (validated numbers since
+ * 08 P2-3b), summary and hint. The swatches come from the palette (06 T7).
  * Ports: index.html@cd3fd3f lines 3898, 3906, 3908, 3920-3980.
  * Side effects: none.
  * @param {import('../domain/WallSection.js').WallSection} section

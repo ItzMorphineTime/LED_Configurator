@@ -625,13 +625,22 @@ describe('Wall', () => {
     assert.equal(wall.nextSectionId, 2);
   });
 
-  test('appendLikeLast on an empty wall after replaceAll([]): TypeError, nextSectionId stays -Infinity', () => {
+  test('replaceAll([]) gives nextSectionId 0 (07 6.8; legacy -Infinity, B-L8; the validator never applies an empty wall)', () => {
     const wall = new Wall();
     wall.replaceAll([]);
-    same(wall.nextSectionId, -Infinity, 'after the empty import');
-    assert.throws(() => wall.appendLikeLast(['#00f0ff']), TypeError);
-    same(wall.nextSectionId, -Infinity, '-Infinity++ is -Infinity');
+    same(wall.nextSectionId, 0, 'after an empty list');
+    assert.throws(() => wall.appendLikeLast(['#00f0ff']), TypeError, 'still no section to copy');
     assert.equal(wall.count, 0);
+  });
+
+  test('MAX_SECTIONS and canAddSection (08 P2-3b; 07 4.1)', () => {
+    assert.equal(Wall.MAX_SECTIONS, 200);
+    const make = (id) => new WallSection({ ...WallSection.createDefault(), id });
+    const wall = new Wall({ sections: Array.from({ length: 199 }, (_, i) => make(i)) });
+    assert.equal(wall.canAddSection(), true);
+    wall.appendLikeLast(['#00f0ff']);
+    assert.equal(wall.count, 200);
+    assert.equal(wall.canAddSection(), false);
   });
 
   test('appendLikeLast on new Wall({ sections: [] }): TypeError after the allocator moved from 1 to 2', () => {
@@ -643,34 +652,64 @@ describe('Wall', () => {
     assert.equal(wall.count, 0);
   });
 
-  test("replaceAll with ['abc'] ids gives NaN, and appendLikeLast then hands out NaN ids", () => {
-    const wall = new Wall();
-    const imported = [new WallSection({ ...WallSection.createDefault(), id: 'abc' })];
-    wall.replaceAll(imported);
-    assert.equal(wall.sections, imported, 'the given array is stored, not copied');
-    same(wall.nextSectionId, NaN, 'Math.max("abc") + 1');
-    const added = wall.appendLikeLast(['#00f0ff', '#ff00aa']);
-    same(added.id, NaN, 'new id');
-    same(wall.nextSectionId, NaN, 'NaN++');
-    assert.equal(added.color, '#ff00aa');
-  });
-
-  test('replaceAll follows legacy coercion of ids (Math.max over the spread)', () => {
+  test('replaceAll stores the given array and recomputes nextSectionId with the 07 6.8 allocator (B-L8 fixed in 08 P2-3b)', () => {
     const make = (id) => new WallSection({ ...WallSection.createDefault(), id });
     const wall = new Wall();
-    wall.replaceAll([make('5'), make(2)]);
-    same(wall.nextSectionId, 6, 'numeric string');
-    wall.replaceAll([make(0), make(1), make(2)]);
-    same(wall.nextSectionId, 3, 'plain ids');
-    wall.replaceAll([make(1), make(undefined)]);
-    same(wall.nextSectionId, NaN, 'undefined id');
-    wall.replaceAll([make('3'), make('12')]);
-    same(wall.nextSectionId, 13, 'numeric comparison, not string order');
-    const legacy = (secs) => Math.max(...secs.map(s => s.id)) + 1;
-    for (const sections of fuzzWalls(5, 100)) {
-      wall.replaceAll(sections);
-      same(wall.nextSectionId, legacy(sections), 'fuzzed');
+    const imported = [make(4), make(9), make(2)];
+    wall.replaceAll(imported);
+    assert.equal(wall.sections, imported, 'the given array is stored, not copied');
+    same(wall.nextSectionId, 10, 'max + 1, the legacy formula for valid ids');
+    const added = wall.appendLikeLast(['#00f0ff', '#ff00aa']);
+    assert.equal(added.id, 10);
+    same(wall.nextSectionId, 11);
+    // For every set of valid ids below the top of the range, the legacy Math.max(...ids) + 1.
+    const rand = rng(31);
+    for (let k = 0; k < 300; k++) {
+      const ids = Array.from({ length: 1 + Math.floor(rand() * 8) }, () => Math.floor(rand() * 1000));
+      wall.replaceAll([...new Set(ids)].map(make));
+      same(wall.nextSectionId, Math.max(...ids) + 1, `ids ${ids}`);
     }
+    // At the top of the range: the smallest unused id, so re-validation never renumbers again (07 6.8).
+    wall.replaceAll([make(2147483647), make(0), make(1)]);
+    same(wall.nextSectionId, 2);
+    // Ids that are not valid (unreachable since the validator; legacy gave NaN) are ignored.
+    wall.replaceAll([make('abc'), make(NaN), make(3)]);
+    same(wall.nextSectionId, 4);
+  });
+
+  test('setName stores exactly what the import validator stores for any input (08 8.4 property test, 07 C28)', async () => {
+    const { validateProject } = await import('../../js/io/ProjectValidator.js');
+    const rand = rng(28);
+    const ALPHABET = ['a', 'Z', ' ', '7', '<', '"', '\u0000', '\u001f', '\u007f', '\u0085', '\u009f', '‪', '‮', '⁦',
+      '⁩', '‏', 'é', '\u{1F600}', '\uD83D', '\uDE00', '\t', '\n'];
+    for (let k = 0; k < 1000; k++) {
+      let raw = '';
+      const n = Math.floor(rand() * 41);
+      while (raw.length < n) raw += ALPHABET[Math.floor(rand() * ALPHABET.length)];
+      const s = WallSection.createDefault();
+      const stored = s.setName(raw);
+      const r = validateProject({ sections: [{ name: raw, id: 0 }] }, { palette: { sectionColors: ['#00f0ff'] } });
+      const validated = r.project.sections[0].name;
+      assert.equal(stored === '' ? 'Wall 1' : stored, validated, JSON.stringify(raw));
+      // and the stored name is a fixed point of the validator (Save then Open never changes it)
+      if (stored !== '') {
+        const again = validateProject({ sections: [{ name: stored, id: 0 }] }, { palette: { sectionColors: ['#00f0ff'] } });
+        assert.deepEqual(again.issues, [], JSON.stringify(stored));
+      }
+    }
+  });
+
+  test('setName applies the validator\'s text rule (07 C28, 08 A3): controls stripped, 32 units, no trim, pairs kept', () => {
+    const s = WallSection.createDefault();
+    assert.equal(s.setName('  Stage Left  '), '  Stage Left  ', 'never trimmed');
+    assert.equal(s.setName('A\u0000B\u001fC\u007fD\u0085E‮F⁦G'), 'ABCDEFG');
+    assert.equal(s.setName('x'.repeat(40)), 'x'.repeat(32));
+    assert.equal(s.setName(`${'x'.repeat(31)}\u{1F600}`), 'x'.repeat(31), 'a surrogate pair that would be split is dropped');
+    assert.equal(s.setName(`${'x'.repeat(30)}\u{1F600}`), `${'x'.repeat(30)}\u{1F600}`, 'a pair that fits is kept');
+    assert.equal(s.setName(5), '5');
+    assert.equal(s.setName('\u0001'), '');
+    assert.equal(s.rename('\u0001\u0002', 3), 'Wall 4', 'rename: empty after stripping -> the default name');
+    assert.equal(s.rename('Left‮', 0), 'Left');
   });
 
   test('removeById removes every duplicate (strict equality) and replaces the array', () => {

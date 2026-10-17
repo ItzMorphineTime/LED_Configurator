@@ -661,15 +661,15 @@ then the summary.
   `node tools/check-orientation.mjs --failures-only tests/regression/output/baseline` checks every
   export of a capture. Since 08 P2-2 every wall export passes; what still fails is owned by later 08
   commits and listed in `tests/unit/export-orientation.test.mjs` (`OPEN_DEFECTS`): the safe-distance
-  floor OBJs (no `vn`, B-L29, 08 P2-5b) and `import_edge`'s `ii_combined` and `ii_section` OBJ and glTF
-  (string counts, B-L8, 08 P2-3b); `p2_zero_inputs`' combined OBJ passes since 08 P2-8a (Columns 2.5 is rounded to 3).
+  floor OBJs (no `vn`, B-L29, 08 P2-5b); `p2_zero_inputs`' combined OBJ passes since 08 P2-8a (Columns 2.5 is rounded
+  to 3) and `import_edge`'s `ii_combined` and `ii_section` OBJ and glTF since 08 P2-3b (the string counts are coerced).
   That test runs the same check over `GOLDEN_DIR` and over 500 seeded integer walls in every mesh mode.
 - `node tools/check-gltf.mjs <file.gltf ...>`: buffer, bufferView and accessor bounds, component and
   4-byte alignment, index values below the vertex count and never the primitive-restart value,
   `POSITION` min/max compared after `Math.fround`, unit `NORMAL`s, the `TEXCOORD_0` count, and the
   mesh, material, node and scene references; exit 1 on any failure. Today the string-number glTFs of
-  `import_edge` (`ii_combined`, `ii_section`) fail it (indices beyond the vertex count, B-L8) until
-  08 P2-3b.
+  `import_edge` (`ii_combined`, `ii_section`) failed it (indices beyond the vertex count, B-L8) until
+  08 P2-3b, which coerces the string counts on import.
 
 Their unit tests are `tests/unit/tools.test.mjs`; the `--expect` semantics are unit-tested in
 `tests/unit/compare.test.mjs` on synthetic output trees.
@@ -812,7 +812,10 @@ in parentheses changes them:
   glTF throw `TypeError: Cannot read properties of undefined (reading 'color')` (08 P2-1a: both are
   M-EXP-1 alerts, `Export OBJ failed: ... No file was downloaded.`; Add Section still throws). Importing `null`
   alerts `Error parsing JSON file: Cannot read properties of null (reading 'sections')`, and the
-  malformed file alerts `Error parsing JSON file: Unexpected end of JSON input`.
+  malformed file alerts `Error parsing JSON file: Unexpected end of JSON input` (08 P2-3b, B-L8: the empty file is
+  refused with M-IMP-2 and the default wall stays, so Add Section works and every export downloads; (ii) string
+  numbers, (iii) the unknown mode, (iv) the duplicate ids and (v) the string id are corrected with one M-IMP-5 alert
+  each; `{foo: 1}` alerts M-IMP-1 and `null` M-IMP-4a; the malformed file keeps its text).
 - `preview_off_in_pilot`: three alerts `Enable Camera Frustum Preview first to use Pilot Mode`, and
   pilot mode stays on until the preview is enabled again (B-H4).
 - `preview_resize`: the second drag produces a 1200×120 preview window (B-L32).
@@ -835,7 +838,11 @@ in parentheses changes them:
   Ctrl and auto-repeat are filtered, so translate mode and pilot mode stay off in steps 1 to 3).
 - `p2_project_v2`: the JSON exports are v1 (sections and mesh mode only), so the restored page has the
   default camera, props, display and no logos (B-L31); the hostile file's logos are never stored, so
-  `stored_svg_08_hostile` lists no SVG; `network.json` is empty.
+  `stored_svg_08_hostile` lists no SVG; `network.json` is empty (08 P2-3b: the step-8 file says `"version": "2.0"`,
+  which is refused with M-IMP-4b until a v2 reader exists, so step 8 exports the wall of step 7).
+- `p2_oversize_canvas`: since 08 P2-3b the import clamps the section's 70 columns to the 50-column limit (M-IMP-5),
+  so the wall is 50,000 px wide: still beyond the 32,767 px of `CANVAS_HARD_LIMITS`, so M-EXP-2, M-EXP-4 and the
+  viewport fallback are exercised as before (the harness browser itself could draw it).
 
 A candidate that fixes these will report the missing error as a WARN, and the newly produced
 file as an EXTRA output (FAIL). Accept such a change deliberately through its expected-change

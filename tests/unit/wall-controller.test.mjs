@@ -24,6 +24,8 @@ import { WallSection, SECTION_FIELDS } from '../../js/domain/WallSection.js';
 import { layoutProject } from '../../js/geometry/WallLayout.js';
 import { Palette } from '../../js/theme/Theme.js';
 import { WallController } from '../../js/app/WallController.js';
+import { ProjectSerializer } from '../../js/io/ProjectSerializer.js';
+import { sectionsFromProject } from '../../js/io/ProjectSchema.js';
 import { runFontGate } from '../../js/app/fontGate.js';
 import { HeaderStats } from '../../js/ui/HeaderStats.js';
 import { escapeHtml } from '../../js/ui/dom.js';
@@ -67,10 +69,12 @@ function makeRig({ sections = null, panelIds = false, ledSim = false, cameraEnab
   for (const [key, type] of Object.entries(Events)) {
     bus.on(type, (payload) => { events.push({ key, payload }); trace.push(key); });
   }
-  const wc = new WallController({ project, view, ledTiles, orbit, hub, bus, palette: Palette });
+  const alerts = [];
+  const dialogs = { alert: (msg) => { alerts.push(msg); trace.push('alert'); } };
+  const wc = new WallController({ project, view, ledTiles, orbit, hub, bus, palette: Palette, dialogs });
   const rebuilds = () => view.calls.length;
   const emitted = (key) => events.filter((e) => e.key === key).map((e) => e.payload);
-  return { project, bus, trace, events, view, ledTiles, orbit, hub, wc, rebuilds, emitted };
+  return { project, bus, trace, events, view, ledTiles, orbit, hub, wc, rebuilds, emitted, alerts };
 }
 
 /** The trace of one P1 run (preview off). */
@@ -210,13 +214,36 @@ describe('rebuild policy (ARCHITECTURE.md 6.2): run counts and tile-cache clears
     assert.equal(r.ledTiles.clears, 0);
   });
 
-  test('row 6 addSection on an empty wall: allocator incremented, TypeError, nothing else', () => {
-    const r = makeRig({ sections: [] });
-    assert.equal(r.project.wall.nextSectionId, -Infinity);
-    r.project.wall.nextSectionId = 4;
-    assert.throws(() => r.wc.addSection(), TypeError);
-    assert.equal(r.project.wall.nextSectionId, 5);
-    assert.deepEqual(r.trace, []);
+  test('row 6 addSection at Wall.MAX_SECTIONS (200): the M-SEC-1 alert and nothing else (08 P2-3b)', () => {
+    const r = makeRig({ sections: Array.from({ length: 199 }, (_, i) => fields({ id: i, name: `S${i}` })) });
+    r.wc.addSection();
+    assert.equal(r.project.wall.count, 200, 'the 200th section is added');
+    assert.deepEqual(r.alerts, []);
+    r.trace.length = 0;
+    const before = r.project.wall.sections.slice();
+    const next = r.project.wall.nextSectionId;
+    r.wc.addSection();
+    assert.deepEqual(r.alerts, ['A wall can have at most 200 sections.']);
+    assert.deepEqual(r.trace, ['alert'], 'no event, no rebuild');
+    assert.deepEqual(r.project.wall.sections, before);
+    assert.equal(r.project.wall.nextSectionId, next, 'the allocator is untouched');
+  });
+
+  test('a 200-section wall written by the serializer re-imports with zero corrections; Add Section then alerts M-SEC-1 (08 criterion 16)', () => {
+    const r = makeRig();
+    for (let i = 1; i < 200; i++) r.wc.addSection();
+    assert.equal(r.project.wall.count, 200);
+    const serializer = new ProjectSerializer({ palette: Palette });
+    const read = serializer.read(JSON.parse(JSON.stringify(serializer.write(r.project, { variant: 'file' }))));
+    assert.ok(read.ok);
+    assert.deepEqual(read.issues.filter((i) => i.severity !== 'info'), []);
+    const imported = sectionsFromProject(read.project);
+    assert.deepEqual(imported.map((x) => ({ ...x })), r.project.wall.sections.map((x) => ({ ...x })), 'the same wall');
+    r.wc.applyImport({ sections: imported, meshMode: read.project.mesh_mode });
+    assert.equal(r.project.wall.nextSectionId, 200);
+    r.wc.addSection();
+    assert.deepEqual(r.alerts, ['A wall can have at most 200 sections.']);
+    assert.equal(r.project.wall.count, 200);
   });
 
   test('row 7 deleteSection with one section: nothing at all', () => {
@@ -378,19 +405,11 @@ describe('rebuild policy (ARCHITECTURE.md 6.2): run counts and tile-cache clears
     for (const meshMode of [undefined, '', 0, null]) {
       const r = makeRig();
       r.project.meshMode = 'section';
-      r.wc.applyImport({ sections: [new WallSection(fields({ id: 'a' }))], meshMode });
+      r.wc.applyImport({ sections: [new WallSection(fields({ id: 7 }))], meshMode });
       assert.equal(r.project.meshMode, 'section');
       assert.deepEqual(r.trace, ['WALL_SECTIONS_CHANGED', ...P1]);
-      assert.ok(Number.isNaN(r.project.wall.nextSectionId), 'B-L8: non-numeric ids give a NaN allocator');
+      assert.equal(r.project.wall.nextSectionId, 8, 'the next free id (07 6.8)');
     }
-  });
-
-  test('row 24 applyImport of an empty list rebuilds an empty wall (allocator -Infinity)', () => {
-    const r = makeRig();
-    r.wc.applyImport({ sections: [], meshMode: 'combined' });
-    assert.equal(r.project.wall.count, 0);
-    assert.equal(r.project.wall.nextSectionId, -Infinity);
-    assert.deepEqual(r.emitted('WALL_STATS_CHANGED'), [{ totalPixels: 0, totalPanels: 0, totalSections: 0, totalArc: 0 }]);
   });
 
   test('row F6-1 font gate (06 5.6): one rebuild with panel IDs on, none with them off or with nothing pending', async () => {
@@ -780,7 +799,8 @@ function buildModern(doc) {
   const orbit = { updateCameraPosition() {} };
   const hub = { refresh() { throw new Error('the hub must not run while the preview is off'); } };
   const headerStats = new HeaderStats({ doc, bus });
-  const wallController = new WallController({ project, view, ledTiles, orbit, hub, bus, palette: Palette });
+  const dialogs = { alert: (msg) => doc.call(`alert:${msg}`) };
+  const wallController = new WallController({ project, view, ledTiles, orbit, hub, bus, palette: Palette, dialogs });
   const sectionList = new SectionListPanel({ doc, project, wallController, bus, palette: Palette });
   const displayPanel = new WallDisplayPanel({ doc, wallController, bus });
   const logosPanel = new SectionLogosPanel({ doc, project, wallController, bus });
@@ -1023,35 +1043,33 @@ describe('legacy parity: panels + WallController vs index.html@cd3fd3f', { skip:
         { name: 'No id', panel: { columns: 50 }, led_resolution: { x: 100 } },
       ],
     };
+    // Since 08 P2-3b (B-L8) the import is validated: the modern side reads the document with the app's serializer; the
+    // legacy side imports the validated document (written back as a v1 file), which its `||` mapping takes verbatim,
+    // so the two keep comparing every DOM write of the apply. A document the validator refuses changes nothing.
+    const serializer = new ProjectSerializer({ palette: { sectionColors: Palette.sectionColors } });
+    const validatedV1 = (read) => ({
+      ...(read.project.mesh_mode ? { mesh_mode: read.project.mesh_mode } : {}),
+      sections: read.project.sections.map((s) => ({ name: s.name, id: s.id, panel: s.panel, led_resolution: s.led_resolution,
+        curvature: s.curvature, color: s.color })),
+    });
     const importAs = (data) => (doc, which) => {
-      if (which === 'legacy') { L.importTail(data); return; }
-      // ProjectSerializer.read (WP5) is replaced here by the verbatim legacy mapping 4976-4988.
-      const sections = data.sections.map((s, i) => new WallSection({
-        id: s.id !== undefined ? s.id : i,
-        name: s.name || `Wall ${i + 1}`,
-        panelCols: s.panel?.columns || 5,
-        panelRows: s.panel?.rows || 3,
-        panelWidth: s.panel?.width_mm || 500,
-        panelHeight: s.panel?.height_mm || 500,
-        ledX: s.led_resolution?.x || 32,
-        ledY: s.led_resolution?.y || 32,
-        curveIntensity: s.curvature?.angle_degrees || 0,
-        angleOffset: s.curvature?.angle_offset_degrees || 0,
-        color: s.color || Palette.sectionColors[i % Palette.sectionColors.length],
-      }));
-      M.wallController.applyImport({ sections, meshMode: data.mesh_mode });
+      const read = serializer.read(JSON.parse(JSON.stringify(data)));
+      if (!read.ok) return;
+      if (which === 'legacy') { L.importTail(validatedV1(read)); return; }
+      M.wallController.applyImport({ sections: sectionsFromProject(read.project), meshMode: read.project.mesh_mode });
     };
-    log = step('import with mesh_mode and string/missing ids', importAs(importData));
+    log = step('import with mesh_mode and string/missing ids (validated: the string id renumbered, B-L8 fixed)', importAs(importData));
     assert.equal(rebuilds(log), 1);
-    step('add after the import (NaN allocator: the new card stays collapsed)', (doc) => click(doc, 'add-section-btn'), { regions: true });
-    step('delete the string-id section', (doc) => card(doc, 1).querySelector('.section-delete').fire('click'), { regions: true });
+    step('add after the import (the next free id; the new card is expanded)', (doc) => click(doc, 'add-section-btn'), { regions: true });
+    step('delete the renumbered section', (doc) => card(doc, 1).querySelector('.section-delete').fire('click'), { regions: true });
     step('collapse/expand cards', (doc) => { card(doc, 0).querySelector('.section-header').fire('click'); card(doc, 2).querySelector('.section-header').fire('click'); });
     step('add after a delete keeps the collapse states', (doc) => click(doc, 'add-section-btn'), { regions: true });
     step('import without mesh_mode', importAs({ sections: [{ id: 3, name: 'Solo' }, { id: 8 }] }));
     step('mesh mode after import', (doc) => label(doc, 'section').fire('click'));
-    step('import of an empty list', importAs({ mesh_mode: 'panel', sections: [] }));
-    step('add on the empty wall throws TypeError after the allocator increment', (doc) => click(doc, 'add-section-btn'), { throws: TypeError });
-    step('stats after the failed add', (doc, which) => (which === 'legacy' ? L.createLEDWall() : M.wallController.rebuild()));
+    log = step('import of an empty list is refused: nothing changes (M-IMP-2 is ProjectIO\'s alert)', importAs({ mesh_mode: 'panel', sections: [] }));
+    assert.deepEqual(log, []);
+    step('add after the refused import', (doc) => click(doc, 'add-section-btn'), { regions: true });
+    step('stats', (doc, which) => (which === 'legacy' ? L.createLEDWall() : M.wallController.rebuild()));
   });
 
   test('delete keeps every remaining card\'s own collapse state (PR2: the snapshot maps the cards to the rendered list)', () => {

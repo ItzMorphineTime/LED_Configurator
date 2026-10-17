@@ -6,6 +6,8 @@
  * Sync/async shape is legacy (R13): exportZIP and exportPanelIds stay async. Every export runs inside
  * #runExport (08 P2-1a, B-H3), which reports a failure as the M-EXP-1 alert instead of an uncaught exception or an
  * unhandled rejection; its try/catch and the legacy one around the import parse are the only ones (R13 amendment).
+ * Since 08 P2-3b (B-L8 fixed) the import is validated (io/ProjectValidator through the injected serializer) and every
+ * refusal and correction is reported (08 3.3: M-IMP-1 to M-IMP-7).
  * Legacy source: index.html@cd3fd3f 2786-2827 (exportSafeDistanceOBJ), 4491-4554 (exportZIP), 4911-4924
  * (exportOBJ, exportGLTF), 4926-4940 (exportPanelIds), 4942-4965 (exportJSON), 4967-5010 (importJSON),
  * 5082-5091 (downloadFile).
@@ -15,6 +17,7 @@
 import { computeAtlas, canvasFits, CANVAS_HARD_LIMITS } from '../geometry/TextureAtlas.js';
 import { zipTextureFileName } from '../geometry/PanelNaming.js';
 import { Strategies } from '../legacy/LegacyCompat.js';
+import { MAX_IMPORT_BYTES } from '../domain/rules.js';
 
 /**
  * The dialogs facade (ui/dom.js createDialogs).
@@ -43,6 +46,23 @@ const ExportMessages = Object.freeze({
   /** @param {string[]} names  the left-out ZIP entry names @returns {string} */
   zipTexturesLeftOut: (names) => `The ZIP was created, but ${names.length} texture(s) were too large for this browser and ` +
     `were left out: ${names.join(', ')}.`,
+});
+
+/**
+ * The import alerts of 08 3.3 that are not an issue of the serializer (P2-3b): M-IMP-6 (the file is too large; never
+ * read), M-IMP-7 (the read failed) and M-IMP-5 (the corrections of an applied import: up to 10 lines, then a count).
+ */
+const ImportAlerts = Object.freeze({
+  /** M-IMP-6 @returns {string} */
+  tooLarge: () => `Import failed: the file is larger than ${Math.round(MAX_IMPORT_BYTES / 1048576)} MB, the maximum for a project file.`,
+  /** M-IMP-7 @param {string} name  reader.error?.name @returns {string} */
+  unreadable: (name) => `Import failed: the file could not be read (${name}).`,
+  /** M-IMP-5 @param {{message: string}[]} warnings @returns {string} */
+  corrections: (warnings) => {
+    const lines = warnings.slice(0, 10).map((w) => `• ${w.message}`);
+    if (warnings.length > 10) lines.push(`• …and ${warnings.length - 10} more`);
+    return `Imported with ${warnings.length} correction(s):\n${lines.join('\n')}`;
+  },
 });
 
 /** The single anchor-download sequence (legacy 5082-5091 == 4547-4553 == 4932-4938). */
@@ -122,6 +142,8 @@ export class ProjectIO {
   #brand;
   /** @type {Window} */
   #win;
+  /** @type {(project: object) => import('../domain/WallSection.js').WallSection[]} io/ProjectSchema.sectionsFromProject */
+  #sectionsFromProject;
 
   /**
    * Side effects: none.
@@ -133,10 +155,11 @@ export class ProjectIO {
    *          panelIds: import('../render/textures/PanelIdRenderer.js').PanelIdRenderer,
    *          safeDistance: import('../render/SafeDistanceView.js').SafeDistanceView,
    *          downloader: Downloader, JSZip: new () => object, dialogs: Dialogs, brand: IoBrand,
-   *          win: Window}} deps
+   *          win: Window, sectionsFromProject: (project: object) => import('../domain/WallSection.js').WallSection[]}} deps
+   *   sectionsFromProject: io/ProjectSchema.sectionsFromProject, injected by App (app/ may not import io/; 08 P2-3b)
    */
   constructor({ project, wallController, serializer, objExporter, gltfExporter, panelIds, safeDistance, downloader,
-    JSZip, dialogs, brand, win }) {
+    JSZip, dialogs, brand, win, sectionsFromProject }) {
     this.#project = project;
     this.#wallController = wallController;
     this.#serializer = serializer;
@@ -149,6 +172,7 @@ export class ProjectIO {
     this.#dialogs = dialogs;
     this.#brand = brand;
     this.#win = win;
+    this.#sectionsFromProject = sectionsFromProject;
   }
 
   /**
@@ -375,28 +399,50 @@ export class ProjectIO {
   }
 
   /**
-   * P-IMPORT (ARCHITECTURE.md 6.10): reads the chosen file as text; on load parses it, reads it as v1 and
-   * applies it. Only the parse + read + apply step is inside the legacy try/catch; any error becomes the legacy
-   * alert. The input is reset synchronously so the same file can be chosen again. Logos are neither reset nor
-   * re-rendered (B-L21, tagged at WallController.applyImport).
+   * P-IMPORT (ARCHITECTURE.md 6.10; 08 4.3, P2-3b): a file larger than MAX_IMPORT_BYTES is refused before it is read
+   * (M-IMP-6); a read failure alerts M-IMP-7 (legacy had no handler, B-L8); on load the text is parsed (a parse error
+   * keeps the legacy alert text, V-5) and read through the serializer (version detection, v1 migration, validation).
+   * A document with an error issue is refused with that issue's message and changes nothing (atomic import, 07 4.7);
+   * otherwise the validated wall is applied (wall scope: sections, and the mesh mode when the file names one) and, if
+   * the validator corrected anything, M-IMP-5 lists the corrections. The parse, read and apply steps stay inside the
+   * legacy try/catch, so any other error still becomes the legacy alert. The input is reset synchronously so the same
+   * file can be chosen again. Logos are neither reset nor re-rendered until 08 P2-3d (B-L21, tagged at
+   * WallController.applyImport).
    * Ports: index.html@cd3fd3f lines 4967-5010.
-   * Side effects: starts a FileReader; resets the input's value; later (on load) the wall import pipeline or
-   * an alert.
+   * Side effects: one alert (M-IMP-6), or starts a FileReader; resets the input's value; later (on load or error) the
+   * wall import pipeline and at most one alert (M-IMP-5), or one alert (an error message).
    * @param {Event} e  the #import-input change event
    */
   importFromInputEvent(e) {
     const file = e.target.files[0];
     if (!file) return;
 
+    if (file.size > MAX_IMPORT_BYTES) {
+      this.#dialogs.alert(ImportAlerts.tooLarge());
+      e.target.value = ''; // Reset input
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
         const data = JSON.parse(event.target.result);
-        const parsed = this.#serializer.read(data);
-        if (parsed) this.#wallController.applyImport(parsed);
+        const result = this.#serializer.read(data);
+        if (!result.ok) {
+          this.#dialogs.alert(result.issues.find((issue) => issue.severity === 'error').message);
+          return;
+        }
+        this.#wallController.applyImport({
+          sections: this.#sectionsFromProject(result.project), meshMode: result.project.mesh_mode,
+        });
+        const corrections = result.issues.filter((issue) => issue.severity === 'warning');
+        if (corrections.length) this.#dialogs.alert(ImportAlerts.corrections(corrections));
       } catch (err) {
         this.#dialogs.alert('Error parsing JSON file: ' + err.message);
       }
+    };
+    reader.onerror = () => {
+      this.#dialogs.alert(ImportAlerts.unreadable(reader.error?.name ?? 'unknown error'));
     };
     reader.readAsText(file);
     e.target.value = ''; // Reset input

@@ -21,6 +21,7 @@ import { layoutProject } from '../../js/geometry/WallLayout.js';
 import { WallMeshBuilder } from '../../js/geometry/WallMeshBuilder.js';
 import { computeAtlas } from '../../js/geometry/TextureAtlas.js';
 import { ProjectSerializer } from '../../js/io/ProjectSerializer.js';
+import { sectionsFromProject } from '../../js/io/ProjectSchema.js';
 import { CONFIGS } from '../regression/configs.mjs';
 
 const IDENTITY4 = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
@@ -29,13 +30,14 @@ const TIP = [0.8, 0.6, 0.2];
 const out = (lines) => ({ positions: new Float32Array(lines * 6), colors: new Float32Array(lines * 6), count: 0, seen: 0 });
 const close = (a, b, eps, msg) => assert.ok(Math.abs(a - b) <= eps, `${msg}: ${a} vs ${b}`);
 
-/** The project of a harness config (tests/regression/configs.mjs), read by the app's own v1 reader. */
+/** The project of a harness config (tests/regression/configs.mjs), read by the app's own v1 reader (validated since 08 P2-3b). */
 function configProject(name) {
   if (name === 'default') return Project.createDefault();
-  const { sections, meshMode } = new ProjectSerializer({ palette: Palette }).read(CONFIGS[name]);
+  const read = new ProjectSerializer({ palette: Palette }).read(CONFIGS[name]);
+  assert.ok(read.ok, name);
   const project = Project.createDefault();
-  project.wall.replaceAll(sections);
-  if (meshMode) project.meshMode = meshMode;
+  project.wall.replaceAll(sectionsFromProject(read.project));
+  if (read.project.mesh_mode) project.meshMode = read.project.mesh_mode;
   return project;
 }
 const oneSection = (fields) => {

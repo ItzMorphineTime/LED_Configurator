@@ -148,13 +148,16 @@ export class LEDWallView {
     const sections = layout.sections.map((sl) => sl.section);
     const atlas = computeAtlas(sections);
     this.#materials.beginRebuild();
+    // The three mesh modes (B-L8 fixed in 08 P2-3b: the validator maps an unknown imported mode to 'combined', so the
+    // throw is unreachable from the app; legacy rendered any unknown mode as panels).
     if (meshMode === 'combined') {
       this.#buildCombined(layout, sections, atlas);
     } else if (meshMode === 'section') {
       this.#buildSections(layout, atlas);
-    } else {
-      // LEGACY(B-L8): any unknown (imported) mesh mode renders as individual panels.
+    } else if (meshMode === 'panel') {
       this.#buildPanels(layout, atlas);
+    } else {
+      throw new Error(`Unknown mesh mode ${JSON.stringify(meshMode)}`);
     }
 
     // 4. Panel frames.

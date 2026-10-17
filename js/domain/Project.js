@@ -129,7 +129,8 @@ export class PanelIdStyle {
 export class Project {
   /** @type {Wall} */
   wall;
-  /** @type {*} 'combined' | 'section' | 'panel' | any imported string (B-L8: unknown renders as panels; tagged at LEDWallView.rebuild) */
+  /** @type {'combined'|'section'|'panel'} the mesh mode (since 08 P2-3b an import can only set one of the three; legacy kept
+   *  any imported string and rendered it as panels, B-L8) */
   meshMode;
   /** @type {DisplaySettings} */
   display;

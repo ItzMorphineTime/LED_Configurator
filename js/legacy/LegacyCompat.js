@@ -56,7 +56,6 @@ export const Strategies = deepFreeze({
   zipTextureNaming: 'sanitized-name',              // B-L14 (no de-duplication)
   mtlDownloadDelayMs: 100,                         // B-L7
   zipJsonIncludesAngleOffset: false,               // B-M3
-  importValidation: 'none',                        // B-L8
   framingBounds: 'flat',                           // B-L2, B-M10
   curveBeforeFirstPanel: true,                     // B-L1
   safeDistanceBand: 'per-column-own-normal',       // B-M15, B-L29
@@ -174,7 +173,7 @@ const QUIRKS = deepFreeze({
   'B-L7': ['MTL second download, textures missing',
     'bundle'],
   'B-L8': ['No import validation; unknown mode renders as panels; raw coercion',
-    'validator'],
+    'Landed in 08 P2-3b (`ProjectSerializer.read`: `detectVersion`, `migrateV1toV2` and `validateProject` of `io/ProjectMigrations.js`, `io/ProjectValidator.js`, `io/ProjectSchema.js`; `Strategies.importValidation` retired; `Wall.MAX_SECTIONS` with M-SEC-1; the size limit and the read error; the three-mode dispatch; `WallSection.setName`; no tag site)'],
   'B-L9': ['`|| default` turns 0 into the default (D-7, J-5, V-3)',
     'change `orDefault` or per rule'],
   'B-L10': ['Gizmo posY >= 0 vs pilot >= 0.1 per frame; Z unclamped',
@@ -240,12 +239,8 @@ const QUIRKS = deepFreeze({
  */
 const TAG_SITES = deepFreeze([
   ['js/legacy/LegacyCompat.js#orDefault', ['B-L9']],
-  ['js/domain/WallSection.js#constructor', ['B-L8']],
   ['js/domain/WallSection.js#exceeds4K', ['B-L17']],
-  ['js/domain/Wall.js#appendLikeLast', ['B-L8']],
-  ['js/domain/Wall.js#replaceAll', ['B-L8']],
   ['js/domain/Wall.js#flatBounds', ['B-L2', 'B-M10']],
-  ['js/domain/LogoLibrary.js#get', ['B-L8']],
   ['js/domain/CineCamera.js#coverage', ['B-M10']],
   ['js/domain/CineCamera.js#presetShortName', ['B-L34']],
   ['js/domain/CineCamera.js#translateBy', ['B-L10']],
@@ -256,18 +251,15 @@ const TAG_SITES = deepFreeze([
   ['js/geometry/WallLayout.js#computeWallLayout', ['B-L1']],
   ['js/geometry/WallLayout.js#flatEdges', ['B-M15']],
   ['js/geometry/WallLayout.js#framingBounds', ['B-L2', 'B-M10']],
-  ['js/geometry/WallMeshBuilder.js#sectionGrid', ['B-L8']],
   ['js/geometry/WallMeshBuilder.js#combinedGrid', ['B-M5']],
   ['js/geometry/TextureAtlas.js#panelPxPerLed', ['B-M16']],
   ['js/geometry/PanelNaming.js#zipTextureFileName', ['B-L14']],
   ['js/geometry/PanelNaming.js#mtlTextureFile', ['B-M2']],
   ['js/io/ProjectSerializer.js#write', ['B-M3', 'B-L31']],
-  ['js/io/ProjectSerializer.js#read', ['B-L8']],
-  ['js/io/ObjExporter.js#write', ['B-M6', 'B-L6', 'B-L8']],
-  ['js/io/GltfExporter.js#write', ['B-L6', 'B-L8']],
+  ['js/io/ObjExporter.js#write', ['B-M6', 'B-L6']],
+  ['js/io/GltfExporter.js#write', ['B-L6']],
   ['js/io/GltfExporter.js#addMesh', ['B-M7']],
   ['js/render/SceneManager.js#addHelper', ['B-M11']],
-  ['js/render/LEDWallView.js#rebuild', ['B-L8']],
   ['js/render/LEDMaterialFactory.js#combined', ['B-M5', 'B-L18']],
   ['js/render/textures/LEDPixelTextureFactory.js#tile', ['B-L18', 'B-L20']],
   ['js/render/textures/PanelIdRenderer.js#panelCanvas', ['B-L19', 'B-M16']],
@@ -295,7 +287,6 @@ const TAG_SITES = deepFreeze([
   ['js/app/ProjectIO.js#exportOBJ', ['B-L7']],
   ['js/app/ProjectIO.js#exportZIP', ['B-L14']],
   ['js/ui/SectionListPanel.js#patchCard', ['B-L16']],
-  ['js/ui/SectionLogosPanel.js#render', ['B-L8']],
   ['js/ui/SectionLogosPanel.js#onUpload', ['B-L35']],
   ['js/ui/SectionLogosPanel.js#constructor', ['B-L21']],
   ['js/ui/WallDisplayPanel.js#bind', ['B-L13']],
