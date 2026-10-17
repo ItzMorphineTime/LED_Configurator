@@ -198,9 +198,9 @@ export class CameraRigView {
   }
 
   /**
-   * Removes and disposes the rig (no maps). The safe-distance group is NOT touched here: it stays in the scene
-   * when the preview is switched off (B-M8, tagged at CameraController.setPreviewEnabled). bodyMesh is nulled with the
-   * group (08 P2-4a, the 08 2.2 observation: legacy kept a stale `cameraBodyMesh`).
+   * Removes and disposes the rig (no maps). The safe-distance group is not touched here: CameraController removes it
+   * right after, through CameraHub.syncSafeDistance (B-M8 fixed in 08 P2-4b). bodyMesh is nulled with the group
+   * (08 P2-4a, the 08 2.2 observation: legacy kept a stale `cameraBodyMesh`).
    * Ports: index.html@cd3fd3f lines 2536-2548.
    * Side effects: removes the group helper from the scene and disposes its geometries and materials.
    * @returns {void}

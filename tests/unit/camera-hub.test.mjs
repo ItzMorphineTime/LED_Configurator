@@ -242,7 +242,7 @@ describe('CameraController.setPreviewEnabled (P-PREVIEW, ARCHITECTURE.md 6.5)', 
     const s = setup({ enabled: true, rigExists: true, previewInitialized: true, pilotActive: true, selectedId: 'camera' });
     s.controller.setPreviewEnabled(false);
     assert.deepEqual(s.calls(), [
-      'emit CAMERA_PREVIEW_CHANGED', 'preview.setVisible', 'rig.remove',
+      'emit CAMERA_PREVIEW_CHANGED', 'preview.setVisible', 'rig.remove', 'safeDistance.remove',
       'pilot.toggle',
       'selection.isSelected', 'selection.deselect',
     ]);
@@ -254,18 +254,20 @@ describe('CameraController.setPreviewEnabled (P-PREVIEW, ARCHITECTURE.md 6.5)', 
     assert.equal(s.entry('selection.isSelected').arg, 'camera');
   });
 
-  test('off never removes the safe-distance group (B-M8)', () => {
+  test('off removes the safe-distance group right after the rig (B-M8 fixed in 08 P2-4b); on again rebuilds it', () => {
     const s = setup({ enabled: true, rigExists: true, previewInitialized: true, showSafeDistance: true });
     s.controller.setPreviewEnabled(false);
-    assert.ok(!s.calls().includes('safeDistance.remove'));
     assert.ok(!s.calls().includes('safeDistance.create'));
-    assert.deepEqual(s.calls(), ['emit CAMERA_PREVIEW_CHANGED', 'preview.setVisible', 'rig.remove', 'selection.isSelected']);
+    assert.deepEqual(s.calls(), ['emit CAMERA_PREVIEW_CHANGED', 'preview.setVisible', 'rig.remove', 'safeDistance.remove', 'selection.isSelected']);
+    s.log.length = 0;
+    s.controller.setPreviewEnabled(true);
+    assert.ok(s.calls().includes('safeDistance.create'), 'the next enable shows it again (08 criterion 20, cam_15)');
   });
 
   test('off outside pilot mode with nothing selected: no toggle, no deselect', () => {
     const s = setup({ enabled: true, rigExists: true, previewInitialized: true, selectedId: 'person' });
     s.controller.setPreviewEnabled(false);
-    assert.deepEqual(s.calls(), ['emit CAMERA_PREVIEW_CHANGED', 'preview.setVisible', 'rig.remove', 'selection.isSelected']);
+    assert.deepEqual(s.calls(), ['emit CAMERA_PREVIEW_CHANGED', 'preview.setVisible', 'rig.remove', 'safeDistance.remove', 'selection.isSelected']);
     assert.equal(s.selection.selectedId, 'person');
   });
 });

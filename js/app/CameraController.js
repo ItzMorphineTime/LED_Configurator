@@ -165,13 +165,14 @@ export class CameraController {
 
   /**
    * P-PREVIEW (ARCHITECTURE.md 6.5), after CameraPanel flipped the toggle class. On: the preview renderer is
-   * created on the first enable, then the pose is reset (which runs P2). Off: the rig is removed, pilot mode is left
-   * (cleanly since 08 P2-4a, B-H4: the pilot guard applies only on entry) and the camera is deselected.
+   * created on the first enable, then the pose is reset (which runs P2). Off: the rig and the safe-distance floor are
+   * removed (the floor since 08 P2-4b, B-M8), pilot mode is left (cleanly since 08 P2-4a, B-H4: the pilot guard applies
+   * only on entry) and the camera is deselected.
    * Ports: index.html@cd3fd3f lines 4232-4248.
    * Side effects: writes cine.enabled; emits CAMERA_PREVIEW_CHANGED {enabled} (#camera-preview-options);
    *   preview.setVisible (#camera-preview-window); on: preview.init() (first time), resetPose();
-   *   off: rig.remove(), pilot.toggle() when in pilot mode (restores the orbit view), selection.deselect() when the
-   *   camera is selected.
+   *   off: rig.remove(), hub.syncSafeDistance() (removes the safe-distance group, 08 P2-4b), pilot.toggle() when in pilot
+   *   mode (restores the orbit view), selection.deselect() when the camera is selected.
    * @param {boolean} on  the toggle's new state
    * @returns {void}
    */
@@ -184,9 +185,11 @@ export class CameraController {
       if (!this.#preview.initialized) this.#preview.init();
       this.resetPose();
     } else {
-      // LEGACY(B-M8): only the rig is removed; the safe-distance group (if shown) stays in the scene, stale, and
-      // its toggle is hidden with the preview options.
+      // The rig, then the safe-distance group (B-M8 fixed in 08 P2-4b: legacy removed only the rig, so the floor stayed
+      // in the scene, stale, while its toggle was hidden with the preview options). syncSafeDistance removes it because
+      // cine.enabled is already false, and the next enable rebuilds it through resetPose's refresh.
       this.#rig.remove();
+      this.#hub.syncSafeDistance();
       // Pilot mode is left after cine.enabled was cleared; since 08 P2-4a (B-H4 fixed) the pilot guard applies only on
       // entry, so this exits cleanly (legacy alerted and stayed in pilot mode).
       if (this.#pilot.active) {

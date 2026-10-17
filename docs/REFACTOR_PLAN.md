@@ -123,7 +123,7 @@ The authoritative plan is `docs/improvements/08-bugfix-roadmap.md` (batch cards 
 4. **P2-2** **B-H1, B-H2, B-L3**: stage-facing winding and real normals in the viewport and every export (the owner-reported "inverted normals"). It must follow P2-1: adding `NORMAL` puts `large_wall`'s glTF buffer at 121,056 bytes, inside the band where the legacy spread encoder throws `RangeError` (B-H3). **Landed** (manifests P2-2a to P2-2d: B-H1 viewport winding; B-L3 viewport normals; B-H2 OBJ and glTF).
 5. **P2-8a** **B-L15**: integer counts and sanity caps in the UI rules, before the validator. **Landed** (manifest `P2-8a`).
 6. **P2-3** **B-M4, B-L8, B-L16, B-L21**: escaped names and validated imports. **P2-3a landed** (manifest `P2-3a`: B-M4). **P2-3b landed** (manifest `P2-3b`: B-L8). **P2-3c landed** (manifest `P2-3c`: B-L16). **P2-3d landed** (manifest `P2-3d`: B-L21); P2-3 is complete.
-7. **P2-4** **B-H4, B-M8**: a clean preview-off (no stuck pilot mode, no stale safe-distance floor). **P2-4a landed** (manifest `P2-4a`: B-H4).
+7. **P2-4** **B-H4, B-M8**: a clean preview-off (no stuck pilot mode, no stale safe-distance floor). **P2-4a landed** (manifest `P2-4a`: B-H4). **P2-4b landed** (manifest `P2-4b`: B-M8); P2-4 is complete.
 8. **P2-5b** **B-L29, B-M15**: the mitred, clamped safe-distance band.
 9. **P2-6** **B-M3, B-L14, B-L7, B-M2**: consistent, lossless bundles (ZIP JSON offsets, texture names, MTL delivery).
 10. **P2-12d** **B-M16, B-L19**: panel-mode textures (P2-12a is not needed: B-H5 and B-L12 landed in Phase 1C, H1 and H2).

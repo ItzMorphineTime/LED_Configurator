@@ -66,6 +66,9 @@ The hosted version on [GitHub Pages](https://itzmorphinetime.github.io/LED_Confi
 - Frame coverage visualization at wall distance
 - Safe distance calculation and 3D visualization
 
+Release note: the safe-distance floor is now removed when the camera preview is turned off (it used to stay in the
+scene), and it returns when the preview is turned back on with Safe Distance still enabled.
+
 ### 3D Gizmo Controls
 - **Translate Mode (G)**: Move objects along X/Y/Z axes
 - **Rotate Mode (R)**: Rotate objects around X/Y/Z axes

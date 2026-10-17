@@ -806,7 +806,9 @@ These were observed in the original app and are part of the golden master until 
 in parentheses changes them:
 
 - `camera`: Export Safe Distance OBJ throws `ReferenceError: downloadBlob is not defined`, so no file is
-  produced (08 P2-5a: the OBJ downloads, with the legacy per-column band until P2-5b).
+  produced (08 P2-5a: the OBJ downloads, with the legacy per-column band until P2-5b). `14_preview_off` still shows
+  the safe-distance floor after the preview is turned off (B-M8) (08 P2-4b: the floor is removed with the preview;
+  `cam_15` shows it again).
 - `large_wall`: Export glTF in panel mode throws `RangeError: Maximum call stack size exceeded`
   from `btoa(String.fromCharCode(...buffer))`, so no file is produced (08 P2-1a: the chunked encoder
   writes the file).
