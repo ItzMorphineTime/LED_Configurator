@@ -314,6 +314,65 @@ opposite walls of a U-shaped stage overlap, they still overlap (a darker region 
 
 ---
 
+## Pivot
+
+The pivot is the point that becomes the origin of every exported mesh. Set it in the **Wall Pivot** panel (under Mesh
+Options) so that the wall arrives in Blender, Unreal or any other tool exactly where your stage needs it, with nothing to
+re-centre by hand after each change.
+
+### Choosing the pivot
+| Mode | Where the pivot sits |
+|------|----------------------|
+| Bottom-left corner | The first section's first bottom corner (how every earlier version exported) |
+| Wall mesh centre (bounding box) | The centre of the wall's bounding box, half the tallest section up |
+| Wall centre on floor (first ↔ last edge) | Halfway between the first section's first edge and the last section's last edge, on the floor |
+
+- **Offset X / Y / Z** (metres, 1 mm steps, up to ±1000 m) moves the pivot from that anchor in the wall's axes: X along
+  the start of the wall, Y up, Z toward the stage. Use it for a surveyed point, for example the tracking origin 2 m in
+  front of the wall centre (Wall centre on floor, Offset Z = 2). Typing text or clearing a field keeps the stored value;
+  0 is a valid offset. **Reset offset** returns to the anchor.
+- **Select pivot (O)**, or the **O** key, selects the pivot marker; drag its arrows to move it (Translate only). Hold
+  Ctrl (⌘ on a Mac) while dragging to move in steps of the **Ctrl-drag snap** size; Escape during a drag cancels it and
+  leaves the offset unchanged; a second Escape deselects.
+- The read-out shows the pivot measured from the wall start, and the line under it what the last change did ("Stage
+  origin moved …", "Pivot height … · affects exports only", or a wall edit that moved the stage origin).
+- The **marker** (a small cross at the pivot, a dashed line to the floor when the pivot is raised, a grey cross at the
+  anchor when an offset is set) is shown in the viewport only: never in the camera preview, never in pilot mode and
+  never in an export. "Show pivot marker" hides it.
+
+### What moves in the viewport
+The viewport's floor grid and its red, green and blue axes cross at the **stage origin**: the pivot projected onto the
+floor. Camera and prop positions (X, Z Position) are measured from there, and the floor is always at height 0. With
+**Keep stage layout on pivot change** on (the default), changing the pivot moves the camera and props together with the
+wall, so their placement relative to the wall stays the same and only their coordinates change; with it off they keep
+their coordinates and the wall moves relative to them. Editing sections never moves the camera or props: with the
+centred modes a growing wall stays centred on the stage origin. "Distance to wall plane" in the camera panel is the
+camera's distance to the wall's start plane.
+
+### Exports and placement in a 3D tool
+- **OBJ, glTF and the ZIP** are written with the pivot at the file origin (0, 0, 0): Y up, metres. The wall's position
+  relative to the pivot is exactly what the viewport shows.
+- With a pivot other than the bottom-left corner, the OBJ header names it (`# Pivot: …` and `# Stage placement: origin
+  at stage (0 <height> 0)`) and the glTF carries it in `scenes[0].extras.pivot` (Blender shows it as a custom property
+  of the scene).
+- **Blender**: import the glTF (File > Import > glTF 2.0) or the OBJ with its default axes (Y up). Blender converts Y up
+  to its Z up, so the pivot lands on Blender's world origin; 1 m stays 1 Blender unit.
+- **Unreal Engine** (nDisplay and other virtual-production stages) is Z up and measures in centimetres: the exported Y
+  (up) axis becomes Unreal's Z. The glTF importer applies both conversions; for the OBJ, check the import's axis
+  conversion and uniform scale (100 turns metres into centimetres). Place the imported mesh at your stage origin with no
+  rotation, for example at the root of the nDisplay configuration when the pivot is the tracking origin.
+- **A raised pivot** (Wall mesh centre, or an Offset Y): the exported wall's floor is below the file origin by the pivot
+  height, which the OBJ header's `Stage placement` line states. Place the asset that much above your stage floor to
+  stand the wall on the floor; a floor-level pivot (Bottom-left corner, Wall centre on floor, Offset Y = 0) needs no
+  height.
+
+### Session only (for now)
+The pivot, its offset and the "Keep stage layout" and marker switches last for the session: Export JSON and Export All
+(ZIP) do not save them yet, and importing a project file resets the pivot to the bottom-left corner. They will be saved
+with the JSON v2 project format.
+
+---
+
 ## 🏗️ Use Cases
 
 ### Virtual Production
@@ -426,6 +485,7 @@ Contributions are welcome! Feel free to:
 ## 📋 Changelog
 
 ### Latest Updates
+- ✅ Wall pivot: export origin at the bottom-left corner, the wall mesh centre or the wall centre on the floor, plus an offset; draggable pivot marker (O); camera and props kept in place; floor grid centred on the pivot (session only for now)
 - ✅ Morph branding: dark interface, Morph colours on the 3D scene and the panel-ID textures, the Morph section palette, exports named `morph-led-wall-*`
 - ✅ 3D Gizmo system for camera and prop manipulation
 - ✅ World/Local space toggle for gizmos
