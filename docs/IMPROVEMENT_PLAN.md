@@ -490,6 +490,12 @@ Every question has a recommended default. If you accept the defaults, only the i
 
 **Decided 2026-10-16 (M0 kick-off).** The owner chose the **full platform route** (A0) and **approved** publishing the 8 Morph brand files (A8). Every other question in tables A and B, and every remaining question in the specs (§11.2), takes its recommended default. The last column of each table records the outcome. The specs record the decisions they gate where they require it: B-L1 in 08 §5.6 and Q10 and in ARCHITECTURE §1.4; the 03 T13 sign-off in 03 §5.10.1 and 02 §10.3; 02 Q24-Q26 and 06 Q2 in their question tables; the kick-off list in 07 §1.5.
 
+**Decided 2026-10-17 (re-prioritisation).** After testing the Phase 2 exports, the owner made **03 (pivot) and 04 (UVs and the UV editor) the next priority**, sequenced "fastest, session-only". This overrides the full-route order (A0) for these two features only:
+- **No project file v2 now.** 08 P2-13e and P2-8b-d, 03 T7 and 04 UV-5c wait for M7a ("Project file v2 and session"); the pivot and the UV settings last for the session only until then, and their release notes say so (principle 6). An import resets them (03 §4.4, Q14).
+- **The UV editor takes path B** (04 header): `UvFallbackHistory`, the `ViewportInput` `'u'` branch with the shared typing guard, in-memory viewer preferences and observer hooks on the Phase-1 `SelectionManager`, because 07 I1/I2/H1/H3 are not built; 04 UV-18 removes them later. Spec 02 is not built, so 04 UV-17 is skipped; the viewer chooses a section with its section dropdown and a double-click on the wall (UV-15).
+- **Export OBJ is one download** (08 P2-6e, landed): `morph-led-wall-obj.zip` with the OBJ, the MTL and every texture the MTL references.
+- **Every other open question keeps its recommended default:** A7 (the 03 T13 sign-off, confirmed: 03 §5.10.1, 02 §10.3), B4 bottom-left, B5 the bounding-box centre, B5a the generated wall, B6 the 100 m grid centred on the stage origin, B7 per-section 0..1 with the Atlas layout as an option (the owner's own review of the exports in Blender and Unreal stands in for B8's go/no-go), B9 16 MP, A11 / 08 Q4, Q5 yes.
+
 ### A. At kick-off (M0)
 
 | # | Decision | Source | Recommended default | Decided 2026-10-16 |
@@ -501,7 +507,7 @@ Every question has a recommended default. If you accept the defaults, only the i
 | A4 | Build section editing on 07's keymap, selection and gizmo ("path A")? | 02 Q26 | **Path A** on the full route; **path B** on the minimum path (A0) (blocking before 02 T8) | Recommended default for the full route: **path A** |
 | A5 | Persisted offset key names | 02 Q24 | **`offset.position_m` and `offset.rotation_origin`** | Recommended default |
 | A6 | Detached sections in the section-editing MVP? | 02 Q25 | **No: defer them to 3b** (or to 09 X10, which builds on them). They are the only change to the generative walk, detaching can move a centred pivot (02 §6.17), and you asked for basic offsets. Say **yes** only if you need soffits, ceilings or risers now; 3a then takes 27 days instead of 25. | Recommended default: defer to 3b |
-| A7 | Sign off the shared gizmo and composition contract | 03 T13 | **Sign off** (blocking before 03 T5) | Recommended default: **signed off** (recorded in 03 §5.10.1 and 02 §10.3) |
+| A7 | Sign off the shared gizmo and composition contract | 03 T13 | **Sign off** (blocking before 03 T5) | Recommended default: **signed off** (recorded in 03 §5.10.1 and 02 §10.3; confirmed 2026-10-17, 03 T13 done) |
 | A8 | Publish the 8 Morph brand files in the public repo | 06 Q2 | **Yes, exactly those 8, with your written OK**; otherwise a text-only header (blocking for 06 T4b) | **Approved:** exactly the 8 files of 06 §5.8, with `NOTICE.md` |
 | A9 | Product name | 06 Q1 | **"Morph LED Configurator"** | Recommended default |
 | A10 | Fix the glTF crash before the normals | 08 Q1 | **Yes** | Recommended default |
