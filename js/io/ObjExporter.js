@@ -79,8 +79,8 @@ export class ObjExporter {
    *   section: one material and object per section; per-section `v`, `vt` and normals; `map_Kd` only for a
    *     texture the caller ships (08 P2-6c, B-L7 fixed): textureNames given and textureNames[i] not null. Export OBJ
    *     passes no names, so its standalone MTL has no `map_Kd`; Export All (ZIP) passes its texture names, null for a
-   *     texture it left out (08 P2-1c). The path names the texture by index until 08 P2-6d (B-M2, tagged at
-   *     PanelNaming.mtlTextureFile);
+   *     texture it left out (08 P2-1c). The path is that file's ZIP entry, `textures/<name>` (08 P2-6d, B-M2 fixed:
+   *     legacy named it by index);
    *   panel: one object per panel with 4 vertices, 4 `vt`, its facing `vn` and two faces (builder.panelQuadIndices).
    * Ports: index.html@cd3fd3f lines 4556-4717.
    * Side effects: none.
@@ -189,9 +189,9 @@ export class ObjExporter {
       text.mtlContent += `Kd ${color.r.toFixed(4)} ${color.g.toFixed(4)} ${color.b.toFixed(4)}\n`;
       text.mtlContent += `Ka 0.1 0.1 0.1\nKs 0.5 0.5 0.5\nNs 100\nd 1.0\n`;
       // A texture is referenced only when the caller ships it (08 P2-6c, B-L7 fixed; a texture the ZIP left out,
-      // 08 P2-1c, is null). The index-based path is B-M2 (tagged at PanelNaming.mtlTextureFile).
+      // 08 P2-1c, is null), by its ZIP entry path (08 P2-6d, B-M2 fixed).
       const shipped = Array.isArray(textureNames) && textureNames[i] != null;
-      text.mtlContent += shipped ? `map_Kd ${mtlTextureFile(i)}\n\n` : '\n';
+      text.mtlContent += shipped ? `map_Kd ${mtlTextureFile(textureNames[i])}\n\n` : '\n';
     });
 
     text.objContent += `mtllib ${this.#brand.files.mtl}\n\n`;

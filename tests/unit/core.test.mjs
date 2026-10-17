@@ -204,7 +204,6 @@ describe('Strategies', () => {
                 indexType: 'auto', doubleSided: 'omit' },
       },
       exportCombinedColor: 'first-section',
-      mtlTextureNaming: 'index',
       framingBounds: 'flat',
       curveBeforeFirstPanel: true,
       frustumDepthM: 15,
@@ -347,7 +346,7 @@ describe('LEGACY_SITES', () => {
   // 08 commit its 8.2 fix cell names. Every landing commit adds its id here.
   const PHASE2_LANDED = { 'B-M1': 'P2-5a', 'B-H3': 'P2-1a', 'B-L5': 'P2-1b', 'B-L4': 'P2-1c', 'B-H1': 'P2-2a', 'B-L3': 'P2-2b', 'B-H2': 'P2-2c',
     'B-L11': 'P2-9b', 'B-L15': 'P2-8a', 'B-M4': 'P2-3a', 'B-L8': 'P2-3b', 'B-L16': 'P2-3c', 'B-L21': 'P2-3d', 'B-H4': 'P2-4a', 'B-M8': 'P2-4b',
-    'B-M15': 'P2-5b', 'B-L29': 'P2-5b', 'B-M3': 'P2-6a', 'B-L14': 'P2-6b', 'B-L7': 'P2-6c' };
+    'B-M15': 'P2-5b', 'B-L29': 'P2-5b', 'B-M3': 'P2-6a', 'B-L14': 'P2-6b', 'B-L7': 'P2-6c', 'B-M2': 'P2-6d' };
   // The quirks a Phase 3 feature step fixed (its spec and step, as its 8.2 fix cell names them): B-L24's badge overlap in
   // 06 T4a (its .view-btn.active half had landed in 01 F1-2; its two CSS documentation entries are gone).
   const PHASE3_LANDED = { 'B-L24': '06 T4a' };

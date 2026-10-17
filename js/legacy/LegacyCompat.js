@@ -52,7 +52,6 @@ export const Strategies = deepFreeze({
                                                    // since 08 P2-2d (B-H2), Phase-1 'legacy-cw' / 'none' / ['POSITION'],
                                                    // and the new leaf gltf.panelNormal (08 P2-2d)
   exportCombinedColor: 'first-section',            // B-L6
-  mtlTextureNaming: 'index',                       // B-M2
   framingBounds: 'flat',                           // B-L2, B-M10
   curveBeforeFirstPanel: true,                     // B-L1
   frustumDepthM: 15,                               // B-L33
@@ -125,7 +124,7 @@ const QUIRKS = deepFreeze({
   'B-M1': ['Safe-distance OBJ throws ReferenceError (K-3)',
     'Landed in 08 P2-5a (`downloader.saveBlob`; no tag site)'],
   'B-M2': ['Index-based MTL texture path (R-3)',
-    'name-based'],
+    'Landed in 08 P2-6d (`PanelNaming.mtlTextureFile(fileName)` is `textures/<fileName>`: the MTL `map_Kd` names the same `textureFileNames` entry as the ZIP texture and the JSON `texture_file`; `Strategies.mtlTextureNaming` retired; no tag site)'],
   'B-M3': ['ZIP JSON lacks angle offsets (U-1)',
     'Landed in 08 P2-6a (the ZIP JSON is the `\'file\'` document plus `texture_file` per section, so it keeps `angle_offset_degrees` and re-imports exactly; `Strategies.zipJsonIncludesAngleOffset` retired; no tag site)'],
   'B-M4': ['Unescaped names/colours/values in innerHTML (V-8)',
@@ -248,7 +247,6 @@ const TAG_SITES = deepFreeze([
   ['js/geometry/WallLayout.js#framingBounds', ['B-L2', 'B-M10']],
   ['js/geometry/WallMeshBuilder.js#combinedGrid', ['B-M5']],
   ['js/geometry/TextureAtlas.js#panelPxPerLed', ['B-M16']],
-  ['js/geometry/PanelNaming.js#mtlTextureFile', ['B-M2']],
   ['js/io/ProjectSerializer.js#write', ['B-L31']],
   ['js/io/ObjExporter.js#write', ['B-M6', 'B-L6']],
   ['js/io/GltfExporter.js#write', ['B-L6']],

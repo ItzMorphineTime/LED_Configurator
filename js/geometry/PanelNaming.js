@@ -4,10 +4,8 @@
  * Legacy source: index.html@cd3fd3f 1991-1999 (getColumnLabel), 2022-2024 / 2083-2084 (panel labels),
  * 4496 (sanitizeFilename), 4511 / 4540 (ZIP texture names, unique since 08 P2-6b), 4609 / 4612 / 4622 (MTL and OBJ
  * section names), 4676 / 4888 (panel object names), 4867 (glTF section names).
- * Layer: geometry (may import domain, legacy; THREE-free and DOM-free).
+ * Layer: geometry (may import domain, legacy; THREE-free and DOM-free). It imports nothing.
  */
-
-import { Strategies, unsupportedStrategy } from '../legacy/LegacyCompat.js';
 
 /**
  * Spreadsheet-style column letters (bijective base 26: 0 -> A, 25 -> Z, 26 -> AA). Works on numeric strings like
@@ -81,8 +79,8 @@ export function sanitizeFilename(name) {
  * `${candidate}_PanelIDs.png` with candidate = sanitizeFilename(section.name || `Wall_${i + 1}`), the legacy name, made
  * unique case-insensitively (archives are unpacked onto case-insensitive file systems on Windows and macOS) by appending
  * `_2`, `_3`, ... to a base already used. Names without a collision are the legacy names, so existing ZIP texture
- * entries keep their names. The single source of the ZIP texture entries and the ZIP JSON `texture_file` (and of the
- * MTL `map_Kd` once 08 P2-6d lands). It never returns null: a caller that leaves a texture out replaces that entry with
+ * entries keep their names. The single source of the ZIP texture entries, the ZIP JSON `texture_file` and the MTL
+ * `map_Kd` (08 P2-6d). It never returns null: a caller that leaves a texture out replaces that entry with
  * null (08 6.3).
  * Ports: index.html@cd3fd3f lines 4511, 4540 (the legacy name of each section; legacy did not de-duplicate, so equal or
  *   equally sanitised names overwrote each other in the ZIP).
@@ -105,19 +103,14 @@ export function textureFileNames(sections) {
 }
 
 /**
- * The MTL `map_Kd` texture path of a section (section mode).
- * Ports: index.html@cd3fd3f line 4612.
+ * The MTL `map_Kd` texture path of a section texture file (section mode): the ZIP entry path of that file, so the MTL
+ * names exactly the texture the archive holds (08 P2-6d, B-M2 fixed: legacy wrote `textures/Wall_${i + 1}_PanelIDs.png`
+ * by index, which matched no texture of a named section; Strategies.mtlTextureNaming is retired).
+ * Ports: index.html@cd3fd3f line 4612 (the `textures/` folder).
  * Side effects: none.
- * @param {number} i  section index
- * @returns {string} `textures/Wall_${i + 1}_PanelIDs.png`
- * @throws {Error} unsupportedStrategy if Strategies.mtlTextureNaming is not the Phase-1 value
+ * @param {string} fileName  a textureFileNames entry
+ * @returns {string} `textures/${fileName}`
  */
-export function mtlTextureFile(i) {
-  switch (Strategies.mtlTextureNaming) {
-    case 'index':
-      // LEGACY(B-M2): index based, so it does not match textureFileNames for named sections.
-      return `textures/Wall_${i + 1}_PanelIDs.png`;
-    default:
-      throw unsupportedStrategy('mtlTextureNaming', Strategies.mtlTextureNaming);
-  }
+export function mtlTextureFile(fileName) {
+  return `textures/${fileName}`;
 }

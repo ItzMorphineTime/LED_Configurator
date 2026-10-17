@@ -1,0 +1,19 @@
+{
+  "commit": "P2-6d",
+  "bugs": ["B-M2"],
+  "expect": [
+    { "output": "{p2_zip_section_mode,p2_xss_names}/*section__export-zip__*.zip", "change": "modified", "each": true,
+      "reason": "the MTL entry's map_Kd lines name each section's own texture entry (textures/<textureFileNames entry>, e.g. Center_Stage_PanelIDs.png) instead of the index-based textures/Wall_<i>_PanelIDs.png, which the ZIP does not hold for a named section (B-M2); no other entry changes" }
+  ],
+  "mayChange": [
+    { "output": "p2_curved_safe_distance/box_corner.screenshot.png", "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas on the preview footer label row (1 level, 1 px, seen in the 06 T6a-08 P2-5b runs); this commit changes no rendered pixel of it" },
+    { "output": "p2_shortcut_filters/pilot_view_front.screenshot.png", "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas (1 level, 2 px, seen in the 06 T6b-08 P2-5b runs); this commit changes no rendered pixel of it" },
+    { "output": "toggles/15_car_moved.screenshot.png", "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-08 P2-6c runs)" },
+    { "output": "large_wall/final__export-zip__morph-led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b); this commit changes no entry of it (a combined-mode MTL has no map_Kd)" }
+  ],
+  "notes": "08 P2-6d (B-M2): PanelNaming.mtlTextureFile(fileName) = textures/<fileName>, and ObjExporter writes map_Kd from the ZIP's texture names; Strategies.mtlTextureNaming retired. Only section-mode ZIPs reference textures, and p2_oversize_canvas's only texture is left out (no map_Kd), so p2_zip_section_mode and p2_xss_names are the only changes. The standalone MTLs have no map_Kd since P2-6c."
+}

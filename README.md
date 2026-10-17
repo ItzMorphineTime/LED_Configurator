@@ -223,6 +223,10 @@ Complete export bundle containing:
 - Panel ID textures (PNG)
 - Per-section exports
 
+Release note: in section mode the ZIP's MTL now points each section's material at that section's own texture file
+(the name the ZIP stores); it used to use a numbered name, so a renamed section, or every section after a deleted
+one, opened in Blender or Unreal without its texture.
+
 Release note: sections with the same name, or with names that only differ in spaces, punctuation or upper and lower
 case, now each get their own texture in the ZIP (`Dup_PanelIDs.png`, `Dup_2_PanelIDs.png`, ...); they used to overwrite
 each other, so one texture was missing.

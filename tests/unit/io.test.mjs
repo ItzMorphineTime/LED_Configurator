@@ -987,7 +987,9 @@ describe("ProjectSerializer and ObjExporter: textures the ZIP left out (B-L4, 08
     const none = OBJ.write(args('section', null));
     assert.equal(out.objContent, all.objContent);
     assert.equal(none.objContent, all.objContent);
-    assert.equal(out.mtlContent, all.mtlContent.replace('d 1.0\nmap_Kd textures/Wall_2_PanelIDs.png\n\n', 'd 1.0\n\n'));
+    assert.equal(out.mtlContent, all.mtlContent.replace('d 1.0\nmap_Kd textures/B_PanelIDs.png\n\n', 'd 1.0\n\n'));
+    assert.ok(all.mtlContent.includes('map_Kd textures/A_PanelIDs.png\n') && all.mtlContent.includes('map_Kd textures/B_PanelIDs.png\n'),
+      'the map_Kd paths are the texture names (B-M2 fixed in 08 P2-6d)');
     assert.ok(out.mtlContent.endsWith('d 1.0\n\n'));
     assert.equal(none.mtlContent, all.mtlContent.split(/map_Kd [^\n]*\n/).join(''), 'no names: no map_Kd at all (the standalone MTL)');
     assert.ok(!none.mtlContent.includes('map_Kd'));
@@ -1300,8 +1302,8 @@ describe('ProjectIO use cases', () => {
     assert.equal(JSON.parse(json).sections[0].texture_file, 'textures/Left_PanelIDs.png');
     const { objContent, mtlContent } = OBJ.write({ sections, meshMode: 'section', layout,
       textureNames: textureFileNames(sections).map((n, i) => (skipped[i] ? null : n)) });
-    assert.ok(!mtlContent.includes('map_Kd textures/Wall_2_PanelIDs.png'));
-    assert.ok(mtlContent.includes('map_Kd textures/Wall_1_PanelIDs.png') && mtlContent.includes('map_Kd textures/Wall_3_PanelIDs.png'));
+    assert.ok(!mtlContent.includes('map_Kd textures/Center_PanelIDs.png'));
+    assert.ok(mtlContent.includes('map_Kd textures/Left_PanelIDs.png') && mtlContent.includes('map_Kd textures/Right_PanelIDs.png'));
     const atlas = computeAtlas(sections);
     assert.deepEqual(log, [
       ['new JSZip'],
@@ -1320,6 +1322,23 @@ describe('ProjectIO use cases', () => {
       ['saveBlob', FILES.zip, 'ZIP-BLOB'],
       ['alert', mExp4(['textures/Center_PanelIDs.png'])],
     ]);
+  });
+
+  test('exportZIP (08 criterion 25, P2-6d): every MTL map_Kd names a texture entry of the ZIP, and texture_file is unique', async () => {
+    const names = ['Dup', 'Dup', 'dup', 'A B', 'A_B', ''];
+    const project = projectOf(names.map((name, i) => new WallSection({ id: i, name, panelCols: 2, panelRows: 1, panelWidth: 500,
+      panelHeight: 500, ledX: 32, ledY: 32, curveIntensity: 0, angleOffset: 0, color: '#00f0ff' })), 'section');
+    const log = [];
+    await fakeIO(project, log).exportZIP();
+    const entries = new Set(log.filter((e) => e[0] === 'folder.file').map((e) => e[1]));
+    const mtl = log.find((e) => e[0] === 'zip.file' && e[1] === FILES.mtl)[3];
+    const maps = [...mtl.matchAll(/^map_Kd (.+)$/gm)].map((m) => m[1]);
+    assert.equal(maps.length, names.length);
+    for (const m of maps) assert.ok(entries.has(m), `${m} is an entry of the ZIP`);
+    const json = JSON.parse(log.find((e) => e[0] === 'zip.file' && e[1] === FILES.json)[3]);
+    const files = json.sections.map((s) => s.texture_file);
+    assert.deepEqual(files, maps, 'the JSON and the MTL name the same files, in section order');
+    assert.equal(new Set(files.map((f) => f.toLowerCase())).size, names.length);
   });
 
   test('exportZIP late skip: a data:, PNG is left out, the JSON and MTL entries are re-written, M-EXP-4 names it', async () => {

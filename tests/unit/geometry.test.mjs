@@ -614,13 +614,13 @@ describe('PanelNaming', () => {
     assert.deepEqual(textureFileNames([]), []);
   });
 
-  test('exportSectionName + mtlTextureFile == the MTL section block (4607-4613)', (t) => {
+  test('exportSectionName + mtlTextureFile of the legacy index names == the MTL section block (4607-4613)', (t) => {
     overAllWalls(t, ({ sections }, mm, label) => {
       let mtl = '';
       sections.forEach((s, i) => {
         mtl += `newmtl ${exportSectionName(i)}\n`;
         mtl += `Ka 0.1 0.1 0.1\nKs 0.5 0.5 0.5\nNs 100\nd 1.0\n`;
-        mtl += `map_Kd ${mtlTextureFile(i)}\n\n`;
+        mtl += `map_Kd ${mtlTextureFile(`Wall_${i + 1}_PanelIDs.png`)}\n\n`;
       });
       compareDeep(mtl, L.legacyMtlSectionText(sections), `${label}.mtl`, mm);
     });
@@ -634,11 +634,13 @@ describe('PanelNaming', () => {
     assert.equal(textureFileNames([section({ name: '' })])[0], 'Wall_1_PanelIDs.png');
   });
 
-  test('names: exportSectionName, exportPanelName, mtlTextureFile (B-M2: index based)', () => {
+  test('names: exportSectionName, exportPanelName, mtlTextureFile (B-M2 fixed in 08 P2-6d: the texture file name)', () => {
     assert.equal(exportSectionName(0), 'Wall_1');
     assert.equal(exportPanelName(1, 2, 3), 'Wall_2_Panel_R3_C4');
-    assert.equal(mtlTextureFile(4), 'textures/Wall_5_PanelIDs.png');
-    assert.notEqual(mtlTextureFile(0), `textures/${textureFileNames([section({ name: 'Main' })])[0]}`);
+    assert.equal(mtlTextureFile('Wall_5_PanelIDs.png'), 'textures/Wall_5_PanelIDs.png');
+    const name = textureFileNames([section({ name: 'Main' })])[0];
+    assert.equal(mtlTextureFile(name), `textures/${name}`, 'the MTL path is the ZIP entry and the JSON texture_file');
+    assert.equal(mtlTextureFile(name), 'textures/Main_PanelIDs.png');
   });
 });
 
