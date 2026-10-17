@@ -176,6 +176,48 @@ function gltfText(gltf) {
   return json2(doc);
 }
 
+/**
+ * The combined OBJ + MTL the LegacyProfiles writer gives since 08 P2-7d (B-L6 fixed: one material per section), derived
+ * from the legacy SECTION-mode text of the same wall, an explicit expected value (08 4.2: the retired global key
+ * exportCombinedColor cannot be injected): the header with "# Mesh Mode: combined"; `mtllib`; `o LED_Wall_Combined`;
+ * every section's `v` lines, then every section's `vt` lines (the legacy section and combined writers write the same
+ * lines), one `vn 0 0 1` (Phase-1 'constant-z'), then per section `usemtl Wall_<i+1>` and its faces with the normal index
+ * 1 (the vertex and texture indices already run across sections in section mode). The MTL is the section MTL without
+ * its map_Kd lines (the combined materials reference no section texture).
+ */
+function combinedObjFromSections({ objContent, mtlContent }) {
+  const lines = objContent.split('\n');
+  const mtllibAt = lines.findIndex((l) => l.startsWith('mtllib '));
+  const header = lines.slice(0, mtllibAt + 2).map((l) => (l === '# Mesh Mode: section' ? '# Mesh Mode: combined' : l));
+  const v = [], vt = [], blocks = [];
+  let block = null;
+  for (const line of lines.slice(mtllibAt + 2)) {
+    if (line.startsWith('o ')) blocks.push(block = { material: null, faces: [] });
+    else if (line.startsWith('usemtl ')) block.material = line.slice('usemtl '.length);
+    else if (line.startsWith('v ')) v.push(line);
+    else if (line.startsWith('vt ')) vt.push(line);
+    else if (line.startsWith('f ')) block.faces.push(line.split(' ').map((tok, k) => (k === 0 ? tok : tok.replace(/\/[^/]*$/, '/1'))).join(' '));
+  }
+  const out = [...header, 'o LED_Wall_Combined', ...v, ...vt, 'vn 0 0 1'];
+  for (const b of blocks) out.push(`usemtl ${b.material}`, ...b.faces);
+  return { objContent: `${out.join('\n')}\n`, mtlContent: mtlContent.split('\n').filter((l) => !l.startsWith('map_Kd ')).join('\n') };
+}
+
+/**
+ * The combined glTF the LegacyProfiles writer gives since 08 P2-7d (B-L6 fixed; 08 6.8), derived from the legacy
+ * SECTION-mode document of the same wall: the section meshes' primitives, in order, become the primitives of one mesh
+ * `LED_Wall_Combined` with one node; accessors, buffer views, the buffer and the materials (`Wall_<i+1>_Material` in the
+ * section colours) are exactly the section document's (each primitive keeps its own accessors, indices from 0).
+ */
+function combinedGltfFromSections(doc) {
+  return {
+    ...doc,
+    scenes: [{ nodes: [0] }],
+    nodes: [{ name: 'LED_Wall_Combined', mesh: 0 }],
+    meshes: [{ name: 'LED_Wall_Combined', primitives: doc.meshes.flatMap((m) => m.primitives) }],
+  };
+}
+
 /** Legacy and new OBJ / glTF / JSON outcomes of one project. */
 function compareAll(project, label, tally) {
   const sections = project.wall.sections;
@@ -184,7 +226,14 @@ function compareAll(project, label, tally) {
     const outcome = assertSameOutcome(actual, expected, `${label} ${key}`, toText);
     tally[outcome]++;
   };
-  if (MODES.includes(meshMode)) {
+  if (meshMode === 'combined') {
+    // B-L6 fixed in 08 P2-7d: the combined outputs are the explicit expected values derived from the legacy section-mode
+    // outputs (combinedObjFromSections, combinedGltfFromSections); an empty wall no longer throws.
+    r('obj', run(() => LEGACY_OBJ.write({ sections, meshMode, layout: layoutProject(project) })),
+      run(() => combinedObjFromSections(L.generateOBJContent(legacyGeometry(sections), 0.001, sections, 'section', colorToRgb))), objText);
+    r('gltf', run(() => LEGACY_GLTF.write({ sections, meshMode, layout: layoutProject(project) })),
+      run(() => combinedGltfFromSections(L.generateGLTFContent(legacyGeometry(sections), sections, 'section', colorToRgb))), gltfText);
+  } else if (MODES.includes(meshMode)) {
     // 08 P2-6c: map_Kd only for a shipped texture; legacy referenced every section's index-named texture, so the oracle
     // writer is told that each one ships, under its legacy index name (B-M2's path, unchanged by P2-6d for these names).
     const legacyTextureNames = sections.map((s, i) => `Wall_${i + 1}_PanelIDs.png`);
@@ -331,23 +380,20 @@ describe('oracle equality (byte for byte)', () => {
     }
     t.diagnostic(`${tally.equal} identical outputs, ${tally.threw} identical exceptions`);
     assert.ok(tally.equal > 50);
-    assert.ok(tally.threw > 0, 'expected the empty-wall combined exports and the large panel-mode glTF to throw');
+    assert.ok(tally.threw > 0, 'expected the large panel-mode glTF to throw (the Phase-1 spread encoder)');
   });
 
-  test('empty wall: combined OBJ and glTF throw the legacy TypeError; section/panel do not', () => {
+  test("empty wall (unreachable since 08 P2-3b): no mode throws; legacy's combined TypeError on sections[0].color is gone with B-L6 (08 P2-7d)", () => {
     for (const mode of MODES) {
       const project = projectOf([], mode);
       const sections = project.wall.sections;
-      const obj = run(() => LEGACY_OBJ.write({ sections, meshMode: mode, layout: layoutProject(project) }));
-      const gltf = run(() => LEGACY_GLTF.write({ sections, meshMode: mode, layout: layoutProject(project) }));
-      if (mode === 'combined') {
-        assert.ok(!obj.ok && obj.error instanceof TypeError, describeError(obj.error));
-        assert.ok(!gltf.ok && gltf.error instanceof TypeError, describeError(gltf.error));
-        assert.match(obj.error.message, /reading 'color'/);
-      } else {
-        assert.ok(obj.ok && gltf.ok);
+      for (const exporter of [LEGACY_OBJ, LEGACY_GLTF, OBJ, GLTF]) {
+        const out = run(() => exporter.write({ sections, meshMode: mode, layout: layoutProject(project) }));
+        assert.ok(out.ok, `${mode}: ${out.ok || describeError(out.error)}`);
       }
     }
+    const legacyCombined = run(() => L.generateOBJContent([], 0.001, [], 'combined', colorToRgb));
+    assert.ok(!legacyCombined.ok && /reading 'color'/.test(legacyCombined.error.message), 'legacy threw');
   });
 
   test('large_wall panel-mode glTF throws RangeError in both with the Phase-1 encoder (B-H3); combined does not', () => {
@@ -1463,14 +1509,16 @@ describe('ProjectIO use cases', () => {
   });
 
   test('#runExport: every export reports a failure as M-EXP-1 with its label, then warns; nothing escapes', async () => {
-    const empty = projectOf([], 'combined');
-    const cannotReadColor = "Cannot read properties of undefined (reading 'color')";
+    // An unknown mesh mode (unreachable after the validator, 08 P2-3b) makes both writers throw after the layout; the
+    // empty combined wall of legacy no longer throws (08 P2-7d, B-L6).
+    const bogus = projectOf([WallSection.createDefault()], 'bogus');
+    const unknownMode = 'Unknown mesh mode "bogus"';
     for (const [method, label, before] of [['exportOBJ', 'Export OBJ (ZIP)', ['new JSZip', 'layout']], ['exportGLTF', 'Export glTF', ['layout']]]) {
       const log = [];
-      assert.equal(await fakeIO(empty, log)[method](), undefined, method);
+      assert.equal(await fakeIO(bogus, log)[method](), undefined, method);
       assert.deepEqual(log.map((e) => e[0]), [...before, 'alert', 'warn'], method);
-      assert.equal(log.at(-2)[1], mExp1(label, cannotReadColor));
-      assert.ok(log.at(-1)[1] instanceof TypeError);
+      assert.equal(log.at(-2)[1], mExp1(label, unknownMode));
+      assert.ok(log.at(-1)[1] instanceof Error);
     }
 
     const boom = new RangeError('boom');
@@ -1887,7 +1935,7 @@ describe('glTF: stage-facing winding and the NORMAL attribute (B-H2, 08 P2-2d)',
           Array.from(new Float32Array(builder.sectionGrid(sl).normals)), `${label} section ${i}`);
       });
       const combined = GLTF.write(writeArgs(project, 'combined'));
-      assert.deepEqual(accessorData(combined, combined.meshes[0].primitives[0].attributes.NORMAL),
+      assert.deepEqual(combined.meshes[0].primitives.flatMap((prim) => accessorData(combined, prim.attributes.NORMAL)),
         Array.from(new Float32Array(layout.sections.flatMap((sl) => builder.sectionGrid(sl).normals))), label);
       const panel = GLTF.write(writeArgs(project, 'panel'));
       const panels = layout.sections.flatMap((sl) => sl.panels);
@@ -2052,6 +2100,99 @@ describe('glTF TEXCOORD_0 (B-M7, 08 P2-7c, 08 6.7)', () => {
           assert.deepEqual(a.accessors[prim.indices].count, b.accessors[other.indices].count);
         }));
       }
+    }
+  });
+});
+
+describe('combined exports: one material per section (B-L6, 08 P2-7d, 08 6.8; criterion 30)', () => {
+  const writeArgs = (project) => ({ sections: project.wall.sections, meshMode: 'combined', layout: layoutProject(project) });
+  const rgb = (c) => `${c.r.toFixed(4)} ${c.g.toFixed(4)} ${c.b.toFixed(4)}`;
+
+  test('Strategies.exportCombinedColor is retired', () => {
+    assert.equal(Strategies.exportCombinedColor, undefined);
+  });
+
+  test("OBJ: newmtl Wall_<i+1> per section with its Kd; usemtl Wall_<i+1> before exactly that section's faces; no LED_Wall_Combined material", () => {
+    for (const [label, project] of handPicked()) {
+      const sections = project.wall.sections;
+      if (!sections.length) continue;
+      const { objContent, mtlContent } = OBJ.write(writeArgs(project));
+      const expectedMtl = sections.map((s, i) => `newmtl Wall_${i + 1}\nKd ${rgb(colorToRgb(s.color))}\nKa 0.1 0.1 0.1\nKs 0.5 0.5 0.5\nNs 100\nd 1.0\n\n`).join('');
+      assert.equal(mtlContent, Brand.mtlHeader + expectedMtl, label);
+      assert.ok(!mtlContent.includes('LED_Wall_Combined'));
+      const lines = objContent.split('\n');
+      assert.deepEqual(lines.filter((l) => l.startsWith('o ')), ['o LED_Wall_Combined'], 'one object, its name kept');
+      assert.deepEqual(lines.filter((l) => l.startsWith('usemtl ')), sections.map((s, i) => `usemtl Wall_${i + 1}`));
+      // The faces after usemtl Wall_<i+1> are exactly section i's faces: their vertex indices lie in its range.
+      let vertexStart = 1;
+      const ranges = layoutProject(project).sections.map((sl) => {
+        const n = (sl.section.panelCols + 1) * (sl.section.panelRows + 1);
+        const range = [vertexStart, vertexStart + n];
+        vertexStart += n;
+        return range;
+      });
+      let current = -1;
+      let faces = 0;
+      for (const line of lines) {
+        if (line.startsWith('usemtl ')) current = Number(line.slice('usemtl Wall_'.length)) - 1;
+        if (!line.startsWith('f ')) continue;
+        faces++;
+        for (const tok of line.split(' ').slice(1)) {
+          const v = Number(tok.split('/')[0]);
+          assert.ok(v >= ranges[current][0] && v < ranges[current][1], `${label}: face of section ${current} uses vertex ${v}`);
+        }
+      }
+      assert.equal(faces, sections.reduce((n, s) => n + 2 * s.panelCols * s.panelRows, 0));
+    }
+  });
+
+  test('glTF: one mesh LED_Wall_Combined and one node; one primitive per section with its own accessors (indices from 0) and Wall_<i+1>_Material', () => {
+    const builder = new WallMeshBuilder(Strategies.mesh.gltf);
+    for (const [label, project] of handPicked()) {
+      const sections = project.wall.sections;
+      if (!sections.length) continue;
+      const doc = GLTF.write(writeArgs(project));
+      assert.deepEqual(checkGltfDocument(doc), [], label);
+      assert.deepEqual(doc.nodes, [{ name: 'LED_Wall_Combined', mesh: 0 }]);
+      assert.equal(doc.meshes.length, 1);
+      assert.equal(doc.meshes[0].name, 'LED_Wall_Combined');
+      const prims = doc.meshes[0].primitives;
+      assert.equal(prims.length, sections.length);
+      assert.deepEqual(doc.materials.map((m) => m.name), sections.map((s, i) => `Wall_${i + 1}_Material`));
+      doc.materials.forEach((m, i) => {
+        const c = colorToRgb(sections[i].color);
+        assert.deepEqual(m.pbrMetallicRoughness.baseColorFactor, [c.r, c.g, c.b, 1.0], `${label}: the section colour`);
+      });
+      const used = new Set();
+      layoutProject(project).sections.forEach((sl, i) => {
+        const prim = prims[i];
+        assert.equal(prim.material, i);
+        for (const a of [...Object.values(prim.attributes), prim.indices]) {
+          assert.ok(!used.has(a), 'every primitive has its own accessors');
+          used.add(a);
+        }
+        const grid = builder.sectionGrid(sl, { indexBase: 0 });
+        assert.equal(doc.accessors[prim.attributes.POSITION].count, grid.positions.length / 3);
+        assert.equal(doc.accessors[prim.indices].count, grid.indices.length);
+      });
+    }
+  });
+
+  test('glTF: the vertex data equals the section-mode meshes (legacy combined meshes never shared a vertex across sections)', () => {
+    for (const key of ['flat3', 'mixed', 'box_corner']) {
+      const project = projectFromConfig(CONFIGS[key]);
+      const combined = GLTF.write(writeArgs(project));
+      const section = GLTF.write({ ...writeArgs(project), meshMode: 'section' });
+      const bytes = (doc, a) => {
+        const acc = doc.accessors[a];
+        const view = doc.bufferViews[acc.bufferView];
+        return Buffer.from(doc.buffers[0].uri.split(',')[1], 'base64').subarray(view.byteOffset, view.byteOffset + view.byteLength).toString('hex');
+      };
+      combined.meshes[0].primitives.forEach((prim, i) => {
+        const other = section.meshes[i].primitives[0];
+        for (const attribute of ['POSITION', 'NORMAL']) assert.equal(bytes(combined, prim.attributes[attribute]), bytes(section, other.attributes[attribute]), `${key} ${i} ${attribute}`);
+        assert.equal(bytes(combined, prim.indices), bytes(section, other.indices), `${key} ${i} indices`);
+      });
     }
   });
 });

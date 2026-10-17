@@ -12,7 +12,7 @@
 import { exportSectionName, exportPanelName, mtlTextureFile } from '../geometry/PanelNaming.js';
 import { computeAtlas } from '../geometry/TextureAtlas.js';
 import { atlasUvRect } from '../geometry/WallMeshBuilder.js';
-import { Strategies, unsupportedStrategy } from '../legacy/LegacyCompat.js';
+import { unsupportedStrategy } from '../legacy/LegacyCompat.js';
 
 /**
  * The orientation header line (01 CR-3, adopted by 08 P2-2c), written after `# Mesh Mode: ...` when the OBJ profile
@@ -76,9 +76,11 @@ export class ObjExporter {
    * when the profile winds 'ccw' (none for 'legacy-cw'), brand.objGeneratorLine. Dispatch: 'combined' / 'section' /
    * anything else is written as panels. Strip normals (#stripNormalLines): 'per-vertex' (08 P2-2c) writes one `vn`
    * per vertex from the builder normals and faces `f a/a/a`; 'constant-z' (Phase 1) one `vn 0 0 1` per object.
-   *   combined: one object `LED_Wall_Combined` coloured by the first section (B-L6); all `v` lines of all
-   *     sections, then all `vt` lines (since 08 P2-7b the pixel-accurate atlas UVs of the viewport, B-M6 fixed;
-   *     'per-section-overlap', 0..1 per section, for LegacyProfiles), then the normals, then the faces;
+   *   combined: one object `LED_Wall_Combined` with one material per section, `Wall_<i+1>` with that section's colour
+   *     (08 P2-7d, B-L6 fixed: legacy coloured the whole wall with section 0's `LED_Wall_Combined` material); all `v`
+   *     lines of all sections, then all `vt` lines (since 08 P2-7b the pixel-accurate atlas UVs of the viewport, B-M6
+   *     fixed; 'per-section-overlap', 0..1 per section, for LegacyProfiles), then the normals, then per section
+   *     `usemtl Wall_<i+1>` followed by that section's faces;
    *   section: one material and object per section; per-section `v`, `vt` and normals; `map_Kd` only for a
    *     texture the caller ships (08 P2-6c, B-L7 fixed): textureNames given and textureNames[i] not null. Both archives
    *     pass their texture names, null for a texture they left out (08 P2-1c): Export All (ZIP), and Export OBJ (ZIP)
@@ -93,8 +95,8 @@ export class ObjExporter {
    *   section mode, by Export OBJ (ZIP), 08 P2-6e): the shipped texture file name of each section
    *   (PanelNaming.textureFileNames), null for a texture left out; absent or null: no map_Kd at all
    * @returns {{objContent: string, mtlContent: string}}
-   * @throws {TypeError} combined mode on an empty wall (`sections[0].color`, as legacy);
-   *   {Error} unsupportedStrategy for a foreign profile value
+   * @throws {Error} unsupportedStrategy for a foreign profile value (an empty wall no longer throws in combined mode:
+   *   B-L6's `sections[0].color` read is gone since 08 P2-7d, and the validator never lets an empty wall in, 08 P2-3b)
    */
   write({ sections, meshMode, layout, textureNames = null }) {
     const brand = this.#brand;
@@ -121,23 +123,17 @@ export class ObjExporter {
   }
 
   /**
-   * Combined mode, verbatim 4563-4604. The colour is read FIRST (before any text), then the UV option.
+   * Combined mode, 4563-4604 with one material per section (08 P2-7d, 08 6.8; B-L6 fixed): the UV option first, then
+   * per section `newmtl Wall_<i+1>` (Kd from the section colour, toFixed(4), then Ka/Ks/Ns/d exactly as the section
+   * materials); the object `LED_Wall_Combined` with all `v`, all `vt`, all normals, then per section
+   * `usemtl Wall_<i+1>` and its faces. Legacy (`Strategies.exportCombinedColor = 'first-section'`, retired) wrote one
+   * `LED_Wall_Combined` material coloured by section 0 for the whole wall.
    * @param {{objContent: string, mtlContent: string}} text  appended to
    * @param {import('../domain/WallSection.js').WallSection[]} sections
    * @param {import('../geometry/WallLayout.js').WallLayout} layout
    */
   #writeCombined(text, sections, layout) {
     const profile = this.#builder.profile;
-    let color;
-    switch (Strategies.exportCombinedColor) {
-      case 'first-section':
-        // LEGACY(B-L6): the whole combined wall gets the first section's colour (and an empty wall throws the
-        // legacy TypeError on `sections[0].color`).
-        color = this.#colorToRgb(sections[0].color);
-        break;
-      default:
-        throw unsupportedStrategy('exportCombinedColor', Strategies.exportCombinedColor);
-    }
     let uvFor;
     switch (profile.combinedUV) {
       case 'atlas-pixel-accurate': {
@@ -158,18 +154,25 @@ export class ObjExporter {
         throw unsupportedStrategy('mesh.obj.combinedUV', profile.combinedUV);
     }
 
-    text.mtlContent += `newmtl LED_Wall_Combined\n`;
-    text.mtlContent += `Kd ${color.r.toFixed(4)} ${color.g.toFixed(4)} ${color.b.toFixed(4)}\n`;
-    text.mtlContent += `Ka 0.1 0.1 0.1\nKs 0.5 0.5 0.5\nNs 100\nd 1.0\n\n`;
+    // 08 P2-7d (B-L6 fixed, 08 6.8): one material per section with that section's colour, named and laid out like the
+    // section-mode materials; the single LED_Wall_Combined material is gone, for single-section walls too (04 Q11).
+    sections.forEach((section, i) => {
+      const color = this.#colorToRgb(section.color);
+      text.mtlContent += `newmtl ${exportSectionName(i)}\n`;
+      text.mtlContent += `Kd ${color.r.toFixed(4)} ${color.g.toFixed(4)} ${color.b.toFixed(4)}\n`;
+      text.mtlContent += `Ka 0.1 0.1 0.1\nKs 0.5 0.5 0.5\nNs 100\nd 1.0\n\n`;
+    });
 
     text.objContent += `mtllib ${this.#brand.files.mtl}\n\n`;
     text.objContent += 'o LED_Wall_Combined\n';
-    text.objContent += 'usemtl LED_Wall_Combined\n';
 
     const grid = { positions: [], normals: [], uvs: [], indices: [] };
+    const faceRanges = [];
     let vertexOffset = 1;
     layout.sections.forEach((sl, i) => {
+      const start = grid.indices.length;
       const { vertexAdvance } = this.#builder.sectionGrid(sl, { indexBase: vertexOffset, uv: uvFor(i) }, grid);
+      faceRanges.push({ start, end: grid.indices.length });
       vertexOffset += vertexAdvance;
     });
 
@@ -179,10 +182,13 @@ export class ObjExporter {
     text.objContent += lines;
 
     const q = grid.indices;
-    for (let k = 0; k < q.length; k += 6) {
-      text.objContent += `f ${q[k]}/${q[k]}/${n(q[k])} ${q[k + 1]}/${q[k + 1]}/${n(q[k + 1])} ${q[k + 2]}/${q[k + 2]}/${n(q[k + 2])}\n`;
-      text.objContent += `f ${q[k + 3]}/${q[k + 3]}/${n(q[k + 3])} ${q[k + 4]}/${q[k + 4]}/${n(q[k + 4])} ${q[k + 5]}/${q[k + 5]}/${n(q[k + 5])}\n`;
-    }
+    faceRanges.forEach(({ start, end }, i) => {
+      text.objContent += `usemtl ${exportSectionName(i)}\n`;
+      for (let k = start; k < end; k += 6) {
+        text.objContent += `f ${q[k]}/${q[k]}/${n(q[k])} ${q[k + 1]}/${q[k + 1]}/${n(q[k + 1])} ${q[k + 2]}/${q[k + 2]}/${n(q[k + 2])}\n`;
+        text.objContent += `f ${q[k + 3]}/${q[k + 3]}/${n(q[k + 3])} ${q[k + 4]}/${q[k + 4]}/${n(q[k + 4])} ${q[k + 5]}/${q[k + 5]}/${n(q[k + 5])}\n`;
+      }
+    });
   }
 
   /**

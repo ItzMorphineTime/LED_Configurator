@@ -11,7 +11,7 @@
 import { exportSectionName, exportPanelName } from '../geometry/PanelNaming.js';
 import { maxIndexOf, indexWidth, atlasUvRect, WallMeshBuilder } from '../geometry/WallMeshBuilder.js';
 import { computeAtlas } from '../geometry/TextureAtlas.js';
-import { Strategies, unsupportedStrategy } from '../legacy/LegacyCompat.js';
+import { unsupportedStrategy } from '../legacy/LegacyCompat.js';
 
 /**
  * Colour parser injected by App (`(s) => new THREE.Color(s)`); tests inject a THREE r128 setStyle equivalent.
@@ -80,8 +80,10 @@ export class GltfExporter {
   /**
    * The glTF document of the wall, verbatim 4719-4909. Top-level key order: asset, scene, scenes, nodes, meshes,
    * accessors, bufferViews, buffers, materials. Dispatch: 'combined' / 'section' / anything else as panels.
-   *   combined: one mesh `LED_Wall_Combined` (all section grids and their normals, indices offset per section from
-   *     0), coloured by the first section AFTER the loop (B-L6);
+   *   combined: one mesh `LED_Wall_Combined` with one primitive per section (08 P2-7d, 08 6.8; B-L6 fixed): each with
+   *     its own POSITION / NORMAL / TEXCOORD_0 / index accessors for that section's grid (indices from 0) and its own
+   *     material `Wall_<i+1>_Material` in the section colour (legacy: one primitive and one `LED_Wall_Combined_Material`
+   *     coloured by section 0);
    *   section: one mesh per section (indices from 0), coloured by that section after its indices;
    *   panel: one mesh per panel (the 4 builder corners, indices panelQuadIndices(0), the facing normal x4), colour per
    *     section first.
@@ -96,7 +98,8 @@ export class GltfExporter {
    *          layout: import('../geometry/WallLayout.js').WallLayout}} args  layout = layoutProject(project) of
    *   the same sections
    * @returns {object} the glTF document (plain JSON)
-   * @throws {TypeError} combined mode on an empty wall; {Error} unsupportedStrategy for a foreign profile
+   * @throws {Error} unsupportedStrategy for a foreign profile (an empty wall no longer throws in combined mode since
+   *   08 P2-7d; the validator never lets one in, 08 P2-3b)
    */
   write({ sections, meshMode, layout }) {
     const gltf = {
@@ -146,42 +149,28 @@ export class GltfExporter {
   }
 
   /**
-   * Combined mode, verbatim 4830-4851: every section grid appended with loops (indices offset by the running
-   * declared vertex count, from 0), then the colour, then one mesh. With TEXCOORD_0 (08 P2-7c) each grid carries the
-   * uv option of #combinedUvOption (the pixel-accurate atlas rect, 08 6.7).
+   * Combined mode (4830-4851 restructured by 08 P2-7d, 08 6.8; B-L6 fixed; 04 7.3): one mesh `LED_Wall_Combined` and one
+   * node, with one primitive per section: its own grid (indices from 0; with TEXCOORD_0 the uv option of
+   * #combinedUvOption, the pixel-accurate atlas rect of 08 6.7), its own accessors and its own material
+   * `Wall_<i+1>_Material` in the section colour. The vertex data equals the legacy single primitive's (legacy never
+   * shared a vertex across sections); only the buffer views, the accessors and the materials are split per section.
+   * Legacy (`Strategies.exportCombinedColor = 'first-section'`, retired) coloured the whole wall with section 0.
    * @param {BufferState} state
    * @param {import('../domain/WallSection.js').WallSection[]} sections
    * @param {import('../geometry/WallLayout.js').WallLayout} layout
    */
   #writeCombined(state, sections, layout) {
     const uvFor = this.#combinedUvOption(sections);
-    const allVertices = [];
-    const allNormals = [];
-    const allUvs = [];
-    const allIndices = [];
-    let indexOffset = 0;
-
-    layout.sections.forEach((sl, sectionIndex) => {
-      const grid = this.#builder.sectionGrid(sl, { indexBase: indexOffset, uv: uvFor(sectionIndex) });
-      for (let i = 0; i < grid.positions.length; i++) allVertices.push(grid.positions[i]);
-      for (let i = 0; i < grid.normals.length; i++) allNormals.push(grid.normals[i]);
-      for (let i = 0; i < grid.uvs.length; i++) allUvs.push(grid.uvs[i]);
-      for (let i = 0; i < grid.indices.length; i++) allIndices.push(grid.indices[i]);
-      indexOffset += grid.vertexAdvance;
+    const primitives = layout.sections.map((sl, sectionIndex) => {
+      const grid = this.#builder.sectionGrid(sl, { indexBase: 0, uv: uvFor(sectionIndex) });
+      return {
+        attrs: { positions: grid.positions, normals: grid.normals, uvs: grid.uvs },
+        indices: grid.indices,
+        color: this.#colorToRgb(sl.section.color),
+        materialName: `${exportSectionName(sectionIndex)}_Material`,
+      };
     });
-
-    let color;
-    switch (Strategies.exportCombinedColor) {
-      case 'first-section':
-        // LEGACY(B-L6): the whole combined wall gets the first section's colour (and an empty wall throws the
-        // legacy TypeError on `sections[0].color`).
-        color = this.#colorToRgb(sections[0].color);
-        break;
-      default:
-        throw unsupportedStrategy('exportCombinedColor', Strategies.exportCombinedColor);
-    }
-    this.#addMesh(state, 'LED_Wall_Combined', { positions: allVertices, normals: allNormals, uvs: allUvs },
-      [{ indices: allIndices, color }]);
+    this.#addMesh(state, 'LED_Wall_Combined', primitives);
   }
 
   /**
@@ -219,8 +208,8 @@ export class GltfExporter {
     layout.sections.forEach((sl, sectionIndex) => {
       const grid = this.#builder.sectionGrid(sl, { indexBase: 0, uv });
       const color = this.#colorToRgb(sl.section.color);
-      this.#addMesh(state, exportSectionName(sectionIndex), { positions: grid.positions, normals: grid.normals, uvs: grid.uvs },
-        [{ indices: grid.indices, color }]);
+      this.#addMesh(state, exportSectionName(sectionIndex),
+        [{ attrs: { positions: grid.positions, normals: grid.normals, uvs: grid.uvs }, indices: grid.indices, color }]);
     });
   }
 
@@ -250,7 +239,7 @@ export class GltfExporter {
 
         const indices = builder.panelQuadIndices(0);
         const name = exportPanelName(sectionIndex, panel.row, panel.col);
-        this.#addMesh(state, name, { positions: vertices, normals, uvs }, [{ indices, color }]);
+        this.#addMesh(state, name, [{ attrs: { positions: vertices, normals, uvs }, indices, color }]);
       });
     });
   }
@@ -263,26 +252,30 @@ export class GltfExporter {
    *     the float64 values), NORMAL (08 P2-2d: Float32Array, its own view with target 34962, no min/max; it needs one
    *     normal per position in attrs.normals), TEXCOORD_0 (08 P2-7c: VEC2 5126, its own view with target 34962, no
    *     min/max, written (u, 1 - v); it needs one uv per position in attrs.uvs);
-   *   primitives: each with its own index view and accessor (the index width of its own indices) and its own material
-   *     (materialName, default name + "_Material"); every caller passes one primitive so far (08 P2-7d adds more).
+   *   primitives: each with its own attribute accessors (in attribute order), then its own index view and accessor (the
+   *     index width of its own indices), and its own material (materialName, default name + "_Material"); the materials
+   *     of all primitives come first. Section and panel meshes have one primitive; the combined mesh one per section
+   *     (08 P2-7d), so a one-primitive mesh keeps the legacy layout: materials, attributes, indices.
    * @param {BufferState} state
    * @param {string} name
-   * @param {{positions: number[], normals?: number[], uvs?: number[]}} attrs  flat float64 arrays (min/max are computed
-   *   from the positions, not from the Float32Array); uvs in the OBJ / three convention (v up)
-   * @param {{indices: number[], color: {r: number, g: number, b: number}, materialName?: string}[]} primitives
+   * @param {{attrs: {positions: number[], normals?: number[], uvs?: number[]}, indices: number[],
+   *          color: {r: number, g: number, b: number}, materialName?: string}[]} primitives  attrs: flat float64 arrays
+   *   (min/max are computed from the positions, not from the Float32Array); uvs in the OBJ / three convention (v up)
    * @throws {Error} unsupportedStrategy('mesh.gltf.attributes' | 'mesh.gltf.indexType' | 'mesh.gltf.doubleSided' |
    *   'mesh.gltf.normals', ...) for a foreign or inconsistent profile value
    */
-  #addMesh(state, name, attrs, primitives) {
+  #addMesh(state, name, primitives) {
     const { gltf } = state;
     const attributes = this.#attributeList();
     const formats = primitives.map((p) => this.#indexFormat(p.indices));
     const doubleSided = this.#doubleSided();
-    if (attributes.includes('NORMAL') && !(attrs.normals && attrs.normals.length === attrs.positions.length)) {
-      throw unsupportedStrategy('mesh.gltf.normals', this.#builder.profile.normals);
-    }
-    if (attributes.includes('TEXCOORD_0') && !(attrs.uvs && attrs.uvs.length / 2 === attrs.positions.length / 3)) {
-      throw unsupportedStrategy('mesh.gltf.attributes', attributes);
+    for (const { attrs } of primitives) {
+      if (attributes.includes('NORMAL') && !(attrs.normals && attrs.normals.length === attrs.positions.length)) {
+        throw unsupportedStrategy('mesh.gltf.normals', this.#builder.profile.normals);
+      }
+      if (attributes.includes('TEXCOORD_0') && !(attrs.uvs && attrs.uvs.length / 2 === attrs.positions.length / 3)) {
+        throw unsupportedStrategy('mesh.gltf.attributes', attributes);
+      }
     }
 
     const materialIndices = primitives.map(({ color, materialName }) => {
@@ -300,24 +293,24 @@ export class GltfExporter {
       return materialIndex;
     });
 
-    const accessors = {};
-    for (const attribute of attributes) {
-      switch (attribute) {
-        case 'POSITION':
-          accessors.POSITION = this.#addVec3(state, attrs.positions, true);
-          break;
-        case 'NORMAL':
-          accessors.NORMAL = this.#addVec3(state, attrs.normals, false);
-          break;
-        case 'TEXCOORD_0':
-          accessors.TEXCOORD_0 = this.#addTexCoords(state, attrs.uvs);
-          break;
-        default:
-          throw unsupportedStrategy('mesh.gltf.attributes', attributes);
+    const written = primitives.map(({ attrs, indices }, p) => {
+      const accessors = {};
+      for (const attribute of attributes) {
+        switch (attribute) {
+          case 'POSITION':
+            accessors.POSITION = this.#addVec3(state, attrs.positions, true);
+            break;
+          case 'NORMAL':
+            accessors.NORMAL = this.#addVec3(state, attrs.normals, false);
+            break;
+          case 'TEXCOORD_0':
+            accessors.TEXCOORD_0 = this.#addTexCoords(state, attrs.uvs);
+            break;
+          default:
+            throw unsupportedStrategy('mesh.gltf.attributes', attributes);
+        }
       }
-    }
 
-    const indexAccessors = primitives.map(({ indices }, p) => {
       const { IndexArray, componentType } = formats[p];
       const indexBuffer = new IndexArray(indices);
       const indexBytes = new Uint8Array(indexBuffer.buffer);
@@ -345,15 +338,15 @@ export class GltfExporter {
         count: indices.length,
         type: "SCALAR"
       });
-      return indexAccessor;
+      return { accessors, indexAccessor };
     });
 
     const currentMeshIndex = state.meshIndex++;
     gltf.meshes.push({
       name: name,
-      primitives: primitives.map((primitive, p) => ({
-        attributes: { ...accessors },
-        indices: indexAccessors[p],
+      primitives: written.map(({ accessors, indexAccessor }, p) => ({
+        attributes: accessors,
+        indices: indexAccessor,
         material: materialIndices[p]
       }))
     });

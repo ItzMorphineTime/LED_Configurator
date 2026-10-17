@@ -1,0 +1,61 @@
+{
+  "commit": "P2-7d",
+  "bugs": [
+    "B-L6"
+  ],
+  "expect": [
+    {
+      "output": "**/*combined__export-{obj,gltf}__*",
+      "change": "modified",
+      "each": true,
+      "reason": "B-L6: one material per section in combined mode (08 6.8): the Export OBJ ZIP MTL entry holds newmtl Wall_<i+1> per section in its colour (no LED_Wall_Combined material, single-section walls included, 04 Q11) and the OBJ entry a usemtl Wall_<i+1> before each section's faces; the glTF is one mesh LED_Wall_Combined with one primitive per section, each with its own accessors and Wall_<i+1>_Material (the vertex data is unchanged)"
+    },
+    {
+      "output": "import_edge/{i,iii_weird}__export-{obj,gltf}__*",
+      "change": "modified",
+      "each": true,
+      "reason": "the same per-section materials on the combined walls of import_edge cases (i) (the wall the refused import leaves, two sections) and (iii) (an unknown mode imported as combined since 08 P2-3b); their names lack the combined__ prefix"
+    },
+    {
+      "output": "ui_sections/edited__export-obj__*.zip",
+      "change": "modified",
+      "reason": "the same per-section materials on the edited combined wall of ui_sections"
+    },
+    {
+      "output": "{default,flat3,concave_offsets,convex,mixed,box_corner,large_wall}/final__export-zip__*.zip",
+      "change": "modified",
+      "each": true,
+      "reason": "the OBJ, MTL and glTF entries of every combined Export All ZIP (COMBZIP)"
+    },
+    {
+      "output": "logos/*__export-zip__*.zip",
+      "change": "modified",
+      "each": true,
+      "reason": "the combined Export All ZIPs of the logos scenario (COMBZIP)"
+    },
+    {
+      "output": "**/*combined__export-zip__*.zip",
+      "change": "modified",
+      "each": true,
+      "reason": "the combined Export All ZIP of p2_project_v2 step 8 (COMBZIP)"
+    }
+  ],
+  "mayChange": [
+    {
+      "output": "toggles/15_car_moved.screenshot.png",
+      "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-08 P2-7c runs); this commit changes no pixel of it"
+    },
+    {
+      "output": "p2_curved_safe_distance/box_corner.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas on the preview footer label row (1 level, 1 px, seen in the 06 T6a-08 P2-7c runs); this commit changes no pixel of it"
+    },
+    {
+      "output": "p2_shortcut_filters/pilot_view_front.screenshot.png",
+      "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas (1 level, 2 px, seen in the 06 T6b-08 P2-7c runs); this commit changes no pixel of it"
+    }
+  ],
+  "notes": "08 P2-7d (B-L6): Strategies.exportCombinedColor retired; ObjExporter combined writes one newmtl Wall_<i+1> per section and usemtl before each section's faces in the one object LED_Wall_Combined; GltfExporter combined writes one mesh with one primitive per section (own POSITION / NORMAL / TEXCOORD_0 / index accessors, Wall_<i+1>_Material). Section- and panel-mode exports are unchanged; section-mode ZIPs (p2_xss_names, p2_zip_section_mode, p2_oversize_canvas) are unchanged."
+}

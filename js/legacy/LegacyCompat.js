@@ -58,7 +58,6 @@ export const Strategies = deepFreeze({
                                                    // since 08 P2-7b (B-M6), Phase-1 'per-section-overlap';
                                                    // gltf.attributes + 'TEXCOORD_0' and the new leaf gltf.combinedUV since
                                                    // 08 P2-7c (B-M7)
-  exportCombinedColor: 'first-section',            // B-L6
   framingBounds: 'flat',                           // B-L2, B-M10
   curveBeforeFirstPanel: true,                     // B-L1
   frustumDepthM: 15,                               // B-L33
@@ -68,7 +67,8 @@ export const Strategies = deepFreeze({
   pilotForwardYSign: -1,                           // B-M13
   combinedLedSimColor: 'white',                    // B-L18
 });                                                // dispose.wallTextures / dispose.gizmo (B-H5, B-L12: true since
-                                                   // Phase 1C H1 / H2) retired by 08 P2-12a: always dispose
+                                                   // Phase 1C H1 / H2) retired by 08 P2-12a: always dispose;
+                                                   // exportCombinedColor (B-L6) retired by 08 P2-7d: per-section materials
 
 /**
  * The exact Phase-1 mesh profiles (docs/improvements/08-bugfix-roadmap.md 4.2). Production code never reads these;
@@ -171,7 +171,7 @@ const QUIRKS = deepFreeze({
   'B-L5': ['Uint16 glTF indices',
     'Landed in 08 P2-1b (glTF `mesh.gltf.indexType = \'auto\'`, `indexWidth`) and 08 P2-1e (viewport: Uint32 index attribute from a largest index of 65,535); no tag site'],
   'B-L6': ['Combined exports use section 0\'s colour',
-    'per-section'],
+    'Landed in 08 P2-7d (one material per section in the combined exports: OBJ `newmtl Wall_<i+1>` with `usemtl` before each section\'s faces, glTF one primitive per section with its own accessors and `Wall_<i+1>_Material`; `LED_Wall_Combined` stays the object and mesh name; `Strategies.exportCombinedColor` retired; no tag site)'],
   'B-L7': ['MTL second download, textures missing',
     'Landed in 08 P2-6c (the standalone MTL has no `map_Kd`: `ObjExporter.write` references a texture only when the caller ships it (`textureNames`); `Strategies.mtlDownloadDelayMs` retired as `ProjectIO.MTL_DOWNLOAD_DELAY_MS`; the possibly blocked second download was an ARCHITECTURE 8.4 observation until 08 P2-6e, the owner\'s decision: Export OBJ downloads one ZIP with the OBJ, the MTL and every texture the MTL references; no tag site)'],
   'B-L8': ['No import validation; unknown mode renders as panels; raw coercion',
@@ -253,8 +253,6 @@ const TAG_SITES = deepFreeze([
   ['js/geometry/WallLayout.js#computeWallLayout', ['B-L1']],
   ['js/geometry/WallLayout.js#framingBounds', ['B-L2', 'B-M10']],
   ['js/io/ProjectSerializer.js#write', ['B-L31']],
-  ['js/io/ObjExporter.js#write', ['B-L6']],
-  ['js/io/GltfExporter.js#write', ['B-L6']],
   ['js/render/SceneManager.js#addHelper', ['B-M11']],
   ['js/render/LEDMaterialFactory.js#combined', ['B-L18']],
   ['js/render/textures/LEDPixelTextureFactory.js#tile', ['B-L18', 'B-L20']],

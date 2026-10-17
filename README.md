@@ -227,6 +227,10 @@ and a message names it.) The button now reads "Export OBJ (ZIP)".
 Release note: the Combined-mode OBJ now carries the same texture coordinates as the viewport: each section maps its own
 part of the Panel IDs PNG (the sections used to overlap, each spanning the whole image).
 
+Release note: Combined-mode OBJ and glTF exports now give every section its own material (`Wall_1`, `Wall_2`, ...) in
+that section's colour; they used to colour the whole wall with the first section's colour. The wall stays one object
+(`LED_Wall_Combined`), with one material slot per section (in glTF, one primitive per section).
+
 ### glTF Export
 Modern 3D format with embedded materials for:
 - Web viewers
