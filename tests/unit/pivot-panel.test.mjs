@@ -248,6 +248,23 @@ describe('PivotPanel mirrors and listeners with the real controller (03 3.2; AC 
   });
 });
 
+describe('the Wall Pivot switches are named (03 3.2, AC 18)', () => {
+  test('every role="switch" of index.html is labelled by its visible .toggle-label text (aria-labelledby)', () => {
+    const html = readFileSync(join(ROOT, 'index.html'), 'utf8');
+    const switches = [...html.matchAll(/<div\b[^>]*\brole="switch"[^>]*>/g)].map((m) => m[0]);
+    assert.deepEqual(switches.map((t) => /\bid="([^"]+)"/.exec(t)[1]), ['toggle-pivot-keep-stage', 'toggle-pivot-marker']);
+    const expected = { 'toggle-pivot-keep-stage': 'Keep stage layout on pivot change', 'toggle-pivot-marker': 'Show pivot marker' };
+    for (const tag of switches) {
+      const id = /\bid="([^"]+)"/.exec(tag)[1];
+      const ref = /\baria-labelledby="([^"]+)"/.exec(tag);
+      assert.ok(ref, `#${id} has aria-labelledby`);
+      const label = new RegExp(`<span class="toggle-label" id="${ref[1]}">([^<]*)</span>`).exec(html);
+      assert.ok(label, `#${ref[1]} is a .toggle-label span`);
+      assert.equal(label[1], expected[id]);
+    }
+  });
+});
+
 describe('CameraPanel: "Distance to wall plane" (03 3.5)', () => {
   test('CAMERA_COVERAGE_CHANGED writes #camera-wall-distance as distToWall.toFixed(2) + m', () => {
     const map = new Map();

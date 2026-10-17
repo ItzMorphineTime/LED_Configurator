@@ -4151,6 +4151,10 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 3.10 `PivotController.toggleSelect` (the use case of the `O` key and of `#pivot-select`) is also a no-op in pilot mode. `ViewportInput` already ignored the `O` key there, but the button, "the same as the O key" (03 3.2), selected the pivot in pilot mode and built its translate gizmo around the marker that pilot mode hides (03 T9).
 - 2.3: `pivot-controller.test.mjs` (pilot mode: no select, no deselect; it works again afterwards).
 
+**03 T6c, accessible names of the Wall Pivot switches (review follow-up of 03 T6)** (docs/improvements/03-pivot.md 3.2; AC 18; manifest `tests/regression/expected/F3-T6c.json`, an invariance gate: no probe records `aria-labelledby` or span ids):
+- `index.html`: `#toggle-pivot-keep-stage` and `#toggle-pivot-marker` (`role="switch"`) are named by their visible `.toggle-label` spans through `aria-labelledby` (`#pivot-keep-stage-label`, `#pivot-marker-label`); without a name assistive technology announced an unnamed switch. 03 3.2's markup is amended.
+- 2.3: `pivot-panel.test.mjs` (every `role="switch"` of `index.html` is labelled by its `.toggle-label` text).
+
 **03 T12, the README "Pivot" section** (docs/improvements/03-pivot.md 5.9, 10; manifest `tests/regression/expected/F3-T12.json`, an invariance gate: documentation only):
 - Every 5.9 amendment landed with its code commit (03 T1-T6, T9, T10, T8; the entries above). 9: the Feature 3 row lists the landed tasks and what waits (T7 and the v2 half of T9 with project file v2 at M7a; step F is 08's P2-11c).
 - `README.md`: the "Pivot" section (the modes, the offset, the marker, O and the drag with Ctrl snapping and the Escape cancel, keep stage layout and the stage origin, the exports at the pivot, placement in Blender and Unreal, a raised pivot, the session-only note) and the changelog line.
