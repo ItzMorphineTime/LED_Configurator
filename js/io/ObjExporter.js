@@ -76,21 +76,24 @@ export class ObjExporter {
    * per vertex from the builder normals and faces `f a/a/a`; 'constant-z' (Phase 1) one `vn 0 0 1` per object.
    *   combined: one object `LED_Wall_Combined` coloured by the first section (B-L6); all `v` lines of all
    *     sections, then all `vt` lines (0..1 per section, B-M6), then the normals, then the faces;
-   *   section: one material and object per section; per-section `v`, `vt` and normals; `map_Kd` names the
-   *     texture by index (B-M2, tagged at PanelNaming.mtlTextureFile), except for a section whose `skipped[i]` is
-   *     true (the ZIP left its texture out, 08 P2-1c): its material ends without `map_Kd`;
+   *   section: one material and object per section; per-section `v`, `vt` and normals; `map_Kd` only for a
+   *     texture the caller ships (08 P2-6c, B-L7 fixed): textureNames given and textureNames[i] not null. Export OBJ
+   *     passes no names, so its standalone MTL has no `map_Kd`; Export All (ZIP) passes its texture names, null for a
+   *     texture it left out (08 P2-1c). The path names the texture by index until 08 P2-6d (B-M2, tagged at
+   *     PanelNaming.mtlTextureFile);
    *   panel: one object per panel with 4 vertices, 4 `vt`, its facing `vn` and two faces (builder.panelQuadIndices).
    * Ports: index.html@cd3fd3f lines 4556-4717.
    * Side effects: none.
    * @param {{sections: import('../domain/WallSection.js').WallSection[], meshMode: *,
-   *          layout: import('../geometry/WallLayout.js').WallLayout, skipped?: boolean[]|null}} args  layout =
-   *   layoutProject(project) of the same sections; skipped (Export All ZIP only, 08 P2-1c): per section, true when its
-   *   texture is not shipped, so its section-mode material gets no map_Kd (P2-6 replaces it with null texture names)
+   *          layout: import('../geometry/WallLayout.js').WallLayout, textureNames?: (string|null)[]|null}} args
+   *   layout = layoutProject(project) of the same sections; textureNames (Export All ZIP only, 08 P2-6c): the shipped
+   *   texture file name of each section (PanelNaming.textureFileNames), null for a texture left out; absent or null: no
+   *   map_Kd at all
    * @returns {{objContent: string, mtlContent: string}}
    * @throws {TypeError} combined mode on an empty wall (`sections[0].color`, as legacy);
    *   {Error} unsupportedStrategy for a foreign profile value
    */
-  write({ sections, meshMode, layout, skipped = null }) {
+  write({ sections, meshMode, layout, textureNames = null }) {
     const brand = this.#brand;
     let objContent = brand.objHeader;
     objContent += `# Mesh Mode: ${meshMode}\n`;
@@ -104,7 +107,7 @@ export class ObjExporter {
     if (meshMode === 'combined') {
       this.#writeCombined(text, sections, layout);
     } else if (meshMode === 'section') {
-      this.#writeSections(text, sections, layout, skipped);
+      this.#writeSections(text, sections, layout, textureNames);
     } else if (meshMode === 'panel') {
       this.#writePanels(text, sections, layout);
     } else {
@@ -177,17 +180,18 @@ export class ObjExporter {
    * @param {{objContent: string, mtlContent: string}} text  appended to
    * @param {import('../domain/WallSection.js').WallSection[]} sections
    * @param {import('../geometry/WallLayout.js').WallLayout} layout
-   * @param {boolean[]|null} skipped  sections whose texture the ZIP left out get no map_Kd (08 P2-1c)
+   * @param {(string|null)[]|null} textureNames  the shipped texture of each section; null (or a null entry): no map_Kd
    */
-  #writeSections(text, sections, layout, skipped) {
+  #writeSections(text, sections, layout, textureNames) {
     sections.forEach((section, i) => {
       const color = this.#colorToRgb(section.color);
       text.mtlContent += `newmtl ${exportSectionName(i)}\n`;
       text.mtlContent += `Kd ${color.r.toFixed(4)} ${color.g.toFixed(4)} ${color.b.toFixed(4)}\n`;
       text.mtlContent += `Ka 0.1 0.1 0.1\nKs 0.5 0.5 0.5\nNs 100\nd 1.0\n`;
-      // The index-based texture path is B-M2 (tagged at PanelNaming.mtlTextureFile). A texture the ZIP left out
-      // (08 P2-1c) is not referenced.
-      text.mtlContent += skipped && skipped[i] ? '\n' : `map_Kd ${mtlTextureFile(i)}\n\n`;
+      // A texture is referenced only when the caller ships it (08 P2-6c, B-L7 fixed; a texture the ZIP left out,
+      // 08 P2-1c, is null). The index-based path is B-M2 (tagged at PanelNaming.mtlTextureFile).
+      const shipped = Array.isArray(textureNames) && textureNames[i] != null;
+      text.mtlContent += shipped ? `map_Kd ${mtlTextureFile(i)}\n\n` : '\n';
     });
 
     text.objContent += `mtllib ${this.#brand.files.mtl}\n\n`;

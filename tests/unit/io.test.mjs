@@ -184,7 +184,10 @@ function compareAll(project, label, tally) {
     tally[outcome]++;
   };
   if (MODES.includes(meshMode)) {
-    r('obj', run(() => LEGACY_OBJ.write({ sections, meshMode, layout: layoutProject(project) })),
+    // 08 P2-6c: map_Kd only for a shipped texture; legacy referenced every section's index-named texture, so the oracle
+    // writer is told that each one ships, under its legacy index name (B-M2's path, unchanged by P2-6d for these names).
+    const legacyTextureNames = sections.map((s, i) => `Wall_${i + 1}_PanelIDs.png`);
+    r('obj', run(() => LEGACY_OBJ.write({ sections, meshMode, layout: layoutProject(project), textureNames: legacyTextureNames })),
       run(() => L.generateOBJContent(legacyGeometry(sections), 0.001, sections, meshMode, colorToRgb)), objText);
     r('gltf', run(() => LEGACY_GLTF.write({ sections, meshMode, layout: layoutProject(project) })),
       run(() => L.generateGLTFContent(legacyGeometry(sections), sections, meshMode, colorToRgb)), gltfText);
@@ -965,7 +968,7 @@ describe("ProjectSerializer and ObjExporter: textures the ZIP left out (B-L4, 08
     new WallSection({ id: 2, name: 'B', panelCols: 2, panelRows: 1, panelWidth: 500, panelHeight: 500, ledX: 32, ledY: 32,
       curveIntensity: 5, angleOffset: 0, color: '#00ff66' }),
   ], 'section');
-  const args = (meshMode, skipped) => ({ sections: project.wall.sections, meshMode, layout: layoutProject(project), skipped });
+  const args = (meshMode, textureNames) => ({ sections: project.wall.sections, meshMode, layout: layoutProject(project), textureNames });
 
   test("'zip' JSON: texture_file null where the textureNames entry is null (08 P2-6b: the names come from the caller)", () => {
     const names = textureFileNames(project.wall.sections);
@@ -977,16 +980,23 @@ describe("ProjectSerializer and ObjExporter: textures the ZIP left out (B-L4, 08
     assert.equal(json2(serializer.write(project, { variant: 'file', textureNames: [null, null] })), json2(serializer.write(project)));
   });
 
-  test('section-mode MTL: no map_Kd for a skipped section, the rest byte-identical; other modes ignore skipped', () => {
-    const plain = OBJ.write(args('section', null));
-    const out = OBJ.write(args('section', [false, true]));
-    assert.equal(out.objContent, plain.objContent);
-    assert.equal(out.mtlContent, plain.mtlContent.replace('d 1.0\nmap_Kd textures/Wall_2_PanelIDs.png\n\n', 'd 1.0\n\n'));
+  test('section-mode MTL: map_Kd only for a shipped texture (08 P2-6c), the rest byte-identical; other modes ignore the names', () => {
+    const names = textureFileNames(project.wall.sections);
+    const all = OBJ.write(args('section', names));
+    const out = OBJ.write(args('section', [names[0], null]));
+    const none = OBJ.write(args('section', null));
+    assert.equal(out.objContent, all.objContent);
+    assert.equal(none.objContent, all.objContent);
+    assert.equal(out.mtlContent, all.mtlContent.replace('d 1.0\nmap_Kd textures/Wall_2_PanelIDs.png\n\n', 'd 1.0\n\n'));
     assert.ok(out.mtlContent.endsWith('d 1.0\n\n'));
+    assert.equal(none.mtlContent, all.mtlContent.split(/map_Kd [^\n]*\n/).join(''), 'no names: no map_Kd at all (the standalone MTL)');
+    assert.ok(!none.mtlContent.includes('map_Kd'));
     for (const mode of ['combined', 'panel']) {
-      const a = OBJ.write(args(mode, [true, true]));
-      const b = OBJ.write(args(mode, null));
+      const a = OBJ.write(args(mode, [null, null]));
+      const b = OBJ.write(args(mode, names));
+      const c = OBJ.write(args(mode, null));
       assert.equal(objText(a), objText(b), mode);
+      assert.equal(objText(c), objText(b), mode);
     }
   });
 });
@@ -1148,16 +1158,24 @@ describe('ProjectIO use cases', () => {
     assert.deepEqual(log, [['saveText', FILES.json, 'application/json', json2(serializer.write(project))]]);
   });
 
-  test('exportOBJ: layout, OBJ now, MTL through win.setTimeout(Strategies.mtlDownloadDelayMs)', () => {
+  test('exportOBJ: layout, OBJ now, MTL through win.setTimeout(ProjectIO.MTL_DOWNLOAD_DELAY_MS); no map_Kd (B-L7 fixed in 08 P2-6c)', () => {
     const project = Project.createDefault();
     const log = [];
     const extra = {};
     fakeIO(project, log, extra).exportOBJ();
     const { objContent, mtlContent } = OBJ.write({ sections: project.wall.sections, meshMode: 'combined', layout: layoutProject(project) });
     assert.deepEqual(log, [['layout'], ['saveText', FILES.obj, 'text/plain', objContent], ['setTimeout', 100]]);
-    assert.equal(Strategies.mtlDownloadDelayMs, 100);
+    assert.equal(ProjectIO.MTL_DOWNLOAD_DELAY_MS, 100);
     extra.timer();
     assert.deepEqual(log.at(-1), ['saveText', FILES.mtl, 'text/plain', mtlContent]);
+    // Section mode: the standalone MTL references no texture (Export OBJ delivers none).
+    project.meshMode = 'section';
+    const log2 = [];
+    const extra2 = {};
+    fakeIO(project, log2, extra2).exportOBJ();
+    extra2.timer();
+    const sectionMtl = log2.at(-1)[3];
+    assert.ok(sectionMtl.includes('newmtl Wall_1') && !sectionMtl.includes('map_Kd'), sectionMtl);
   });
 
   test('exportGLTF downloads the pretty-printed document; a large panel wall downloads too (B-H3 fixed in 08 P2-1a)', () => {
@@ -1280,7 +1298,8 @@ describe('ProjectIO use cases', () => {
     const json = json2(serializer.write(project, { variant: 'zip', textureNames: textureFileNames(sections).map((n, i) => (skipped[i] ? null : n)) }));
     assert.equal(JSON.parse(json).sections[1].texture_file, null);
     assert.equal(JSON.parse(json).sections[0].texture_file, 'textures/Left_PanelIDs.png');
-    const { objContent, mtlContent } = OBJ.write({ sections, meshMode: 'section', layout, skipped });
+    const { objContent, mtlContent } = OBJ.write({ sections, meshMode: 'section', layout,
+      textureNames: textureFileNames(sections).map((n, i) => (skipped[i] ? null : n)) });
     assert.ok(!mtlContent.includes('map_Kd textures/Wall_2_PanelIDs.png'));
     assert.ok(mtlContent.includes('map_Kd textures/Wall_1_PanelIDs.png') && mtlContent.includes('map_Kd textures/Wall_3_PanelIDs.png'));
     const atlas = computeAtlas(sections);
@@ -1316,7 +1335,8 @@ describe('ProjectIO use cases', () => {
       'textures/Left_PanelIDs.png', 'textures/Center_PanelIDs.png', FILES.json, FILES.mtl]);
     const rewrites = log.filter((e) => e[0] === 'zip.file').slice(-2);
     assert.equal(rewrites[0][3], json2(serializer.write(project, { variant: 'zip', textureNames: textureFileNames(sections).map((n, i) => (skipped[i] ? null : n)) })));
-    assert.equal(rewrites[1][3], OBJ.write({ sections, meshMode: 'section', layout, skipped }).mtlContent);
+    assert.equal(rewrites[1][3], OBJ.write({ sections, meshMode: 'section', layout,
+      textureNames: textureFileNames(sections).map((n, i) => (skipped[i] ? null : n)) }).mtlContent);
     assert.deepEqual(log.slice(-2), [['saveBlob', FILES.zip, 'ZIP-BLOB'], ['alert', mExp4(['textures/Right_PanelIDs.png'])]]);
     // No left-out texture: no alert at all.
     const log2 = [];

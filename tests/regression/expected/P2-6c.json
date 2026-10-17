@@ -1,0 +1,19 @@
+{
+  "commit": "P2-6c",
+  "bugs": ["B-L7"],
+  "expect": [
+    { "output": "**/*section__export-obj__*.mtl", "change": "modified", "each": true,
+      "reason": "the standalone section-mode MTL of Export OBJ references no texture (it delivers none): every map_Kd line is gone (B-L7). The ten files: the seven CFG7 section MTLs, import_edge/ii_section, p2_xss_names and p2_zip_section_mode" }
+  ],
+  "mayChange": [
+    { "output": "p2_curved_safe_distance/box_corner.screenshot.png", "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas on the preview footer label row (1 level, 1 px, seen in the 06 T6a-08 P2-5b runs); this commit changes no rendered pixel of it" },
+    { "output": "p2_shortcut_filters/pilot_view_front.screenshot.png", "change": "modified",
+      "reason": "overlay-glyph jitter of DOM text over the WebGL canvas (1 level, 2 px, seen in the 06 T6b-08 P2-5b runs); this commit changes no rendered pixel of it" },
+    { "output": "toggles/15_car_moved.screenshot.png", "change": "modified",
+      "reason": "the help-badge overlay-glyph jitter of this allowlisted output, 1 level, up to 9 px, one pixel above the allowlist bound (06 T4b-08 P2-6b runs)" },
+    { "output": "large_wall/final__export-zip__morph-led-wall-export.zip", "change": "modified",
+      "reason": "the bistable 1-level export-PNG pixels of the large_wall ZIP textures (P2-0b); this commit changes no ZIP entry (the ZIP passes its texture names, so its MTL is unchanged)" }
+  ],
+  "notes": "08 P2-6c (B-L7): ObjExporter.write references a section texture only when the caller ships it (textureNames); Export OBJ passes none, the ZIP passes its names (null for a left-out texture). Strategies.mtlDownloadDelayMs becomes ProjectIO.MTL_DOWNLOAD_DELAY_MS (100 ms, unchanged), so downloads.json and every OBJ are unchanged. The ZIP MTLs keep their map_Kd (index-based until P2-6d)."
+}

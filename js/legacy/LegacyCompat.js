@@ -53,7 +53,6 @@ export const Strategies = deepFreeze({
                                                    // and the new leaf gltf.panelNormal (08 P2-2d)
   exportCombinedColor: 'first-section',            // B-L6
   mtlTextureNaming: 'index',                       // B-M2
-  mtlDownloadDelayMs: 100,                         // B-L7
   framingBounds: 'flat',                           // B-L2, B-M10
   curveBeforeFirstPanel: true,                     // B-L1
   frustumDepthM: 15,                               // B-L33
@@ -168,7 +167,7 @@ const QUIRKS = deepFreeze({
   'B-L6': ['Combined exports use section 0\'s colour',
     'per-section'],
   'B-L7': ['MTL second download, textures missing',
-    'bundle'],
+    'Landed in 08 P2-6c (the standalone MTL has no `map_Kd`: `ObjExporter.write` references a texture only when the caller ships it (`textureNames`); `Strategies.mtlDownloadDelayMs` retired as `ProjectIO.MTL_DOWNLOAD_DELAY_MS`; the possibly blocked second download is an ARCHITECTURE 8.4 observation; no tag site)'],
   'B-L8': ['No import validation; unknown mode renders as panels; raw coercion',
     'Landed in 08 P2-3b (`ProjectSerializer.read`: `detectVersion`, `migrateV1toV2` and `validateProject` of `io/ProjectMigrations.js`, `io/ProjectValidator.js`, `io/ProjectSchema.js`; `Strategies.importValidation` retired; `Wall.MAX_SECTIONS` with M-SEC-1; the size limit and the read error; the three-mode dispatch; `WallSection.setName`; no tag site)'],
   'B-L9': ['`|| default` turns 0 into the default (D-7, J-5, V-3)',
@@ -276,7 +275,6 @@ const TAG_SITES = deepFreeze([
   ['js/interaction/ViewportInput.js#attachPointer', ['B-M14']],
   ['js/app/WallController.js#setMeshMode', ['B-L13']],
   ['js/app/CameraController.js#CameraHub.refresh', ['B-L30']],
-  ['js/app/ProjectIO.js#exportOBJ', ['B-L7']],
   ['js/ui/SectionLogosPanel.js#onUpload', ['B-L35']],
   ['js/ui/WallDisplayPanel.js#bind', ['B-L13']],
   ['index.html', ['B-L36']],                   // markup, untagged; documentation-only

@@ -836,6 +836,8 @@ in parentheses changes them:
 - `box_corner`: the JSON inside the ZIP has no `angle_offset_degrees`, so its re-import
   (`zipjson_roundtrip__export-json`) lays the four sections out in a line (B-M3) (08 P2-6a: the ZIP JSON is the
   Export JSON document plus `texture_file`, and the round trip equals `final__export-json`).
+- Every standalone section-mode MTL (`*section__export-obj__*.mtl`) has `map_Kd textures/Wall_<i>_PanelIDs.png`
+  lines for textures Export OBJ never downloads (B-L7) (08 P2-6c: no `map_Kd`; the ZIP's MTL keeps them).
 - `p2_curved_safe_distance`: each of the four exports throws the B-M1 `ReferenceError`, so no OBJ is
   produced (08 P2-5a: the four OBJs download); the `concave30` screenshot shows the folded band (B-M15) (08 P2-5b:
   the mitred, clamped band; the clamped stretches are amber, and the OBJs of `concave_offsets`, `box_corner` and

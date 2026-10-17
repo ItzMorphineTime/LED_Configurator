@@ -16,7 +16,6 @@
 
 import { computeAtlas, canvasFits, CANVAS_HARD_LIMITS } from '../geometry/TextureAtlas.js';
 import { textureFileNames } from '../geometry/PanelNaming.js';
-import { Strategies } from '../legacy/LegacyCompat.js';
 import { MAX_IMPORT_BYTES } from '../domain/rules.js';
 
 /**
@@ -118,6 +117,12 @@ export class Downloader {
 
 /** Export and import use cases. */
 export class ProjectIO {
+  /**
+   * The delay (ms) of Export OBJ's MTL download after the OBJ: the legacy 100 ms (4916), a constant since 08 P2-6c
+   * retired Strategies.mtlDownloadDelayMs (no longer a defect: the MTL references no texture it does not deliver).
+   */
+  static MTL_DOWNLOAD_DELAY_MS = 100;
+
   /** @type {import('../domain/Project.js').Project} */
   #project;
   /** @type {import('./WallController.js').WallController} */
@@ -188,7 +193,10 @@ export class ProjectIO {
   }
 
   /**
-   * Export OBJ: the OBJ now, the MTL as a second download after Strategies.mtlDownloadDelayMs.
+   * Export OBJ: the OBJ now, the MTL as a second download after ProjectIO.MTL_DOWNLOAD_DELAY_MS. The MTL references no
+   * texture (08 P2-6c, B-L7 fixed: the writer gets no texture names; legacy pointed section-mode materials at textures it
+   * never delivered); the textured OBJ ships in Export All (ZIP). A browser may still prompt for or block the second
+   * download (ARCHITECTURE.md 8.4).
    * Ports: index.html@cd3fd3f lines 4911-4917.
    * Side effects: one download now (brand.files.obj), one timer that downloads brand.files.mtl; or the M-EXP-1
    * alert (#runExport; for example the TypeError of combined mode on an empty wall).
@@ -200,10 +208,8 @@ export class ProjectIO {
         sections: this.#project.wall.sections, meshMode: this.#project.meshMode, layout,
       });
       this.#downloader.saveText(objContent, this.#brand.files.obj, 'text/plain');
-      // LEGACY(B-L7): the MTL is a second download fired 100 ms later (browsers may block it as a multiple
-      // download), and the textures its map_Kd lines reference are never delivered.
       this.#win.setTimeout(() => this.#downloader.saveText(mtlContent, this.#brand.files.mtl, 'text/plain'),
-        Strategies.mtlDownloadDelayMs);
+        ProjectIO.MTL_DOWNLOAD_DELAY_MS);
     });
   }
 
@@ -283,8 +289,7 @@ export class ProjectIO {
     // the M-EXP-4 list all come from this one list.
     const names = textureFileNames(sections);
     // 08 6.3 step 1: the pre-check, pure arithmetic before anything is written. A left-out texture's textureNames entry
-    // is null (JSON texture_file null). Before 08 P2-6c/d the MTL keeps the index naming (B-M2), so the OBJ writer
-    // still takes the left-out textures as a boolean per section.
+    // is null: JSON texture_file null and no MTL map_Kd (08 P2-6c: the OBJ writer references only shipped textures).
     const skipped = sections.map((section) => {
       const { width, height } = this.#panelIds.sectionSize(section, null);
       return !canvasFits(width, height);
@@ -297,7 +302,7 @@ export class ProjectIO {
 
     const layout = this.#wallController.layout();
     const objArgs = { sections, meshMode: project.meshMode, layout };
-    const { objContent, mtlContent } = this.#objExporter.write({ ...objArgs, skipped });
+    const { objContent, mtlContent } = this.#objExporter.write({ ...objArgs, textureNames });
     zip.file(brand.files.obj, objContent);
     zip.file(brand.files.mtl, mtlContent);
 
@@ -328,7 +333,7 @@ export class ProjectIO {
         textureNames[i] = null;
       }
       zip.file(brand.files.json, jsonText());
-      zip.file(brand.files.mtl, this.#objExporter.write({ ...objArgs, skipped }).mtlContent);
+      zip.file(brand.files.mtl, this.#objExporter.write({ ...objArgs, textureNames }).mtlContent);
     }
 
     const content = await zip.generateAsync({ type: 'blob' });

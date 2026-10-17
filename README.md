@@ -206,6 +206,10 @@ Industry-standard 3D mesh format compatible with:
 - Unreal Engine
 - Unity
 
+Release note: in section mode the MTL of Export OBJ used to point at panel-ID textures that were never downloaded; it
+now references none (Export All (ZIP) delivers the textured OBJ). The MTL is still a second download, which a browser
+may ask you to allow.
+
 ### glTF Export
 Modern 3D format with embedded materials for:
 - Web viewers
