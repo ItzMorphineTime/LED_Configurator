@@ -543,6 +543,11 @@ Byte-identical files report `IDENTICAL`. Otherwise:
 
 - **ZIP container bytes** differ on every export, because JSZip stamps entries with the current
   time. Archives are compared by entry list and content.
+- **Web fonts (Google Fonts) in a whole run.** One full run of 04 UV-7..UV-9 (2026-10-31) drew every web-font
+  text slightly differently: sub-pixel widths in `ui_visual` `*.styles.json` (the header columns, the stats), sidebar
+  text in the screenshots, and the glyphs of every panel-ID PNG and section texture (about 0.3 % of the pixels). A
+  re-run of the same tree matched the previous build exactly. When such diffs appear everywhere at once, re-run the
+  capture before suspecting the change.
 - **Overlay glyphs over a WebGL canvas.** Screenshots can differ by 1 level in 1–8 pixels between
   runs, and every such pixel lies on a glyph of DOM text composited over a WebGL canvas: the help
   badge over the main canvas, the pilot-mode banner, and the camera preview window's header

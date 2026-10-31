@@ -1,7 +1,8 @@
 /**
  * @module app/ProjectIO
- * The export and import use cases (JSON, the OBJ ZIP (OBJ + MTL + the textures the MTL references: section textures in
- * section mode, the combined atlas in combined mode since 08 P2-7f), glTF, panel-ID
+ * The export and import use cases (JSON, the OBJ ZIP (OBJ + MTL + the textures the MTL references: since 04 UV-8a and
+ * UV-9 the section textures in section mode, combined per-section and panel section-space UVs, the combined atlas in the
+ * combined atlas layout; 04 7.1), glTF, panel-ID
  * PNG, ZIP bundle, safe-distance OBJ, JSON import) and the Downloader, the single owner of the legacy anchor-download
  * sequence. Every export reads the live project and a fresh layout (WallController.layout({frame: 'export'}) since
  * 03 T3: the file origin is the pivot); only the safe-distance OBJ reads a scene group, which it re-expresses into the
@@ -195,10 +196,10 @@ export class ProjectIO {
    * `mtllib` line) and every texture the MTL references, at the referenced path (08 P2-6e, the owner's decision of
    * 2026-10-17, which replaces 08 Q7's two downloads: legacy fired the MTL as a second download 100 ms later, which a
    * browser may block, so an importer such as Blender found no materials; B-L7 fixed). Order: JSZip -> layout -> the
-   * texture plan (the names and the pre-check of Export All, 08 6.3 and 6.6): the section textures in section mode, the
-   * combined atlas in combined mode (08 P2-7f: its MTL maps it) -> OBJ + MTL (map_Kd only for a shipped texture) -> the
-   * textures (a `data:,` PNG is left out late and the MTL entry is written again) -> generateAsync -> download ->
-   * M-EXP-4 if textures were left out. Panel mode references no texture, so its archive holds the OBJ and the MTL only.
+   * texture plan (the names and the pre-check of Export All, 08 6.3 and 6.6) of what the MTL references (#mtlTextureRefs,
+   * 04 7.1) -> OBJ + MTL (the UVs and map_Kd of project.uv; map_Kd only for a shipped texture) -> the textures (a
+   * `data:,` PNG is left out late and the MTL entry is written again) -> generateAsync -> download -> M-EXP-4 if textures
+   * were left out. Panel mode with the per-panel UVs references no texture, so its archive holds the OBJ and the MTL only.
    * The body is the private #writeObjZip().
    * Ports: index.html@cd3fd3f lines 4911-4917 (the OBJ and MTL text), 4534-4543 (the texture loop, as in Export All).
    * Side effects: draws one canvas per shipped section texture (section mode) or the atlas canvas (combined mode); one
@@ -220,12 +221,14 @@ export class ProjectIO {
     const project = this.#project;
     const sections = project.wall.sections;
     const layout = this.#wallController.layout({ frame: 'export' });   // 03 T3: the file origin is the pivot
-    const objArgs = { sections, meshMode: project.meshMode, layout };
+    const objArgs = { sections, meshMode: project.meshMode, layout, uvSettings: project.uv };
 
-    // The archive ships exactly what the MTL references (08 P2-6e): one texture per section in section mode, the combined
-    // atlas in combined mode (08 P2-7f; every material maps it), nothing in panel mode.
-    const plan = project.meshMode === 'section' ? this.#planSectionTextures(sections) : null;
-    const atlasPlan = project.meshMode === 'combined' ? this.#planAtlas(sections) : null;
+    // The archive ships exactly what the MTL references (08 P2-6e; 04 7.1 since UV-8a and UV-9): one texture per section
+    // in section mode, in combined mode with the per-section layout and in panel mode with section-space UVs; the combined
+    // atlas in combined mode with the atlas layout; nothing in panel mode with the per-panel UVs.
+    const refs = this.#mtlTextureRefs();
+    const plan = refs.sections ? this.#planSectionTextures(sections) : null;
+    const atlasPlan = refs.atlas ? this.#planAtlas(sections) : null;
     const writeObj = () => this.#objExporter.write({
       ...objArgs, textureNames: plan && plan.textureNames, atlasFile: atlasPlan && atlasPlan.file,
     });
@@ -243,6 +246,21 @@ export class ProjectIO {
   }
 
   /**
+   * Which textures the MTL and the ZIP glTF reference for the current mesh mode and UV settings (04 7.1): the section
+   * textures (section mode, combined 'per-section', panel 'section') or the combined atlas (combined 'atlas').
+   * Side effects: none.
+   * @returns {{sections: boolean, atlas: boolean}}
+   */
+  #mtlTextureRefs() {
+    const { meshMode, uv } = this.#project;
+    const atlasLayout = uv.combinedLayout === 'atlas';
+    return {
+      sections: meshMode === 'section' || (meshMode === 'combined' && !atlasLayout) || (meshMode === 'panel' && uv.panelUvs !== 'panel'),
+      atlas: meshMode === 'combined' && atlasLayout,
+    };
+  }
+
+  /**
    * Export glTF: the document pretty-printed with 2 spaces (any size since 08 P2-1a: the chunked encoder).
    * Ports: index.html@cd3fd3f lines 4919-4924.
    * Side effects: one download (brand.files.gltf, application/json), or the M-EXP-1 alert (#runExport).
@@ -251,7 +269,7 @@ export class ProjectIO {
     this.#runExport('Export glTF', () => {
       const layout = this.#wallController.layout({ frame: 'export' });   // 03 T3: the file origin is the pivot
       const gltfContent = this.#gltfExporter.write({
-        sections: this.#project.wall.sections, meshMode: this.#project.meshMode, layout,
+        sections: this.#project.wall.sections, meshMode: this.#project.meshMode, layout, uvSettings: this.#project.uv,
       });
       this.#downloader.saveText(JSON.stringify(gltfContent, null, 2), this.#brand.files.gltf, 'application/json');
     });
@@ -326,24 +344,28 @@ export class ProjectIO {
     zip.file(brand.files.json, jsonText());
 
     const layout = this.#wallController.layout({ frame: 'export' });   // 03 T3: the file origin is the pivot
-    const objArgs = { sections, meshMode: project.meshMode, layout };
-    // The MTL references the atlas only while the UVs are atlas-placed: combined mode (08 6.3 step 1, P2-7f).
-    const writeObj = () => this.#objExporter.write({
-      ...objArgs, textureNames: plan.textureNames, atlasFile: project.meshMode === 'combined' ? atlasPlan.file : null,
-    });
+    const objArgs = { sections, meshMode: project.meshMode, layout, uvSettings: project.uv };
+    // Every texture ships; the MTL and the glTF reference the ones their UVs address (04 7.1, 7.3: the atlas only while
+    // the UVs are atlas-placed, combined mode with the atlas layout; 08 6.3 step 1, P2-7f).
+    const writeObj = () => this.#objExporter.write({ ...objArgs, textureNames: plan.textureNames, atlasFile: atlasPlan.file });
+    const gltfText = () => JSON.stringify(this.#gltfExporter.write({
+      ...objArgs, textures: { sectionFiles: plan.textureNames, atlasFile: atlasPlan.file },
+    }), null, 2);
     const { objContent, mtlContent } = writeObj();
     zip.file(brand.files.obj, objContent);
     zip.file(brand.files.mtl, mtlContent);
 
-    const gltfContent = this.#gltfExporter.write(objArgs);
-    zip.file(brand.files.gltf, JSON.stringify(gltfContent, null, 2));
+    zip.file(brand.files.gltf, gltfText());
 
     // Steps 3-4: the textures that fit, then the atlas; when one is left out late, re-write the entries that name it
-    // without it (JSZip keeps an entry's position): the JSON and the MTL for a section texture, the MTL for the atlas.
+    // without it (JSZip keeps an entry's position): the JSON for a section texture, the MTL and the glTF for either.
     const lateSections = this.#addSectionTextures(zip.folder('textures'), sections, plan);
     const lateAtlas = this.#addAtlasTexture(zip, sections, atlasPlan);
     if (lateSections) zip.file(brand.files.json, jsonText());
-    if (lateSections || lateAtlas) zip.file(brand.files.mtl, writeObj().mtlContent);
+    if (lateSections || lateAtlas) {
+      zip.file(brand.files.mtl, writeObj().mtlContent);
+      zip.file(brand.files.gltf, gltfText());
+    }
 
     const content = await zip.generateAsync({ type: 'blob' });
     this.#downloader.saveBlob(content, brand.files.zip);

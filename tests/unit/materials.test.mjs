@@ -448,3 +448,39 @@ describe('04 UV-7: the per-section combined layout (Material[] and geometry grou
     }
   });
 });
+
+describe('04 UV-9: panel mode with the UV plans', () => {
+  const sections = () => [section({ name: 'A', panelCols: 3, panelRows: 2 }), section({ id: 1, name: 'B', panelCols: 2, panelRows: 1 })];
+  const build = (uvSettings, transform = null) => {
+    const calls = [];
+    const materials = {
+      beginRebuild() {},
+      sectionShared: (s) => { calls.push(['sectionShared', s.name]); return new FakeMaterial({ shared: s.name }); },
+      panel: (s, i, col, row, scale) => { calls.push(['panel', s.name, col, row, scale]); return new FakeMaterial({ panel: s.name }); },
+    };
+    const builder = new WallMeshBuilder(Strategies.mesh.viewport);
+    const view = new LEDWallView({ sceneManager: { add() {}, remove() {} }, materials, builder, theme: { scene: { frame: 0x4a4a5a } } });
+    const walls = sections();
+    if (transform) walls[0].setUvTransform(transform);
+    const layout = computeWallLayout(walls);
+    view.rebuild({ layout, meshMode: 'panel', display: { showFrame: false, panelIdsEnabled: true, content: 'panelIds' }, uvSettings });
+    return { calls, meshes: view.meshes(), layout, builder };
+  };
+
+  test("the section's UV transform reaches the panel UVs (section space); the 'panel' option draws per-panel canvases at the wall-wide px/LED", async () => {
+    const { UvSettings, UvTransform } = await import('../../js/domain/UvSettings.js');
+    const flip = new UvTransform({ flipU: true });
+    const { meshes, layout, builder } = build(new UvSettings(), flip);
+    const panel0 = layout.sections[0].panels[0];
+    const plan = { transform: flip, linear: { a: -1, b: -0, cc: 0, d: 1 }, rect: null, panelUvs: 'section' };
+    const expected = builder.panelUvs(panel0, layout.sections[0], plan);
+    const uv = meshes[0].geometry.attributes.uv.array;   // TL, TR, BL, BR = corners 3, 2, 0, 1
+    assert.deepEqual([uv[4], uv[5], uv[6], uv[7]], [...expected[0], ...expected[1]]);
+    assert.equal(uv[4], 1, 'flip U: the first panel starts at u = 1');
+    const perPanel = build(new UvSettings().assign({ panelUvs: 'panel' }));
+    const wallWide = panelPxPerLed(sections());
+    assert.deepEqual(perPanel.calls.map((c) => c[0]), new Array(8).fill('panel'));
+    assert.ok(perPanel.calls.every((c) => c[4] === wallWide));
+    assert.deepEqual(Array.from(perPanel.meshes[0].geometry.attributes.uv.array), [0, 1, 1, 1, 0, 0, 1, 0], 'the PlaneGeometry UVs');
+  });
+});

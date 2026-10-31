@@ -42,9 +42,9 @@ export const Strategies = deepFreeze({
   mesh: {
     viewport: { winding: 'ccw', normals: 'averaged', combinedUV: 'plan', side: 'double' },
     obj:      { winding: 'ccw', normals: 'averaged', stripNormals: 'per-vertex',
-                combinedUV: 'atlas-pixel-accurate', panelNormal: 'facing' },
+                combinedUV: 'plan', panelNormal: 'facing' },
     gltf:     { winding: 'ccw', normals: 'averaged', panelNormal: 'facing', attributes: ['POSITION', 'NORMAL', 'TEXCOORD_0'],
-                combinedUV: 'atlas-pixel-accurate', indexType: 'auto',
+                combinedUV: 'plan', indexType: 'auto',
                 doubleSided: 'omit' },                     // 'omit' = the material object has NO doubleSided key
   },                                               // gltf.indexType: 'auto' since 08 P2-1b (B-L5), Phase-1 'uint16';
                                                    // viewport.winding: 'ccw' since 08 P2-2a (B-H1), Phase-1 'legacy-cw';
@@ -58,7 +58,8 @@ export const Strategies = deepFreeze({
                                                    // since 08 P2-7b (B-M6), Phase-1 'per-section-overlap';
                                                    // gltf.attributes + 'TEXCOORD_0' and the new leaf gltf.combinedUV since
                                                    // 08 P2-7c (B-M7); viewport.combinedUV: 'plan' since 04 UV-7 (the UV
-                                                   // plans of Project.uv: per-section 0..1 by default, or the atlas)
+                                                   // plans of Project.uv: per-section 0..1 by default, or the atlas),
+                                                   // obj.combinedUV and gltf.combinedUV: 'plan' since 04 UV-8a / UV-8b
   framingBounds: 'layout',                         // since 08 P2-11c (B-L2, B-M10): FramingPolicy's three named boxes of
                                                    // the stage layout; Phase-1 'flat', 03 T2's 'flat-pivot' (both deleted)
   curveBeforeFirstPanel: true,                     // B-L1

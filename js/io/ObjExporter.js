@@ -12,6 +12,8 @@
 import { exportSectionName, exportPanelName, mtlTextureFile } from '../geometry/PanelNaming.js';
 import { computeAtlas } from '../geometry/TextureAtlas.js';
 import { atlasUvRect } from '../geometry/WallMeshBuilder.js';
+import { planSectionUvs } from '../geometry/UvMapper.js';
+import { UvSettings } from '../domain/UvSettings.js';
 import { isIdentityResolution } from '../geometry/WallLayout.js';
 import { turnXZ, yawTrig } from '../geometry/WallOrientation.js';
 import { unsupportedStrategy } from '../legacy/LegacyCompat.js';
@@ -24,6 +26,31 @@ const FACE_CONVENTION_LINE = '# Faces: counter-clockwise front faces; vn point o
 
 /** The identity translation of the safe-distance OBJ (03 7.1). */
 const NO_TRANSLATE = Object.freeze({ x: 0, y: 0, z: 0 });
+
+/**
+ * The archive path of section i's texture (`textures/<name>`, PanelNaming.mtlTextureFile), or null when the caller ships
+ * none (no names, or a null entry: left out by the size guard).
+ * @param {(string|null)[]|null} textureNames
+ * @param {number} i
+ * @returns {string|null}
+ */
+export function sectionTexturePath(textureNames, i) {
+  return Array.isArray(textureNames) && textureNames[i] != null ? mtlTextureFile(textureNames[i]) : null;
+}
+
+/** The UV settings of a write that passes none: the defaults (04 4.1), frozen. */
+const DEFAULT_UV_SETTINGS = Object.freeze(new UvSettings());
+
+/**
+ * The export UV plans of a write (04 5.3, 7.1): the caller's, else UvMapper.planSectionUvs of the layout with the UV
+ * transforms applied (exports always carry them; only the viewport's LED-mask content ignores them).
+ * @param {{sections: object[], meshMode: *, layout: object, uvPlans: object[]|null}} args
+ * @param {UvSettings} settings
+ * @returns {import('../geometry/UvMapper.js').SectionUvPlan[]}
+ */
+export function exportUvPlans({ sections, meshMode, layout, uvPlans }, settings) {
+  return uvPlans ?? planSectionUvs({ layout, atlas: computeAtlas(sections), settings, meshMode, applyTransforms: true });
+}
 
 /**
  * The two pivot header lines of 03 7.1 for a layout of layoutProject (the export frame), or '' when the layout has no
@@ -131,12 +158,18 @@ export class ObjExporter {
    *   section mode, by Export OBJ (ZIP), 08 P2-6e): the shipped texture file name of each section
    *   (PanelNaming.textureFileNames), null for a texture left out; absent or null: no map_Kd at all. atlasFile (08 P2-7f):
    *   the archive path of the combined atlas the caller ships (PanelNaming.atlasTexturePath), read in combined mode only;
-   *   null (left out, or a caller that ships no atlas): no map_Kd
+   *   null (left out, or a caller that ships no atlas): no map_Kd.
+   *   04 UV-8a / UV-9: uvSettings (Project.uv; default the defaults) chooses the UVs and so the texture each material
+   *   maps (04 7.1): section mode, combined 'per-section' and panel 'section' map textureNames[i]; combined 'atlas' maps
+   *   atlasFile; panel 'panel' maps nothing. uvPlans: the caller's export plans (default exportUvPlans, with the UV
+   *   transforms)
    * @returns {{objContent: string, mtlContent: string}}
    * @throws {Error} unsupportedStrategy for a foreign profile value (an empty wall no longer throws in combined mode:
    *   B-L6's `sections[0].color` read is gone since 08 P2-7d, and the validator never lets an empty wall in, 08 P2-3b)
    */
-  write({ sections, meshMode, layout, textureNames = null, atlasFile = null }) {
+  write({ sections, meshMode, layout, textureNames = null, atlasFile = null, uvSettings = null, uvPlans = null }) {
+    const settings = uvSettings ?? DEFAULT_UV_SETTINGS;
+    const plans = exportUvPlans({ sections, meshMode, layout, uvPlans }, settings);
     const brand = this.#brand;
     let objContent = brand.objHeader;
     objContent += `# Mesh Mode: ${meshMode}\n`;
@@ -149,11 +182,11 @@ export class ObjExporter {
     // The three mesh modes (B-L8 fixed in 08 P2-3b: the validator maps an unknown imported mode to 'combined', so the
     // throw is unreachable from the app; legacy wrote any unknown mode as panels).
     if (meshMode === 'combined') {
-      this.#writeCombined(text, sections, layout, atlasFile);
+      this.#writeCombined(text, sections, layout, { atlasFile, textureNames, plans, settings });
     } else if (meshMode === 'section') {
-      this.#writeSections(text, sections, layout, textureNames);
+      this.#writeSections(text, sections, layout, textureNames, plans);
     } else if (meshMode === 'panel') {
-      this.#writePanels(text, sections, layout);
+      this.#writePanels(text, sections, layout, textureNames, plans);
     } else {
       throw new Error(`Unknown mesh mode ${JSON.stringify(meshMode)}`);
     }
@@ -168,15 +201,25 @@ export class ObjExporter {
    * `usemtl Wall_<i+1>` and its faces. Legacy (`Strategies.exportCombinedColor = 'first-section'`, retired) wrote one
    * `LED_Wall_Combined` material coloured by section 0 for the whole wall. With atlasFile (08 P2-7f) every material
    * maps the combined atlas the archive ships (the combined UVs are atlas-placed, 08 6.7).
+   * 04 UV-8a: with combinedUV 'plan' the `vt` are the export plans' UVs (each section filling 0..1 in the per-section
+   * layout, atlas-placed in the atlas layout, with the UV transforms) and each material maps what its UVs address: the
+   * section's own texture (textureNames[i]) in the per-section layout, atlasFile in the atlas layout.
    * @param {{objContent: string, mtlContent: string}} text  appended to
    * @param {import('../domain/WallSection.js').WallSection[]} sections
    * @param {import('../geometry/WallLayout.js').WallLayout} layout
-   * @param {string|null} atlasFile  the shipped atlas path, or null: no map_Kd
+   * @param {{atlasFile: string|null, textureNames: (string|null)[]|null, plans: object[], settings: UvSettings}} uv
+   *   atlasFile: the shipped atlas path, or null; textureNames: the shipped section textures (null entries: left out)
    */
-  #writeCombined(text, sections, layout, atlasFile) {
+  #writeCombined(text, sections, layout, { atlasFile, textureNames, plans, settings }) {
     const profile = this.#builder.profile;
     let uvFor;
+    let mapFor = () => atlasFile;
     switch (profile.combinedUV) {
+      case 'plan':
+        // 04 UV-8a: the UV plans; the per-section layout maps each section's own texture (04 7.1).
+        uvFor = (i) => plans[i];
+        if (settings.combinedLayout !== 'atlas') mapFor = (i) => sectionTexturePath(textureNames, i);
+        break;
       case 'atlas-pixel-accurate': {
         // 08 P2-7b (B-M6 fixed, 08 6.7): the viewport's pixel-accurate atlas UVs (atlasUvRect of each computeAtlas entry),
         // so the combined OBJ maps the combined panel-ID image (Brand.files.panelIdsPng) exactly; single-section walls
@@ -202,8 +245,10 @@ export class ObjExporter {
       text.mtlContent += `newmtl ${exportSectionName(i)}\n`;
       text.mtlContent += `Kd ${color.r.toFixed(4)} ${color.g.toFixed(4)} ${color.b.toFixed(4)}\n`;
       text.mtlContent += `Ka 0.1 0.1 0.1\nKs 0.5 0.5 0.5\nNs 100\nd 1.0\n`;
-      // 08 P2-7f: the atlas, when the archive ships it, as in the section materials' map_Kd lines.
-      text.mtlContent += atlasFile != null ? `map_Kd ${atlasFile}\n\n` : '\n';
+      // 08 P2-7f: the atlas, when the archive ships it, as in the section materials' map_Kd lines; 04 UV-8a: the section's
+      // own texture in the per-section layout (never a file the archive does not hold).
+      const map = mapFor(i);
+      text.mtlContent += map != null ? `map_Kd ${map}\n\n` : '\n';
     });
 
     text.objContent += `mtllib ${this.#brand.files.mtl}\n\n`;
@@ -242,8 +287,10 @@ export class ObjExporter {
    * @param {import('../domain/WallSection.js').WallSection[]} sections
    * @param {import('../geometry/WallLayout.js').WallLayout} layout
    * @param {(string|null)[]|null} textureNames  the shipped texture of each section; null (or a null entry): no map_Kd
+   * @param {object[]} plans  the export UV plans (04 UV-8a: the `vt` carry the section's UV transform; identity plans
+   *   write the legacy 0..1 bytes)
    */
-  #writeSections(text, sections, layout, textureNames) {
+  #writeSections(text, sections, layout, textureNames, plans) {
     sections.forEach((section, i) => {
       const color = this.#colorToRgb(section.color);
       text.mtlContent += `newmtl ${exportSectionName(i)}\n`;
@@ -251,8 +298,8 @@ export class ObjExporter {
       text.mtlContent += `Ka 0.1 0.1 0.1\nKs 0.5 0.5 0.5\nNs 100\nd 1.0\n`;
       // A texture is referenced only when the caller ships it (08 P2-6c, B-L7 fixed; a texture the ZIP left out,
       // 08 P2-1c, is null), by its ZIP entry path (08 P2-6d, B-M2 fixed).
-      const shipped = Array.isArray(textureNames) && textureNames[i] != null;
-      text.mtlContent += shipped ? `map_Kd ${mtlTextureFile(textureNames[i])}\n\n` : '\n';
+      const map = sectionTexturePath(textureNames, i);
+      text.mtlContent += map != null ? `map_Kd ${map}\n\n` : '\n';
     });
 
     text.objContent += `mtllib ${this.#brand.files.mtl}\n\n`;
@@ -264,7 +311,7 @@ export class ObjExporter {
       text.objContent += `o ${exportSectionName(sectionIndex)}\n`;
       text.objContent += `usemtl ${exportSectionName(sectionIndex)}\n`;
 
-      const grid = this.#builder.sectionGrid(sl, { indexBase: vertexOffset, uv: 'unit' });
+      const grid = this.#builder.sectionGrid(sl, { indexBase: vertexOffset, uv: plans[sectionIndex] });
       text.objContent += vertexLines(grid.positions);
       text.objContent += texCoordLines(grid.uvs);
       const { lines, normalIndex: n } = this.#stripNormalLines(grid.normals, normalOffset);
@@ -283,18 +330,25 @@ export class ObjExporter {
   }
 
   /**
-   * Panel mode (and any unknown mode), verbatim 4660-4713: all materials first (no map_Kd), then one object per
-   * panel, sections in order and panels row-major.
+   * Panel mode (and any unknown mode), 4660-4713: all materials first, then one object per panel, sections in order and
+   * panels row-major. 04 UV-9: with section-space panel UVs (uv.panel_uvs = 'section', the default) each panel's 4 `vt`
+   * are builder.panelUvs(panel, sl, plan) (BL, BR, TR, TL, toFixed(6): its sub-rectangle of the section's 0..1 space,
+   * with the UV transform) and each section material maps the section's shipped texture; with 'panel' the legacy
+   * literal `vt 0 0 / 1 0 / 1 1 / 0 1` and no map_Kd.
    * @param {{objContent: string, mtlContent: string}} text  appended to
    * @param {import('../domain/WallSection.js').WallSection[]} sections
    * @param {import('../geometry/WallLayout.js').WallLayout} layout
+   * @param {(string|null)[]|null} textureNames  the shipped texture of each section
+   * @param {object[]} plans  the export UV plans
    */
-  #writePanels(text, sections, layout) {
+  #writePanels(text, sections, layout, textureNames, plans) {
     sections.forEach((section, i) => {
       const color = this.#colorToRgb(section.color);
       text.mtlContent += `newmtl ${exportSectionName(i)}\n`;
       text.mtlContent += `Kd ${color.r.toFixed(4)} ${color.g.toFixed(4)} ${color.b.toFixed(4)}\n`;
-      text.mtlContent += `Ka 0.1 0.1 0.1\nKs 0.5 0.5 0.5\nNs 100\nd 1.0\n\n`;
+      text.mtlContent += `Ka 0.1 0.1 0.1\nKs 0.5 0.5 0.5\nNs 100\nd 1.0\n`;
+      const map = plans[i] && plans[i].panelUvs !== 'panel' ? sectionTexturePath(textureNames, i) : null;
+      text.mtlContent += map != null ? `map_Kd ${map}\n\n` : '\n';
     });
 
     text.objContent += `mtllib ${this.#brand.files.mtl}\n\n`;
@@ -304,7 +358,9 @@ export class ObjExporter {
     let texCoordOffset = 1;
     let normalOffset = 1;
 
-    layout.sections.forEach(({ panels, panelW, panelH }, sectionIndex) => {
+    layout.sections.forEach((sl, sectionIndex) => {
+      const { panels, panelW, panelH } = sl;
+      const plan = plans[sectionIndex];
       panels.forEach((panel) => {
         text.objContent += `o ${exportPanelName(sectionIndex, panel.row, panel.col)}\n`;
         text.objContent += `usemtl ${exportSectionName(sectionIndex)}\n`;
@@ -313,7 +369,12 @@ export class ObjExporter {
           text.objContent += `v ${c.x.toFixed(6)} ${c.y.toFixed(6)} ${c.z.toFixed(6)}\n`;
         });
 
-        text.objContent += `vt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\n`;
+        // 04 UV-9: section-space corners (the legacy per-panel literal with uv.panel_uvs = 'panel')
+        if (plan && plan.panelUvs !== 'panel') {
+          text.objContent += texCoordLines(builder.panelUvs(panel, sl, plan).flat());
+        } else {
+          text.objContent += `vt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\n`;
+        }
 
         const normal = builder.panelFacingNormal(panel);
         text.objContent += `vn ${normal.x.toFixed(6)} 0 ${normal.z.toFixed(6)}\n`;

@@ -200,9 +200,9 @@ describe('Strategies', () => {
       mesh: {
         viewport: { winding: 'ccw', normals: 'averaged', combinedUV: 'plan', side: 'double' },
         obj: { winding: 'ccw', normals: 'averaged', stripNormals: 'per-vertex',
-               combinedUV: 'atlas-pixel-accurate', panelNormal: 'facing' },
+               combinedUV: 'plan', panelNormal: 'facing' },
         gltf: { winding: 'ccw', normals: 'averaged', panelNormal: 'facing', attributes: ['POSITION', 'NORMAL', 'TEXCOORD_0'],
-                combinedUV: 'atlas-pixel-accurate', indexType: 'auto', doubleSided: 'omit' },
+                combinedUV: 'plan', indexType: 'auto', doubleSided: 'omit' },
       },
       framingBounds: 'layout',   // 08 P2-11c (Phase-1 'flat', 03 T2 'flat-pivot')
       curveBeforeFirstPanel: true,

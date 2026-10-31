@@ -24,6 +24,8 @@ import { fileURLToPath } from 'node:url';
 
 import { WallSection } from '../../js/domain/WallSection.js';
 import { Project } from '../../js/domain/Project.js';
+import { UvSettings, UvTransform } from '../../js/domain/UvSettings.js';
+import { planSectionUvs } from '../../js/geometry/UvMapper.js';
 import { LegacyProfiles, Strategies, unsupportedStrategy } from '../../js/legacy/LegacyCompat.js';
 import { computeWallLayout, layoutProject, resolvePivot } from '../../js/geometry/WallLayout.js';
 import { WallPivot } from '../../js/domain/Wall.js';
@@ -100,8 +102,16 @@ const makeGltf = (profile = Strategies.mesh.gltf, encodeBase64 = undefined, bran
 // each Phase-2 flip and each branding step.
 const OBJ = makeObj();
 const GLTF = makeGltf();
-const LEGACY_OBJ = makeObj(LegacyProfiles.mesh.obj, LEGACY_BRAND);
-const LEGACY_GLTF = makeGltf(LegacyProfiles.mesh.gltf, legacySpreadBase64, LEGACY_BRAND);
+// The oracle writers use the legacy per-panel UV option (04 UV-9: uv.panel_uvs = 'panel'), which reproduces the Phase-1
+// panel `vt 0 0 / 1 0 / 1 1 / 0 1` literal and the panel MTL without map_Kd; every other UV of the Phase-1 profiles is
+// identity-plan output, bit for bit.
+const LEGACY_UV = Object.freeze(new UvSettings().assign({ panelUvs: 'panel' }));
+const withLegacyUv = (exporter) => new Proxy(exporter, {
+  get: (target, key) => (key === 'write' ? (args) => target.write({ uvSettings: LEGACY_UV, ...args })
+    : typeof target[key] === 'function' ? target[key].bind(target) : target[key]),
+});
+const LEGACY_OBJ = withLegacyUv(makeObj(LegacyProfiles.mesh.obj, LEGACY_BRAND));
+const LEGACY_GLTF = withLegacyUv(makeGltf(LegacyProfiles.mesh.gltf, legacySpreadBase64, LEGACY_BRAND));
 // The Phase-1 OBJ profile with the production Brand: for comparisons of the profiles alone (08 P2-2c), where the
 // header strings must not differ. It keeps the production combinedUV, so that it isolates the P2-2c keys (winding,
 // normals, stripNormals) from the 08 P2-7b UV flip.
@@ -752,9 +762,10 @@ describe('golden files (byte-identical to the legacy downloads)', { skip: golden
         // Export OBJ downloads one ZIP since 08 P2-6e: the OBJ, the MTL (map_Kd for the section textures it ships) and
         // in section mode those textures, at the referenced paths.
         const objEntries = `${golden(mode, 'obj', 'objZip')}.entries`;
-        // Since 08 P2-7f the combined MTL maps the atlas, which the archive ships (every harness atlas fits).
-        const shipped = mode === 'section' ? textureFileNames(sections) : null;
-        const atlasFile = mode === 'combined' ? atlasTexturePath(FILES) : null;
+        // 04 7.1 (UV-8a, UV-9): with the default UV settings every mode maps the section textures (combined per-section,
+        // panel section space), which the archive ships; the atlas only in the combined atlas layout.
+        const shipped = textureFileNames(sections);
+        const atlasFile = null;
         const { objContent, mtlContent } = OBJ.write({ sections, meshMode: mode, layout: layoutProject(project), textureNames: shipped, atlasFile });
         same(objContent, `${objEntries}/${FILES.obj}`);
         same(mtlContent, `${objEntries}/${FILES.mtl}`);
@@ -782,10 +793,12 @@ describe('golden files (byte-identical to the legacy downloads)', { skip: golden
       const entries = `${golden('final', 'zip', 'zip')}.entries`;
       const layout = layoutProject(project);
       same(json2(serializer.write(project, { variant: 'zip', textureNames: textureFileNames(sections) })), `${entries}/${FILES.json}`);
-      const zipObj = OBJ.write({ sections, meshMode: 'combined', layout, atlasFile: atlasTexturePath(FILES) });
+      const zipTextures = { textureNames: textureFileNames(sections), atlasFile: atlasTexturePath(FILES) };
+      const zipObj = OBJ.write({ sections, meshMode: 'combined', layout, ...zipTextures });
       same(zipObj.objContent, `${entries}/${FILES.obj}`);
       same(zipObj.mtlContent, `${entries}/${FILES.mtl}`);
-      same(json2(GLTF.write({ sections, meshMode: 'combined', layout })), `${entries}/${FILES.gltf}`);
+      same(json2(GLTF.write({ sections, meshMode: 'combined', layout,
+        textures: { sectionFiles: zipTextures.textureNames, atlasFile: zipTextures.atlasFile } })), `${entries}/${FILES.gltf}`);
       // The ZIP's texture names (textureFileNames, unique since 08 P2-6b) and, since 08 P2-7f, the atlas are the files
       // the archive holds.
       const textureDir = file(`${entries}/textures`);
@@ -968,8 +981,8 @@ describe('strategy reads (foreign profile values throw unsupportedStrategy)', ()
   });
 
   test('GltfExporter: combinedUV (08 P2-7c) is read in combined mode only, and only when the attributes list TEXCOORD_0', () => {
-    const foreign = makeGltf({ ...Strategies.mesh.gltf, combinedUV: 'plan' });
-    assert.throws(() => foreign.write(args('combined')), expectError('mesh.gltf.combinedUV', 'plan'));
+    const foreign = makeGltf({ ...Strategies.mesh.gltf, combinedUV: 'per-section' });
+    assert.throws(() => foreign.write(args('combined')), expectError('mesh.gltf.combinedUV', 'per-section'));
     assert.doesNotThrow(() => foreign.write(args('section')));
     assert.doesNotThrow(() => foreign.write(args('panel')));
     // The Phase-1 profile has no combinedUV leaf: with TEXCOORD_0 added it throws in combined mode only.
@@ -978,7 +991,7 @@ describe('strategy reads (foreign profile values throw unsupportedStrategy)', ()
     assert.doesNotThrow(() => noLeaf.write(args('section')));
     assert.doesNotThrow(() => noLeaf.write(args('panel')));
     // Without TEXCOORD_0 the leaf is never read.
-    assert.doesNotThrow(() => makeGltf({ ...Strategies.mesh.gltf, attributes: ['POSITION', 'NORMAL'], combinedUV: 'plan' }).write(args('combined')));
+    assert.doesNotThrow(() => makeGltf({ ...Strategies.mesh.gltf, attributes: ['POSITION', 'NORMAL'], combinedUV: 'per-section' }).write(args('combined')));
   });
 
   test('the Phase-1 profiles do not throw; the default glTF encoder is chunkedBase64 (08 P2-1a) and an injected one is used', () => {
@@ -1054,7 +1067,7 @@ describe("ProjectSerializer and ObjExporter: textures the ZIP left out (B-L4, 08
     assert.equal(json2(serializer.write(project, { variant: 'file', textureNames: [null, null] })), json2(serializer.write(project)));
   });
 
-  test('section-mode MTL: map_Kd only for a shipped texture (08 P2-6c), the rest byte-identical; other modes ignore the names', () => {
+  test('section-mode MTL: map_Kd only for a shipped texture (08 P2-6c), the rest byte-identical; the OBJ text ignores the names', () => {
     const names = textureFileNames(project.wall.sections);
     const all = OBJ.write(args('section', names));
     const out = OBJ.write(args('section', [names[0], null]));
@@ -1067,12 +1080,16 @@ describe("ProjectSerializer and ObjExporter: textures the ZIP left out (B-L4, 08
     assert.ok(out.mtlContent.endsWith('d 1.0\n\n'));
     assert.equal(none.mtlContent, all.mtlContent.split(/map_Kd [^\n]*\n/).join(''), 'no names: no map_Kd at all (the standalone MTL)');
     assert.ok(!none.mtlContent.includes('map_Kd'));
+    // 04 7.1 (UV-8a, UV-9): combined per-section and panel section-space materials map the shipped section textures too;
+    // the OBJ text never depends on the names.
     for (const mode of ['combined', 'panel']) {
       const a = OBJ.write(args(mode, [null, null]));
       const b = OBJ.write(args(mode, names));
       const c = OBJ.write(args(mode, null));
-      assert.equal(objText(a), objText(b), mode);
-      assert.equal(objText(c), objText(b), mode);
+      assert.equal(a.objContent, b.objContent, mode);
+      assert.equal(c.objContent, b.objContent, mode);
+      assert.equal(b.mtlContent, all.mtlContent, `${mode}: the section maps of the default UV settings`);
+      assert.equal(a.mtlContent, none.mtlContent, mode);
     }
   });
 });
@@ -1247,11 +1264,12 @@ describe('ProjectIO use cases', () => {
     assert.equal(FILES.objZip, `${Brand.filePrefix}-obj.zip`);
     const project = Project.createDefault();
     project.meshMode = 'panel';
+    project.uv.assign({ panelUvs: 'panel' });   // 04 UV-9: the legacy per-panel UVs reference no texture
     const log = [];
     assert.equal(await fakeIO(project, log).exportOBJ(), undefined);
-    const { objContent, mtlContent } = OBJ.write({ sections: project.wall.sections, meshMode: 'panel', layout: layoutProject(project) });
+    const { objContent, mtlContent } = OBJ.write({ sections: project.wall.sections, meshMode: 'panel', layout: layoutProject(project), uvSettings: project.uv });
     assert.ok(objContent.includes(`\nmtllib ${FILES.mtl}\n`), 'the OBJ names the MTL entry');
-    assert.ok(!mtlContent.includes('map_Kd'), 'panel mode: no texture referenced, none shipped');
+    assert.ok(!mtlContent.includes('map_Kd'), 'panel mode with per-panel UVs: no texture referenced, none shipped');
     assert.deepEqual(log, [
       ['new JSZip'],
       ['layout'],
@@ -1262,12 +1280,13 @@ describe('ProjectIO use cases', () => {
     ]);
   });
 
-  test('exportOBJ in combined mode (08 P2-7f): every Wall_<i+1> material maps the atlas, which the ZIP ships at that path', async () => {
+  test('exportOBJ in combined mode, atlas layout (08 P2-7f; 04 7.1): every Wall_<i+1> material maps the atlas, which the ZIP ships at that path', async () => {
     const project = projectFromConfig(CONFIGS.mixed);
+    project.uv.assign({ combinedLayout: 'atlas' });
     const sections = project.wall.sections;
     const log = [];
     await fakeIO(project, log).exportOBJ();
-    const { objContent, mtlContent } = OBJ.write({ sections, meshMode: 'combined', layout: layoutProject(project), atlasFile: ATLAS });
+    const { objContent, mtlContent } = OBJ.write({ sections, meshMode: 'combined', layout: layoutProject(project), atlasFile: ATLAS, uvSettings: project.uv });
     assert.deepEqual(log, [
       ['new JSZip'],
       ['layout'],
@@ -1284,7 +1303,7 @@ describe('ProjectIO use cases', () => {
     await fakeIO(project, log2, { atlasSize: { width: 70000, height: 128 } }).exportOBJ();
     assert.ok(!log2.some((e) => e[0] === 'atlasCanvas'));
     assert.equal(log2.find((e) => e[0] === 'zip.file' && e[1] === FILES.mtl)[3],
-      OBJ.write({ sections, meshMode: 'combined', layout: layoutProject(project) }).mtlContent);
+      OBJ.write({ sections, meshMode: 'combined', layout: layoutProject(project), uvSettings: project.uv }).mtlContent);
     assert.deepEqual(log2.at(-1), ['alert', mExp4([ATLAS])]);
     // A data:, atlas (a device limit): left out late, the MTL entry is written again without map_Kd.
     const log3 = [];
@@ -1296,15 +1315,15 @@ describe('ProjectIO use cases', () => {
     assert.deepEqual(log3.at(-1), ['alert', mExp4([ATLAS])]);
   });
 
-  test('exportOBJ in section mode (08 P2-6e): the textures the MTL references ship at their map_Kd paths, as in Export All', async () => {
+  for (const meshMode of ['section', 'combined', 'panel']) test(`exportOBJ in ${meshMode} mode (08 P2-6e; 04 7.1 since UV-8a / UV-9): the section textures the MTL references ship at their map_Kd paths, as in Export All`, async () => {
     const project = projectFromConfig(CONFIGS.flat3);
-    project.meshMode = 'section';
+    project.meshMode = meshMode;
     const sections = project.wall.sections;
     const names = textureFileNames(sections);
     const log = [];
     await fakeIO(project, log).exportOBJ();
     const layout = layoutProject(project);
-    const { objContent, mtlContent } = OBJ.write({ sections, meshMode: 'section', layout, textureNames: names });
+    const { objContent, mtlContent } = OBJ.write({ sections, meshMode, layout, textureNames: names });
     const atlas = computeAtlas(sections);
     assert.deepEqual(log, [
       ['new JSZip'],
@@ -1416,15 +1435,17 @@ describe('ProjectIO use cases', () => {
     assert.equal(ProjectIO.prototype.exportZIP.constructor.name, 'AsyncFunction');
     await fakeIO(project, log).exportZIP();
     const layout = layoutProject(project);
-    const { objContent, mtlContent } = OBJ.write({ sections, meshMode: 'combined', layout, atlasFile: ATLAS });
+    const names = textureFileNames(sections);
+    const { objContent, mtlContent } = OBJ.write({ sections, meshMode: 'combined', layout, textureNames: names, atlasFile: ATLAS });
     const atlas = computeAtlas(sections);
+    const gltf = GLTF.write({ sections, meshMode: 'combined', layout, textures: { sectionFiles: names, atlasFile: ATLAS } });
     const expected = [
       ['new JSZip'],
       ['zip.file', FILES.json, undefined, json2(serializer.write(project, { variant: 'zip', textureNames: textureFileNames(sections) }))],
       ['layout'],
       ['zip.file', FILES.obj, undefined, objContent],
       ['zip.file', FILES.mtl, undefined, mtlContent],
-      ['zip.file', FILES.gltf, undefined, json2(GLTF.write({ sections, meshMode: 'combined', layout }))],
+      ['zip.file', FILES.gltf, undefined, json2(gltf)],
       ['zip.folder', 'textures'],
       ...sections.flatMap((s, i) => [
         ['sectionCanvas', i, null, atlas.entries[i].startCol],
@@ -1436,7 +1457,9 @@ describe('ProjectIO use cases', () => {
       ['saveBlob', FILES.zip, 'ZIP-BLOB'],
     ];
     assert.deepEqual(log, expected);
-    assert.deepEqual([...mtlContent.matchAll(/^map_Kd (.+)$/gm)].map((m) => m[1]), sections.map(() => ATLAS), 'combined: every material maps the atlas (08 P2-7f)');
+    // 04 7.1 (UV-8a): the per-section layout maps each section's own texture; the atlas ships but nothing maps it.
+    assert.deepEqual([...mtlContent.matchAll(/^map_Kd (.+)$/gm)].map((m) => m[1]), names.map((n) => `textures/${n}`));
+    assert.deepEqual(gltf.images.map((i) => i.uri), names.map((n) => `textures/${n}`), 'the glTF maps the same files (04 7.3)');
     assert.deepEqual(sections.map((s, i) => atlas.entries[i].startCol), [0, 6, 10, 16]);
   });
 
@@ -1481,7 +1504,8 @@ describe('ProjectIO use cases', () => {
       ['layout'],
       ['zip.file', FILES.obj, undefined, objContent],
       ['zip.file', FILES.mtl, undefined, mtlContent],
-      ['zip.file', FILES.gltf, undefined, json2(GLTF.write({ sections, meshMode: 'section', layout }))],
+      ['zip.file', FILES.gltf, undefined, json2(GLTF.write({ sections, meshMode: 'section', layout,
+        textures: { sectionFiles: textureFileNames(sections).map((n, i) => (skipped[i] ? null : n)), atlasFile: ATLAS } }))],
       ['zip.folder', 'textures'],
       ...[0, 2].flatMap((i) => [
         ['sectionCanvas', i, null, atlas.entries[i].startCol],
@@ -1523,11 +1547,13 @@ describe('ProjectIO use cases', () => {
     const layout = layoutProject(project);
     const files = log.filter((e) => e[0] === 'zip.file' || e[0] === 'folder.file').map((e) => e[1]);
     assert.deepEqual(files, [FILES.json, FILES.obj, FILES.mtl, FILES.gltf,
-      'textures/Left_PanelIDs.png', 'textures/Center_PanelIDs.png', ATLAS, FILES.json, FILES.mtl]);
-    const rewrites = log.filter((e) => e[0] === 'zip.file').slice(-2);
-    assert.equal(rewrites[0][3], json2(serializer.write(project, { variant: 'zip', textureNames: textureFileNames(sections).map((n, i) => (skipped[i] ? null : n)) })));
-    assert.equal(rewrites[1][3], OBJ.write({ sections, meshMode: 'section', layout,
-      textureNames: textureFileNames(sections).map((n, i) => (skipped[i] ? null : n)) }).mtlContent);
+      'textures/Left_PanelIDs.png', 'textures/Center_PanelIDs.png', ATLAS, FILES.json, FILES.mtl, FILES.gltf]);
+    const rewrites = log.filter((e) => e[0] === 'zip.file').slice(-3);
+    const kept = textureFileNames(sections).map((n, i) => (skipped[i] ? null : n));
+    assert.equal(rewrites[0][3], json2(serializer.write(project, { variant: 'zip', textureNames: kept })));
+    assert.equal(rewrites[1][3], OBJ.write({ sections, meshMode: 'section', layout, textureNames: kept }).mtlContent);
+    // 04 UV-8b: the glTF images name exactly the files the archive holds, so it is re-written too
+    assert.equal(rewrites[2][3], json2(GLTF.write({ sections, meshMode: 'section', layout, textures: { sectionFiles: kept, atlasFile: ATLAS } })));
     assert.deepEqual(log.slice(-2), [['saveBlob', FILES.zip, 'ZIP-BLOB'], ['alert', mExp4(['textures/Right_PanelIDs.png'])]]);
     // No left-out texture: no alert at all.
     const log2 = [];
@@ -1552,9 +1578,11 @@ describe('ProjectIO use cases', () => {
     const log = [];
     await fakeIO(project, log, { atlasDataUrl: 'data:,', dataUrlFor: (i) => (i === 0 ? 'data:,' : undefined) }).exportZIP();
     const writes = log.filter((e) => e[0] === 'zip.file').map((e) => e[1]);
-    assert.deepEqual(writes, [FILES.json, FILES.obj, FILES.mtl, FILES.gltf, FILES.json, FILES.mtl], 'no atlas entry; JSON and MTL re-written');
+    assert.deepEqual(writes, [FILES.json, FILES.obj, FILES.mtl, FILES.gltf, FILES.json, FILES.mtl, FILES.gltf],
+      'no atlas entry; JSON, MTL and glTF re-written');
     const finalMtl = log.filter((e) => e[0] === 'zip.file' && e[1] === FILES.mtl).at(-1)[3];
-    assert.equal(finalMtl, OBJ.write({ sections, meshMode: 'combined', layout }).mtlContent);
+    const kept = textureFileNames(sections).map((n, i) => (i === 0 ? null : n));
+    assert.equal(finalMtl, OBJ.write({ sections, meshMode: 'combined', layout, textureNames: kept }).mtlContent);
     assert.deepEqual(log.at(-1), ['alert', mExp4([`textures/${textureFileNames(sections)[0]}`, ATLAS])]);
   });
 
@@ -1849,7 +1877,7 @@ describe('OBJ: stage-facing winding and per-vertex normals (B-H2, 08 P2-2c)', ()
 
   test("the production profile winds 'ccw' with 'averaged' per-vertex normals; LegacyProfiles keeps the Phase-1 values (combinedUV: 08 P2-7b)", () => {
     assert.deepEqual({ ...Strategies.mesh.obj }, { winding: 'ccw', normals: 'averaged', stripNormals: 'per-vertex',
-      combinedUV: 'atlas-pixel-accurate', panelNormal: 'facing' });
+      combinedUV: 'plan', panelNormal: 'facing' });
     assert.deepEqual({ ...LegacyProfiles.mesh.obj }, { winding: 'legacy-cw', normals: 'none', stripNormals: 'constant-z',
       combinedUV: 'per-section-overlap', panelNormal: 'facing' });
   });
@@ -1942,7 +1970,7 @@ describe('glTF: stage-facing winding and the NORMAL attribute (B-H2, 08 P2-2d)',
 
   test("the production profile winds 'ccw' with 'averaged' normals, panelNormal 'facing' and attributes POSITION, NORMAL (+ TEXCOORD_0 since 08 P2-7c)", () => {
     assert.deepEqual(JSON.parse(JSON.stringify(Strategies.mesh.gltf)), { winding: 'ccw', normals: 'averaged', panelNormal: 'facing',
-      attributes: ['POSITION', 'NORMAL', 'TEXCOORD_0'], combinedUV: 'atlas-pixel-accurate', indexType: 'auto', doubleSided: 'omit' });
+      attributes: ['POSITION', 'NORMAL', 'TEXCOORD_0'], combinedUV: 'plan', indexType: 'auto', doubleSided: 'omit' });
     assert.deepEqual(JSON.parse(JSON.stringify(LegacyProfiles.mesh.gltf)), { winding: 'legacy-cw', normals: 'none',
       attributes: ['POSITION'], indexType: 'uint16', doubleSided: 'omit' });
   });
@@ -2053,13 +2081,30 @@ describe('glTF: stage-facing winding and the NORMAL attribute (B-H2, 08 P2-2d)',
 });
 
 describe('combined OBJ: pixel-accurate atlas vt (B-M6, 08 P2-7b, 08 6.7)', () => {
-  test("the production OBJ profile is 'atlas-pixel-accurate'; LegacyProfiles keeps 'per-section-overlap'", () => {
-    assert.equal(Strategies.mesh.obj.combinedUV, 'atlas-pixel-accurate');
+  test('04 UV-9: panel-mode vt are the section-space panel corners (with the UV transform); the per-panel option keeps the literal', () => {
+    const project = projectFromConfig(CONFIGS.flat3);
+    const sections = project.wall.sections;
+    const layout = layoutProject(project);
+    sections[1].setUvTransform(new UvTransform({ flipV: true, offsetU: 0.25 }));
+    const vt = OBJ.write({ sections, meshMode: 'panel', layout }).objContent.split('\n').filter((l) => l.startsWith('vt '));
+    const builder = new WallMeshBuilder(Strategies.mesh.obj);
+    const plans = planSectionUvs({ layout, settings: null, meshMode: 'panel', applyTransforms: true });
+    const expected = layout.sections.flatMap((sl, i) => sl.panels.flatMap((p) => builder.panelUvs(p, sl, plans[i])
+      .map(([u, v]) => `vt ${u.toFixed(6)} ${v.toFixed(6)}`)));
+    assert.deepEqual(vt, expected);
+    assert.ok(vt.includes('vt 1.250000 1.000000'), 'the transform reaches the panel corners');
+    const legacy = OBJ.write({ sections, meshMode: 'panel', layout, uvSettings: new UvSettings().assign({ panelUvs: 'panel' }) }).objContent;
+    assert.equal(legacy.split('vt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\n').length - 1, layout.sections.reduce((n, sl) => n + sl.panels.length, 0));
+    sections[1].setUvTransform(UvTransform.identity());
+  });
+
+  test("the production OBJ profile is 'plan' (04 UV-8a); LegacyProfiles keeps 'per-section-overlap'", () => {
+    assert.equal(Strategies.mesh.obj.combinedUV, 'plan');
     assert.equal(LegacyProfiles.mesh.obj.combinedUV, 'per-section-overlap');
   });
 
   test('every combined vt equals the viewport combinedGrid UV (toFixed(6)); every other line equals the Phase-1 UV option', () => {
-    const viewport = new WallMeshBuilder({ ...Strategies.mesh.viewport, combinedUV: 'atlas-pixel-accurate' });   // until 04 UV-8a/UV-8b
+    const viewport = new WallMeshBuilder(Strategies.mesh.viewport);
     const OVERLAP = makeObj({ ...Strategies.mesh.obj, combinedUV: 'per-section-overlap' });
     for (const [label, project] of handPicked()) {
       if (!project.wall.sections.length) continue;
@@ -2077,11 +2122,12 @@ describe('combined OBJ: pixel-accurate atlas vt (B-M6, 08 P2-7b, 08 6.7)', () =>
     }
   });
 
-  test('the mixed config: every section maps exactly its own rect of the combined panel-ID image', () => {
+  test('the mixed config, atlas layout (04 UV-8a): every section maps exactly its own rect of the combined panel-ID image', () => {
     const project = projectFromConfig(CONFIGS.mixed);
     const sections = project.wall.sections;
     const atlas = computeAtlas(sections);
-    const text = OBJ.write({ sections, meshMode: 'combined', layout: layoutProject(project) }).objContent;
+    const uvSettings = new UvSettings().assign({ combinedLayout: 'atlas' });
+    const text = OBJ.write({ sections, meshMode: 'combined', layout: layoutProject(project), uvSettings }).objContent;
     const vt = text.split('\n').filter((l) => l.startsWith('vt ')).map((l) => l.split(' ').slice(1).map(Number));
     let k = 0;
     sections.forEach((s, i) => {
@@ -2133,8 +2179,8 @@ describe('glTF TEXCOORD_0 (B-M7, 08 P2-7c, 08 6.7)', () => {
     t.diagnostic(`${primitives} primitives`);
   });
 
-  test("the values are the builder UVs written (u, 1 - v): combined = the viewport's pixel-accurate atlas UVs, section = 0..1, panel = PANEL_UVS", () => {
-    const viewport = new WallMeshBuilder({ ...Strategies.mesh.viewport, combinedUV: 'atlas-pixel-accurate' });   // until 04 UV-8a/UV-8b
+  test("the values are the builder UVs written (u, 1 - v): combined = the viewport's UVs (per-section 0..1, 04 UV-8b), section = 0..1, panel = section space (04 UV-9)", () => {
+    const viewport = new WallMeshBuilder(Strategies.mesh.viewport);
     const builder = new WallMeshBuilder(Strategies.mesh.gltf);
     for (const key of ['default', 'flat3', 'mixed', 'box_corner']) {
       const project = key === 'default' ? Project.createDefault() : projectFromConfig(CONFIGS[key]);
@@ -2149,12 +2195,61 @@ describe('glTF TEXCOORD_0 (B-M7, 08 P2-7c, 08 6.7)', () => {
           flipped(builder.sectionGrid(sl, { uv: 'unit' }).uvs), `${key} section ${i}`);
       });
       const panel = GLTF.write(writeArgs(project, 'panel'));
-      for (const mesh of panel.meshes) {
-        assert.deepEqual(floats(panel, mesh.primitives[0].attributes.TEXCOORD_0), [0, 1, 1, 1, 1, 0, 0, 0], `${key} ${mesh.name}`);
+      const corners = layout.sections.flatMap((sl) => sl.panels.map((p) => builder.panelUvs(p, sl).flat()));
+      panel.meshes.forEach((mesh, m) => {
+        assert.deepEqual(floats(panel, mesh.primitives[0].attributes.TEXCOORD_0), flipped(corners[m]), `${key} ${mesh.name}`);
+      });
+      // the legacy per-panel option (uv.panel_uvs = 'panel'): PANEL_UVS
+      const perPanel = GLTF.write({ ...writeArgs(project, 'panel'), uvSettings: new UvSettings().assign({ panelUvs: 'panel' }) });
+      for (const mesh of perPanel.meshes) {
+        assert.deepEqual(floats(perPanel, mesh.primitives[0].attributes.TEXCOORD_0), [0, 1, 1, 1, 1, 0, 0, 0], `${key} ${mesh.name}`);
       }
     }
     // The V flip itself: v = 0 (the bottom of the image in the OBJ / three convention) is t = 1 (glTF's top-left origin).
     assert.deepEqual(flipped([0.25, 0, 0.5, 1, 1, 0.75]), [0.25, 1, 0.5, 0, 1, 0.25]);
+  });
+
+  test('04 UV-8b: ZIP textures follow the 7.1 rules (images, one sampler, baseColorTexture, KHR_materials_unlit); TEXCOORD_1; transforms', () => {
+    const project = projectFromConfig(CONFIGS.mixed);
+    const sections = project.wall.sections;
+    const layout = layoutProject(project);
+    const names = textureFileNames(sections);
+    const textures = { sectionFiles: [names[0], null, names[2], names[3]], atlasFile: ATLAS };
+    const doc = GLTF.write({ ...writeArgs(project, 'combined'), textures });
+    assert.deepEqual(doc.samplers, [{ magFilter: 9729, minFilter: 9987, wrapS: 33071, wrapT: 33071 }]);
+    assert.deepEqual(doc.images.map((i) => i.uri), [0, 2, 3].map((i) => `textures/${names[i]}`));
+    assert.deepEqual(doc.textures, [0, 1, 2].map((i) => ({ sampler: 0, source: i })));
+    assert.deepEqual(doc.extensionsUsed, ['KHR_materials_unlit']);
+    assert.equal(doc.extensionsRequired, undefined);
+    doc.materials.forEach((m, i) => {
+      const textured = i !== 1;   // section 1's texture was left out: the untextured colour material
+      assert.equal(!!m.extensions?.KHR_materials_unlit, textured, m.name);
+      if (textured) assert.deepEqual(m.pbrMetallicRoughness.baseColorFactor, [1, 1, 1, 1]);
+      else assert.equal(m.pbrMetallicRoughness.baseColorTexture, undefined);
+    });
+    const atlasLayout = new UvSettings().assign({ combinedLayout: 'atlas' });
+    const atlasDoc = GLTF.write({ ...writeArgs(project, 'combined'), textures, uvSettings: atlasLayout });
+    assert.deepEqual(atlasDoc.images, [{ uri: ATLAS }]);
+    assert.ok(atlasDoc.materials.every((m) => m.pbrMetallicRoughness.baseColorTexture.index === 0));
+    const perPanel = GLTF.write({ ...writeArgs(project, 'panel'), textures, uvSettings: new UvSettings().assign({ panelUvs: 'panel' }) });
+    assert.equal(perPanel.images, undefined);
+    assert.equal(perPanel.extensionsUsed, undefined);
+    assert.equal(GLTF.write({ ...writeArgs(project, 'panel'), textures }).images.length, 3, 'section-space panels map their section texture');
+    assert.equal(GLTF.write(writeArgs(project, 'section')).images, undefined, 'standalone: untextured');
+    // TEXCOORD_1: the atlas-layout UVs on the per-section combined primitives only
+    const t1 = GLTF.write({ ...writeArgs(project, 'combined'), uvSettings: new UvSettings().assign({ gltfAtlasTexcoord1: true }) });
+    const atlasUvs = new WallMeshBuilder(Strategies.mesh.viewport).combinedGrid(layout, computeAtlas(sections),
+      planSectionUvs({ layout, settings: atlasLayout, meshMode: 'combined', applyTransforms: true })).uvs;
+    assert.deepEqual(t1.meshes[0].primitives.flatMap((p) => floats(t1, p.attributes.TEXCOORD_1)), flipped(atlasUvs));
+    assert.equal(GLTF.write(writeArgs(project, 'combined')).meshes[0].primitives[0].attributes.TEXCOORD_1, undefined);
+    // a transformed section writes t = 1 - v of its transformed UVs (section mode)
+    sections[0].setUvTransform(new UvTransform({ flipU: true, rotation: 90, sourceRotated: true }));
+    const turned = GLTF.write(writeArgs(project, 'section'));
+    const plan = planSectionUvs({ layout, settings: null, meshMode: 'section', applyTransforms: true })[0];
+    const expected = new WallMeshBuilder(Strategies.mesh.gltf).sectionUvs(layout.sections[0], plan);
+    assert.deepEqual(floats(turned, turned.meshes[0].primitives[0].attributes.TEXCOORD_0), flipped(expected));
+    assert.notDeepEqual(expected, new WallMeshBuilder(Strategies.mesh.gltf).sectionUvs(layout.sections[0], null));
+    sections[0].setUvTransform(UvTransform.identity());
   });
 
   test('POSITION, NORMAL, indices and materials are unchanged by TEXCOORD_0 (the profile without it gives the same data)', () => {
@@ -2272,15 +2367,16 @@ describe('combined exports: one material per section (B-L6, 08 P2-7d, 08 6.8; cr
 });
 
 describe('the combined atlas in the archives (08 P2-7f, Q5; 04 7.1, 7.5)', () => {
-  test('ObjExporter: atlasFile adds map_Kd to every combined material; section and panel mode ignore it', () => {
+  test('ObjExporter: atlasFile adds map_Kd to every combined material in the atlas layout (04 7.1); otherwise it is ignored', () => {
     const project = projectFromConfig(CONFIGS.mixed);
     const sections = project.wall.sections;
     const layout = layoutProject(project);
-    const plain = OBJ.write({ sections, meshMode: 'combined', layout });
-    const mapped = OBJ.write({ sections, meshMode: 'combined', layout, atlasFile: ATLAS });
+    const uvSettings = new UvSettings().assign({ combinedLayout: 'atlas' });
+    const plain = OBJ.write({ sections, meshMode: 'combined', layout, uvSettings });
+    const mapped = OBJ.write({ sections, meshMode: 'combined', layout, atlasFile: ATLAS, uvSettings });
     assert.equal(mapped.objContent, plain.objContent);
     assert.equal(mapped.mtlContent, plain.mtlContent.replace(/d 1\.0\n\n/g, `d 1.0\nmap_Kd ${ATLAS}\n\n`));
-    for (const meshMode of ['section', 'panel']) {
+    for (const meshMode of ['combined', 'section', 'panel']) {
       assert.deepEqual(OBJ.write({ sections, meshMode, layout, atlasFile: ATLAS }), OBJ.write({ sections, meshMode, layout }), meshMode);
     }
   });

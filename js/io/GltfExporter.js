@@ -9,11 +9,32 @@
  * Layer: io (may import domain, geometry, legacy; THREE-free and DOM-free).
  */
 
-import { exportSectionName, exportPanelName } from '../geometry/PanelNaming.js';
-import { maxIndexOf, indexWidth, atlasUvRect, WallMeshBuilder } from '../geometry/WallMeshBuilder.js';
+import { exportSectionName, exportPanelName, mtlTextureFile } from '../geometry/PanelNaming.js';
+import { maxIndexOf, indexWidth, atlasUvRect } from '../geometry/WallMeshBuilder.js';
 import { computeAtlas } from '../geometry/TextureAtlas.js';
 import { isIdentityResolution } from '../geometry/WallLayout.js';
+import { planSectionUvs } from '../geometry/UvMapper.js';
+import { UvSettings } from '../domain/UvSettings.js';
 import { unsupportedStrategy } from '../legacy/LegacyCompat.js';
+
+/** The UV settings of a write that passes none: the defaults (04 4.1), frozen. */
+const DEFAULT_UV_SETTINGS = Object.freeze(new UvSettings());
+
+/**
+ * The one texture sampler of a textured (ZIP) glTF (04 7.3): linear, trilinear mipmaps, clamped to the edge.
+ * @type {Readonly<{magFilter: number, minFilter: number, wrapS: number, wrapT: number}>}
+ */
+const SAMPLER = Object.freeze({ magFilter: 9729, minFilter: 9987, wrapS: 33071, wrapT: 33071 });
+
+/**
+ * The archive path of section i's shipped texture (`textures/<name>`), or null (none shipped, or left out).
+ * @param {(string|null)[]|null|undefined} sectionFiles
+ * @param {number} i
+ * @returns {string|null}
+ */
+function sectionTexture(sectionFiles, i) {
+  return Array.isArray(sectionFiles) && sectionFiles[i] != null ? mtlTextureFile(sectionFiles[i]) : null;
+}
 
 /**
  * Colour parser injected by App (`(s) => new THREE.Color(s)`); tests inject a THREE r128 setStyle equivalent.
@@ -28,6 +49,7 @@ import { unsupportedStrategy } from '../legacy/LegacyCompat.js';
  * @property {number} byteOffset       running byte offset into the single buffer
  * @property {number} accessorIndex    next accessor index
  * @property {number} meshIndex        next mesh index
+ * @property {Map<string, number>} textures  texture index by image URI (04 UV-8b; the ZIP's textured materials)
  */
 
 /**
@@ -98,16 +120,31 @@ export class GltfExporter {
    * non-identity pivot and a resolution (layout.pivot), scenes[0].extras = {pivot: {mode, offset_m, anchor_layout_m,
    * point_layout_m}} (arrays [x, y, z]), assigned after the nodes, so the scene's keys are nodes, extras; at the
    * identity nothing is added and the document is unchanged.
+   * Spec 04 (UV-8b, UV-9; 04 7.3): TEXCOORD_0 comes from the export UV plans (uvPlans, default planSectionUvs of
+   * uvSettings with the UV transforms): combined (profile.combinedUV 'plan') each section filling 0..1 in the per-section
+   * layout or atlas-placed, section mode the section's transformed 0..1, panel mode the section-space panel corners
+   * (per-panel 0..1 with uv.panel_uvs = 'panel'). With uvSettings.gltfAtlasTexcoord1 the per-section combined primitives
+   * also get TEXCOORD_1 = the atlas-layout UVs (no material uses it). With `textures` (the ZIP: the files the archive
+   * holds) each material whose UVs address a shipped texture (the 04 7.1 rules: the section texture in section mode,
+   * combined per-section and panel 'section'; the atlas in the combined atlas layout) gets baseColorTexture (factor white)
+   * and KHR_materials_unlit, the document gets one sampler, an image per distinct file (relative URI), a texture per
+   * image, and `extensionsUsed: ['KHR_materials_unlit']`; standalone (textures null) stays untextured.
    * Ports: index.html@cd3fd3f lines 4719-4909.
    * Side effects: none.
    * @param {{sections: import('../domain/WallSection.js').WallSection[], meshMode: *,
-   *          layout: import('../geometry/WallLayout.js').WallLayout}} args  layout = layoutProject(project,
-   *   {frame: 'export'}) of the same sections (03 T3)
+   *          layout: import('../geometry/WallLayout.js').WallLayout, uvSettings?: UvSettings|null,
+   *          uvPlans?: import('../geometry/UvMapper.js').SectionUvPlan[]|null,
+   *          textures?: {sectionFiles: (string|null)[]|null, atlasFile: string|null}|null}} args  layout =
+   *   layoutProject(project, {frame: 'export'}) of the same sections (03 T3); textures.sectionFiles: the shipped section
+   *   texture names (PanelNaming.textureFileNames, null where left out); textures.atlasFile: the shipped atlas path or null
    * @returns {object} the glTF document (plain JSON)
    * @throws {Error} unsupportedStrategy for a foreign profile (an empty wall no longer throws in combined mode since
    *   08 P2-7d; the validator never lets one in, 08 P2-3b)
    */
-  write({ sections, meshMode, layout }) {
+  write({ sections, meshMode, layout, uvSettings = null, uvPlans = null, textures = null }) {
+    const settings = uvSettings ?? DEFAULT_UV_SETTINGS;
+    const plans = uvPlans ?? planSectionUvs({ layout, atlas: computeAtlas(sections), settings, meshMode, applyTransforms: true });
+    const uv = { settings, plans, textures };
     const gltf = {
       asset: { version: "2.0", generator: this.#brand.gltfGenerator },
       scene: 0,
@@ -121,16 +158,16 @@ export class GltfExporter {
     };
 
     /** @type {BufferState} */
-    const state = { gltf, allBufferData: [], byteOffset: 0, accessorIndex: 0, meshIndex: 0 };
+    const state = { gltf, allBufferData: [], byteOffset: 0, accessorIndex: 0, meshIndex: 0, textures: new Map() };
 
     // The three mesh modes (B-L8 fixed in 08 P2-3b: the validator maps an unknown imported mode to 'combined', so the
     // throw is unreachable from the app; legacy wrote any unknown mode as panels).
     if (meshMode === 'combined') {
-      this.#writeCombined(state, sections, layout);
+      this.#writeCombined(state, sections, layout, uv);
     } else if (meshMode === 'section') {
-      this.#writeSections(state, layout);
+      this.#writeSections(state, layout, uv);
     } else if (meshMode === 'panel') {
-      this.#writePanels(state, layout);
+      this.#writePanels(state, layout, uv);
     } else {
       throw new Error(`Unknown mesh mode ${JSON.stringify(meshMode)}`);
     }
@@ -163,6 +200,9 @@ export class GltfExporter {
       uri: "data:application/octet-stream;base64," + base64
     });
 
+    // 04 7.3 (Q9): listed iff some material uses it (the Khronos validator reports an unused one); never required.
+    if (state.textures.size > 0) gltf.extensionsUsed = ['KHR_materials_unlit'];
+
     return gltf;
   }
 
@@ -173,19 +213,33 @@ export class GltfExporter {
    * `Wall_<i+1>_Material` in the section colour. The vertex data equals the legacy single primitive's (legacy never
    * shared a vertex across sections); only the buffer views, the accessors and the materials are split per section.
    * Legacy (`Strategies.exportCombinedColor = 'first-section'`, retired) coloured the whole wall with section 0.
+   * 04 UV-8b: with combinedUV 'plan' the UVs of the export plans; the texture each material maps follows its UVs (the
+   * section texture in the per-section layout, the atlas otherwise); TEXCOORD_1 as described in write().
    * @param {BufferState} state
    * @param {import('../domain/WallSection.js').WallSection[]} sections
    * @param {import('../geometry/WallLayout.js').WallLayout} layout
+   * @param {{settings: UvSettings, plans: object[], textures: object|null}} uv
    */
-  #writeCombined(state, sections, layout) {
-    const uvFor = this.#combinedUvOption(sections);
+  #writeCombined(state, sections, layout, { settings, plans, textures }) {
+    const uvFor = this.#combinedUvOption(sections, plans);
+    const withUvs = this.#attributeList().includes('TEXCOORD_0');
+    const perSection = withUvs && this.#builder.profile.combinedUV === 'plan' && settings.combinedLayout !== 'atlas';
+    const atlasPlans = perSection && settings.gltfAtlasTexcoord1
+      ? planSectionUvs({ layout, atlas: computeAtlas(sections), settings: { combinedLayout: 'atlas', panelUvs: settings.panelUvs },
+        meshMode: 'combined', applyTransforms: true })
+      : null;
     const primitives = layout.sections.map((sl, sectionIndex) => {
       const grid = this.#builder.sectionGrid(sl, { indexBase: 0, uv: uvFor(sectionIndex) });
+      const attrs = { positions: grid.positions, normals: grid.normals, uvs: grid.uvs };
+      if (atlasPlans) attrs.uvs1 = this.#builder.sectionUvs(sl, atlasPlans[sectionIndex]);
+      let textureFile = null;
+      if (textures && withUvs) textureFile = perSection ? sectionTexture(textures.sectionFiles, sectionIndex) : textures.atlasFile;
       return {
-        attrs: { positions: grid.positions, normals: grid.normals, uvs: grid.uvs },
+        attrs,
         indices: grid.indices,
         color: this.#colorToRgb(sl.section.color),
         materialName: `${exportSectionName(sectionIndex)}_Material`,
+        textureFile,
       };
     });
     this.#addMesh(state, 'LED_Wall_Combined', primitives);
@@ -197,15 +251,19 @@ export class GltfExporter {
    * row 08-3) the new leaf profile.combinedUV: 'atlas-pixel-accurate' -> atlasUvRect(computeAtlas(sections).entries[i]),
    * the viewport's pixel-accurate atlas UVs (08 6.7), so the combined glTF maps the combined panel-ID image
    * (Brand.files.panelIdsPng) exactly.
+   * 04 UV-8b adds 'plan' -> plans[i], the export UV plan (per-section 0..1 or atlas-placed, with the UV transforms).
    * @param {import('../domain/WallSection.js').WallSection[]} sections
-   * @returns {(sectionIndex: number) => ({offsetU: number, widthU: number, heightV: number}|null)}
+   * @param {object[]} plans  the export UV plans
+   * @returns {(sectionIndex: number) => (object|null)}
    * @throws {Error} unsupportedStrategy('mesh.gltf.combinedUV', ...) for a foreign value when TEXCOORD_0 is written;
    *   unsupportedStrategy('mesh.gltf.attributes', ...) from #attributeList
    */
-  #combinedUvOption(sections) {
+  #combinedUvOption(sections, plans) {
     if (!this.#attributeList().includes('TEXCOORD_0')) return () => null;
     const profile = this.#builder.profile;
     switch (profile.combinedUV) {
+      case 'plan':
+        return (sectionIndex) => plans[sectionIndex];
       case 'atlas-pixel-accurate': {
         const atlas = computeAtlas(sections);
         return (sectionIndex) => atlasUvRect(atlas.entries[sectionIndex]);
@@ -217,17 +275,21 @@ export class GltfExporter {
 
   /**
    * Section mode, verbatim 4853-4868: per section its grid (indices from 0), then its colour, then its mesh. With
-   * TEXCOORD_0 (08 P2-7c) the grid carries the section's own 0..1 UVs (uv 'unit', the UVs of the section texture).
+   * TEXCOORD_0 (08 P2-7c) the grid carries the section's own 0..1 UVs (the UVs of the section texture; 04 UV-8b: the
+   * section's export plan, so its UV transform applies; identity plans give the 'unit' values bit for bit) and, in the
+   * ZIP, the material maps the section texture.
    * @param {BufferState} state
    * @param {import('../geometry/WallLayout.js').WallLayout} layout
+   * @param {{plans: object[], textures: object|null}} uv
    */
-  #writeSections(state, layout) {
-    const uv = this.#attributeList().includes('TEXCOORD_0') ? 'unit' : null;
+  #writeSections(state, layout, { plans, textures }) {
+    const withUvs = this.#attributeList().includes('TEXCOORD_0');
     layout.sections.forEach((sl, sectionIndex) => {
-      const grid = this.#builder.sectionGrid(sl, { indexBase: 0, uv });
+      const grid = this.#builder.sectionGrid(sl, { indexBase: 0, uv: withUvs ? plans[sectionIndex] : null });
       const color = this.#colorToRgb(sl.section.color);
+      const textureFile = textures && withUvs ? sectionTexture(textures.sectionFiles, sectionIndex) : null;
       this.#addMesh(state, exportSectionName(sectionIndex),
-        [{ attrs: { positions: grid.positions, normals: grid.normals, uvs: grid.uvs }, indices: grid.indices, color }]);
+        [{ attrs: { positions: grid.positions, normals: grid.normals, uvs: grid.uvs }, indices: grid.indices, color, textureFile }]);
     });
   }
 
@@ -236,28 +298,33 @@ export class GltfExporter {
    * (row-major) from the 4 builder corners (BL, BR, TR, TL) flattened x, y, z and panelQuadIndices(0). When the
    * profile's attributes list NORMAL (08 P2-2d), the normals are builder.panelNormals(panel): 4 copies of the facing
    * normal; otherwise the builder is not asked for them (the Phase-1 glTF profile has no panelNormal). With TEXCOORD_0
-   * (08 P2-7c) the UVs are WallMeshBuilder.PANEL_UVS (per-panel 0..1, as the OBJ panel `vt`; 04 UV-9 later offers
-   * section-space UVs). The attribute list is checked first (#attributeList), so a foreign list throws its own error
-   * before any builder call.
+   * (08 P2-7c) the UVs are builder.panelUvs(panel, sl, plan) (04 UV-9: the panel's section-space corners with the UV
+   * transform, the OBJ panel `vt`; per-panel 0..1, WallMeshBuilder.PANEL_UVS, with uv.panel_uvs = 'panel'), and in the
+   * ZIP each material of a section-space panel maps its section texture. The attribute list is checked first
+   * (#attributeList), so a foreign list throws its own error before any builder call.
    * @param {BufferState} state
    * @param {import('../geometry/WallLayout.js').WallLayout} layout
+   * @param {{plans: object[], textures: object|null}} uv
    */
-  #writePanels(state, layout) {
+  #writePanels(state, layout, { plans, textures }) {
     const builder = this.#builder;
     const withNormals = this.#attributeList().includes('NORMAL');
     const withUvs = this.#attributeList().includes('TEXCOORD_0');
-    layout.sections.forEach(({ section, panels, panelW, panelH }, sectionIndex) => {
+    layout.sections.forEach((sl, sectionIndex) => {
+      const { section, panels, panelW, panelH } = sl;
       const color = this.#colorToRgb(section.color);
+      const plan = plans[sectionIndex];
+      const textureFile = textures && withUvs && plan.panelUvs !== 'panel' ? sectionTexture(textures.sectionFiles, sectionIndex) : null;
 
       panels.forEach((panel) => {
         const vertices = [];
         for (const c of builder.panelCorners(panel, panelW, panelH)) vertices.push(c.x, c.y, c.z);
         const normals = withNormals ? builder.panelNormals(panel) : [];
-        const uvs = withUvs ? WallMeshBuilder.PANEL_UVS.slice() : [];
+        const uvs = withUvs ? builder.panelUvs(panel, sl, plan).flat() : [];
 
         const indices = builder.panelQuadIndices(0);
         const name = exportPanelName(sectionIndex, panel.row, panel.col);
-        this.#addMesh(state, name, [{ attrs: { positions: vertices, normals, uvs }, indices, color }]);
+        this.#addMesh(state, name, [{ attrs: { positions: vertices, normals, uvs }, indices, color, textureFile }]);
       });
     });
   }
@@ -296,16 +363,29 @@ export class GltfExporter {
       }
     }
 
-    const materialIndices = primitives.map(({ color, materialName }) => {
+    const materialIndices = primitives.map(({ color, materialName, textureFile = null }) => {
       const materialIndex = gltf.materials.length;
-      const material = {
-        name: materialName ?? name + "_Material",
-        pbrMetallicRoughness: {
-          baseColorFactor: [color.r, color.g, color.b, 1.0],
-          metallicFactor: 0.0,
-          roughnessFactor: 0.8
+      // 04 UV-8b (7.3, Q9): a shipped texture -> baseColorTexture with a white factor (glTF multiplies them) and
+      // KHR_materials_unlit; otherwise the untextured section colour, as before.
+      const material = textureFile !== null
+        ? {
+          name: materialName ?? name + "_Material",
+          pbrMetallicRoughness: {
+            baseColorTexture: { index: this.#textureIndex(state, textureFile) },
+            baseColorFactor: [1, 1, 1, 1],
+            metallicFactor: 0.0,
+            roughnessFactor: 0.8
+          },
+          extensions: { KHR_materials_unlit: {} }
         }
-      };
+        : {
+          name: materialName ?? name + "_Material",
+          pbrMetallicRoughness: {
+            baseColorFactor: [color.r, color.g, color.b, 1.0],
+            metallicFactor: 0.0,
+            roughnessFactor: 0.8
+          }
+        };
       if (doubleSided) material.doubleSided = true;
       gltf.materials.push(material);
       return materialIndex;
@@ -328,6 +408,8 @@ export class GltfExporter {
             throw unsupportedStrategy('mesh.gltf.attributes', attributes);
         }
       }
+      // 04 7.3 (Q3): the optional atlas UVs, after the profile's attributes (written (u, 1 - v) like TEXCOORD_0).
+      if (attrs.uvs1) accessors.TEXCOORD_1 = this.#addTexCoords(state, attrs.uvs1);
 
       const { IndexArray, componentType } = formats[p];
       const indexBuffer = new IndexArray(indices);
@@ -372,6 +454,29 @@ export class GltfExporter {
     const nodeIndex = gltf.nodes.length;
     gltf.nodes.push({ name: name, mesh: currentMeshIndex });
     gltf.scenes[0].nodes.push(nodeIndex);
+  }
+
+  /**
+   * The texture index of an image URI (04 UV-8b, 7.3): the first use creates the document's single sampler (SAMPLER),
+   * then each distinct URI gets one image ({uri}, relative to the .gltf in the archive) and one texture ({sampler: 0,
+   * source}), in first-use order.
+   * @param {BufferState} state
+   * @param {string} uri  the archive path of the image (`textures/...`)
+   * @returns {number}
+   */
+  #textureIndex(state, uri) {
+    const { gltf } = state;
+    if (state.textures.has(uri)) return state.textures.get(uri);
+    if (!gltf.samplers) {
+      gltf.samplers = [{ ...SAMPLER }];
+      gltf.images = [];
+      gltf.textures = [];
+    }
+    const index = gltf.textures.length;
+    gltf.textures.push({ sampler: 0, source: gltf.images.length });
+    gltf.images.push({ uri });
+    state.textures.set(uri, index);
+    return index;
   }
 
   /**
