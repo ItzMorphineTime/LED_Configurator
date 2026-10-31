@@ -535,7 +535,10 @@ export class UVViewer {
   #onHover({ hit }) {
     if (!this.#panel) return;
     this.#hover = hit;
-    this.#els.readout.textContent = hit ? readoutText(hit) : READOUT_EMPTY;
+    const text = hit ? readoutText(hit) : READOUT_EMPTY;
+    // three fixed lines (css: clipped with an ellipsis), the full text as the tooltip
+    this.#els.readout.textContent = text;
+    this.#els.readout.title = text;
     this.#view.setHover(this.#hoverPoint());
     this.#redraw();
   }
@@ -594,13 +597,12 @@ export class UVViewer {
   }
 
   /**
-   * Redraws the canvas and the chips that depend on the view (LED zoom, thin island). The chips are laid out first, so
-   * the canvas is measured at its final size; a chip line that appears or goes away resizes the canvas, which the
-   * canvas's ResizeObserver turns into one more draw.
+   * Redraws the canvas, then the chips that depend on the view (LED zoom, thin island). The chip line and the readout
+   * reserve fixed heights (css/features/uv-viewer.css), so neither changes the canvas size: only a panel resize does,
+   * which the canvas's ResizeObserver turns into a draw.
    */
   #redraw() {
     if (!this.#panel || !this.#panel.visible) return;
-    this.#renderChips();
     this.#view.draw();
     this.#renderChips();
   }
@@ -621,6 +623,7 @@ export class UVViewer {
       const chip = this.#doc.createElement('span');
       chip.className = `uv-chip uv-chip--${c.kind}`;
       chip.textContent = c.text;
+      chip.title = c.text;
       if (c.action) {
         const b = this.#doc.createElement('button');
         b.type = 'button';
