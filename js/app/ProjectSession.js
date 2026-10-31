@@ -14,6 +14,12 @@ import { Events } from '../core/EventBus.js';
 import { sectionKeyOf } from '../core/sectionIds.js';
 import { MAX_IMPORT_BYTES } from '../domain/rules.js';
 
+/** The largest ZIP an import reads (07 4.7 too-large: 2 GiB, the practical ArrayBuffer limit). */
+export const MAX_ZIP_BYTES = 2 * 1024 * 1024 * 1024;
+
+/** The MIME types a browser gives a .zip file. */
+const ZIP_TYPES = Object.freeze(['application/zip', 'application/x-zip-compressed', 'application/x-zip']);
+
 /**
  * The import alerts of 08 3.3 that are not an issue of the serializer (P2-3b): M-IMP-6 (the file is too large; never
  * read), M-IMP-7 (the read failed), the legacy parse alert (V-5) and M-IMP-5 (the corrections of an applied import:
@@ -24,6 +30,12 @@ export const ImportAlerts = Object.freeze({
   tooLarge: () => `Import failed: the file is larger than ${Math.round(MAX_IMPORT_BYTES / 1048576)} MB, the maximum for a project file.`,
   /** M-IMP-7 @param {string} name  reader.error?.name @returns {string} */
   unreadable: (name) => `Import failed: the file could not be read (${name}).`,
+  /** 07 D6: a ZIP over MAX_ZIP_BYTES @returns {string} */
+  zipTooLarge: () => 'Import failed: the ZIP file is larger than 2 GB.',
+  /** 07 D6: JSZip refused the archive @param {string} message @returns {string} */
+  badZip: (message) => `Import failed: the ZIP file could not be read (${message}).`,
+  /** 07 D6 @returns {string} */
+  noProjectInZip: () => 'Import failed: the ZIP file contains no project file (.json).',
   /** the legacy parse alert (V-5), also for any other failure of the open @param {string} message @returns {string} */
   parseError: (message) => `Error parsing JSON file: ${message}`,
   /** M-IMP-5 @param {{message: string}[]} warnings @returns {string} */
@@ -74,6 +86,7 @@ export class ProjectSession {
   /** @type {{saveText(content: string, filename: string, mimeType: string): void}} */ #downloader;
   /** @type {{files: {json: string}}} */ #brand;
   /** @type {Window} FileReader */ #win;
+  /** @type {{loadAsync(data: ArrayBuffer): Promise<object>}|null} the JSZip constructor (vendor/jszip.js; 07 D6) */ #JSZip;
   /** @type {(v2: object) => object} io/ProjectSchema.stateFromProject */ #stateFromProject;
   /** @type {(v2: object) => import('../domain/WallSection.js').WallSection[]} io/ProjectSchema.sectionsFromProject */
   #sectionsFromProject;
@@ -93,15 +106,15 @@ export class ProjectSession {
    * @param {{project: object, serializer: object, assets?: import('./AssetStore.js').AssetStore, wallController?: object,
    *          cameraController?: object, personController?: object, carController?: object, pilot?: object,
    *          selection?: object, sceneManager?: object, ledTiles?: object, bus?: object, dialogs?: object,
-   *          downloader?: object, brand?: object, win?: object, stateFromProject?: Function,
+   *          downloader?: object, brand?: object, win?: object, JSZip?: object, stateFromProject?: Function,
    *          sectionsFromProject?: Function, createProject?: Function, features?: Record<string, FeatureHook>}} deps
    *   stateFromProject / sectionsFromProject: io/ProjectSchema's, injected by App (app/ may not import io/); features:
    *   the initial hook map (more through registerFeature)
    */
   constructor({ project, serializer, assets = null, wallController = null, cameraController = null, personController = null,
     carController = null, pilot = null, selection = null, sceneManager = null, ledTiles = null, bus = null, dialogs = null,
-    downloader = null, brand = null, win = null, stateFromProject = null, sectionsFromProject = null, createProject = null,
-    features = {} }) {
+    downloader = null, brand = null, win = null, JSZip = null, stateFromProject = null, sectionsFromProject = null,
+    createProject = null, features = {} }) {
     this.#project = project;
     this.#serializer = serializer;
     this.#assets = assets;
@@ -118,6 +131,7 @@ export class ProjectSession {
     this.#downloader = downloader;
     this.#brand = brand;
     this.#win = win;
+    this.#JSZip = JSZip;
     this.#stateFromProject = stateFromProject;
     this.#sectionsFromProject = sectionsFromProject;
     this.#createProject = createProject;
@@ -301,51 +315,97 @@ export class ProjectSession {
   }
 
   /**
-   * P-IMPORT (ARCHITECTURE.md 6.10; 07 5.5.2 openFile; 08 4.3): a file larger than MAX_IMPORT_BYTES is refused before
-   * it is read (M-IMP-6); a read failure alerts M-IMP-7; the text is parsed (a parse error keeps the legacy alert text,
-   * V-5) and read through the serializer (version detection, v1 migration, validation). A document with an error
-   * issue is refused with that issue's message and changes nothing (atomic, 07 4.7). A v1 file is applied with
-   * scope 'wall' (reason 'import'); a v2 file has its logo assets loaded into the AssetStore first (an unloadable one is
-   * dropped with a warning, a sanitised SVG or a checksum mismatch kept with a warning, 07 4.5) and is then applied
-   * whole (reason 'open'). Then the clean snapshot is taken (an open is not an edit) and, when there are warnings, one
-   * alert (M-IMP-5 with the budget notes). Any other failure of the parse, read or apply alerts like a parse error
-   * (the legacy try/catch, R13).
+   * P-IMPORT (ARCHITECTURE.md 6.10; 07 5.5.2 openFile; 08 4.3): a .json file larger than MAX_IMPORT_BYTES (a .zip larger
+   * than MAX_ZIP_BYTES, 07 D6) is refused before it is read (M-IMP-6); a read failure alerts M-IMP-7. A .zip (by name or
+   * type; 07 D6) is opened with JSZip and its project file is the first `*.json` entry at the archive's root, else the
+   * first anywhere (an Export All archive holds one; its glTF is .gltf); an entry over MAX_IMPORT_BYTES is refused like a
+   * large file, an archive without one or one JSZip cannot read alerts why. The text is parsed (a parse error keeps the
+   * legacy alert text, V-5) and read through the serializer (version detection, v1 migration, validation). A document
+   * with an error issue is refused with that issue's message and changes nothing (atomic, 07 4.7). A v1 file is applied
+   * with scope 'wall' (reason 'import'); a v2 file has its logo assets loaded into the AssetStore first (inline ones from
+   * their data URI, `storage: 'zip'` ones from the archive's entry at their path; an asset that cannot be loaded or is
+   * not in the archive is dropped with a warning, a sanitised SVG or a checksum mismatch kept with a warning, 07 4.5) and
+   * is then applied whole (reason 'open'). Then the clean snapshot is taken (an open is not an edit) and, when there are
+   * warnings, one alert (M-IMP-5 with the budget notes). Any other failure of the parse, read or apply alerts like a
+   * parse error (the legacy try/catch, R13).
    * Side effects: at most one alert; on success the whole project (see apply).
    * @param {File} file
    * @returns {Promise<boolean>} whether the file was applied; never rejects
    */
   openFile(file) {
-    if (file.size > MAX_IMPORT_BYTES) {
-      this.#dialogs.alert(ImportAlerts.tooLarge());
+    const zip = /\.zip$/i.test(String(file.name ?? '')) || ZIP_TYPES.includes(String(file.type ?? '').toLowerCase());
+    if (file.size > (zip ? MAX_ZIP_BYTES : MAX_IMPORT_BYTES)) {
+      this.#dialogs.alert(zip ? ImportAlerts.zipTooLarge() : ImportAlerts.tooLarge());
       return Promise.resolve(false);
     }
-    return this.#read(file).then((text) => this.#open(text),
+    return this.#read(file, zip).then((content) => (zip ? this.#openZip(content) : this.#open(content, null)),
       (error) => {
         this.#dialogs.alert(ImportAlerts.unreadable(error?.name ?? 'unknown error'));
+        return false;
+      })
+      // an archive entry that cannot be inflated (#openZip; #open itself never rejects)
+      .then(undefined, (err) => {
+        this.#dialogs.alert(ImportAlerts.badZip(err?.message ?? String(err)));
         return false;
       });
   }
 
   /**
-   * Reads a file as text through the window's FileReader (onload is set before the read starts).
+   * Reads a file as text, or (a ZIP) as an ArrayBuffer, through the window's FileReader (onload is set before the read
+   * starts).
    * @param {File} file
-   * @returns {Promise<string>} rejects with reader.error (or {name: 'unknown error'})
+   * @param {boolean} binary
+   * @returns {Promise<string|ArrayBuffer>} rejects with reader.error (or {name: 'unknown error'})
    */
-  #read(file) {
+  #read(file, binary) {
     return new Promise((resolve, reject) => {
       const reader = new this.#win.FileReader();
       reader.onload = (event) => resolve(event.target.result);
       reader.onerror = () => reject(reader.error ?? { name: 'unknown error' });
-      reader.readAsText(file);
+      if (binary) reader.readAsArrayBuffer(file);
+      else reader.readAsText(file);
     });
+  }
+
+  /**
+   * Opens an archive (07 D6): its project JSON entry, then #open with every file entry by path.
+   * @param {ArrayBuffer} buffer
+   * @returns {Promise<boolean>}
+   */
+  async #openZip(buffer) {
+    const archive = await this.#JSZip.loadAsync(buffer).then((a) => a, (err) => {
+      this.#dialogs.alert(ImportAlerts.badZip(err?.message ?? String(err)));
+      return null;
+    });
+    if (!archive) return false;
+    const entries = new Map();
+    archive.forEach((path, entry) => { if (!entry.dir) entries.set(path, entry); });
+    const jsons = [...entries.keys()].filter((path) => /\.json$/i.test(path));
+    const name = jsons.find((path) => !path.includes('/')) ?? jsons[0];
+    if (name === undefined) {
+      this.#dialogs.alert(ImportAlerts.noProjectInZip());
+      return false;
+    }
+    const size = entries.get(name)._data?.uncompressedSize;
+    if (Number.isFinite(size) && size > MAX_IMPORT_BYTES) {
+      this.#dialogs.alert(ImportAlerts.tooLarge());
+      return false;
+    }
+    const text = await entries.get(name).async('string');
+    if (text.length > MAX_IMPORT_BYTES) {
+      this.#dialogs.alert(ImportAlerts.tooLarge());
+      return false;
+    }
+    return this.#open(text, entries);
   }
 
   /**
    * Parse, read, load the assets, apply, report (openFile after the read).
    * @param {string} text
+   * @param {Map<string, {async(type: string): Promise<*>}>|null} entries  the archive's file entries by path (a ZIP), or null
    * @returns {Promise<boolean>}
    */
-  async #open(text) {
+  async #open(text, entries) {
     try {
       const result = this.#serializer.read(JSON.parse(text));
       if (!result.ok) {
@@ -356,7 +416,7 @@ export class ProjectSession {
       if (result.scope === 'wall') {
         this.apply(result.project, { reason: 'import', scope: 'wall' });
       } else {
-        await this.#loadAssets(result.project, issues);
+        await this.#loadAssets(result.project, issues, entries);
         this.apply(result.project, { reason: 'open', scope: 'full' });
         this.#newSnapshot = null;
       }
@@ -372,23 +432,38 @@ export class ProjectSession {
 
   /**
    * Loads every logo asset of a validated v2 object into the AssetStore (07 4.5): an inline asset through
-   * addFromDataUri; an asset that cannot be loaded is dropped (its sections show no logo), a sanitised SVG or a raster
-   * whose SHA-256 differs from the file's is kept, each with a warning. A loaded asset whose stored id differs from the
-   * file's (a sanitised SVG) is renamed in `v2` (its entry and every section logo), so apply finds it by id.
+   * addFromDataUri, a `storage: 'zip'` asset (07 D6) through addFromBytes with the bytes of the archive's entry at its
+   * path; an asset that cannot be loaded, or whose entry is not there (a ZIP's JSON opened alone), is dropped (its
+   * sections show no logo), a sanitised SVG or a raster whose SHA-256 differs from the file's is kept, each with a
+   * warning. A loaded asset whose stored id differs from the file's (a sanitised SVG) is renamed in `v2` (its entry and
+   * every section logo), so apply finds it by id.
    * Side effects: fills the AssetStore; rewrites asset ids in `v2` (a fresh validated object); pushes warnings.
    * @param {object} v2
    * @param {object[]} issues
+   * @param {Map<string, {async(type: string): Promise<*>}>|null} entries  the archive's entries (a ZIP), or null
    * @returns {Promise<void>}
    */
-  async #loadAssets(v2, issues) {
+  async #loadAssets(v2, issues, entries) {
     const warn = (message) => issues.push({ path: 'assets', code: 'sanitized', severity: 'warning', message });
     for (const asset of v2.assets) {
-      const res = asset.storage === 'inline' ? await this.#assets.addFromDataUri(asset, asset.data_uri) : null;
+      let res = null;
+      let given = asset.data_uri;
+      if (asset.storage === 'inline') {
+        res = await this.#assets.addFromDataUri(asset, asset.data_uri);
+      } else if (asset.storage === 'zip') {
+        const entry = entries ? entries.get(asset.path) : undefined;
+        if (!entry) {
+          warn(`Logo "${asset.name}": dropped (its image ${asset.path} is not in this file; open the project's ZIP)`);
+          continue;
+        }
+        res = await this.#assets.addFromBytes(asset, await entry.async('uint8array'));
+        given = res.dataUri;
+      }
       if (!res || !res.ok) {
         warn(`Logo "${asset.name}": dropped (the image could not be loaded)`);
         continue;
       }
-      if (res.meta.dataUri !== asset.data_uri) warn(`Logo "${asset.name}": unsafe or unsized SVG content was removed`);
+      if (res.meta.dataUri !== given) warn(`Logo "${asset.name}": unsafe or unsized SVG content was removed`);
       else if (asset.sha256 && asset.sha256 !== res.meta.sha256) warn(`Logo "${asset.name}": the image does not match its checksum`);
       if (res.meta.assetId !== asset.id) {
         for (const s of v2.sections) if (s.logo && s.logo.asset_id === asset.id) s.logo.asset_id = res.meta.assetId;

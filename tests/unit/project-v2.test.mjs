@@ -17,7 +17,8 @@ import { validateProject } from '../../js/io/ProjectValidator.js';
 import { KNOWN_REVISION, REVISIONS, VERSION, sectionsFromProject, stateFromProject } from '../../js/io/ProjectSchema.js';
 import { ProjectSession } from '../../js/app/ProjectSession.js';
 import { AssetStore } from '../../js/app/AssetStore.js';
-import { Palette } from '../../js/theme/Theme.js';
+import { ProjectIO } from '../../js/app/ProjectIO.js';
+import { Brand, Palette } from '../../js/theme/Theme.js';
 
 const serializer = new ProjectSerializer({ palette: Palette });
 const json2 = (v) => JSON.stringify(v, null, 2);
@@ -238,7 +239,7 @@ describe('project file v2: the validator (07 4.7, 08 6.16)', () => {
       'Logo "x.png": dropped (not a PNG, JPEG, WebP or SVG data URL)',
       'Logo "x.png": dropped (not a PNG, JPEG, WebP or SVG data URL)',
       'Logo "x.png": dropped (invalid or repeated id)',
-      'Logo "x.png": dropped (the image is not stored in this file)',
+      'Logo "x.png": dropped (not a PNG, JPEG, WebP or SVG entry of the archive)',   // 07 D6: storage zip without a valid path
     ]);
     const p = r.project;
     assert.equal(p.sections[0].color, Palette.sectionColors[0]);
@@ -277,7 +278,7 @@ describe('project file v2: the validator (07 4.7, 08 6.16)', () => {
 // ---- ProjectSession over model-level fakes (07 D5; 08 6.17's restore lives in ProjectSession.apply) ----------------
 
 /** A ProjectSession whose collaborators write the model the way the real controllers do (no views), recording the calls. */
-function modelSession(project, calls, { selected = null } = {}) {
+function modelSession(project, calls, { selected = null, JSZip = null } = {}) {
   const display = project.display;
   const wallController = {
     applyPivot: () => calls.push('pivot hook'),
@@ -317,7 +318,7 @@ function modelSession(project, calls, { selected = null } = {}) {
     sceneManager: { toggleGrid: () => { calls.push('grid'); display.showGrid = !display.showGrid; } },
     ledTiles: { clearCache: () => calls.push('clearCache') }, bus,
     dialogs: { alert: (m) => { alerts.push(m); calls.push('alert'); } }, downloader: { saveText: () => calls.push('saveText') },
-    brand: { files: { json: 'x.json' } }, win: { FileReader: SyncFileReader }, stateFromProject, sectionsFromProject,
+    brand: { files: { json: 'x.json' } }, win: { FileReader: SyncFileReader }, JSZip, stateFromProject, sectionsFromProject,
     createProject: () => Project.createNew({ defaultSectionColor: Palette.defaultSectionColor }),
     features: { pivot: { hydrate: () => wallController.applyPivot(null) } },
   });
@@ -327,6 +328,42 @@ function modelSession(project, calls, { selected = null } = {}) {
 /** A FileReader that reads a fake file's `text` synchronously. */
 class SyncFileReader {
   readAsText(file) { this.onload({ target: { result: file.text } }); }
+  readAsArrayBuffer(file) { this.onload({ target: { result: file.blob } }); }
+}
+
+/** An in-memory JSZip (the 3.10 subset ProjectIO and ProjectSession use): entries by path as bytes. */
+class MemZip {
+  constructor() { this.entries = new Map(); }
+  file(name, data, options = {}) {
+    this.entries.set(name, options.base64 ? Buffer.from(data, 'base64') : Buffer.from(String(data), 'utf8'));
+    return this;
+  }
+  folder(prefix) { return { file: (name, data, options) => this.file(`${prefix}/${name}`, data, options) }; }
+  async generateAsync() { return { zipped: new Map(this.entries) }; }
+  static async loadAsync(blob) {
+    if (!blob || !blob.zipped) throw new Error('Corrupted zip: end of central directory not found');
+    const z = new MemZip();
+    z.entries = new Map(blob.zipped);
+    return z;
+  }
+  forEach(cb) {
+    for (const [path, bytes] of this.entries) {
+      cb(path, { dir: false, _data: { uncompressedSize: bytes.length }, async: async (type) => (type === 'string' ? bytes.toString('utf8') : new Uint8Array(bytes)) });
+    }
+  }
+}
+
+/** Export All (ZIP) of `project` through ProjectIO with MemZip and stub exporters; resolves with the archive. */
+async function exportAll(project) {
+  let blob = null;
+  const io = new ProjectIO({ project, wallController: { layout: () => null }, serializer,
+    objExporter: { write: () => ({ objContent: 'o', mtlContent: 'm' }) }, gltfExporter: { write: () => ({}) },
+    panelIds: { sectionSize: () => ({ width: 8, height: 8 }), atlasSize: () => ({ width: 8, height: 8 }),
+      sectionCanvas: () => ({ toDataURL: () => 'data:image/png;base64,QUJD' }), atlasCanvas: () => ({ toDataURL: () => 'data:image/png;base64,QUJD' }) },
+    safeDistance: null, downloader: { saveBlob: (b) => { blob = b; } }, JSZip: MemZip,
+    dialogs: { alert: (m) => { throw new Error(m); } }, brand: Brand, win: { setTimeout() {}, console }, session: null });
+  await io.exportZIP();
+  return blob;
 }
 
 /** Opens `text` through ProjectSession.openFile. */
@@ -376,6 +413,78 @@ describe('ProjectSession.openFile and apply (07 D5; the 08 6.17 restore)', () =>
     assert.deepEqual(after.sections.map((s) => [s.name, s.panel.columns, s.color, s.logo]), [['Only', 3, '#00f0ff', null]]);
     assert.equal(after.mesh_mode, 'panel');
     assert.deepEqual(after.assets, [], 'B-L21: the logos are cleared');
+  });
+});
+
+describe('07 D6: logo assets as ZIP entries, and opening an Export All archive', () => {
+  test('Export All (ZIP) -> open that ZIP -> Export All again: the identical JSON and asset entries; no data URI in the JSON', async () => {
+    const first = await exportAll(busyProject());
+    const doc = JSON.parse(first.zipped.get(Brand.files.json).toString('utf8'));
+    assert.deepEqual(doc.assets.map((a) => [a.storage, a.path, 'data_uri' in a]), doc.assets.map((a) => ['zip', `assets/${a.id}.${a.mime === 'image/png' ? 'png' : 'svg'}`, false]));
+    assert.equal(doc.assets.length, 2);
+    assert.ok(!JSON.stringify(doc).includes('data:image'));
+    assert.deepEqual(first.zipped.get(doc.assets[0].path), Buffer.from('a png logo'), 'the stored bytes');
+    const fresh = Project.createNew({ defaultSectionColor: Palette.defaultSectionColor });
+    const calls = [];
+    const { session, alerts } = modelSession(fresh, calls, { JSZip: MemZip });
+    assert.equal(await session.openFile({ name: 'morph-led-wall.zip', type: '', size: 99, blob: first }), true);
+    assert.deepEqual(alerts, []);
+    assert.deepEqual(calls.slice(0, 2), ['load logo.png', 'load mark.svg']);
+    const second = await exportAll(fresh);
+    assert.deepEqual([...second.zipped.keys()], [...first.zipped.keys()]);
+    for (const [path, bytes] of first.zipped) assert.deepEqual(second.zipped.get(path), bytes, path);
+    assert.equal(json2(serializer.write(fresh)), json2(serializer.write(busyProject())), 'the same project as its Export JSON');
+  });
+
+  test('the ZIP\'s JSON alone keeps the wall and drops its logos with a warning; a broken or JSON-less ZIP changes nothing', async () => {
+    const archive = await exportAll(busyProject());
+    const text = archive.zipped.get(Brand.files.json).toString('utf8');
+    const p = Project.createNew();
+    const { session, alerts } = modelSession(p, [], { JSZip: MemZip });
+    assert.equal(await session.openFile({ name: 'x.json', size: text.length, text }), true);
+    assert.equal(p.wall.count, 3);
+    assert.equal(p.logos.get(0), undefined);
+    assert.match(alerts[0], /Logo "logo\.png": dropped \(its image assets\/a_\w+\.png is not in this file; open the project's ZIP\)/);
+    const q = Project.createNew();
+    const before = json2(serializer.write(q));
+    const z = modelSession(q, [], { JSZip: MemZip });
+    assert.equal(await z.session.openFile({ name: 'bad.zip', size: 4, blob: 'not a zip' }), false);
+    const empty = new MemZip().file('readme.txt', 'x');
+    assert.equal(await z.session.openFile({ name: 'none.zip', size: 4, blob: await empty.generateAsync() }), false);
+    assert.equal(await z.session.openFile({ name: 'huge.zip', size: 2 ** 31 + 1 }), false);
+    assert.deepEqual(z.alerts, ['Import failed: the ZIP file could not be read (Corrupted zip: end of central directory not found).',
+      'Import failed: the ZIP file contains no project file (.json).', 'Import failed: the ZIP file is larger than 2 GB.']);
+    assert.equal(json2(serializer.write(q)), before, 'atomic');
+  });
+
+  test('the validator keeps a zip asset with a safe path and drops traversal or foreign paths', () => {
+    const sec = (logo) => ({ name: 'S', id: 0, panel: { columns: 1, rows: 1, width_mm: 500, height_mm: 500 }, led_resolution: { x: 32, y: 32 },
+      curvature: { angle_degrees: 0, angle_offset_degrees: 0 }, color: '#00ff66', logo });
+    const zipAsset = (path) => ({ id: 'a_0123456789abcdef', kind: 'logo', name: 'l.png', mime: 'image/png', bytes: 10, sha256: 'ab'.repeat(32), storage: 'zip', path });
+    for (const [path, kept] of [['assets/a_0123456789abcdef.png', true], ['assets/../x.png', false], ['textures/a.png', false], ['/etc/x.png', false], ['assets/a.exe', false]]) {
+      const r = readV2({ version: '2.0', sections: [sec({ asset_id: 'a_0123456789abcdef', position: 'center', scale: 0.3 })], assets: [zipAsset(path)] });
+      assert.equal(r.project.assets.length, kept ? 1 : 0, path);
+      if (kept) assert.deepEqual(validateProject(r.project, { revision: 0, palette: { sectionColors: Palette.sectionColors } }).issues, [], 'idempotent');
+    }
+  });
+
+  test('AssetStore: load stores a loaded image by its asset id and nothing on a refusal; addFromBytes builds the data URI', async () => {
+    const loads = [];
+    const store = new AssetStore({ logoLoader: { load: async (req) => {
+      loads.push(req);
+      if (req.file && req.file.name === 'big.png') return { ok: false, reason: 'tooLarge', message: 'M-LOGO-2' };
+      const uri = req.dataUri ?? 'data:image/png;base64,QQ==';
+      return { ok: true, image: { src: uri }, meta: { dataUri: uri, mime: 'image/png', bytes: 1, name: req.name ?? req.file.name, sha256: 'f'.repeat(64), assetId: `a_${loads.length}` } };
+    } } });
+    assert.equal((await store.load({ file: { name: 'big.png' }, sectionId: 0 })).message, 'M-LOGO-2');
+    assert.deepEqual(store.list(), []);
+    await store.load({ file: { name: 'ok.png' }, sectionId: 0 });
+    assert.deepEqual(store.list(), ['a_2']);
+    const res = await store.addFromBytes({ name: 'z.png', mime: 'image/png' }, new Uint8Array([65, 66, 67]));
+    assert.equal(res.dataUri, 'data:image/png;base64,QUJD');
+    assert.deepEqual(loads.at(-1), { dataUri: 'data:image/png;base64,QUJD', name: 'z.png' });
+    assert.equal(store.get('a_3').meta.name, 'z.png');
+    assert.equal(store.get('a_9'), null);
   });
 });
 

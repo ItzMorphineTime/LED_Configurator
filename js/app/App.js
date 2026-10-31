@@ -224,14 +224,14 @@ export class App {
     const objExporter = new ObjExporter({ brand, colorToRgb, builder: new WallMeshBuilder(Strategies.mesh.obj) });
     const gltfExporter = new GltfExporter({ brand, colorToRgb, builder: new WallMeshBuilder(Strategies.mesh.gltf) });
     const downloader = new Downloader({ doc, win });
-    // 07 D5 (5.5.3): the session's logo images by asset id, loaded through the one logo loader.
+    // 07 D5, D6 (5.5.3): every logo image by asset id (uploads and opened files), loaded through the one logo loader.
     const assetStore = new AssetStore({ logoLoader });
     // 07 D5 (5.5.2): open, save, new, capture and the one apply. `features` is the hook map of 07 C41: each landed
     // feature's step-3 restore step. The pivot and orientation are session-only until project file v2 saves them, so
     // their hook keeps them and announces them to the pivot mirrors (03 4.4, the owner's rule of 03 12.11).
     const session = new ProjectSession({
       project, serializer, assets: assetStore, wallController, cameraController, personController, carController, pilot,
-      selection, sceneManager, ledTiles, bus, dialogs, downloader, brand, win, stateFromProject, sectionsFromProject,
+      selection, sceneManager, ledTiles, bus, dialogs, downloader, brand, win, JSZip, stateFromProject, sectionsFromProject,
       createProject: () => Project.createNew({ defaultSectionColor: theme.palette.defaultSectionColor }),
       features: {
         pivot: { hydrate: () => wallController.applyPivot(null) },
@@ -297,7 +297,8 @@ export class App {
     const displayPanel = new WallDisplayPanel({ doc, wallController, bus, uvController, project });
     // 03 T6 (5.8): the Wall Pivot panel, after the display panel (the sidebar order)
     const pivotPanel = new PivotPanel({ doc, project, pivotController, bus });
-    const logosPanel = new SectionLogosPanel({ doc, project, wallController, bus, logoLoader, dialogs });
+    // 07 D6: uploads load through the AssetStore (the LogoLoader contract), so every logo the app holds is in it
+    const logosPanel = new SectionLogosPanel({ doc, project, wallController, bus, logoLoader: assetStore, dialogs });
     const cameraPanel = new CameraPanel({ doc, project, cameraController, projectIO, bus, theme });
     const personControls = new PropControls({ doc, prefix: 'person', controller: personController, prop: person, bus });
     const carControls = new PropControls({ doc, prefix: 'car', controller: carController, prop: car, bus });

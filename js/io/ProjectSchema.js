@@ -194,6 +194,23 @@ export const PROPS = deepFreeze([
   { key: 'car', label: 'Car', defaults: { posX: 4, posZ: 3 } },
 ]);
 
+/** The file extension of each logo MIME type (07 4.5), for an asset's ZIP entry. */
+export const ASSET_EXTENSIONS = deepFreeze({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/svg+xml': 'svg' });
+
+/** A logo asset's ZIP entry path (07 4.5, D6): `assets/` + its id + the extension of its MIME type. */
+export const ASSET_PATH_RE = /^assets\/[A-Za-z0-9_.-]{1,64}\.(png|jpg|webp|svg)$/;
+
+/**
+ * The ZIP entry of a logo asset in Export All (07 4.5, D6): `assets/<id>.<ext>`.
+ * Side effects: none.
+ * @param {string} id    the asset id ('a_' + 16 hex)
+ * @param {string} mime  one of LOGO_MIMES
+ * @returns {string}
+ */
+export function assetZipPath(id, mime) {
+  return `assets/${id}.${ASSET_EXTENSIONS[mime] ?? 'bin'}`;
+}
+
 /** The logo of a section (07 4.3): asset_id, position (LOGO_POSITIONS) and scale ([0.05, 1]). */
 export const LOGO_ROWS = deepFreeze({ positions: LOGO_POSITIONS, scale: LOGO_SCALE });
 

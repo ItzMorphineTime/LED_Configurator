@@ -286,7 +286,8 @@ export class ProjectIO {
   }
 
   /**
-   * Export All (ZIP), in the legacy order: JSON ('zip' variant) -> layout -> OBJ + MTL -> glTF -> textures
+   * Export All (ZIP), in the legacy order: JSON ('zip' variant; since 07 D6 followed by its logo assets, one entry each
+   * at `assets/<id>.<ext>`) -> layout -> OBJ + MTL -> glTF -> textures
    * folder -> one panel-ID PNG per section -> (08 P2-7f) the combined atlas -> generateAsync -> download. The start
    * columns come from computeAtlas before the texture loop (PR7c). Size guard (08 6.3, B-L4 fixed in 08 P2-1c): a
    * section texture or the atlas that exceeds CANVAS_HARD_LIMITS is skipped up front (no canvas; JSON texture_file null;
@@ -318,11 +319,14 @@ export class ProjectIO {
     // null: JSON texture_file null and no MTL map_Kd.
     const plan = this.#planSectionTextures(sections);
     const atlasPlan = this.#planAtlas(sections);
-    const jsonText = () => JSON.stringify(this.#serializer.write(project, { variant: 'zip', textureNames: plan.textureNames }),
-      null, 2);
+    const jsonDoc = () => this.#serializer.write(project, { variant: 'zip', textureNames: plan.textureNames });
+    const jsonText = () => JSON.stringify(jsonDoc(), null, 2);
 
-    // Step 2: JSON (texture_file null when skipped), OBJ + MTL (no map_Kd when skipped), glTF.
-    zip.file(brand.files.json, jsonText());
+    // Step 2: JSON (texture_file null when skipped; 07 D6: each logo asset by its ZIP path, stored right after it as
+    // its own entry), OBJ + MTL (no map_Kd when skipped), glTF.
+    const doc = jsonDoc();
+    zip.file(brand.files.json, JSON.stringify(doc, null, 2));
+    this.#addAssetEntries(zip, doc.assets);
 
     const layout = this.#wallController.layout({ frame: 'export' });   // 03 T3: the file origin is the pivot
     const objArgs = { sections, meshMode: project.meshMode, layout, uvSettings: project.uv };
@@ -353,6 +357,27 @@ export class ProjectIO {
 
     // Step 5: name every left-out entry.
     this.#reportLeftOut(plan, atlasPlan);
+  }
+
+  /**
+   * The logo assets of Export All (07 4.5, D6): each asset of the ZIP's JSON (`storage: 'zip'`) stored at its `path`
+   * (`assets/<id>.<ext>`) with the bytes of the logo entry that holds that asset id (LogoLoader's stored data URI), so
+   * the archive opens again with every logo (ProjectSession.openFile) and the JSON stays small.
+   * Side effects: adds one ZIP entry per asset.
+   * @param {{file(name: string, data: string, options: object): *}} zip
+   * @param {Array<{id: string, path: string}>} assets  the 'zip' document's assets
+   */
+  #addAssetEntries(zip, assets) {
+    if (!assets.length) return;
+    const dataUris = new Map();
+    for (const s of this.#project.wall.sections) {
+      const e = this.#project.logos.get(s.id);
+      if (e && typeof e.assetId === 'string' && typeof e.dataUri === 'string') dataUris.set(e.assetId, e.dataUri);
+    }
+    for (const a of assets) {
+      const uri = dataUris.get(a.id);
+      zip.file(a.path, uri.slice(uri.indexOf(',') + 1), { base64: true });
+    }
   }
 
   /**

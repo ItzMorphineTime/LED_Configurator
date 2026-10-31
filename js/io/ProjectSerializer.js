@@ -18,7 +18,7 @@ import { detectVersion, migrateV1toV2 } from './ProjectMigrations.js';
 import { validateProject } from './ProjectValidator.js';
 import {
   FORMAT, VERSION, KNOWN_REVISION, DISPLAY_ROWS, PANEL_ID_STYLE_ROWS, CAMERA_ROWS, PROP_ROWS, PROPS, PROJECT_ROWS,
-  blockFromDomain,
+  blockFromDomain, assetZipPath,
 } from './ProjectSchema.js';
 
 /**
@@ -60,7 +60,9 @@ export class ProjectSerializer {
    *   extensions.
    *   'zip' (Export All ZIP): each section's `texture_file` is `'textures/' + textureNames[i]`, or null where
    *   textureNames[i] is null (its texture is not in the ZIP, 08 P2-1c). The names are PanelNaming.textureFileNames
-   *   (08 P2-6b), computed once by the caller for the ZIP entries, this document and the MTL.
+   *   (08 P2-6b), computed once by the caller for the ZIP entries, this document and the MTL. Since 07 D6 each logo
+   *   asset is `storage: 'zip'` with `path` = assetZipPath(id, mime) (`assets/<id>.<ext>`) instead of a data URI;
+   *   the caller stores its bytes at that path.
    *   'history' (07 D4, 4.2: a snapshot of the session, never a file): no derived key (pixel_pitch_mm, curvature.type,
    *   totals), no view-only key (the rows marked viewOnly: display.show_grid) and each asset as `{id}` only (the
    *   image stays in the session's asset store).
@@ -100,8 +102,10 @@ export class ProjectSerializer {
       if (!e || !e.image || typeof e.dataUri !== 'string' || typeof e.assetId !== 'string') return null;
       if (!assetIds.has(e.assetId)) {
         assetIds.add(e.assetId);
-        assets.push(history ? { id: e.assetId } : { id: e.assetId, kind: 'logo', name: e.name ?? '', mime: e.mime, bytes: e.bytes,
-          sha256: e.sha256, storage: 'inline', data_uri: e.dataUri });
+        const meta = { id: e.assetId, kind: 'logo', name: e.name ?? '', mime: e.mime, bytes: e.bytes, sha256: e.sha256 };
+        if (history) assets.push({ id: e.assetId });
+        else if (variant === 'zip') assets.push({ ...meta, storage: 'zip', path: assetZipPath(e.assetId, e.mime) });
+        else assets.push({ ...meta, storage: 'inline', data_uri: e.dataUri });
       }
       return { asset_id: e.assetId, position: e.position, scale: e.scale };
     };

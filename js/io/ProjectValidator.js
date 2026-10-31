@@ -14,14 +14,14 @@
  * Layer: io (pure; may import domain, geometry, legacy).
  */
 
-import { clamp, roundInt, stripControls, truncateUnits, isValidSectionId, createIdAllocator } from '../domain/rules.js';
+import { clamp, roundInt, stripControls, truncateUnits, isValidSectionId, createIdAllocator, MAX_LOGO_BYTES } from '../domain/rules.js';
 import { FILMBACK_PRESETS } from '../domain/CineCamera.js';
 import { logoAssetName, parseLogoDataUri } from '../domain/LogoRules.js';
 import { canvasFits, CANVAS_HARD_LIMITS } from '../geometry/TextureAtlas.js';
 import {
   LIMITS, MESH_MODES, SECTION_NUMBER_ROWS, SECTION_GROUP_LABELS, SECTION_LABELS, SECTION_DERIVED_KEYS, SECTION_KEYS,
   FORMAT, KNOWN_REVISION, TOP_LEVEL_KEYS, DERIVED_TOP_LEVEL_KEYS, KNOWN_UNAPPLIED_KEYS, DISPLAY_ROWS, PANEL_ID_STYLE_ROWS,
-  CAMERA_ROWS, PROP_ROWS, PROPS, LOGO_ROWS, PROJECT_ROWS, MAX_PANELS_BUDGET, getPath, setPath,
+  CAMERA_ROWS, PROP_ROWS, PROPS, LOGO_ROWS, PROJECT_ROWS, MAX_PANELS_BUDGET, ASSET_PATH_RE, ASSET_EXTENSIONS, getPath, setPath,
 } from './ProjectSchema.js';
 import { ImportMessages, isPlainObject } from './ProjectMigrations.js';
 
@@ -579,18 +579,28 @@ function validateAssets(raw, limits, push) {
       warn('sanitized', `more than ${limits.maxLogoAssets} logo images`);
       return;
     }
-    if (a.storage !== 'inline') {
+    const sha256 = typeof a.sha256 === 'string' && SHA256_RE.test(a.sha256) ? a.sha256.toLowerCase() : '';
+    let asset;
+    if (a.storage === 'zip') {
+      // 07 D6: a ZIP entry of the project's archive, `assets/<id>.<ext>` (no other folder, no traversal); its bytes
+      // are read and checked when the archive is opened (a JSON opened alone drops it then)
+      if (typeof a.path !== 'string' || !ASSET_PATH_RE.test(a.path) || !Object.prototype.hasOwnProperty.call(ASSET_EXTENSIONS, a.mime)
+        || !Number.isInteger(a.bytes) || a.bytes < 0 || a.bytes > MAX_LOGO_BYTES) {
+        warn('sanitized', 'not a PNG, JPEG, WebP or SVG entry of the archive');
+        return;
+      }
+      asset = { id: a.id, kind: 'logo', name, mime: a.mime, bytes: a.bytes, sha256, storage: 'zip', path: a.path };
+    } else if (a.storage !== 'inline') {
       warn('missing-asset', 'the image is not stored in this file');
       return;
+    } else {
+      const parsed = parseLogoDataUri(a.data_uri);
+      if (!parsed || parsed.mime !== a.mime) {
+        warn('sanitized', 'not a PNG, JPEG, WebP or SVG data URL');
+        return;
+      }
+      asset = { id: a.id, kind: 'logo', name, mime: parsed.mime, bytes: parsed.bytes, sha256, storage: 'inline', data_uri: a.data_uri };
     }
-    const parsed = parseLogoDataUri(a.data_uri);
-    if (!parsed || parsed.mime !== a.mime) {
-      warn('sanitized', 'not a PNG, JPEG, WebP or SVG data URL');
-      return;
-    }
-    const asset = { id: a.id, kind: 'logo', name, mime: parsed.mime, bytes: parsed.bytes,
-      sha256: typeof a.sha256 === 'string' && SHA256_RE.test(a.sha256) ? a.sha256.toLowerCase() : '', storage: 'inline',
-      data_uri: a.data_uri };
     for (const key of Object.keys(a)) {
       if (!['id', 'kind', 'name', 'mime', 'bytes', 'sha256', 'storage', 'data_uri', 'path'].includes(key)) {
         push({ path: `${path}.${key}`, code: 'dropped-unknown', severity: 'info', message: `${label}: ignored "${key}"` });

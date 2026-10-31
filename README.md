@@ -365,9 +365,13 @@ panel spans 0..1. Positions, normals and materials are unchanged.
 ### ZIP Package
 Complete export bundle containing:
 - JSON configuration
+- The logo images, one file each in `assets/` (the JSON names them instead of embedding them)
 - OBJ mesh files
 - Panel ID textures (PNG)
 - Per-section exports
+
+The Import button also opens an Export All archive (`.zip`): it reads the project file and the logo images inside it.
+Opening the archive's JSON on its own restores everything but the logos (a message says so).
 
 Release note: in section mode the ZIP's MTL now points each section's material at that section's own texture file
 (the name the ZIP stores); it used to use a numbered name, so a renamed section, or every section after a deleted
