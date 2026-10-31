@@ -1,0 +1,81 @@
+/* css/features/sidebar.css: the collapsible side panel (ui/SidebarToggle; the owner's request of 2026-10-31).
+   #sidebar-toggle is a slim chevron handle on the viewport's edge beside the panel (inside .viewport, so it stays
+   reachable while the panel is collapsed): the left edge, vertically centred, in the wide layout; the bottom edge,
+   horizontally centred, at <= 900 px, where the panel sits below the viewport (12-responsive.css). The chevron points
+   the way the panel goes. .sidebar-collapsed on .app-container gives the viewport the whole width (the whole height at
+   <= 900 px); the hidden panel leaves the tab order and the accessibility tree (visibility: hidden). No transition: the
+   renderer is fitted once per toggle. z-index 35: above the floating panels (30), below the pilot banner (100) and the
+   debug popover (110). The focus ring of 03-layout.css is drawn inset, because .viewport clips its overflow.
+   Colours only through the role tokens of 02-tokens.css (06 R-B1). */
+
+.app-container.sidebar-collapsed {
+    grid-template-columns: 0 1fr;
+}
+
+.app-container.sidebar-collapsed > .control-panel {
+    visibility: hidden;
+    overflow: hidden;
+    padding: 0;
+    border: 0;
+}
+
+.sidebar-toggle {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    z-index: 35;
+    width: 16px;
+    height: 56px;
+    margin-top: -28px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
+    border-left: 0;
+    border-radius: 0 8px 8px 0;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.sidebar-toggle:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text-primary);
+}
+
+.sidebar-toggle:focus-visible {
+    outline-offset: -2px;
+}
+
+.sidebar-toggle__icon {
+    display: block;
+}
+
+.sidebar-collapsed .sidebar-toggle__icon {
+    transform: rotate(180deg);
+}
+
+@media (max-width: 900px) {
+    .app-container.sidebar-collapsed {
+        grid-template-columns: 1fr;
+        grid-template-rows: 60px 1fr 0;
+    }
+    .sidebar-toggle {
+        top: auto;
+        bottom: 0;
+        left: 50%;
+        width: 56px;
+        height: 16px;
+        margin: 0 0 0 -28px;
+        border: 1px solid var(--color-border-subtle);
+        border-bottom: 0;
+        border-radius: 8px 8px 0 0;
+    }
+    .sidebar-toggle__icon {
+        transform: rotate(-90deg);
+    }
+    .sidebar-collapsed .sidebar-toggle__icon {
+        transform: rotate(90deg);
+    }
+}

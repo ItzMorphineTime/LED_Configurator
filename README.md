@@ -209,6 +209,7 @@ it used to show white LEDs on every section.
 | D / → | Move right |
 | Q | Move down |
 | E | Move up |
+| Side panel handle (chevron on the viewport's left edge; bottom edge on narrow screens) | Hide / show the side panel; hidden, the 3D view takes the whole width (Tab to it, Enter or Space) |
 
 ### Gizmo Controls
 | Key | Action |

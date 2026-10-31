@@ -330,6 +330,40 @@ export class SceneManager {
   }
 
   /**
+   * Fits the renderer to its container when the container's client size differs from the renderer's size (the
+   * collapsible side panel, the owner's request of 2026-10-31): onResize() then, so the camera aspect, the canvas and the
+   * preview region (PreviewPass reads the rects every frame) follow. An unchanged or empty (0 px) container does nothing,
+   * so it never repeats a window resize and never sets an infinite aspect.
+   * Side effects: maybe onResize().
+   * @returns {boolean} whether it resized
+   */
+  fitContainer() {
+    const renderer = this.#renderer;
+    if (!renderer) return false;
+    const container = renderer.domElement.parentElement;
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    if (!(w > 0) || !(h > 0)) return false;
+    const size = renderer.getSize({ x: 0, y: 0, set(x, y) { this.x = x; this.y = y; return this; } });
+    if (size.x === w && size.y === h) return false;
+    this.onResize();
+    return true;
+  }
+
+  /**
+   * Follows the canvas container's own size changes (the side panel collapsing or expanding, the narrow layout): one
+   * ResizeObserver on the container calls fitContainer(), so its first report (the unchanged size) and a window resize
+   * that attachResize already handled do nothing. Skipped where the window has no ResizeObserver.
+   * Side effects: creates one ResizeObserver (win.ResizeObserver, looked up at call time) observing the container.
+   * @returns {void}
+   */
+  observeResize() {
+    const RO = this.#win.ResizeObserver;
+    if (typeof RO !== 'function' || !this.#renderer) return;
+    new RO(() => this.fitContainer()).observe(this.#renderer.domElement.parentElement);
+  }
+
+  /**
    * Starts the frame loop. Each frame requests the next one BEFORE running `tick`, and the first frame runs
    * synchronously (inside the init phase, before setupUI), exactly like legacy `animate()`.
    * Ports: index.html@cd3fd3f lines 1454, 3884-3890 (the tick body itself is defined by App).

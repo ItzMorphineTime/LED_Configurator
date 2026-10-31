@@ -72,6 +72,7 @@ import { ExportPanel } from '../ui/ExportPanel.js';
 import { DebugViewControls } from '../ui/DebugViewControls.js';
 import { UVViewer } from '../ui/UVViewer.js';
 import { bindCollapsibles } from '../ui/Collapsible.js';
+import { SidebarToggle } from '../ui/SidebarToggle.js';
 
 /**
  * The application: wires the modules together and runs the legacy bootstrap.
@@ -270,6 +271,8 @@ export class App {
     const uvViewer = new UVViewer({
       doc, win, uvController, bus, theme, host: canvasEl.parentElement, avoidElement: () => previewWindowEl,
     });
+    // The collapsible side panel (#sidebar-toggle, #control-panel): every toggle fits the renderer to the new viewport.
+    const sidebar = new SidebarToggle({ doc, onLayoutChange: () => sceneManager.fitContainer() });
     // Legacy animate body (3886-3889). 07 R2: one frame of the main renderer, its main pass then the preview pass.
     const tick = () => {
       orbit.tickKeyboard();
@@ -309,6 +312,10 @@ export class App {
     // 04 UV-12: the UV viewer (its toolbar button, the hidden panel and their listeners; a window resize listener after
     // every legacy one). U is ViewportInput's.
     uvViewer.bind();
+    // The side panel's handle, then one ResizeObserver on the viewport (after every legacy listener): the renderer
+    // follows its container whenever the panel collapses or expands, not only on window resizes.
+    sidebar.bind();
+    sceneManager.observeResize();
 
     // ---- legacy setView('reset') (5095) ----
     orbit.setView('reset');

@@ -36,6 +36,7 @@
     <link rel="stylesheet" href="css/features/pivot.css">
     <link rel="stylesheet" href="css/features/floating-panel.css">
     <link rel="stylesheet" href="css/features/uv-viewer.css">
+    <link rel="stylesheet" href="css/features/sidebar.css">
     <link rel="stylesheet" href="css/12-responsive.css">
     <link rel="stylesheet" href="css/99-utilities.css">
 </head>
@@ -68,7 +69,7 @@
             </div>
         </header>
 
-        <aside class="control-panel">
+        <aside class="control-panel" id="control-panel">
             <div class="wall-sections" id="wall-sections"></div>
 
             <button class="add-section-btn" id="add-section-btn">
@@ -459,6 +460,7 @@
 
         <main class="viewport">
             <canvas id="three-canvas"></canvas>
+            <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-controls="control-panel" aria-expanded="true" aria-label="Side panel" title="Hide side panel"><svg class="sidebar-toggle__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><polyline points="15 18 9 12 15 6"/></svg></button>
             <div id="camera-preview-window" class="preview-window" style="display: none; width: 320px; height: 180px;">
                 <div id="camera-preview-resize" class="preview-window__resize">
                     <svg class="preview-window__icon" width="10" height="10" viewBox="0 0 10 10">
