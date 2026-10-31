@@ -9,3 +9,6 @@ tests/regression/output/
 
 # Unit-test artefacts (e.g. the synthetic glTF of 08 P2-1b for the manual validator check)
 tests/unit/out/
+
+# Owner reference files (local only)
+BlenderReference/
