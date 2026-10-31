@@ -35,6 +35,7 @@ import { PreviewWindow } from '../render/PreviewWindow.js';
 import { PreviewPass } from '../render/PreviewPass.js';
 import { PersonPropView, CarPropView } from '../render/PropViews.js';
 import { PivotMarkerView } from '../render/PivotMarkerView.js';
+import { UvHighlightView } from '../render/UvHighlightView.js';
 import { DebugMaterials } from '../render/DebugMaterials.js';
 import { NormalsDebugView } from '../render/NormalsDebugView.js';
 import { InteractionState, KeyboardState, PointerRay } from '../interaction/InputState.js';
@@ -43,6 +44,7 @@ import { SelectionManager } from '../interaction/SelectionManager.js';
 import { TransformGizmo } from '../interaction/TransformGizmo.js';
 import { PilotCameraDriver, PilotController } from '../interaction/PilotController.js';
 import { ViewportInput } from '../interaction/ViewportInput.js';
+import { WallHoverProbe } from '../interaction/WallHoverProbe.js';
 import { ProjectSerializer } from '../io/ProjectSerializer.js';
 import { sectionsFromProject } from '../io/ProjectSchema.js';
 import { ObjExporter } from '../io/ObjExporter.js';
@@ -175,6 +177,8 @@ export class App {
     const carView = new CarPropView({ sceneManager, theme });
     // 03 T5 (5.8): the pivot marker (subscribes WALL_REBUILT, WALL_PIVOT_CHANGED, SELECTION_CHANGED; allocated last).
     const pivotMarker = new PivotMarkerView({ sceneManager, bus, display, theme });
+    // 04 UV-15 (5.6): the hovered panel's outline on the wall (subscribes UV_HOVER_CHANGED; allocated on the first hover).
+    const uvHighlight = new UvHighlightView({ sceneManager, bus, theme });
     // Subscribed before the bootstrap rebuild, so the first WALL_STATS_CHANGED reaches the header.
     const headerStats = new HeaderStats({ doc, bus });
     const orbit = new OrbitController({ sceneManager, keyboard, interaction, frameBounds });
@@ -220,14 +224,28 @@ export class App {
       win,
       sectionsFromProject,
     });
+    // ViewportInput is constructed here (it stores its collaborators only) so the UV hover probe can read
+    // handlesDoubleClick; its U command reaches the UV controller lazily (04 3.6 path B).
+    const viewportInput = new ViewportInput({
+      doc, win, sceneManager, interaction, gizmo, selection, pilot, onPivotShortcut: () => pivotController.toggleSelect(),
+      commands: { toggleUvViewer: () => uvController.toggleViewer() },
+    });
+    // 04 UV-15 (5.3): the wall hover probe in its own-raycast mode (spec 02's shared hover raycast does not exist):
+    // the front LED meshes only, at most one raycast per frame while the viewer is open; a double-click on the wall
+    // opens the viewer on that section.
+    const uvProbe = new WallHoverProbe({
+      sceneManager, pointerRay, interaction, win, targets: () => wallView.meshes(),
+      onHover: (hit) => uvController.onWallHover(hit), onDoubleClick: (hit) => uvController.onWallDoubleClick(hit),
+      doubleClick: !viewportInput.handlesDoubleClick,
+    });
     // 04 UV-11 (5.3; path B, the owner's decision): the UV viewer's view model (its state in memory), the UV-only undo
     // stack and the UV use cases, registered as a selection observer and a rebuild observer before the bootstrap
     // rebuild, so the first onWallRebuilt caches the layout and fills the sidebar atlas note. Nothing reads the renderer
     // here (maxTextureSize is a getter). UV state is session-only until project file v2 (04 UV-5c).
     const uvViewModel = new UvViewModel({ project, panelIds, ledTiles, bus });
     const uvController = new UvController({
-      project, wallController, view: wallView, viewModel: uvViewModel, history: new UvFallbackHistory(), bus,
-      maxTextureSize: () => sceneManager.renderer.capabilities.maxTextureSize,
+      project, wallController, view: wallView, viewModel: uvViewModel, probe: uvProbe, history: new UvFallbackHistory(),
+      bus, maxTextureSize: () => sceneManager.renderer.capabilities.maxTextureSize,
       raf: (fn) => win.requestAnimationFrame(fn),
     });
     selection.addObserver(uvController);
@@ -243,10 +261,6 @@ export class App {
     const personControls = new PropControls({ doc, prefix: 'person', controller: personController, prop: person, bus });
     const carControls = new PropControls({ doc, prefix: 'car', controller: carController, prop: car, bus });
     const toolbar = new ViewportToolbar({ doc, orbit, sceneManager, gizmo, pilot, bus });
-    const viewportInput = new ViewportInput({
-      doc, win, sceneManager, interaction, gizmo, selection, pilot, onPivotShortcut: () => pivotController.toggleSelect(),
-      commands: { toggleUvViewer: () => uvController.toggleViewer() },   // 04 3.6 path B: U
-    });
     const exportPanel = new ExportPanel({ doc, projectIO });
     // Subscribes DEBUG_VIEW_CHANGED (its only subscriber, 01 F1-2).
     const debugControls = new DebugViewControls({ doc, win, controller: debugController, bus, theme });
@@ -285,6 +299,7 @@ export class App {
     toolbar.bind();                            // 4394-4407
     viewportInput.attachShortcuts();           // 4410-4434 (doc keydown, after KeyboardState's)
     viewportInput.attachPointer();             // 4437-4479 (canvas listeners after the orbit ones; win mouseup; wheel)
+    uvProbe.attach();                          // 04 UV-15: canvas mousemove / mouseleave / dblclick, after the router's
     exportPanel.bind();                        // 4481-4488
     // 01 F1-2: the debug view's buttons, popover and N / Shift+N, after every legacy listener (the doc keydown listener
     // runs after ViewportInput's), so the legacy listener order is unchanged.
