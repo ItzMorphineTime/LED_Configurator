@@ -288,7 +288,7 @@ export class CameraPanel {
    * "5" and "0" are unchanged and a Reset facing a curved or turned wall shows no float noise; the model keeps the exact
    * pose.
    * 'pivot' (03 T4, 5.5: the re-expression after a pivot edit moved the stage origin): pos-x, pos-z toFixed(2), the
-   * two components translateStage writes. 'import' (08 P2-13e, a v2 import): the three positions toFixed(2) and the
+   * two components translateStage writes, and rot-y toFixed(1) when an orientation edit turned the camera. 'import' (08 P2-13e, a v2 import): the three positions toFixed(2) and the
    * three rotations toFixed(1).
    * @param {{source: 'reset'|'gizmo-translate'|'gizmo-rotate'|'pilot-look'|'pilot-move'|'pivot', axis?: 'x'|'y'|'z'}} payload
    */
@@ -298,6 +298,9 @@ export class CameraPanel {
       case 'pivot':
         this.#posX.value = cine.posX.toFixed(2);
         this.#posZ.value = cine.posZ.toFixed(2);
+        // An orientation edit re-expresses the pose with a turn (03 §12): mirror the pan too, but only when it changed,
+        // so a translate-only pivot edit leaves the field's text exactly as it was.
+        if (Number(this.#rotY.value) !== Number(cine.rotY.toFixed(1))) this.#rotY.value = cine.rotY.toFixed(1);
         break;
       case 'reset':
         this.#posX.value = cine.posX.toFixed(1);
