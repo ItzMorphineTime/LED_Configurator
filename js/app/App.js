@@ -29,6 +29,7 @@ import { LEDWallView } from '../render/LEDWallView.js';
 import { LEDMaterialFactory } from '../render/LEDMaterialFactory.js';
 import { LEDPixelTextureFactory } from '../render/textures/LEDPixelTextureFactory.js';
 import { PanelIdRenderer } from '../render/textures/PanelIdRenderer.js';
+import { LogoLoader } from '../render/textures/LogoLoader.js';
 import { CameraRigView } from '../render/CameraRigView.js';
 import { SafeDistanceView } from '../render/SafeDistanceView.js';
 import { PreviewWindow } from '../render/PreviewWindow.js';
@@ -145,6 +146,8 @@ export class App {
     const pointerRay = new PointerRay({ sceneManager });
     const ledTiles = new LEDPixelTextureFactory({ doc, display, theme });
     const panelIds = new PanelIdRenderer({ doc, style, logos, theme });
+    // 08 P2-13a (6.16): the one logo loader of the upload and (P2-13e) of the project file's logo assets
+    const logoLoader = new LogoLoader({ win, logos });
     const materials = new LEDMaterialFactory({ display, panelIds, ledTiles, win });
     // The normals debug view (01 F1-1, F1-2; 5.7): settings, lazily created materials, the wall override, the lines
     // and their stats element. Nothing is allocated until a debug option is switched on; the lines view subscribes
@@ -278,7 +281,7 @@ export class App {
     const displayPanel = new WallDisplayPanel({ doc, wallController, bus, uvController });
     // 03 T6 (5.8): the Wall Pivot panel, after the display panel (the sidebar order)
     const pivotPanel = new PivotPanel({ doc, project, pivotController, bus });
-    const logosPanel = new SectionLogosPanel({ doc, project, wallController, bus });
+    const logosPanel = new SectionLogosPanel({ doc, project, wallController, bus, logoLoader, dialogs });
     const cameraPanel = new CameraPanel({ doc, project, cameraController, projectIO, bus, theme });
     const personControls = new PropControls({ doc, prefix: 'person', controller: personController, prop: person, bus });
     const carControls = new PropControls({ doc, prefix: 'car', controller: carController, prop: car, bus });

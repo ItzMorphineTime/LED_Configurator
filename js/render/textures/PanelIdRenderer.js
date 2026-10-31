@@ -248,8 +248,6 @@ export class PanelIdRenderer {
     // Draw section logo if set
     const logoData = this.#logos.get(section.id);
     if (logoData && logoData.image && logoData.image.complete) {
-      // LEGACY(B-L35): no guard for a zero-size (or broken) image: the aspect becomes NaN/Infinity and the
-      // drawImage arguments follow it, exactly like legacy.
       this.#drawLogo(ctx, canvas, logoData);
     }
 
@@ -308,6 +306,9 @@ export class PanelIdRenderer {
    */
   #drawLogo(ctx, canvas, logoData) {
     const img = logoData.image;
+    // 08 P2-13a (B-L35 fixed): a zero-size or broken image is never drawn (its aspect would be NaN or Infinity); the
+    // LogoLoader already refuses one, so this guards only an image that broke later.
+    if (!img.naturalWidth || !img.naturalHeight) return;
     const logoScale = logoData.scale || 0.3;
     const position = logoData.position || 'center';
 

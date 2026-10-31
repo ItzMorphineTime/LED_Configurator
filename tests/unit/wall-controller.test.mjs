@@ -1010,7 +1010,7 @@ function buildModern(doc) {
   const wallController = new WallController({ project, view, ledTiles, orbit, hub, bus, palette: Palette, dialogs });
   const sectionList = new SectionListPanel({ doc, project, wallController, bus, palette: Palette });
   const displayPanel = new WallDisplayPanel({ doc, wallController, bus });
-  const logosPanel = new SectionLogosPanel({ doc, project, wallController, bus });
+  const logosPanel = new SectionLogosPanel({ doc, project, wallController, bus, logoLoader: syncLogoLoader, dialogs });
   return { project, bus, wallController, headerStats, sectionList, displayPanel, logosPanel };
 }
 
@@ -1048,6 +1048,15 @@ const byRegion = (log) => {
   const out = { cards: [], logos: [], calls: [], other: [] };
   for (const x of log) out[regionOf(x)].push(x.entry);
   return out;
+};
+
+/** The modern world's logo loader (08 P2-13a): accepts every file at once (a synchronous thenable), as the legacy world's
+ *  FakeFileReader and FakeImage do. */
+const syncLogoLoader = {
+  load: ({ file }) => ({
+    then: (onLoaded) => onLoaded({ ok: true, image: { source: `data:image/png;base64,${file.name}` },
+      meta: { dataUri: `data:image/png;base64,${file.name}`, mime: 'image/png', bytes: 1, name: file.name } }),
+  }),
 };
 
 class FakeFileReader {

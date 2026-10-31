@@ -4,7 +4,9 @@
  * legacy keys them by id across deletes (and, until 08 P2-3d, across imports, B-L21), so they outlive section objects.
  * The store is a plain object indexed with the given key unchanged, so keys follow JS property-key coercion
  * exactly like legacy `sectionLogos[id]` (UI handlers pass parseInt(dataset.sectionId), the renderer and delete
- * pass section.id).
+ * pass section.id). Since 08 P2-13a (B-L35) an entry also keeps what render/textures/LogoLoader stored: the sanitised,
+ * possibly converted data URI with its MIME, decoded size and file name, and (from 08 P2-13e) its SHA-256 and asset id,
+ * so the project file v2 writer can save the logo and the upload can refuse a 65th distinct image (M-LOGO-3).
  * Legacy source: index.html@cd3fd3f 1392-1393 (state), 2116 / 2196-2197 (reads), 2256-2305 (handlers), 4131 (delete).
  * Layer: domain (may import legacy; THREE-free and DOM-free).
  */
@@ -16,7 +18,19 @@ import { finiteOr } from './rules.js';
  * @property {*} [image]          the loaded HTMLImageElement (absent until an upload finished)
  * @property {string} position    'center' | 'top-left' | ... (the select's value)
  * @property {number} scale       fraction of the section (0.05 .. 1)
+ * @property {string} [dataUri]   the stored image: `data:<LOGO_MIMES entry>;base64,...` (08 P2-13a)
+ * @property {string} [mime]      one of domain/LogoRules LOGO_MIMES
+ * @property {number} [bytes]     the decoded size of dataUri (at most MAX_LOGO_BYTES)
+ * @property {string} [name]      the uploaded file name (sanitised, at most 128 code units)
+ * @property {string} [sha256]    64 hex characters of the stored bytes (08 P2-13e)
+ * @property {string} [assetId]   'a_' + sha256.slice(0, 16), the project file's asset id (07 6.13)
  */
+
+/**
+ * The stored-image fields of an entry, in this order (LogoLoader's result; 08 4.5).
+ * @type {ReadonlyArray<string>}
+ */
+export const LOGO_META_FIELDS = Object.freeze(['dataUri', 'mime', 'bytes', 'name', 'sha256', 'assetId']);
 
 /**
  * Section logos keyed like legacy `sectionLogos[id]` (plain-object property keys).
@@ -63,13 +77,43 @@ export class LogoLibrary {
   }
 
   /**
+   * Stores a loaded image and (08 P2-13a) its stored-image fields; a meta field that is absent is left as it was.
    * Ports: index.html@cd3fd3f lines 2266-2269.
-   * Side effects: creates the entry if needed; writes its image.
+   * Side effects: creates the entry if needed; writes its image and the given LOGO_META_FIELDS.
    * @param {*} sectionId
    * @param {*} image  the loaded HTMLImageElement
+   * @param {{dataUri?: string, mime?: string, bytes?: number, name?: string, sha256?: string, assetId?: string}} [meta]
    */
-  setImage(sectionId, image) {
-    this.ensure(sectionId).image = image;
+  setImage(sectionId, image, meta = {}) {
+    const entry = this.ensure(sectionId);
+    entry.image = image;
+    for (const key of LOGO_META_FIELDS) if (meta[key] !== undefined) entry[key] = meta[key];
+  }
+
+  /**
+   * The distinct stored images in use (08 P2-13a, M-LOGO-3): the dataUri of every entry with an image, except the
+   * entry of `exceptSectionId` (the section an upload replaces), in key order.
+   * Side effects: none.
+   * @param {*} [exceptSectionId]  compared as a property key; undefined: none excluded
+   * @returns {Set<string>}
+   */
+  distinctDataUris(exceptSectionId) {
+    const except = exceptSectionId === undefined ? null : String(exceptSectionId);
+    const out = new Set();
+    for (const key of Object.keys(this.#entries)) {
+      const e = this.#entries[key];
+      if (key !== except && e && e.image && typeof e.dataUri === 'string') out.add(e.dataUri);
+    }
+    return out;
+  }
+
+  /**
+   * Side effects: none.
+   * @param {*} [exceptSectionId]
+   * @returns {number} distinctDataUris(exceptSectionId).size
+   */
+  distinctImageCount(exceptSectionId) {
+    return this.distinctDataUris(exceptSectionId).size;
   }
 
   /**

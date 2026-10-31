@@ -222,7 +222,7 @@ const QUIRKS = deepFreeze({
   'B-L34': ['Preview header first word; fake resolution (L-3)',
     'short names'],
   'B-L35': ['Logo load: no error / zero-size guard',
-    'guards'],
+    'Landed in 08 P2-13a (`render/textures/LogoLoader.js`: the MIME allowlist with PNG re-encoding of other decodable types, the 2 MB cap on the file and on the stored bytes with up to three downscales of a converted raster, the 64-distinct-image limit, SVG sanitising and sizing, the decode check, M-LOGO-1 to M-LOGO-3; `domain/LogoRules.js`; `PanelIdRenderer#drawLogo` skips a zero-size image; no tag site)'],
   'B-L36': ['Toggles not keyboard accessible',
     'markup + `flipToggle` keys'],
 });
@@ -242,7 +242,6 @@ const TAG_SITES = deepFreeze([
   ['js/io/ProjectSerializer.js#write', ['B-L31']],
   ['js/render/textures/LEDPixelTextureFactory.js#tile', ['B-L20']],
   ['js/render/textures/PanelIdRenderer.js#panelCanvas', ['B-L19']],
-  ['js/render/textures/PanelIdRenderer.js#sectionCanvas', ['B-L35']],
   ['js/render/PreviewPass.js#updateCamera', ['B-L34']],
   ['js/interaction/OrbitController.js#tickKeyboard', ['B-L27']],
   ['js/interaction/OrbitController.js#setView', ['B-L25']],
@@ -254,7 +253,6 @@ const TAG_SITES = deepFreeze([
   ['js/interaction/PilotController.js#tickKeyboard', ['B-M13', 'B-L27']],
   ['js/interaction/ViewportInput.js#attachPointer', ['B-M14']],
   ['js/app/CameraController.js#CameraHub.refresh', ['B-L30']],
-  ['js/ui/SectionLogosPanel.js#onUpload', ['B-L35']],
   ['index.html', ['B-L36']],                   // markup, untagged; documentation-only
 ]);
 

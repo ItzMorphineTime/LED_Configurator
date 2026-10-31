@@ -2,6 +2,9 @@
  * @module ui/SectionLogosPanel
  * The per-section logo rows inside the panel-ID options (upload, clear, position, scale): the legacy template,
  * the four logo handlers (LogoLibrary writes, then a rebuild iff panel IDs) and the list's mirror subscriptions.
+ * Since 08 P2-13a (B-L35 fixed) the upload goes through the injected render/textures/LogoLoader (type allowlist and
+ * conversion, the 2 MB caps, the 64-image limit, SVG sanitising and sizing, the decode check) and a refused file shows
+ * its M-LOGO message.
  * Owns #section-logos-container.
  * Legacy source: index.html@cd3fd3f 2189-2254 (renderSectionLogosUI), 2256-2305 (logo handlers), 4020 / 4106 /
  * 4135 / 4197 (the re-render call sites, now mirror subscriptions).
@@ -80,6 +83,10 @@ export class SectionLogosPanel {
   #wallController;
   /** @type {HTMLElement|null} #section-logos-container */
   #container;
+  /** @type {{load(request: {file: File, sectionId: *}): PromiseLike<import('../render/textures/LogoLoader.js').LogoLoadResult>}} */
+  #logoLoader;
+  /** @type {{alert(msg: string): void}} */
+  #dialogs;
 
   /**
    * Looks up #section-logos-container and subscribes the three re-render mirrors:
@@ -90,12 +97,17 @@ export class SectionLogosPanel {
    * Side effects: DOM lookup (no mutation); three bus subscriptions.
    * @param {{doc: Document, project: import('../domain/Project.js').Project,
    *          wallController: import('../app/WallController.js').WallController,
-   *          bus: import('../core/EventBus.js').EventBus}} deps
+   *          bus: import('../core/EventBus.js').EventBus,
+   *          logoLoader: import('../render/textures/LogoLoader.js').LogoLoader,
+   *          dialogs: {alert(msg: string): void}}} deps  logoLoader: anything with the LogoLoader load() contract (its
+   *   result is used through then(), so a synchronous thenable works in tests)
    */
-  constructor({ doc, project, wallController, bus }) {
+  constructor({ doc, project, wallController, bus, logoLoader, dialogs }) {
     this.#doc = doc;
     this.#project = project;
     this.#wallController = wallController;
+    this.#logoLoader = logoLoader;
+    this.#dialogs = dialogs;
     this.#container = byId(doc, 'section-logos-container');
 
     bus.on(Events.WALL_SECTIONS_CHANGED, ({ reason }) => {
@@ -154,10 +166,11 @@ export class SectionLogosPanel {
   }
 
   /**
-   * File input change: read the file as a data URL, load it into an Image, store it under parseInt(id),
-   * re-render the list and rebuild iff panel IDs. FileReader and Image are looked up at call time.
+   * File input change: the LogoLoader reads, checks and converts the file (08 6.16); a loaded logo is stored under
+   * parseInt(id) with its stored-image fields, then the list re-renders and the wall rebuilds iff panel IDs (legacy
+   * order); a refused one alerts its M-LOGO message (B-L35 fixed in 08 P2-13a: legacy failed silently).
    * Ports: index.html@cd3fd3f lines 2256-2278.
-   * Side effects: async: logos.setImage, render(), wallController.rebuildIfPanelIds().
+   * Side effects: async: logos.setImage, render(), wallController.rebuildIfPanelIds(); or one alert.
    * @param {Event} e
    */
   #onUpload(e) {
@@ -165,21 +178,16 @@ export class SectionLogosPanel {
     if (!file) return;
 
     const sectionId = parseInt(e.target.dataset.sectionId);
-    const reader = new FileReader();
+    this.#logoLoader.load({ file, sectionId }).then((result) => {
+      if (!result.ok) {
+        this.#dialogs.alert(result.message);
+        return;
+      }
+      this.#project.logos.setImage(sectionId, result.image, result.meta);
 
-    // LEGACY(B-L35): no reader.onerror / img.onerror and no zero-size guard; a failed load does nothing.
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        this.#project.logos.setImage(sectionId, img);
-
-        this.render();
-        this.#wallController.rebuildIfPanelIds();
-      };
-      img.src = event.target.result;
-    };
-
-    reader.readAsDataURL(file);
+      this.render();
+      this.#wallController.rebuildIfPanelIds();
+    });
   }
 
   /**
