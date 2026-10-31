@@ -17,10 +17,11 @@
 import { clamp, roundInt, stripControls, truncateUnits, isValidSectionId, createIdAllocator } from '../domain/rules.js';
 import { FILMBACK_PRESETS } from '../domain/CineCamera.js';
 import { logoAssetName, parseLogoDataUri } from '../domain/LogoRules.js';
+import { canvasFits, CANVAS_HARD_LIMITS } from '../geometry/TextureAtlas.js';
 import {
   LIMITS, MESH_MODES, SECTION_NUMBER_ROWS, SECTION_GROUP_LABELS, SECTION_LABELS, SECTION_DERIVED_KEYS, SECTION_KEYS,
   FORMAT, KNOWN_REVISION, TOP_LEVEL_KEYS, DERIVED_TOP_LEVEL_KEYS, KNOWN_UNAPPLIED_KEYS, DISPLAY_ROWS, PANEL_ID_STYLE_ROWS,
-  CAMERA_ROWS, PROP_ROWS, PROPS, LOGO_ROWS, getPath, setPath,
+  CAMERA_ROWS, PROP_ROWS, PROPS, LOGO_ROWS, PROJECT_ROWS, MAX_PANELS_BUDGET, getPath, setPath,
 } from './ProjectSchema.js';
 import { ImportMessages, isPlainObject } from './ProjectMigrations.js';
 
@@ -165,7 +166,9 @@ function colorField(v, fallback, report) {
  * the ids of 07 6.8 (the first occurrence of each valid id keeps it, every other id is renumbered from max + 1 with the
  * 2^31 - 1 fallback: reassigned-id); then `mesh_mode`: `null` or absent keeps the current mode (no issue; the v1
  * migration maps a falsy mode to null), `combined | section | panel` applies, anything else becomes `combined`
- * (defaulted, `Mesh mode: <from> → "combined"`).
+ * (defaulted, `Mesh mode: <from> → "combined"`); last (07 D2, 4.7) the `budget` warnings of the corrected wall: its
+ * panel-ID atlas at 1 px per LED does not fit `exportLimits`, or it has more than MAX_PANELS_BUDGET panels (the file
+ * still opens; the warning is a note, not a correction, and it is raised again for the same wall).
  *
  * The v2 path (08 P2-13e; `revision` given) validates a whole v2 file instead: see validateV2.
  *
@@ -176,13 +179,13 @@ function colorField(v, fallback, report) {
  *          revision?: number, exportLimits?: {maxSide: number, maxArea: number}}} [options]
  *   palette.sectionColors: the default colour of section i is sectionColors[i % length] (the serializer passes the
  *   legacy list for a v1 file, 07 4.3); revision: the file's v2 revision (the minor version; detectVersion), which
- *   selects the v2 path; knownRevision: ProjectSchema.KNOWN_REVISION by default; exportLimits is accepted for the 07
- *   signature and unused (Phase 2 raises no `budget` warning, 08 4.3)
+ *   selects the v2 path; knownRevision: ProjectSchema.KNOWN_REVISION by default; exportLimits: the canvas limits of the
+ *   `budget` check (07 4.7; default TextureAtlas.CANVAS_HARD_LIMITS; the validator never probes the browser)
  * @returns {{ok: boolean, project: object|null, issues: Issue[]}}
  */
 export function validateProject(input, { limits = LIMITS, palette = { sectionColors: ['#d9d9d6'] }, knownRevision = KNOWN_REVISION,
-  revision } = {}) {
-  if (Number.isInteger(revision)) return validateV2(input, { limits, palette, knownRevision, revision });
+  revision, exportLimits = CANVAS_HARD_LIMITS } = {}) {
+  if (Number.isInteger(revision)) return validateV2(input, { limits, palette, knownRevision, revision, exportLimits });
   const fail = (path, code, message) => ({ ok: false, project: null, issues: [{ path, code, severity: 'error', message }] });
   if (!isPlainObject(input)) return fail('', 'unsupported-format', ImportMessages.notAProject);
   const raw = input.sections;
@@ -197,7 +200,33 @@ export function validateProject(input, { limits = LIMITS, palette = { sectionCol
   const sections = raw.map((s0, i) => validateSection(s0, i, limits, colors[i % colors.length], issues));
   reassignIds(sections, issues);
   const meshMode = meshModeField(input.mesh_mode, issues);
+  budgetIssues(sections, exportLimits, (issue) => issues.push(issue));
   return { ok: true, project: { sections, mesh_mode: meshMode }, issues };
+}
+
+/**
+ * The `budget` warnings of a validated wall (07 4.7, 6.7; 07 D2): its panel-ID atlas (the sum of columns x LED columns
+ * by the tallest rows x LED rows) does not fit `exportLimits` even at 1 px per LED (TextureBudget's fitPxPerLed of
+ * 07 X3 at its minimum density), or it has more than MAX_PANELS_BUDGET panels. Warnings only: the file still opens.
+ * @param {object[]} sections  validated sections (v2 shape)
+ * @param {{maxSide: number, maxArea: number}} exportLimits
+ * @param {(issue: Issue) => void} push
+ */
+function budgetIssues(sections, exportLimits, push) {
+  let ledX = 0;
+  let ledY = 0;
+  let panels = 0;
+  for (const s of sections) {
+    ledX += s.panel.columns * s.led_resolution.x;
+    ledY = Math.max(ledY, s.panel.rows * s.led_resolution.y);
+    panels += s.panel.columns * s.panel.rows;
+  }
+  if (!canvasFits(ledX, ledY, exportLimits)) {
+    push({ path: 'sections', code: 'budget', severity: 'warning', message: ImportMessages.textureBudget(ledX, ledY, exportLimits) });
+  }
+  if (panels > MAX_PANELS_BUDGET) {
+    push({ path: 'sections', code: 'budget', severity: 'warning', message: ImportMessages.panelBudget(panels, MAX_PANELS_BUDGET) });
+  }
 }
 
 /**
@@ -349,6 +378,43 @@ function boolField(v, fallback, report) {
   }
   report('defaulted', v, fallback);
   return fallback;
+}
+
+/**
+ * A text field (07 4.3 `project.name` / `project.notes`, 6.7, C28): a string, or a finite number as its text (coerced);
+ * the control and bidi characters stripped (sanitized), cut to `row.maxLength` UTF-16 code units without splitting a
+ * pair (truncated), then trimmed when the row says so (sanitized); an empty result takes a non-empty default
+ * (defaulted). A missing value takes the default silently, anything else the default with a warning. Idempotent.
+ * @param {*} v
+ * @param {{maxLength: number, trim?: boolean}} row
+ * @param {string} fallback
+ * @param {(code: string, from: *, to: *) => void} report
+ * @returns {string}
+ */
+function textField(v, row, fallback, report) {
+  let s;
+  if (typeof v === 'string') {
+    s = v;
+  } else if (typeof v === 'number' && Number.isFinite(v)) {
+    s = String(v);
+    report('coerced', v, s);
+  } else if (v === undefined) {
+    return fallback;
+  } else {
+    report('defaulted', v, fallback);
+    return fallback;
+  }
+  const stripped = stripControls(s);
+  if (stripped !== s) report('sanitized', s, stripped);
+  const cut = truncateUnits(stripped, row.maxLength);
+  if (cut !== stripped) report('truncated', stripped, cut);
+  const out = row.trim ? cut.trim() : cut;
+  if (out !== cut) report('sanitized', cut, out);
+  if (out === '' && fallback !== '') {
+    report('defaulted', out, fallback);
+    return fallback;
+  }
+  return out;
 }
 
 /**
@@ -578,6 +644,7 @@ function validateBlock(v, rows, path, blockLabel, prefix, defaults, push) {
       case 'bool': value = boolField(raw, dflt, report); break;
       case 'enum': value = enumField(raw, row.values, dflt, row.fallback ?? dflt, report); break;
       case 'hex': value = colorField(raw, dflt, report); break;
+      case 'text': value = textField(raw, row, dflt, report); break;
       default: value = numberField(raw, { min: row.min, max: row.max, int: row.type === 'int', default: dflt }, report);
     }
     setPath(out, row.key, value);
@@ -599,21 +666,25 @@ function validateBlock(v, rows, path, blockLabel, prefix, defaults, push) {
 
 /**
  * The v2 path of validateProject (08 P2-13e; 07 4.6 "Any v2 revision goes straight to validateProject with absent means
- * default"): the same errors as the wall subset; a newer revision gives one newer-revision warning; then, in this
- * order, the logo assets, the sections (with their logos and extensions) and their ids (07 6.8), the mesh mode
- * (absent: 'combined', 07 4.3), the display, panel-ID style, camera and prop blocks (a preset filmback takes the
- * preset's size, info if different), the top-level extensions, and every unknown or not-yet-applied key (one
- * dropped-unknown info each; generator and totals are derived and ignored silently). Unreferenced assets are dropped
- * (dropped-unknown info).
- * The result is a normalised v2 file: version "2.<knownRevision>", format, sections, mesh_mode, display,
- * panel_id_style, camera, props, assets, extensions, so validating it again gives no issue (idempotence) and a file
- * the app wrote validates to itself without its derived keys (fidelity, 07 4.7).
+ * default"): the same errors as the wall subset; then, in this order, the logo assets, the `project` block (07 D1:
+ * name and notes, kept only when the file has the key), the sections (with their logos and extensions) and their ids
+ * (07 6.8), the mesh mode (absent: 'combined', 07 4.3), the display, panel-ID style, camera and prop blocks (a preset
+ * filmback takes the preset's size, info if different), the top-level extensions, and every unknown or
+ * not-yet-applied key (one dropped-unknown info each; generator and totals are derived and ignored silently).
+ * Unreferenced assets are dropped (dropped-unknown info). A file of a newer revision (07 D2, 4.4 rule 4) opens with one
+ * newer-revision warning, first in the list, that names its format version and every key this build ignored (section
+ * indexes folded); unknown keys inside `extensions` are kept verbatim, every other unknown key is dropped. Last, the
+ * `budget` warnings of the wall (budgetIssues).
+ * The result is a normalised v2 file: version "2.<knownRevision>", format, [project], sections, mesh_mode, display,
+ * panel_id_style, camera, props, assets, extensions, so validating it again gives no issue but the same budget notes
+ * (idempotence) and a file the app wrote validates to itself without its derived keys (fidelity, 07 4.7).
  * Side effects: none.
  * @param {*} input
- * @param {{limits: typeof LIMITS, palette: {sectionColors: ReadonlyArray<string>}, knownRevision: number, revision: number}} options
+ * @param {{limits: typeof LIMITS, palette: {sectionColors: ReadonlyArray<string>}, knownRevision: number, revision: number,
+ *          exportLimits: {maxSide: number, maxArea: number}}} options
  * @returns {{ok: boolean, project: object|null, issues: Issue[]}}
  */
-function validateV2(input, { limits, palette, knownRevision, revision }) {
+function validateV2(input, { limits, palette, knownRevision, revision, exportLimits }) {
   const fail = (path, code, message) => ({ ok: false, project: null, issues: [{ path, code, severity: 'error', message }] });
   if (!isPlainObject(input)) return fail('', 'unsupported-format', ImportMessages.notAProject);
   const raw = input.sections;
@@ -625,11 +696,10 @@ function validateV2(input, { limits, palette, knownRevision, revision }) {
 
   const issues = [];
   const push = (issue) => issues.push(issue);
-  if (revision > knownRevision) {
-    push({ path: 'version', code: 'newer-revision', severity: 'warning', message: ImportMessages.newerRevision, from: input.version, to: `2.${knownRevision}` });
-  }
   const assetIssues = [];
   const assets = validateAssets(input.assets, limits, (issue) => assetIssues.push(issue));
+  const projectBlock = input.project === undefined ? null
+    : validateBlock(input.project, PROJECT_ROWS, 'project', 'Project', '', {}, push);
 
   const colors = palette.sectionColors;
   const sections = raw.map((s0, i) => validateSection(s0, i, limits, colors[i % colors.length], issues,
@@ -687,11 +757,22 @@ function validateV2(input, { limits, palette, knownRevision, revision }) {
   }
   issues.push(...assetIssues);
 
+  if (revision > knownRevision) {
+    // the keys outside `extensions` (a malformed extension key is not a newer setting) and other than whole asset entries
+    // (an unused asset, an asset of another kind), section indexes folded
+    const ignored = [...new Set(issues
+      .filter((i) => i.code === 'dropped-unknown' && !/^assets(\[\d+\])?$/.test(i.path) && !/(^|\.)extensions\./.test(i.path))
+      .map((i) => i.path.replace(/\[\d+\]/g, '[]')))];
+    issues.unshift({ path: 'version', code: 'newer-revision', severity: 'warning',
+      message: ImportMessages.newerRevision(String(input.version), knownRevision, ignored), from: input.version, to: `2.${knownRevision}` });
+  }
+  budgetIssues(sections, exportLimits, push);
+
   return {
     ok: true,
     project: {
-      version: `2.${knownRevision}`, format: FORMAT, sections, mesh_mode: meshMode, display, panel_id_style: panelIdStyle,
-      camera, props, assets: kept, extensions,
+      version: `2.${knownRevision}`, format: FORMAT, ...(projectBlock ? { project: projectBlock } : {}), sections,
+      mesh_mode: meshMode, display, panel_id_style: panelIdStyle, camera, props, assets: kept, extensions,
     },
     issues,
   };

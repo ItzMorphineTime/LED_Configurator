@@ -201,3 +201,12 @@
     color: var(--color-text-primary);
     background: var(--color-surface-2);
 }
+
+/* 07 D1: disabled at the 200-section cap (its title says why) */
+.add-section-btn:disabled,
+.add-section-btn:disabled:hover {
+    border-color: var(--color-border-strong);
+    color: var(--color-text-disabled);
+    background: transparent;
+    cursor: not-allowed;
+}

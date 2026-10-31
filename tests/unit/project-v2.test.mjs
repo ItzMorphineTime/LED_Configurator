@@ -91,7 +91,11 @@ describe('project file v2: the writer (07 4.2, 08 4.6)', () => {
     const doc = serializer.write(p);
     assert.equal(VERSION, '2.0');
     assert.equal(KNOWN_REVISION, 0);
-    assert.deepEqual(REVISIONS[0], Object.keys(doc));
+    // 07 D1: `project` is written only for a named (or annotated) project
+    assert.deepEqual(REVISIONS[0].filter((k) => k !== 'project'), Object.keys(doc));
+    p.meta.assign({ name: 'Stage A', notes: '' });
+    assert.deepEqual(Object.keys(serializer.write(p)), REVISIONS[0]);
+    assert.deepEqual(serializer.write(p).project, { name: 'Stage A', notes: '' });
     assert.deepEqual(Object.keys(doc.display), ['content', 'led_layout', 'wireframe', 'show_frame', 'show_grid', 'show_safe_distance']);
     assert.deepEqual(Object.keys(doc.panel_id_style), ['border_thickness', 'font_size', 'font_color', 'section_label_enabled',
       'section_label_font_size', 'section_label_color']);
@@ -122,11 +126,11 @@ describe('project file v2: the validator (07 4.7, 08 6.16)', () => {
         const textureNames = variant === 'zip' ? p.wall.sections.map((s, i) => (i % 2 ? null : `S${i}.png`)) : null;
         const doc = JSON.parse(json2(serializer.write(p, { variant, textureNames })));
         const r = serializer.read(doc);
-        assert.deepEqual(r.issues, [], `project #${k} ${variant}: no issue`);
+        assert.deepEqual(r.issues.filter((i) => i.code !== 'budget'), [], `project #${k} ${variant}: no issue (07 D2: a budget note is no correction)`);
         assert.equal(r.scope, 'full');
         assert.deepEqual(r.project, strip(doc), `project #${k} ${variant}: strip(validate(file)) equals strip(file)`);
         const again = validateProject(r.project, { palette: { sectionColors: Palette.sectionColors }, revision: KNOWN_REVISION });
-        assert.deepEqual(again.issues, [], `project #${k}: idempotent`);
+        assert.deepEqual(again.issues, r.issues.filter((i) => i.code === 'budget'), `project #${k}: idempotent (the same budget notes)`);
         assert.deepEqual(again.project, r.project);
       }
     }
@@ -169,7 +173,8 @@ describe('project file v2: the validator (07 4.7, 08 6.16)', () => {
     assert.equal(r.ok, true);
     const w = r.issues.filter((i) => i.severity === 'warning').map((i) => i.message);
     assert.deepEqual(w, [
-      'Some settings were saved by a newer version and were ignored.',
+      'Some settings were saved by a newer version and were ignored (file format 2.9, this app reads 2.0): '
+        + 'sections[].face_orientation, display.show_pivot_marker, camera.t_stop, props.tree, pivot, hdri, weird.',
       `Section 1 "A": Panel Colour "red;outline:3px solid lime" → "${Palette.sectionColors[0]}"`,
       'Section 1 "A": Logo position "nowhere" → "center"',
       'Section 1 "A": Logo scale 9 → 1',

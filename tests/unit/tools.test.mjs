@@ -326,7 +326,8 @@ describe('tools/make-cap-wall.mjs and tests/fixtures/normals-max-wall.json (01 T
     assert.equal(doc.mesh_mode, 'combined');
     assert.deepEqual(CAP_WALL, { sections: 200, panelCols: 50, panelRows: 20, panelWidth: 500, panelHeight: 500, ledX: 32, ledY: 32 });
     const read = new ProjectSerializer({ palette: Palette }).read(doc);
-    assert.deepEqual(read.issues, [], 'the cap wall imports with no issue (fidelity, 07 4.7)');
+    // 07 D2: 200,000 panels and a 320,000 px atlas are two budget notes, no correction
+    assert.deepEqual(read.issues.map((i) => i.code), ['budget', 'budget'], 'the cap wall imports with no correction (fidelity, 07 4.7)');
     const sections = sectionsFromProject(read.project);
     assert.equal(read.project.mesh_mode, 'combined');
     assert.equal(sections.length, 200);

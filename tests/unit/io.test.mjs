@@ -525,7 +525,9 @@ describe('oracle equality (byte for byte)', () => {
       const actual = serializer.read(data);   // never throws
       assert.equal(actual.ok, !actual.issues.some((i) => i.severity === 'error'), `doc #${k}: ok iff no error`);
       if (actual.ok) {
-        assert.deepEqual(validateProject(actual.project, { palette: { sectionColors: Palette.legacySectionColors } }).issues, [],
+        // 07 D2: a `budget` note is raised again for the same wall (not a correction)
+        assert.deepEqual(validateProject(actual.project, { palette: { sectionColors: Palette.legacySectionColors } }).issues
+          .filter((i) => i.code !== 'budget'), [],
           `doc #${k}: the validated project validates again with no issue (idempotence, 07 4.7)`);
       } else {
         assert.equal(actual.project, null);
@@ -538,7 +540,7 @@ describe('oracle equality (byte for byte)', () => {
         // colour is lower-cased (07 6.7 hex, no issue).
         valid++;
         assert.ok(actual.ok, `doc #${k}: a valid wall is accepted`);
-        assert.deepEqual(actual.issues.filter((i) => i.severity !== 'info'), [], `doc #${k}: no correction`);
+        assert.deepEqual(actual.issues.filter((i) => i.severity !== 'info' && i.code !== 'budget'), [], `doc #${k}: no correction`);
         assert.equal(actual.project.mesh_mode, expected.value.meshMode || null, `doc #${k} mesh mode`);
         const sections = sectionsFromProject(actual.project);
         sections.forEach((s, i) => {

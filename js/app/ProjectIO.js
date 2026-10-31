@@ -71,6 +71,19 @@ const ImportAlerts = Object.freeze({
     if (warnings.length > 10) lines.push(`• …and ${warnings.length - 10} more`);
     return `Imported with ${warnings.length} correction(s):\n${lines.join('\n')}`;
   },
+  /**
+   * The alert of an applied import: M-IMP-5 over the warnings that are corrections, then (07 D2) one "Note: " line per
+   * `budget` warning (a note about the wall, not a correction); null when there is neither.
+   * @param {{severity: string, code: string, message: string}[]} issues
+   * @returns {string|null}
+   */
+  report: (issues) => {
+    const warnings = issues.filter((i) => i.severity === 'warning');
+    const corrections = warnings.filter((w) => w.code !== 'budget');
+    const notes = warnings.filter((w) => w.code === 'budget').map((w) => `Note: ${w.message}`);
+    const parts = corrections.length ? [ImportAlerts.corrections(corrections), ...notes] : notes;
+    return parts.length ? parts.join('\n\n') : null;
+  },
 });
 
 /** The single anchor-download sequence (legacy 5082-5091 == 4547-4553 == 4932-4938). */
@@ -620,8 +633,8 @@ export class ProjectIO {
         this.#wallController.applyImport({
           sections: this.#sectionsFromProject(result.project), meshMode: result.project.mesh_mode, logos: null,
         });
-        const corrections = result.issues.filter((issue) => issue.severity === 'warning');
-        if (corrections.length) this.#dialogs.alert(ImportAlerts.corrections(corrections));
+        const report = ImportAlerts.report(result.issues);
+        if (report) this.#dialogs.alert(report);
       } catch (err) {
         this.#dialogs.alert('Error parsing JSON file: ' + err.message);
       }
@@ -736,7 +749,7 @@ export class ProjectIO {
     }
     // 11-12
     r.bus.emit(Events.PROJECT_REPLACED, { reason: 'import', scope: 'full' });
-    const corrections = issues.filter((issue) => issue.severity === 'warning');
-    if (corrections.length) this.#dialogs.alert(ImportAlerts.corrections(corrections));
+    const report = ImportAlerts.report(issues);
+    if (report) this.#dialogs.alert(report);
   }
 }

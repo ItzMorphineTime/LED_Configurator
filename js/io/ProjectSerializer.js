@@ -17,7 +17,8 @@
 import { detectVersion, migrateV1toV2 } from './ProjectMigrations.js';
 import { validateProject } from './ProjectValidator.js';
 import {
-  FORMAT, VERSION, KNOWN_REVISION, DISPLAY_ROWS, PANEL_ID_STYLE_ROWS, CAMERA_ROWS, PROP_ROWS, PROPS, blockFromDomain,
+  FORMAT, VERSION, KNOWN_REVISION, DISPLAY_ROWS, PANEL_ID_STYLE_ROWS, CAMERA_ROWS, PROP_ROWS, PROPS, PROJECT_ROWS,
+  blockFromDomain,
 } from './ProjectSchema.js';
 
 /**
@@ -46,7 +47,8 @@ export class ProjectSerializer {
   /**
    * Builds the JSON document of the project (call JSON.stringify(result, null, 2) to get the file text; no trailing
    * newline, no timestamp, 07 C10). Since 08 P2-13e (B-L31 fixed) the v2 document of 07 4.2 in its key order:
-   *   version, format, sections[] (name, id, panel, led_resolution with the derived pixel_pitch_mm, curvature with the
+   *   version, format, [project: name and notes, only while either differs from its default (07 D1)],
+   *   sections[] (name, id, panel, led_resolution with the derived pixel_pitch_mm, curvature with the
    *   derived type, color, logo, ['zip': texture_file], extensions), mesh_mode, display, panel_id_style, camera,
    *   props {person, car}, assets[] (one inline logo per distinct image, in order of first use), totals (derived),
    *   extensions.
@@ -110,9 +112,11 @@ export class ProjectSerializer {
     const props = {};
     for (const p of PROPS) props[p.key] = blockFromDomain(PROP_ROWS, project[p.key]);
 
+    const meta = project.meta;
     return {
       version: VERSION,
       format: FORMAT,
+      ...(meta && !meta.isDefault() ? { project: blockFromDomain(PROJECT_ROWS, meta) } : {}),
       sections,
       mesh_mode: project.meshMode,
       display: blockFromDomain(DISPLAY_ROWS, project.display),

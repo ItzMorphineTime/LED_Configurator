@@ -298,9 +298,15 @@ Release note: imported files are checked before anything changes. A value the ap
 text, a fractional column count, a value outside its range, an invalid colour, a duplicate section id, an unknown mesh
 mode) is corrected, and one message lists every correction. A file that is not a project, has no sections, has more
 than 200 sections, was saved by a newer version or is larger than 179 MB is refused with a message, and the current
-wall stays as it was. A wall can have at most 200 sections; Add Section says so at the limit. Importing a file also
+wall stays as it was. A wall can have at most 200 sections; at the limit the Add Wall Section button is disabled and its
+tooltip says why. Importing a file also
 clears the section logos (a version 1.0 file has none), so a logo can no longer reappear on an imported section that
 happens to reuse an old section id.
+
+Release note: a project file saved by a newer version of the app opens with a message that names the settings this
+version cannot use (they are left out; data under `extensions` is kept as it is). A wall too large for the browser's
+images, or with more than 20,000 panels, opens with a note that says what will not work. A project's name and notes
+(`project`) are kept when a file has them; this version has no field to edit them yet.
 
 Release note: project files now save the camera, the props, the display settings, the panel ID styling and the section
 logos (format version 2.0). The pivot and orientation, the UV settings and UV edits are not saved yet; they will be added

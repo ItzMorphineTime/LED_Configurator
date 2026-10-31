@@ -257,7 +257,7 @@ export class WallController {
    */
   addSection() {
     if (!this.#project.wall.canAddSection()) {
-      this.#dialogs.alert(`A wall can have at most ${Wall.MAX_SECTIONS} sections.`);
+      this.#dialogs.alert(Wall.CAP_MESSAGE);
       return;
     }
     const newSection = this.#project.wall.appendLikeLast(this.#palette.sectionColors);

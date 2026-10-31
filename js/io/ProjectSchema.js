@@ -23,6 +23,7 @@ import { FILMBACK_PRESETS, CineCamera } from '../domain/CineCamera.js';
 import { Prop } from '../domain/Prop.js';
 import { LOGO_POSITIONS, LOGO_SCALE } from '../domain/LogoRules.js';
 import { deepFreeze, MAX_LOGO_ASSETS } from '../domain/rules.js';
+import { ProjectMeta } from '../domain/Project.js';
 
 /** The value of a project file's `format` key (07 4.2); a file may omit it (the version decides). */
 export const FORMAT = 'morph-led-project';
@@ -38,16 +39,20 @@ export const VERSION = `2.${KNOWN_REVISION}`;
 
 /** Revision -> the keys it introduced (07 C40; the dropped-unknown and newer-revision messages read it). */
 export const REVISIONS = deepFreeze({
-  0: ['version', 'format', 'sections', 'mesh_mode', 'display', 'panel_id_style', 'camera', 'props', 'assets', 'totals',
-    'extensions'],
+  0: ['version', 'format', 'project', 'sections', 'mesh_mode', 'display', 'panel_id_style', 'camera', 'props', 'assets',
+    'totals', 'extensions'],
 });
 
 /** The mesh modes a file may name (07 4.3); anything else becomes 'combined' with a warning. */
 export const MESH_MODES = deepFreeze(['combined', 'section', 'panel']);
 
-/** The top-level keys the writer emits, in the file's key order (07 4.2, the Phase-2 subset of 08 4.6). */
-export const TOP_LEVEL_KEYS = deepFreeze(['version', 'format', 'sections', 'mesh_mode', 'display', 'panel_id_style',
-  'camera', 'props', 'assets', 'totals', 'extensions']);
+/**
+ * The top-level keys the writer emits, in the file's key order (07 4.2, the Phase-2 subset of 08 4.6). `project` (07 D1)
+ * is written only while the project's name or notes differ from the defaults (absent means default), so every file of a
+ * project without them keeps its bytes.
+ */
+export const TOP_LEVEL_KEYS = deepFreeze(['version', 'format', 'project', 'sections', 'mesh_mode', 'display',
+  'panel_id_style', 'camera', 'props', 'assets', 'totals', 'extensions']);
 
 /** The keys of one section the writer emits, in the file's key order (07 4.2); texture_file only in the 'zip' variant. */
 export const SECTION_KEYS = deepFreeze(['name', 'id', 'panel', 'led_resolution', 'curvature', 'color', 'logo',
@@ -60,8 +65,10 @@ export const DERIVED_TOP_LEVEL_KEYS = deepFreeze(['generator', 'totals']);
  * The 07 v2.0 keys whose state does not exist yet (07 4.2, 08 4.6): known, validated as present and dropped with one
  * dropped-unknown info each. A feature's landing commit moves its key from here into the tables above.
  */
-export const KNOWN_UNAPPLIED_KEYS = deepFreeze(['project', 'pivot', 'uv', 'atlas', 'hdri', 'production', 'measurements',
-  'viewport']);
+export const KNOWN_UNAPPLIED_KEYS = deepFreeze(['pivot', 'uv', 'atlas', 'hdri', 'production', 'measurements', 'viewport']);
+
+/** More panels than this raise the `budget` warning on import (07 4.7, 6.7). */
+export const MAX_PANELS_BUDGET = 20000;
 
 /** The LED pixel layouts of the #led-layout select (07 4.3). */
 export const LED_LAYOUTS = deepFreeze(['single-dot', 'rgb-triangle', 'rgb-stripe', 'rgb-horizontal', 'square']);
@@ -109,7 +116,9 @@ export const SECTION_LABELS = deepFreeze({ name: 'Section Name', id: 'id', color
  *   of the correction messages (08 3.3)
  * @property {string} key
  * @property {string} field
- * @property {'bool'|'number'|'int'|'enum'|'hex'} type
+ * @property {'bool'|'number'|'int'|'enum'|'hex'|'text'} type
+ * @property {number} [maxLength]  text: the most UTF-16 code units (never splitting a pair)
+ * @property {boolean} [trim]      text: trimmed after the control characters are stripped
  * @property {number} [min]
  * @property {number} [max]
  * @property {ReadonlyArray<string>} [values]  enum values
@@ -117,6 +126,15 @@ export const SECTION_LABELS = deepFreeze({ name: 'Section Name', id: 'id', color
  * @property {string} label
  * @property {boolean} [viewOnly]  view-only (07 4.4 rule 5): excluded from a future history variant
  */
+
+/**
+ * `project` (07 4.3, D1) <-> `project.meta` (ProjectMeta): the name (sanitizeText to 64 units, trimmed, empty gives the
+ * default) and the notes (sanitizeText to 4000 units, not trimmed). No UI writes them yet (07 D8 adds the name field).
+ */
+export const PROJECT_ROWS = deepFreeze([
+  { key: 'name', field: 'name', type: 'text', maxLength: 64, trim: true, default: ProjectMeta.DEFAULT_NAME, label: 'Project name' },
+  { key: 'notes', field: 'notes', type: 'text', maxLength: 4000, trim: false, default: '', label: 'Project notes' },
+]);
 
 /** `display` (07 4.3) <-> `project.display` (DisplaySettings). */
 export const DISPLAY_ROWS = deepFreeze([
@@ -274,7 +292,8 @@ export function sectionsFromProject(project) {
  * @param {object} project  the `project` of a successful v2 validateProject
  * @returns {{sections: WallSection[], meshMode: string, display: object, panelIdStyle: object, camera: object,
  *            person: object, car: object, logos: Array<{sectionId: number, assetId: string, position: string, scale: number}>,
- *            assets: object[], extensions: object}}
+ *            assets: object[], extensions: object, meta: {name: string, notes: string}|null}}  meta: null without a
+ *   `project` key (absent means default, 07 D1)
  */
 export function stateFromProject(project) {
   return {
@@ -290,5 +309,6 @@ export function stateFromProject(project) {
     })),
     assets: project.assets,
     extensions: project.extensions,
+    meta: project.project ? blockToDomain(PROJECT_ROWS, project.project) : null,
   };
 }

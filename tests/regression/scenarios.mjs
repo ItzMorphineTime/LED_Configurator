@@ -11,6 +11,7 @@ import { PHASE2_SCENARIOS } from './scenarios-phase2.mjs';
 import { FEATURE_SCENARIOS } from './scenarios-features.mjs';
 import { PLATFORM_SCENARIOS } from './scenarios-platform.mjs';
 import { UV_SCENARIOS } from './scenarios-uv.mjs';
+import { PROJECT_SCENARIOS } from './scenarios-project.mjs';
 
 const MODES = ['combined', 'section', 'panel'];
 const card = (i) => `#wall-sections > :nth-child(${i + 1})`;
@@ -614,6 +615,8 @@ export const SCENARIOS = {
     ...FEATURE_SCENARIOS,
     // The platform scenarios of scenarios-platform.mjs (07 section 8.3: the camera preview of R1/R2).
     ...PLATFORM_SCENARIOS,
-    // The UV scenarios of scenarios-uv.mjs (04 section 8.2), registered last.
+    // The UV scenarios of scenarios-uv.mjs (04 section 8.2).
     ...UV_SCENARIOS,
+    // The project-file scenarios of scenarios-project.mjs (07 section 8.3, D2), registered last.
+    ...PROJECT_SCENARIOS,
 };

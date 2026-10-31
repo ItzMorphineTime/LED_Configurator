@@ -274,6 +274,10 @@ export class Wall {
    *  validator refuses a file with more (M-IMP-3). */
   static MAX_SECTIONS = 200;
 
+  /** M-SEC-1 (08 3.3): the alert of a programmatic Add Section at the cap, and (07 D1, 3.9) the title of the disabled
+   *  Add Section button. */
+  static CAP_MESSAGE = `A wall can have at most ${Wall.MAX_SECTIONS} sections.`;
+
   /** @type {WallSection[]} */
   #sections;
   /** @type {number} where allocateId (appendLikeLast) starts looking for a free id (legacy global 1409); recomputed by

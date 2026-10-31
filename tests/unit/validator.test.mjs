@@ -290,7 +290,7 @@ describe('the pipeline (ProjectSerializer.read) on the harness documents and the
       if (!r.ok) continue;
       accepted++;
       const again = validateProject(r.project, { palette: LEGACY_COLORS });
-      assert.deepEqual(again.issues, [], `doc #${k}`);
+      assert.deepEqual(again.issues, r.issues.filter((i) => i.code === 'budget'), `doc #${k} (07 D2: only the same budget notes)`);
       assert.deepEqual(again.project, r.project, `doc #${k}`);
       for (const s of r.project.sections) {
         for (const row of SECTION_NUMBER_ROWS) {
@@ -318,8 +318,150 @@ describe('the pipeline (ProjectSerializer.read) on the harness documents and the
       const doc = section({ name: s.name, color: s.color });
       for (const [field, [g, key]] of Object.entries(groups)) doc[g] = { ...doc[g], [key]: s[field] };
       const r = validate([doc]);
-      assert.deepEqual(r.issues, [], `raw ${raw}`);
+      assert.deepEqual(r.issues.filter((i) => i.code !== 'budget'), [], `raw ${raw}`);
       assert.deepEqual(r.project.sections[0], doc, `raw ${raw}`);
     }
+  });
+});
+
+// ---- 07 D2: the v2 path completed (budget, newer revision, the project block, ids at the top of the range) ----------
+
+const v2doc = (over = {}) => ({ version: '2.0', format: 'morph-led-project', sections: [section()], ...over });
+const readDoc = (doc) => serializer.read(JSON.parse(JSON.stringify(doc)));
+const panelOf = (columns, rows) => ({ columns, rows, width_mm: 500, height_mm: 500 });
+
+describe('07 D2: budget notes, newer revisions, the project block (D1), the id fallback', () => {
+  test('budget (07 4.7, 6.7): an atlas beyond the canvas limits, or more than 20,000 panels, is a warning; the file opens', () => {
+    const wide = readDoc(v2doc({ sections: [section({ panel: panelOf(50, 1), led_resolution: { x: 1000, y: 64 } })] }));
+    assert.ok(wide.ok);
+    assert.deepEqual(wide.issues.map((i) => [i.code, i.severity, i.path]), [['budget', 'warning', 'sections']]);
+    assert.equal(wide.issues[0].message, "The wall's panel-ID image needs at least 50000×64 px, more than a browser can create "
+      + '(32767 px per side, 268 MP): Export Panel IDs will refuse it and the ZIPs will leave such textures out.');
+    const many = readDoc(v2doc({ sections: Array.from({ length: 200 }, (_, i) => section({ id: i, panel: panelOf(20, 20), led_resolution: { x: 8, y: 8 } })) }));
+    assert.deepEqual(many.issues.map((i) => i.message), ['The wall has 80000 panels, more than 20000: the 3D view and the exports may be very slow.']);
+    // the v1 path raises it too, after the migrated info; exportLimits is injected (the validator never probes)
+    const v1 = serializer.read({ sections: [{ panel: { columns: 50, rows: 1 }, led_resolution: { x: 1000, y: 64 } }] });
+    assert.deepEqual(v1.issues.map((i) => i.code), ['migrated', 'budget']);
+    const small = validateProject(v2doc(), { revision: 0, exportLimits: { maxSide: 100, maxArea: 1e9 } });
+    assert.deepEqual(small.issues.map((i) => i.code), ['budget'], 'the default 5 x 32 LED columns exceed 100 px');
+    assert.deepEqual(validateProject(v2doc(), { revision: 0 }).issues, [], 'the default wall fits');
+  });
+
+  test('newer revision (07 4.4 rule 4): one warning first, naming the format and the ignored keys; extensions kept verbatim', () => {
+    const r = readDoc(v2doc({
+      version: '2.4', pivot: { mode: 'x' },
+      sections: [section({ uv_transform: {}, extensions: { 'acme.x': { deep: [1, 2] } } }), section({ id: 1, uv_transform: {} })],
+      display: { show_pivot_marker: false }, extensions: { 'acme.y': 'kept' },
+    }));
+    assert.ok(r.ok);
+    assert.equal(r.issues[0].code, 'newer-revision');
+    assert.equal(r.issues[0].message, 'Some settings were saved by a newer version and were ignored (file format 2.4, this app '
+      + 'reads 2.0): sections[].uv_transform, display.show_pivot_marker, pivot.');
+    assert.deepEqual(r.issues.slice(1).map((i) => [i.code, i.severity]), Array(4).fill(['dropped-unknown', 'info']));
+    assert.deepEqual(r.project.sections[0].extensions, { 'acme.x': { deep: [1, 2] } });
+    assert.deepEqual(r.project.extensions, { 'acme.y': 'kept' });
+    assert.equal(r.project.version, '2.0');
+    assert.deepEqual(readDoc(v2doc({ pivot: {} })).issues.map((i) => i.code), ['dropped-unknown'], 'the same key in a 2.0 file: info only');
+    assert.equal(readDoc(v2doc({ version: '2.1' })).issues[0].message,
+      'Some settings were saved by a newer version and were ignored (file format 2.1, this app reads 2.0).');
+    const keys = Object.fromEntries(Array.from({ length: 10 }, (_, k) => [`k${k}`, 1]));
+    assert.match(readDoc(v2doc({ version: '2.1', ...keys })).issues[0].message, /: k0, k1, k2, k3, k4, k5, k6, k7, …and 2 more\.$/);
+  });
+
+  test('the project block (07 D1): name stripped, cut to 64 units, trimmed, empty -> the default; notes untrimmed; absent stays absent', () => {
+    const r = readDoc(v2doc({ project: { name: `  A\u0000B ${'x'.repeat(80)}`, notes: ' n‮ ', client: 'X' } }));
+    assert.deepEqual(r.project.project, { name: `AB ${'x'.repeat(59)}`, notes: ' n ' }, 'stripped, cut to 64 (with the leading spaces), then trimmed');
+    assert.deepEqual(r.issues.map((i) => [i.path, i.code]), [['project.name', 'sanitized'], ['project.name', 'truncated'],
+      ['project.name', 'sanitized'], ['project.notes', 'sanitized'], ['project.client', 'dropped-unknown']]);
+    assert.deepEqual(validateProject(r.project, { revision: 0, palette: { sectionColors: Palette.sectionColors } }).issues, [], 'idempotent');
+    assert.deepEqual(readDoc(v2doc({ project: { name: ' ' } })).project.project, { name: 'Untitled stage', notes: '' });
+    assert.equal(readDoc(v2doc({ project: { name: 7 } })).project.project.name, '7');
+    assert.equal('project' in readDoc(v2doc()).project, false);
+    assert.deepEqual(Object.keys(readDoc(v2doc({ project: {} })).project).slice(0, 4), ['version', 'format', 'project', 'sections']);
+  });
+
+  test('ids at the top of the range on the v2 path (07 6.8): 2147483647 and a duplicate re-validate with no issue', () => {
+    const r = readDoc(v2doc({ sections: [section({ id: 2147483647 }), section({ id: 2147483647 }), section({ id: 0 })] }));
+    assert.deepEqual(r.project.sections.map((s) => s.id), [2147483647, 1, 0]);
+    assert.deepEqual(r.issues.map((i) => i.code), ['reassigned-id']);
+    assert.deepEqual(validateProject(r.project, { revision: 0, palette: { sectionColors: Palette.sectionColors } }).issues, []);
+  });
+
+  test('201 sections are refused (limit-exceeded); logo assets after the 64th are dropped (sanitized)', () => {
+    const over = readDoc(v2doc({ sections: Array.from({ length: 201 }, (_, i) => section({ id: i })) }));
+    assert.deepEqual([over.ok, over.issues[0].code], [false, 'limit-exceeded']);
+    const png = (k) => `data:image/png;base64,${Buffer.from(`png-${k}`).toString('base64')}`;
+    const assets = Array.from({ length: 65 }, (_, k) => ({ id: `a_${k}`, kind: 'logo', name: `l${k}.png`, mime: 'image/png', storage: 'inline', data_uri: png(k) }));
+    const sections = assets.map((a, i) => section({ id: i, logo: { asset_id: a.id, position: 'center', scale: 0.3 } }));
+    const r = readDoc(v2doc({ sections, assets }));
+    assert.equal(r.project.assets.length, 64);
+    assert.deepEqual(r.issues.filter((i) => i.path === 'assets[64]').map((i) => i.code), ['sanitized']);
+    assert.equal(r.project.sections[64].logo, null, 'its section loses the logo (missing-asset)');
+  });
+});
+
+describe('07 D2: fuzz of the v2 path (2,000 seeded hostile documents)', () => {
+  test('never throws; output re-validates to itself; Object.prototype untouched; every number finite; ids unique in range', () => {
+    const rand = rng(0x07d2);
+    const pick = (a) => a[Math.floor(rand() * a.length)];
+    const hostileObject = () => JSON.parse('{"__proto__": {"polluted": true}, "constructor": {"prototype": {"polluted": 1}}, "prototype": 3}');
+    let deep = 1;
+    for (let d = 0; d < 12; d++) deep = { 'acme.d': deep };
+    const POOL = [NaN, Infinity, -Infinity, '1e400', '-1e400', -0, -5, 2.5, 0.4, 1e12, -1e12, '10', ' 7 ', '', null, true, false,
+      [], {}, [[1, [2]]], 'x'.repeat(300), '<img src=x onerror=alert(1)>', '#ABC', 'red', 2147483647, deep, hostileObject];
+    // a fresh copy of every object value (a shared one could become a cycle under later mutations)
+    const value = () => { const v = pick(POOL); return typeof v === 'function' ? v() : v !== null && typeof v === 'object' ? JSON.parse(JSON.stringify(v)) : v; };
+    const png = `data:image/png;base64,${Buffer.from('fake png bytes').toString('base64')}`;
+    const base = () => ({
+      version: '2.0', format: 'morph-led-project', project: { name: 'P', notes: '' },
+      sections: [0, 1, 2].map((i) => ({ ...section({ id: i, name: `S${i}` }), logo: i === 1 ? { asset_id: 'a_1', position: 'center', scale: 0.5 } : null, extensions: { 'acme.k': [i] } })),
+      mesh_mode: 'section',
+      display: { content: 'ledSim', led_layout: 'square', wireframe: true, show_frame: false, show_grid: true, show_safe_distance: false },
+      panel_id_style: { border_thickness: 8, font_size: 0, font_color: '#ffffff', section_label_enabled: true, section_label_font_size: 0, section_label_color: '#888888' },
+      camera: { enabled: true, filmback: 'custom', filmback_width_mm: 30, filmback_height_mm: 20, focal_length_mm: 50,
+        position_m: { x: 1, y: 2, z: 3 }, rotation_deg: { x: 4, y: 500, z: 6 } },
+      props: { person: { visible: true, position_m: { x: 1, z: 2 }, rotation_y_deg: 3, scale: 1 }, car: { visible: false, position_m: { x: 4, z: 3 }, rotation_y_deg: 0, scale: 2 } },
+      assets: [{ id: 'a_1', kind: 'logo', name: 'l.png', mime: 'image/png', bytes: 14, sha256: 'ab'.repeat(32), storage: 'inline', data_uri: png }],
+      extensions: { 'acme.top': { a: 1 } },
+    });
+    /** Every [container, key] of a JSON tree (objects and arrays), depth first. */
+    const slots = (v, out = []) => {
+      if (v !== null && typeof v === 'object') for (const k of Object.keys(v)) { out.push([v, k]); slots(v[k], out); }
+      return out;
+    };
+    const finiteNumbers = (v, path) => {
+      if (typeof v === 'number') assert.ok(Number.isFinite(v), `${path} = ${v}`);
+      else if (v !== null && typeof v === 'object') for (const k of Object.keys(v)) finiteNumbers(v[k], `${path}.${k}`);
+    };
+    const opts = { palette: { sectionColors: Palette.sectionColors }, revision: 0 };
+    let accepted = 0;
+    for (let k = 0; k < 2000; k++) {
+      const doc = base();
+      for (let m = 0, n = 1 + Math.floor(rand() * 6); m < n; m++) {
+        const [obj, key] = pick(slots(doc));
+        const r = rand();
+        if (r < 0.7) obj[key] = value();
+        else if (r < 0.85 && !Array.isArray(obj)) obj[`x${m}`] = value();
+        else if (Array.isArray(obj)) obj.push(value());
+        else Object.defineProperty(obj, '__proto__', { value: { polluted: true }, enumerable: true, configurable: true, writable: true });
+      }
+      if (rand() < 0.02) doc.sections = Array.from({ length: 201 }, () => section());
+      const r = validateProject(doc, opts);
+      assert.equal(({}).polluted, undefined, `doc #${k}: no prototype pollution`);
+      if (!r.ok) {
+        assert.equal(r.project, null);
+        continue;
+      }
+      accepted++;
+      const again = validateProject(r.project, opts);
+      assert.deepEqual(again.issues, r.issues.filter((i) => i.code === 'budget'), `doc #${k}: idempotent`);
+      assert.deepEqual(again.project, r.project, `doc #${k}: the same project`);
+      finiteNumbers(r.project, `doc #${k}`);
+      const ids = r.project.sections.map((s) => s.id);
+      assert.ok(ids.length >= 1 && ids.length <= 200 && new Set(ids).size === ids.length
+        && ids.every((id) => Number.isInteger(id) && id >= 0 && id <= 2147483647), `doc #${k} ids`);
+      assert.ok(r.project.assets.every((a) => r.project.sections.some((s) => s.logo && s.logo.asset_id === a.id)), `doc #${k}: only referenced assets`);
+    }
+    assert.ok(accepted > 1500, `accepted ${accepted}`);
   });
 });

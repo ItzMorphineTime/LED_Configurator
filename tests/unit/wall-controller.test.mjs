@@ -1393,6 +1393,21 @@ describe('legacy parity: panels + WallController vs index.html@cd3fd3f', { skip:
     assert.ok(last.includes('<option value="bottom-right" selected>'), 'the stored position is rendered');
     assert.ok(last.includes('>Renamed</div>'), 'the renamed section is listed');
   });
+
+  test('07 D1: #add-section-btn is disabled at 200 sections with M-SEC-1 as its title, re-enabled below; untouched otherwise', () => {
+    const mdoc = new FakeDocument(panelMarkup());
+    const M = buildModern(mdoc);
+    const btn = mdoc.byId('add-section-btn');
+    const removed = [];
+    btn.removeAttribute = (name) => { removed.push(name); delete btn[name]; };
+    M.sectionList.render();
+    assert.equal(btn.disabled, undefined, 'below the cap the button is never written');
+    M.project.wall.replaceAll(Array.from({ length: 200 }, (_, i) => new WallSection(fields({ id: i }))));
+    M.sectionList.render();
+    assert.deepEqual([btn.disabled, btn.title], [true, 'A wall can have at most 200 sections.']);
+    M.wallController.deleteSection(7);
+    assert.deepEqual([btn.disabled, removed], [false, ['title']]);
+  });
 });
 
 describe('HeaderStats', () => {

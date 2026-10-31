@@ -78,6 +78,19 @@ export class DisplaySettings {
   }
 
   /**
+   * The setter of validated values (07 5.5.2 step 3, D5): the display of an applied project file. Only the given known
+   * fields are written; the view-only showGrid and the safe-distance flag stay with their use cases (SceneManager.toggleGrid,
+   * CameraController.setSafeDistanceEnabled), which ProjectSession calls when they differ.
+   * Side effects: writes the given fields.
+   * @param {{content?: string, ledLayout?: string, wireframe?: boolean, showFrame?: boolean}} fields
+   */
+  assign(fields) {
+    for (const key of ['content', 'ledLayout', 'wireframe', 'showFrame']) {
+      if (fields[key] !== undefined) this[key] = fields[key];
+    }
+  }
+
+  /**
    * Panel-ID toggle, the mirror image of setLedSim.
    * Ports: index.html@cd3fd3f lines 4189, 4192-4196.
    * Side effects: writes content.
@@ -135,6 +148,48 @@ export class PanelIdStyle {
     this[key] = Object.prototype.hasOwnProperty.call(PanelIdStyle.RULES, key) ? PanelIdStyle.RULES[key](rawOrValue) : rawOrValue;
     return this[key];
   }
+
+  /**
+   * The setter of validated values (07 5.5.2 step 3, D5): the panel-ID style of an applied project file, stored as given
+   * (the validator already applied the ranges of RULES); absent fields are left as they are.
+   * Side effects: writes the given fields.
+   * @param {{borderThickness?: number, fontSize?: number, fontColor?: string, sectionLabelEnabled?: boolean,
+   *          sectionLabelFontSize?: number, sectionLabelColor?: string}} fields
+   */
+  assign(fields) {
+    for (const key of ['borderThickness', 'fontSize', 'fontColor', 'sectionLabelEnabled', 'sectionLabelFontSize', 'sectionLabelColor']) {
+      if (fields[key] !== undefined) this[key] = fields[key];
+    }
+  }
+}
+
+/** The project's name and notes (07 4.1, 4.3, D1): the `project` key of the file; no UI writes them yet (07 D8). */
+export class ProjectMeta {
+  /** The name of a project that has none (07 4.3). */
+  static DEFAULT_NAME = 'Untitled stage';
+
+  /** @type {string} at most 64 UTF-16 code units, trimmed, never empty */
+  name = ProjectMeta.DEFAULT_NAME;
+  /** @type {string} at most 4000 UTF-16 code units */
+  notes = '';
+
+  /**
+   * The setter of validated values (07 5.5.2 step 3): absent fields take their defaults (absent means default).
+   * Side effects: writes name and notes.
+   * @param {{name?: string, notes?: string}|null} fields  null: the defaults
+   */
+  assign(fields) {
+    this.name = typeof fields?.name === 'string' && fields.name !== '' ? fields.name : ProjectMeta.DEFAULT_NAME;
+    this.notes = typeof fields?.notes === 'string' ? fields.notes : '';
+  }
+
+  /**
+   * Side effects: none.
+   * @returns {boolean} both fields hold their defaults (the writer then omits the `project` key)
+   */
+  isDefault() {
+    return this.name === ProjectMeta.DEFAULT_NAME && this.notes === '';
+  }
 }
 
 /** The whole configurable state of one LED wall project. */
@@ -177,6 +232,8 @@ export class Project {
   /** @type {Readonly<object>} the top-level `extensions` of the project file (07 4.4 rule 4; 08 P2-13e): validated,
    *  frozen and kept verbatim for a round trip; replaced only through setExtensions */
   extensions = Object.freeze({});
+  /** @type {ProjectMeta} the file's `project` key (07 D1): name and notes; written through ProjectMeta.assign */
+  meta = new ProjectMeta();
 
   /**
    * Side effects: none.

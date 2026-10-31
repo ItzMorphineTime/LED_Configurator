@@ -27,9 +27,11 @@
  * SELECTION_CHANGED mirror re-applied after every render; revealSection(id) (the section menu's "Change settings")
  * expands the card, scrolls it into view, focuses its first field and flashes it (`is-flashing`, css/features/
  * section-selection.css).
+ * 07 D1 (3.9): #add-section-btn is disabled at Wall.MAX_SECTIONS (200) with M-SEC-1 as its title, after every render.
  */
 import { Events } from '../core/EventBus.js';
 import { sectionKeyOf, isSectionKey } from '../core/sectionIds.js';
+import { Wall } from '../domain/Wall.js';
 import { byId, escapeHtml, setTitleWithWarning } from './dom.js';
 
 /**
@@ -188,6 +190,8 @@ export class SectionListPanel {
    * @type {import('../domain/WallSection.js').WallSection[]}
    */
   #renderedSections = [];
+  /** @type {boolean} whether #add-section-btn is disabled (07 D1); the markup starts enabled */
+  #addDisabled = false;
 
   /**
    * Looks up #wall-sections and #add-section-btn and subscribes WALL_SECTIONS_CHANGED:
@@ -321,6 +325,22 @@ export class SectionListPanel {
     });
     // 2026-10-31: the new cards keep the selected section's mark (a deleted section's card is gone; its deselect follows)
     if (this.#selectedKey !== null) this.#paintSelection();
+    this.#syncAddButton();
+  }
+
+  /**
+   * 07 D1 (3.9, 4.3): #add-section-btn is disabled while the wall has Wall.MAX_SECTIONS sections, with M-SEC-1 as its
+   * title (a programmatic addSection still alerts it). Written only when the state changes, so a wall below the cap
+   * never touches the button.
+   * Side effects: writes the button's disabled state and title on a change.
+   */
+  #syncAddButton() {
+    const full = !this.#project.wall.canAddSection();
+    if (full === this.#addDisabled) return;
+    this.#addDisabled = full;
+    this.#addButton.disabled = full;
+    if (full) this.#addButton.title = Wall.CAP_MESSAGE;
+    else this.#addButton.removeAttribute('title');
   }
 
   /**

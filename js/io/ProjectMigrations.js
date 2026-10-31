@@ -28,8 +28,31 @@ export const ImportMessages = Object.freeze({
   tooManySections: (n, max) => `Import failed: ${n} sections is more than the maximum of ${max}.`,
   /** the `migrated` info (not listed in M-IMP-5) */
   migrated: 'Converted from a version 1 project file.',
-  /** the `newer-revision` warning (07 4.4 rule 4; listed in M-IMP-5) */
-  newerRevision: 'Some settings were saved by a newer version and were ignored.',
+  /**
+   * the `newer-revision` warning (07 4.4 rule 4, 4.7; listed in M-IMP-5; 07 D2: it names the file's format version and
+   * the keys this build ignored, at most 8, section indexes folded to `sections[]`)
+   * @param {string} version  the file's "2.<n>"
+   * @param {number} known    KNOWN_REVISION
+   * @param {string[]} keys   the ignored key paths
+   * @returns {string}
+   */
+  newerRevision: (version, known, keys) => {
+    const shown = keys.length > 8 ? [...keys.slice(0, 8), `…and ${keys.length - 8} more`] : keys;
+    return `Some settings were saved by a newer version and were ignored (file format ${version}, this app reads 2.${known})`
+      + (shown.length ? `: ${shown.join(', ')}.` : '.');
+  },
+  /**
+   * the `budget` warnings (07 4.7, 6.7; 07 D2): the file opens, the note says what will not work
+   * @param {number} w  LED columns of the wall (the panel-ID atlas at 1 px per LED)
+   * @param {number} h  LED rows
+   * @param {{maxSide: number, maxArea: number}} limits
+   * @returns {string}
+   */
+  textureBudget: (w, h, limits) => `The wall's panel-ID image needs at least ${w}×${h} px, more than a browser can create `
+    + `(${limits.maxSide} px per side, ${Math.round(limits.maxArea / 1e6)} MP): Export Panel IDs will refuse it and the ZIPs `
+    + 'will leave such textures out.',
+  /** @param {number} n  the wall's panel count @param {number} max @returns {string} */
+  panelBudget: (n, max) => `The wall has ${n} panels, more than ${max}: the 3D view and the exports may be very slow.`,
 });
 
 /**
