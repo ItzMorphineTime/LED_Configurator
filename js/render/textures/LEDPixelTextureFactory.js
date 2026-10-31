@@ -313,5 +313,35 @@ export class LEDPixelTextureFactory {
   clearCache() {
     Object.values(this.#cache).forEach(tex => tex.dispose());
     this.#cache = {};
+    this.#canvasCache.clear();
+  }
+
+  /** @type {Map<string, HTMLCanvasElement>} the UV viewer's plain tile canvases, keyed like #cache (04 6.11) */
+  #canvasCache = new Map();
+
+  /**
+   * The LED tile of `color` in the current layout as a plain 64 x 64 canvas, for the UV viewer's LED background
+   * (04 5.3, 6.11): drawn exactly like tile()'s master, cached per colour and layout, with no THREE texture (so the
+   * viewer allocates no WebGL resource). clearCache() empties it with the masters.
+   * Side effects: on a miss, creates and draws one canvas.
+   * @param {*} color  a CSS colour string
+   * @returns {HTMLCanvasElement}
+   */
+  tileCanvas(color) {
+    const ledColor = new THREE.Color(color);
+    const key = `${ledColor.getHexString()}-${this.#display.ledLayout}`;
+    let canvas = this.#canvasCache.get(key);
+    if (!canvas) {
+      canvas = this.#doc.createElement('canvas');
+      const size = 64;
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = this.#theme.canvas.background;
+      ctx.fillRect(0, 0, size, size);
+      paintTile(ctx, size, this.#display.ledLayout, ledColor);
+      this.#canvasCache.set(key, canvas);
+    }
+    return canvas;
   }
 }

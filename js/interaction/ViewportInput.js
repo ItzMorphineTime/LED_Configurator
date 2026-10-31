@@ -1,6 +1,6 @@
 /**
  * @module interaction/ViewportInput
- * Viewport input routing: the G/R/L/P/O/Escape shortcut keys and the canvas pointer routing
+ * Viewport input routing: the G/R/L/P/O/U/Escape shortcut keys and the canvas pointer routing
  * (pilot | gizmo drag/hover | pick), registered in the legacy setupUI phase and order.
  * 03 T5 (docs/improvements/03-pivot.md 3.4, 5.4): the O key (pivot selection), the Escape order (a hooked gizmo drag is
  * cancelled first) and the gesture swallowing of a cancelled drag (the router's mousemove does nothing while
@@ -44,8 +44,10 @@ export class ViewportInput {
    *          selection: import('./SelectionManager.js').SelectionManager,
    *          pilot: import('./PilotController.js').PilotController, onPivotShortcut: () => void}} deps
    *   onPivotShortcut: the O key (03 3.4; App passes () => pivotController.toggleSelect())
+   * @param {{toggleUvViewer?: () => void}} [deps.commands]  04 3.6 path B: the U key (App passes
+   *   () => uvController.toggleViewer()); removed with the platform keymap (04 UV-18)
    */
-  constructor({ doc, win, sceneManager, interaction, gizmo, selection, pilot, onPivotShortcut }) {
+  constructor({ doc, win, sceneManager, interaction, gizmo, selection, pilot, onPivotShortcut, commands = {} }) {
     this.#doc = doc;
     this.#win = win;
     this.#sceneManager = sceneManager;
@@ -54,6 +56,20 @@ export class ViewportInput {
     this.#selection = selection;
     this.#pilot = pilot;
     this.#onPivotShortcut = onPivotShortcut;
+    this.#commands = commands;
+  }
+
+  /** @type {{toggleUvViewer?: () => void}} the injected commands of 04 3.6 path B */
+  #commands;
+
+  /**
+   * Whether this router handles canvas double-clicks (04 5.3): false in the legacy routing, true once spec 02's dblclick
+   * routing lands; App passes !handlesDoubleClick to the UV hover probe's doubleClick option.
+   * Side effects: none.
+   * @returns {boolean}
+   */
+  get handlesDoubleClick() {
+    return false;
   }
 
   /**
@@ -68,6 +84,8 @@ export class ViewportInput {
    * modifier). Escape first cancels a drag whose target implements endGizmoDrag (gizmo.cancelDrag(): the selection and
    * the mode are kept and the rest of the gesture is swallowed); otherwise pilot mode is left, else the selection and the
    * mode are cleared (legacy; legacy targets have no hook, so a mid-drag Escape on them is unchanged).
+   * 04 3.6 (path B, UV-12): U toggles the UV viewer (commands.toggleUvViewer), not in pilot mode. No existing key
+   * uses U (G R L P O N Shift+N, the WASD / QE / arrow movement keys and Escape).
    * Ports: index.html@cd3fd3f lines 4409-4434.
    * Side effects: adds 1 document keydown listener; the handler calls the gizmo, selection and pilot.
    */
@@ -89,6 +107,11 @@ export class ViewportInput {
         const interaction = this.#interaction;
         if (interaction.pilotMode || interaction.isDraggingGizmo || interaction.gestureCancelled) return;
         this.#onPivotShortcut();
+      } else if (e.key.toLowerCase() === 'u') {
+        // 04 3.6 (path B): U toggles the UV viewer; never in pilot mode (typing targets, modifiers and repeats are
+        // filtered above, so U typed into a field of the viewer never toggles it)
+        if (this.#interaction.pilotMode) return;
+        this.#commands.toggleUvViewer?.();
       } else if (e.key === 'Escape') {
         if (this.#interaction.isDraggingGizmo && gizmo.target?.endGizmoDrag) {
           gizmo.cancelDrag();

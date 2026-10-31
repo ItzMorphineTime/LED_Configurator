@@ -22,7 +22,6 @@ import { Theme } from '../theme/Theme.js';
 import { buildTheme } from '../theme/ThemeBridge.js';
 import { Project } from '../domain/Project.js';
 import { DebugViewSettings } from '../domain/DebugViewSettings.js';
-import { UvSettings } from '../domain/UvSettings.js';
 import { framingBounds } from '../geometry/WallLayout.js';
 import { WallMeshBuilder } from '../geometry/WallMeshBuilder.js';
 import { SceneManager } from '../render/SceneManager.js';
@@ -54,6 +53,9 @@ import { PropController } from './PropController.js';
 import { PivotController } from './PivotController.js';
 import { Downloader, ProjectIO } from './ProjectIO.js';
 import { DebugViewController } from './DebugViewController.js';
+import { UvViewModel } from './UvViewModel.js';
+import { UvController } from './UvController.js';
+import { UvFallbackHistory } from './UvFallbackHistory.js';
 import { runFontGate } from './fontGate.js';
 import { byId, createDialogs } from '../ui/dom.js';
 import { HeaderStats } from '../ui/HeaderStats.js';
@@ -66,6 +68,7 @@ import { PropControls } from '../ui/PropsPanel.js';
 import { ViewportToolbar } from '../ui/ViewportToolbar.js';
 import { ExportPanel } from '../ui/ExportPanel.js';
 import { DebugViewControls } from '../ui/DebugViewControls.js';
+import { UVViewer } from '../ui/UVViewer.js';
 import { bindCollapsibles } from '../ui/Collapsible.js';
 
 /**
@@ -113,13 +116,8 @@ export class App {
     const dialogs = createDialogs(win);
     // 06 T7; the owner's new-project defaults (03 12.11): section meshes, 'wall-center', Centre on −X
     const project = Project.createNew({ defaultSectionColor: theme.palette.defaultSectionColor });
-    // 04 UV-7 / UV-9: until 04 UV-14 adds the sidebar UV options, the UV settings can be chosen in the URL query
-    // (`?uv_layout=atlas`, `?panel_uvs=panel`); missing or unknown values keep the defaults. Session-only, like all UV state.
-    const query = new URLSearchParams(win.location?.search ?? '');
-    project.uv.assign({
-      combinedLayout: UvSettings.RULES.combinedLayout(query.get('uv_layout')),
-      panelUvs: UvSettings.RULES.panelUvs(query.get('panel_uvs')),
-    });
+    // 04 UV-14 retired the `?uv_layout=` / `?panel_uvs=` stopgap of UV-7 / UV-9: the UV settings are the sidebar's
+    // UV Mapping options (session-only, like all UV state until project file v2, 04 UV-5c).
     const display = project.display;
     const style = project.panelIdStyle;
     const logos = project.logos;
@@ -135,7 +133,8 @@ export class App {
 
     const interaction = new InteractionState();
     const keyboard = new KeyboardState({ doc, win });
-    const sceneManager = new SceneManager({ canvas: byId(doc, 'three-canvas'), win, display, theme });
+    const canvasEl = byId(doc, 'three-canvas');
+    const sceneManager = new SceneManager({ canvas: canvasEl, win, display, theme });
     const pointerRay = new PointerRay({ sceneManager });
     const ledTiles = new LEDPixelTextureFactory({ doc, display, theme });
     const panelIds = new PanelIdRenderer({ doc, style, logos, theme });
@@ -155,11 +154,12 @@ export class App {
     const debugController = new DebugViewController({ settings: debugSettings, wallView, normalsView, bus });
     const rig = new CameraRigView({ sceneManager, bus, theme });
     const safeDistance = new SafeDistanceView({ sceneManager, doc, theme });
+    const previewWindowEl = byId(doc, 'camera-preview-window');
     const preview = new PreviewWindow({
       doc,
       cine,
       elements: {
-        windowEl: byId(doc, 'camera-preview-window'),
+        windowEl: previewWindowEl,
         canvas: byId(doc, 'camera-preview-canvas'),
         resizeHandle: byId(doc, 'camera-preview-resize'),
         info: byId(doc, 'camera-preview-info'),
@@ -220,10 +220,22 @@ export class App {
       win,
       sectionsFromProject,
     });
+    // 04 UV-11 (5.3; path B, the owner's decision): the UV viewer's view model (its state in memory), the UV-only undo
+    // stack and the UV use cases, registered as a selection observer and a rebuild observer before the bootstrap
+    // rebuild, so the first onWallRebuilt caches the layout and fills the sidebar atlas note. Nothing reads the renderer
+    // here (maxTextureSize is a getter). UV state is session-only until project file v2 (04 UV-5c).
+    const uvViewModel = new UvViewModel({ project, panelIds, ledTiles, bus });
+    const uvController = new UvController({
+      project, wallController, view: wallView, viewModel: uvViewModel, history: new UvFallbackHistory(), bus,
+      maxTextureSize: () => sceneManager.renderer.capabilities.maxTextureSize,
+      raf: (fn) => win.requestAnimationFrame(fn),
+    });
+    selection.addObserver(uvController);
+    wallController.addRebuildObserver(uvController);
     // Panels: WALL_SECTIONS_CHANGED runs SectionListPanel then SectionLogosPanel, and DISPLAY_CONTENT_CHANGED runs
     // WallDisplayPanel then SectionLogosPanel (construction order = subscription order, ARCHITECTURE.md 5.2).
-    const sectionList = new SectionListPanel({ doc, project, wallController, bus, palette: theme.palette });
-    const displayPanel = new WallDisplayPanel({ doc, wallController, bus });
+    const sectionList = new SectionListPanel({ doc, project, wallController, bus, palette: theme.palette, uvController });
+    const displayPanel = new WallDisplayPanel({ doc, wallController, bus, uvController });
     // 03 T6 (5.8): the Wall Pivot panel, after the display panel (the sidebar order)
     const pivotPanel = new PivotPanel({ doc, project, pivotController, bus });
     const logosPanel = new SectionLogosPanel({ doc, project, wallController, bus });
@@ -233,10 +245,16 @@ export class App {
     const toolbar = new ViewportToolbar({ doc, orbit, sceneManager, gizmo, pilot, bus });
     const viewportInput = new ViewportInput({
       doc, win, sceneManager, interaction, gizmo, selection, pilot, onPivotShortcut: () => pivotController.toggleSelect(),
+      commands: { toggleUvViewer: () => uvController.toggleViewer() },   // 04 3.6 path B: U
     });
     const exportPanel = new ExportPanel({ doc, projectIO });
     // Subscribes DEBUG_VIEW_CHANGED (its only subscriber, 01 F1-2).
     const debugControls = new DebugViewControls({ doc, win, controller: debugController, bus, theme });
+    // 04 UV-12 (5.3): the UV viewer panel (#uv-viewer, floating in the viewport, clear of the camera preview window) and
+    // #toggle-uv-viewer; it subscribes the four viewer events.
+    const uvViewer = new UVViewer({
+      doc, win, uvController, bus, theme, host: canvasEl.parentElement, avoidElement: () => previewWindowEl,
+    });
     // Legacy animate body (3886-3889). 07 R2: one frame of the main renderer, its main pass then the preview pass.
     const tick = () => {
       orbit.tickKeyboard();
@@ -272,6 +290,9 @@ export class App {
     // runs after ViewportInput's), so the legacy listener order is unchanged.
     debugControls.bind();
     debugControls.bindShortcuts();
+    // 04 UV-12: the UV viewer (its toolbar button, the hidden panel and their listeners; a window resize listener after
+    // every legacy one). U is ViewportInput's.
+    uvViewer.bind();
 
     // ---- legacy setView('reset') (5095) ----
     orbit.setView('reset');

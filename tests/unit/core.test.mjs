@@ -55,8 +55,13 @@ describe('Events catalogue', () => {
       PILOT_CHANGED:                'pilot:changed',
       DEBUG_VIEW_CHANGED:           'debug:viewChanged',   // 01 F1-2
       WALL_PIVOT_CHANGED:           'wall:pivotChanged',   // 03 T4 (a visual event, 07 C47)
+      UV_VIEWER_CHANGED:            'uv:viewerChanged',    // 04 UV-12 (non-visual)
+      UV_DATA_CHANGED:              'uv:dataChanged',      // 04 UV-12 (non-visual)
+      UV_TRANSFORM_CHANGED:         'uv:transformChanged', // 04 UV-12 (visual)
+      UV_HOVER_CHANGED:             'uv:hoverChanged',     // 04 UV-12 (visual)
+      UV_SETTINGS_CHANGED:          'uv:settingsChanged',  // 04 UV-14 (visual)
     });
-    assert.equal(Object.keys(Events).length, 21);
+    assert.equal(Object.keys(Events).length, 26);
     assert.ok(Object.isFrozen(Events));
   });
 
@@ -402,9 +407,9 @@ describe('LEGACY_SITES', () => {
 // ---------------------------------------------------------------------------------------------------------------
 
 describe('Theme', () => {
-  test('is deep-frozen and composed of the five parts', () => {
+  test('is deep-frozen and composed of the six parts (uv: 04 UV-12)', () => {
     assertDeepFrozen(Theme, 'Theme');
-    assert.deepEqual(Object.keys(Theme), ['scene', 'canvas', 'ui', 'palette', 'brand']);
+    assert.deepEqual(Object.keys(Theme), ['scene', 'canvas', 'ui', 'palette', 'brand', 'uv']);
     assert.equal(Theme.scene, SceneTheme);
     assert.equal(Theme.canvas, CanvasTheme);
     assert.equal(Theme.ui, UiColors);

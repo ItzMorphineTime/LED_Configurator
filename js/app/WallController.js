@@ -115,6 +115,24 @@ export class WallController {
   }
 
   /**
+   * The rebuild observers (04 5.3, UV-11; ordered direct calls, R2, not events): onWallRebuilt at P1 step 8 and
+   * onSectionRenamed in commitRename. App registers the UvController before the bootstrap rebuild.
+   * @type {{onWallRebuilt(info: object): void, onSectionRenamed?(): void}[]}
+   */
+  #rebuildObservers = [];
+
+  /**
+   * Registers a rebuild observer (04 5.3): `o.onWallRebuilt({layout, atlas, plans, sectionScale, cause})` is called at
+   * every rebuild after the camera hub and before WALL_REBUILT (P1 step 8, 04 6.13), and `o.onSectionRenamed?.()` at
+   * every commitRename, before its panel-ID branch.
+   * Side effects: none besides the registration.
+   * @param {{onWallRebuilt(info: object): void, onSectionRenamed?(): void}} o
+   */
+  addRebuildObserver(o) {
+    this.#rebuildObservers.push(o);
+  }
+
+  /**
    * A fresh layout of the live sections (the single cursor walk) in a frame of 03 5.1: the stage frame (the default)
    * for the rebuild, the export frame for the exporters (ProjectIO, 03 7).
    * Ports: index.html@cd3fd3f lines 1479-1549 (the walk itself lives in geometry/WallLayout).
@@ -212,6 +230,9 @@ export class WallController {
     this.#orbit.updateCameraPosition();
     // 5. if (cameraPreviewEnabled) updateCameraFrustum() (1576): re-drives the pilot view after step 4
     if (project.camera.enabled) this.#hub.refresh();
+    // 5b. (04 6.13 step 8, UV-11) the rebuild observers: the UvController caches the layout, atlas and plans for the live
+    // UV path, keeps its viewed section valid and refreshes the viewer and the sidebar atlas note
+    for (const o of this.#rebuildObservers) o.onWallRebuilt({ layout, atlas, plans: uvPlans, sectionScale, cause });
     // 6. feature seam: cause and stageShift since 03 T3 (additive; the Phase-1 subscribers ignore them)
     this.#bus.emit(Events.WALL_REBUILT, { layout, meshMode, view: this.#view, cause, stageShift: shift, yawShiftDeg });
   }
@@ -317,10 +338,13 @@ export class WallController {
 
   /**
    * The tail of the name handler: only with panel IDs on, the logo list re-renders (mirror) and the wall rebuilds.
+   * 04 5.3 (UV-11): every rebuild observer hears of the rename first, always (the UV viewer's names refresh even when
+   * panel IDs are off and nothing rebuilds).
    * Ports: index.html@cd3fd3f lines 4019-4022.
-   * Side effects: iff panel IDs: emits WALL_SECTION_RENAMED {}; rebuild().
+   * Side effects: o.onSectionRenamed?.() for each rebuild observer; iff panel IDs: emits WALL_SECTION_RENAMED {}; rebuild().
    */
   commitRename() {
+    for (const o of this.#rebuildObservers) o.onSectionRenamed?.();
     if (this.#project.display.panelIdsEnabled) {
       this.#bus.emit(Events.WALL_SECTION_RENAMED, {});
       this.rebuild();

@@ -95,6 +95,47 @@ export class SelectionManager {
     this.#interaction = interaction;
   }
 
+  /** @type {{onSelectionChanged(payload: SelectionPayload): void}[]} 04 5.3 (path B of 07 I2): ordered observers */
+  #observers = [];
+  /** @type {((hit: object|null) => void)[]} 04 5.3: hover-hit observers (fed by spec 02's hoverAt; none in Phase 1) */
+  #hoverHitObservers = [];
+
+  /**
+   * @typedef {object} SelectionPayload  04 5.3 (07 I2's observer payload, path B on the Phase-1 manager)
+   * @property {string|null} primaryId
+   * @property {Selectable|null} primary   the primary member's own Selectable
+   * @property {'camera'|'prop'|'section'|'pivot'|'projector'|null} kind
+   * @property {string[]} ids
+   * @property {'api'} origin
+   */
+
+  /**
+   * Registers a selection observer (04 5.3, the path-B form of 07 I2's addObserver): `o.onSelectionChanged(payload)` is
+   * called exactly once after every SELECTION_CHANGED, after gizmo.attach / detach. Direct ordered calls (R2), not events.
+   * App registers the UvController (it follows `kind === 'section'`, which only spec 02's section Selectables produce).
+   * Side effects: none besides the registration.
+   * @param {{onSelectionChanged(payload: SelectionPayload): void}} o
+   */
+  addObserver(o) {
+    this.#observers.push(o);
+  }
+
+  /**
+   * Registers a hover-hit observer (04 5.3). Spec 02's hoverAt passes its nearest raw wall intersection (or null) to
+   * these; the Phase-1 manager has no hover raycast, so until spec 02 T23 nothing calls them and the UV hover probe
+   * raycasts on its own (WallHoverProbe, own-raycast mode).
+   * Side effects: none besides the registration.
+   * @param {(hit: object|null) => void} fn
+   */
+  addHoverHitObserver(fn) {
+    this.#hoverHitObservers.push(fn);
+  }
+
+  /** Calls every observer with the payload (the single post-change point of select and deselect). */
+  #notifyObservers(payload) {
+    for (const o of this.#observers) o.onSelectionChanged(payload);
+  }
+
   /**
    * Registers a Selectable. Registration order is the raycast tie order: App registers camera, person, car
    * (the legacy push order 3440-3462), then the pivot (03 5.8).
@@ -151,7 +192,8 @@ export class SelectionManager {
    * 03 5.4: the payload carries `modes`, the gizmo modes whose allowedAxes is not null (both for a legacy target); it is
    * emitted before gizmo.attach, so its subscribers cache it instead of reading gizmo.target.
    * Ports: index.html@cd3fd3f lines 3139-3143.
-   * Side effects: emits SELECTION_CHANGED {id, label, modes} (badge), then gizmo.attach(selected) (rebuild).
+   * Side effects: emits SELECTION_CHANGED {id, label, modes} (badge), then gizmo.attach(selected) (rebuild), then the
+   *   observers (04 5.3).
    * @param {string} id
    */
   select(id) {
@@ -161,18 +203,21 @@ export class SelectionManager {
     const modes = GIZMO_MODES.filter((m) => !selected?.allowedAxes || selected.allowedAxes(m) !== null);
     this.#bus.emit(Events.SELECTION_CHANGED, { id, label: selected?.label, modes });
     this.#gizmo.attach(selected);
+    this.#notifyObservers({ primaryId: id, primary: selected, kind: this.kindOf(selected), ids: id != null ? [id] : [], origin: 'api' });
   }
 
   /**
    * Clears the selection: state, badge mirror, then the gizmo (removed; hover reset).
    * Ports: index.html@cd3fd3f lines 3145-3153 (hoveredAxis is reset by gizmo.detach, after the badge: PR5).
-   * Side effects: emits SELECTION_CHANGED {id: null, label: null, modes: []}, then gizmo.detach().
+   * Side effects: emits SELECTION_CHANGED {id: null, label: null, modes: []}, then gizmo.detach(), then the observers
+   *   (04 5.3, kind null).
    */
   deselect() {
     this.#selectedId = null;
     this.#selected = null;
     this.#bus.emit(Events.SELECTION_CHANGED, { id: null, label: null, modes: [] });
     this.#gizmo.detach();
+    this.#notifyObservers({ primaryId: null, primary: null, kind: null, ids: [], origin: 'api' });
   }
 
   /**

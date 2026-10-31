@@ -48,6 +48,17 @@ export const COLOR_BINDINGS = Object.freeze([
   ['ui.status.within',              '--status-within',        'hex'],
   ['ui.status.offCenter',           '--status-off-center',    'hex'],
   ['ui.status.exceeds',             '--status-exceeds',       'hex'],
+  ['uv.wire',                       '--uv-wire',              'css'],   // spec 04's UV viewer canvas (UV-12; 06 5.12)
+  ['uv.wireMinor',                  '--uv-wire-minor',        'css'],
+  ['uv.island',                     '--uv-island',            'css'],
+  ['uv.handle',                     '--uv-handle',            'css'],
+  ['uv.handleActive',               '--uv-handle-active',     'css'],
+  ['uv.outside',                    '--uv-outside',           'css'],
+  ['uv.pixelGrid',                  '--uv-pixel-grid',        'css'],
+  ['uv.crosshair',                  '--uv-crosshair',         'css'],
+  ['uv.checkerA',                   '--uv-checker-a',         'css'],
+  ['uv.checkerB',                   '--uv-checker-b',         'css'],
+  ['uv.halo',                       '--scene-overlay-halo',   'css'],
 ].map((row) => Object.freeze(row)));
 
 /** [path, cssVar, make]: make(fontFamilyList) returns the leaf (a (px) => string function, or a string). */
@@ -56,7 +67,7 @@ export const FONT_BINDINGS = Object.freeze([
   ['canvas.panelSectionNameFont', '--font-mono', (f) => (px) => `${px}px ${f}`],
   ['canvas.sectionLabelFont',     '--font-ui',   (f) => (px) => `bold ${px}px ${f}`],
   ['scene.safeZone.labelFont',    '--font-ui',   (f) => `600 32px ${f}`],
-  // spec 04 adds ['uv.font', '--font-mono', (f) => `11px ${f}`]
+  ['uv.font',                     '--font-mono', (f) => `11px ${f}`],   // spec 04 (UV-12)
 ].map((row) => Object.freeze(row)));
 
 /**

@@ -94,4 +94,15 @@
     --status-within: var(--color-success);       /* also used by .status-ok */
     --status-off-center: var(--color-warning);   /* also used by .status-pending */
     --status-exceeds: var(--color-danger);
+    /* Spec 04's UV viewer canvas (UV-12; 06 5.12): two-tone strokes over --scene-overlay-halo. */
+    --uv-wire: var(--morph-neutral-50);
+    --uv-wire-minor: rgba(247, 247, 245, 0.35);
+    --uv-island: var(--morph-neutral-50);
+    --uv-handle: var(--morph-neutral-50);
+    --uv-handle-active: var(--ui-red-400);
+    --uv-outside: rgba(10, 10, 10, 0.6);
+    --uv-pixel-grid: rgba(247, 247, 245, 0.08);
+    --uv-crosshair: var(--ui-red-400);
+    --uv-checker-a: var(--ui-grey-850);
+    --uv-checker-b: var(--ui-grey-910);
 }

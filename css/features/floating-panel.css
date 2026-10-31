@@ -1,0 +1,124 @@
+/* css/features/floating-panel.css: ui/FloatingPanel (docs/improvements/04-uvs-uv-editor.md 3.1, UV-10).
+   A panel floating inside .viewport (position: relative): z-index 30, above the camera preview window (no z-index) and
+   below the debug popover (110). FloatingPanel writes left / top / width / height inline in the wide layout; at
+   <= 900 px wide it is a bottom sheet across the viewport (60 % of its height, at least min(200px, 100%)), without
+   moving or resizing. Colours only through the role tokens of 02-tokens.css (06 R-B1). */
+
+.floating-panel {
+    position: absolute;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    background: var(--color-surface-overlay);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 10px;
+    box-shadow: var(--shadow-overlay);
+    color: var(--color-text-primary);
+    font-family: var(--font-ui);
+    overflow: hidden;
+}
+
+.floating-panel[hidden] {
+    display: none;
+}
+
+.floating-panel:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: -2px;
+}
+
+.floating-panel__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    box-sizing: border-box;
+    padding: 4px 6px 4px 12px;
+    border-bottom: 1px solid var(--color-border-subtle);
+    cursor: move;
+    user-select: none;
+    touch-action: none;
+}
+
+.floating-panel__title {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+}
+
+.floating-panel__extra {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    margin-left: auto;
+}
+
+.floating-panel__close {
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.floating-panel__close:hover {
+    border-color: var(--color-border-strong);
+    color: var(--color-text-primary);
+}
+
+.floating-panel__close:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 1px;
+}
+
+.floating-panel__body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+}
+
+.floating-panel__resize {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 14px;
+    height: 14px;
+    cursor: nesw-resize;
+    touch-action: none;
+    background: linear-gradient(45deg, var(--color-text-disabled) 0 2px, transparent 2px 5px, var(--color-text-disabled) 5px 6px, transparent 6px);
+    opacity: 0.6;
+}
+
+@media (max-width: 900px) {
+    .floating-panel {
+        left: 0 !important;
+        right: 0 !important;
+        top: auto !important;
+        bottom: 0 !important;
+        width: auto !important;
+        height: 60% !important;
+        min-height: min(200px, 100%);
+        max-height: 100%;
+        border-radius: 10px 10px 0 0;
+    }
+
+    .floating-panel__header {
+        cursor: default;
+    }
+
+    .floating-panel__resize {
+        display: none;
+    }
+}

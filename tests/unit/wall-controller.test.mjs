@@ -891,6 +891,19 @@ const TEMPLATE_EDITS = Object.freeze([
     "setTitleWithWarning(titleEl, section.name, true);", 1],
   ["titleEl.innerHTML = titleEl.innerHTML.replace(/ <span class=\"warning-indicator\">⚠<\\/span>/, '');",
     "setTitleWithWarning(titleEl, section.name, false);", 1],
+  // 04 UV-14: the card's last row, UV Mapping (every section of these fixtures has the identity transform)
+  ['title="Custom colour">\n                                </div>\n                            </div>\n                        </div>\n                    </div>`;',
+    'title="Custom colour">\n                                </div>\n                            </div>\n                        </div>\n'
+    + '                        <div class="section-row single section-uv-row">\n'
+    + '                            <div class="input-field">\n'
+    + '                                <label>UV Mapping</label>\n'
+    + '                                <div class="section-uv-line">\n'
+    + '                                    <span class="section-uv-summary">Identity</span>\n'
+    + '                                    <button type="button" class="section-uv-btn">Edit UVs…</button>\n'
+    + '                                </div>\n'
+    + '                            </div>\n'
+    + '                        </div>\n'
+    + '                    </div>`;', 1],
 ]);
 
 /** `src` with every TEMPLATE_EDITS row applied; throws when a row does not occur exactly its declared number of times. */

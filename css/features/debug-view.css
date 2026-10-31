@@ -248,10 +248,11 @@
 
 /* ---- column overflow fallback (3.1) --------------------------------------------------------------- */
 
-/* Only where the column no longer fits the overlay: an overlay below 385 px (innerHeight - 60 in the wide layout,
+/* Only where the column no longer fits the overlay: an overlay below 433 px (innerHeight - 60 in the wide layout,
    innerHeight - 410 in the <= 900 px layout). The 4 px padding keeps focus rings inside the scroll box. Spec 04's
-   button raises both thresholds by 48 px (01 CR-7). Above them no rule applies. */
-@media (max-height: 444px), (max-width: 900px) and (max-height: 794px) {
+   #toggle-uv-viewer (UV-14) raised both thresholds by 48 px, one 40 px button and its 8 px gap (01 CR-7: 444 -> 492,
+   794 -> 842). Above them no rule applies. */
+@media (max-height: 492px), (max-width: 900px) and (max-height: 842px) {
     .viewport-controls {
         max-height: calc(100% - 40px);
         overflow-y: auto;

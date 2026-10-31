@@ -6,11 +6,44 @@
  * Owns the .mesh-mode-option labels, #toggle-wireframe, #toggle-frame, #toggle-led-sim, #led-sim-options,
  * #led-layout, #toggle-panel-ids, #panel-id-options, #panel-border-thickness, #panel-font-size, #panel-font-color,
  * #toggle-section-labels, #section-label-size and #section-label-color.
+ * Spec 04 (UV-14, docs/improvements/04-uvs-uv-editor.md 3.3): the UV Mapping block of Mesh Options, #uv-options with
+ * #uv-combined-layout, #uv-panel-mode, #uv-gltf-uv1 and #uv-atlas-note; commands go to UvController, and the values and
+ * the atlas note mirror UV_SETTINGS_CHANGED. A page without the block (the legacy parity fixtures) skips it.
  * Legacy source: index.html@cd3fd3f 4156-4227 (setupUI display handlers), 4993-4995 (import label sync).
  * Layer: ui (may import core, legacy, domain static rule tables and ui/dom.js).
  */
 import { Events } from '../core/EventBus.js';
 import { byId, flipToggle, setDisplay } from './dom.js';
+
+/** The thousands separator of the atlas note (no Intl, like NormalLines.formatCount). */
+const group = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+/**
+ * The lines of the atlas note (04 3.3): the atlas size in LED px, the PNG size, then the notes and warnings, each on
+ * its own line.
+ * Side effects: none.
+ * @param {{combinedLayout: string, atlas: object|null, sectionTextures: {reduced: boolean, pxPerLed: number|null}|null}} s
+ * @returns {{text: string, warn: boolean}[]}
+ */
+export function atlasNoteLines({ atlas, sectionTextures }) {
+  if (!atlas) return [];
+  const lines = [
+    { text: `ⓘ Atlas ${group(atlas.widthLed)} × ${group(atlas.heightLed)} LED px`, warn: false },
+    { text: `  PNG ${group(atlas.pngWidth)} × ${group(atlas.pngHeight)} (${atlas.pngPxPerLed} px/LED)`, warn: false },
+  ];
+  if (sectionTextures && sectionTextures.reduced) {
+    const p = Number(Number(sectionTextures.pxPerLed).toFixed(2));
+    lines.push({ text: `ⓘ Viewport section textures at ${p} px/LED (16 MP budget)`, warn: false });
+  }
+  if (atlas.larger4K) lines.push({ text: '⚠ Larger than 4K', warn: true });
+  if (atlas.overTexture) {
+    lines.push({ text: `⚠ Over the GPU texture limit (${group(atlas.maxTextureSize)} px): the Atlas layout is downscaled in the viewport`, warn: true });
+  }
+  if (!atlas.fitsCanvas) {
+    lines.push({ text: '⚠ Exceeds the browser canvas limit: Export Panel IDs and the ZIP atlas will be skipped', warn: true });
+  }
+  return lines;
+}
 
 /**
  * Mesh-mode, wireframe/frame, LED-sim and panel-ID controls.
@@ -33,20 +66,34 @@ export class WallDisplayPanel {
   /** @type {HTMLElement} */ #toggleSectionLabels;
   /** @type {HTMLInputElement} */ #sectionLabelSize;
   /** @type {HTMLInputElement} */ #sectionLabelColor;
+  /** @type {import('../app/UvController.js').UvController|null} */ #uvController;
+  /** @type {HTMLSelectElement|null} */ #uvCombinedLayout;
+  /** @type {HTMLSelectElement|null} */ #uvPanelMode;
+  /** @type {HTMLInputElement|null} */ #uvGltfUv1;
+  /** @type {HTMLElement|null} */ #uvAtlasNote;
 
   /**
-   * Looks up the owned elements and subscribes the two mirrors:
+   * Looks up the owned elements and subscribes the three mirrors:
    *  WALL_MESH_MODE_CHANGED({mode}): each .mesh-mode-option gets 'active' iff its data-mode === mode (4993-4995);
    *    the radio `checked` state is NOT touched (V-2).
-   *  DISPLAY_CONTENT_CHANGED({toggled, on, forcedOff}): the option blocks and the forced-off toggle (4170-4176,
-   *    4190-4196).
-   * Side effects: DOM lookups (no mutation); two bus subscriptions.
+   *  DISPLAY_CONTENT_CHANGED({toggled, on, forcedOff}): the option blocks, the toggled control's 'active' (idempotent
+   *    after its own click; 04 3.7's [Show Panel IDs] chip turns panel IDs on without a click) and the forced-off toggle
+   *    (4170-4176, 4190-4196).
+   *  UV_SETTINGS_CHANGED (04 UV-14): the UV selects, the glTF option (enabled for the per-section layout only) and the
+   *    atlas note.
+   * Side effects: DOM lookups (no mutation); three bus subscriptions.
    * @param {{doc: Document, wallController: import('../app/WallController.js').WallController,
-   *          bus: import('../core/EventBus.js').EventBus}} deps
+   *          bus: import('../core/EventBus.js').EventBus,
+   *          uvController?: import('../app/UvController.js').UvController|null}} deps
    */
-  constructor({ doc, wallController, bus }) {
+  constructor({ doc, wallController, bus, uvController = null }) {
     this.#doc = doc;
     this.#wallController = wallController;
+    this.#uvController = uvController;
+    this.#uvCombinedLayout = byId(doc, 'uv-combined-layout');
+    this.#uvPanelMode = byId(doc, 'uv-panel-mode');
+    this.#uvGltfUv1 = byId(doc, 'uv-gltf-uv1');
+    this.#uvAtlasNote = byId(doc, 'uv-atlas-note');
 
     this.#toggleWireframe = byId(doc, 'toggle-wireframe');
     this.#toggleFrame = byId(doc, 'toggle-frame');
@@ -64,6 +111,7 @@ export class WallDisplayPanel {
 
     bus.on(Events.WALL_MESH_MODE_CHANGED, (payload) => this.#mirrorMeshMode(payload));
     bus.on(Events.DISPLAY_CONTENT_CHANGED, (payload) => this.#mirrorDisplayContent(payload));
+    bus.on(Events.UV_SETTINGS_CHANGED, (payload) => this.#mirrorUvSettings(payload));
   }
 
   /**
@@ -110,6 +158,41 @@ export class WallDisplayPanel {
     });
     this.#bindNumericStyleInput(this.#sectionLabelSize, 'sectionLabelFontSize');
     this.#bindColorStyleInput(this.#sectionLabelColor, 'sectionLabelColor');
+
+    // 04 UV-14: the UV Mapping block (after every legacy listener; absent from the legacy parity fixtures)
+    const uv = this.#uvController;
+    if (uv && this.#uvCombinedLayout && this.#uvPanelMode && this.#uvGltfUv1) {
+      const layout = this.#uvCombinedLayout;
+      layout.addEventListener('change', () => uv.setCombinedLayout(layout.value));
+      const panelMode = this.#uvPanelMode;
+      panelMode.addEventListener('change', () => uv.setPanelUvs(panelMode.value));
+      const gltf = this.#uvGltfUv1;
+      gltf.addEventListener('change', () => uv.setGltfAtlasTexcoord1(gltf.checked));
+    }
+  }
+
+  /**
+   * UV_SETTINGS_CHANGED mirror (04 UV-14): the select values, the glTF option (checked; enabled only for the
+   * per-section layout) and the atlas note lines.
+   * Side effects: writes the UV block's values and the note's children.
+   * @param {object} s  the UV_SETTINGS_CHANGED payload
+   */
+  #mirrorUvSettings(s) {
+    if (this.#uvCombinedLayout) this.#uvCombinedLayout.value = s.combinedLayout;
+    if (this.#uvPanelMode) this.#uvPanelMode.value = s.panelUvs;
+    if (this.#uvGltfUv1) {
+      this.#uvGltfUv1.checked = !!s.gltfAtlasTexcoord1;
+      this.#uvGltfUv1.disabled = s.combinedLayout !== 'per-section';
+    }
+    const note = this.#uvAtlasNote;
+    if (!note) return;
+    note.textContent = '';
+    for (const line of atlasNoteLines(s)) {
+      const div = this.#doc.createElement('div');
+      if (line.warn) div.className = 'uv-note--warn';
+      div.textContent = line.text;
+      note.appendChild(div);
+    }
   }
 
   /**
@@ -167,11 +250,12 @@ export class WallDisplayPanel {
    * DISPLAY_CONTENT_CHANGED mirror: the toggled control's option block, and when the other content mode was
    * forced off, that toggle's class and option block.
    * Ports: index.html@cd3fd3f lines 4170-4176 (LED sim) and 4190-4196 (panel IDs).
-   * Side effects: writes the option blocks' style.display and the forced-off toggle's 'active' class.
+   * Side effects: writes the option blocks' style.display, the toggled control's and the forced-off toggle's 'active' class.
    * @param {{toggled: 'ledSim'|'panelIds', on: boolean, forcedOff: boolean}} payload
    */
   #mirrorDisplayContent({ toggled, on, forcedOff }) {
     if (toggled === 'ledSim') {
+      this.#toggleLedSim.classList.toggle('active', on);   // idempotent after the toggle's own click
       setDisplay(this.#ledSimOptions, on);
       // Disable panel IDs if LED sim is enabled
       if (forcedOff) {
@@ -179,6 +263,7 @@ export class WallDisplayPanel {
         setDisplay(this.#panelIdOptions, false);
       }
     } else if (toggled === 'panelIds') {
+      this.#togglePanelIds.classList.toggle('active', on);   // idempotent after a click; 04's [Show Panel IDs] chip
       setDisplay(this.#panelIdOptions, on);
       // Disable LED sim if panel IDs is enabled
       if (forcedOff) {

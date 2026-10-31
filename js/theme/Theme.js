@@ -111,6 +111,18 @@ export const UiColors = deepFreeze({
 const SECTION_COLORS = deepFreeze(['#d9d9d6', '#c51622', '#58a6e8', '#e2803c', '#14a37f', '#e68ac0', '#7462d8', '#6c6c6c']);
 
 /**
+ * The UV viewer's 2D canvas colours and font (docs/improvements/04-uvs-uv-editor.md 5.3, the values of 06 5.12): wire,
+ * island and handle strokes are two-tone (a 2 px wider `halo` stroke under the light core, 06 D15); `outside` dims the
+ * area outside 0-1; checkerA / checkerB are the UV checker and the empty canvas. Each colour has its --uv-* token
+ * (ThemeBridge COLOR_BINDINGS; the halo is --scene-overlay-halo) and the font follows --font-mono (FONT_BINDINGS).
+ */
+export const UvViewerTheme = deepFreeze({
+  wire: '#f7f7f5', wireMinor: 'rgba(247, 247, 245, 0.35)', island: '#f7f7f5', handle: '#f7f7f5', handleActive: '#f2555a',
+  outside: 'rgba(10, 10, 10, 0.6)', pixelGrid: 'rgba(247, 247, 245, 0.08)', crosshair: '#f2555a', checkerA: '#262626',
+  checkerB: '#161616', halo: '#0a0a0a', font: "11px 'JetBrains Mono', ui-monospace, monospace",
+});
+
+/**
  * Section colour palette: sectionColors for added sections (index = sections.length % 8, 1379-1382) and v2 imports
  * without a colour; cardSwatches, the card's swatches (the same array, 3970-3975); defaultSectionColor, the first
  * section of a new project (1406); legacySectionColors, the Phase-1 palette, only to fill the missing colours of a v1
@@ -158,7 +170,9 @@ export const Brand = deepFreeze({
 });
 
 /**
- * The whole theme, injected by App.js: { scene, canvas, ui, palette, brand }.
+ * The whole theme, injected by App.js: { scene, canvas, ui, palette, brand, uv } (uv: spec 04's UV viewer, UV-12).
  * Feature 6 replaces it with an object of the same shape.
  */
-export const Theme = Object.freeze({ scene: SceneTheme, canvas: CanvasTheme, ui: UiColors, palette: Palette, brand: Brand });
+export const Theme = Object.freeze({
+  scene: SceneTheme, canvas: CanvasTheme, ui: UiColors, palette: Palette, brand: Brand, uv: UvViewerTheme,
+});

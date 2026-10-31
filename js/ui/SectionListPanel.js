@@ -20,9 +20,23 @@
  * (WallSection.LIMITS). 08 P2-3a (B-M4, 08 6.5): every interpolation of a section value goes through escapeHtml
  * (legacy interpolated them raw), so imported or typed markup renders as text. 08 P2-3c (B-L16): the live rename and
  * the 4K patch rebuild the title from the model with setTitleWithWarning (ui/dom.js).
+ * 04 UV-14 (docs/improvements/04-uvs-uv-editor.md 3.1, 3.3): a last card row, "UV Mapping", with the section's
+ * UvTransform.summaryFor and an "Edit UVs…" button that opens the UV viewer on the section; the summary mirrors
+ * UV_TRANSFORM_CHANGED (live while dragging or previewing) and follows a number edit (the summary depends on W x H).
  */
 import { Events } from '../core/EventBus.js';
 import { byId, escapeHtml, setTitleWithWarning } from './dom.js';
+
+/**
+ * The card's UV summary (04 3.3): UvTransform.summaryFor(W, H) of the section ('Identity' by default).
+ * Side effects: none.
+ * @param {import('../domain/WallSection.js').WallSection} section
+ * @returns {string}
+ */
+function uvSummaryOf(section) {
+  const t = section.uvTransform;
+  return t ? t.summaryFor(section.panelCols * section.ledX, section.panelRows * section.ledY) : 'Identity';
+}
 
 /**
  * The 4K warning block of a freshly rendered card (multi-line markup, render only; the in-place patch inserts
@@ -135,6 +149,15 @@ function cardHtml(section, showDelete, swatches) {
                                 </div>
                             </div>
                         </div>
+                        <div class="section-row single section-uv-row">
+                            <div class="input-field">
+                                <label>UV Mapping</label>
+                                <div class="section-uv-line">
+                                    <span class="section-uv-summary">${escapeHtml(uvSummaryOf(section))}</span>
+                                    <button type="button" class="section-uv-btn">Edit UVs…</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>`;
 }
 
@@ -171,16 +194,37 @@ export class SectionListPanel {
    *          bus: import('../core/EventBus.js').EventBus,
    *          palette: {cardSwatches: ReadonlyArray<string>}}} deps
    *   palette: theme.palette (06 T7: the card swatches)
+   * @param {import('../app/UvController.js').UvController|null} [deps.uvController]  04 UV-14: the card's Edit UVs…
+   *   button opens the viewer through it (null: the button does nothing, as in the legacy parity fixtures)
    */
-  constructor({ doc, project, wallController, bus, palette }) {
+  constructor({ doc, project, wallController, bus, palette, uvController = null }) {
     this.#doc = doc;
     this.#palette = palette;
     this.#project = project;
     this.#wallController = wallController;
+    this.#uvController = uvController;
     this.#container = byId(doc, 'wall-sections');
     this.#addButton = byId(doc, 'add-section-btn');
 
     bus.on(Events.WALL_SECTIONS_CHANGED, (payload) => this.#onSectionsChanged(payload));
+    bus.on(Events.UV_TRANSFORM_CHANGED, (payload) => this.#onUvTransform(payload));
+  }
+
+  /** @type {import('../app/UvController.js').UvController|null} */
+  #uvController;
+
+  /**
+   * UV_TRANSFORM_CHANGED mirror (04 UV-14): the matching card's .section-uv-summary (by the section's index in the
+   * list rendered last; ids are unique since 08 P2-3b).
+   * Side effects: writes one summary's text.
+   * @param {{sectionId: *, summary: string}} payload
+   */
+  #onUvTransform({ sectionId, summary }) {
+    const i = this.#renderedSections.findIndex((s) => s.id === sectionId);
+    if (i < 0) return;
+    const card = this.#container.querySelectorAll('.wall-section')[i];
+    const el = card && card.querySelector('.section-uv-summary');
+    if (el && el.textContent !== summary) el.textContent = summary;
   }
 
   /**
@@ -292,6 +336,16 @@ export class SectionListPanel {
       });
       input.addEventListener('click', (e) => e.stopPropagation());
     });
+
+    // 04 UV-14: Edit UVs… opens the UV viewer on this section (after the legacy listeners; only with a UvController)
+    const uvButton = sectionEl.querySelector('.section-uv-btn');
+    const uvController = this.#uvController;
+    if (uvButton && uvController) {
+      uvButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        uvController.openViewer(section.id);
+      });
+    }
   }
 
   /**
@@ -315,6 +369,10 @@ export class SectionListPanel {
     const canvasWidth = section.canvasWidth;
     const canvasHeight = section.canvasHeight;
     sectionEl.querySelector('.section-summary').textContent = section.summary;
+    // 04 UV-14: a non-default transform's summary depends on W x H (Source rotated is shown only when W !== H; the
+    // default transform always reads Identity)
+    const uvSummary = sectionEl.querySelector('.section-uv-summary');
+    if (uvSummary && section.uvTransform && !section.uvTransform.isIdentity) uvSummary.textContent = uvSummaryOf(section);
 
     // Update 4K warning
     const exceeds4K = section.exceeds4K;

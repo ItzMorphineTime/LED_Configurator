@@ -14,6 +14,8 @@
  * Spec 04 (UV-7, UV-9): every mode takes its UVs from the rebuild's UV plans (the UV transforms; base UVs for LED-mask
  * content); the combined mesh has one geometry group per section and, in the default per-section layout, one material
  * per section; section canvases follow the 16 MP viewport budget; uv.panel_uvs = 'panel' restores the per-panel canvases.
+ * Spec 04 UV-11: the live UV path (updateSectionUvs rewrites one section's UVs in place during drags and field previews,
+ * 6.12) and the hover resolution (resolveHit, panelCornersWorld, 6.9) read the layout of the last rebuild.
  * Panel frames are adaptive (docs/improvements/06-morph-branding.md 6.7, 06 T5): each section's frames take the light
  * or the dark frame colour of SceneTheme, whichever contrasts more with the section colour (render/frameColor.js).
  * Legacy source: index.html@cd3fd3f 1457-1577, 1646-1678, 1710-1802.
@@ -22,8 +24,9 @@
 
 import THREE from '../vendor/three.js';
 import { computeAtlas, sectionTextureScale, panelPxPerLed } from '../geometry/TextureAtlas.js';
-import { maxIndexOf, indexWidth } from '../geometry/WallMeshBuilder.js';
+import { maxIndexOf, indexWidth, sectionRangeForFace } from '../geometry/WallMeshBuilder.js';
 import { planSectionUvs, isLedMaskContent } from '../geometry/UvMapper.js';
+import { baseUvToPixel } from '../geometry/PixelMap.js';
 import { UvSettings } from '../domain/UvSettings.js';
 import { ResourceTracker } from './ResourceTracker.js';
 import { MaterialOverride } from './MaterialOverride.js';
@@ -68,12 +71,40 @@ function writePanelUvs(geometry, uvs) {
   }
 }
 
+/** Clamps to [0, 1]. */
+const clamp01 = (x) => Math.min(1, Math.max(0, x));
+
+/**
+ * Marks a range of a uv attribute for upload (04 6.12): BufferAttribute.updateRange (core in r128, reset to count -1
+ * after each upload) is widened to the union with a range still pending, so several section writes in one frame
+ * (Copy to all) all reach the GPU.
+ * Side effects: writes attribute.updateRange and needsUpdate.
+ * @param {{updateRange: {offset: number, count: number}, needsUpdate: boolean}} attribute
+ * @param {number} offset  first array element written
+ * @param {number} count   number of array elements written
+ */
+function markUvRange(attribute, offset, count) {
+  const r = attribute.updateRange;
+  if (r) {
+    if (r.count === -1) {
+      r.offset = offset;
+      r.count = count;
+    } else {
+      const start = Math.min(r.offset, offset);
+      r.count = Math.max(r.offset + r.count, offset + count) - start;
+      r.offset = start;
+    }
+  }
+  attribute.needsUpdate = true;
+}
+
 /**
  * @typedef {object} SectionNode
  * @property {*} sectionId
  * @property {number} sectionIndex
  * @property {THREE.Mesh[]} meshes
  * @property {{indexStart: number, indexCount: number}|null} indexRange  combined mode only
+ * @property {{vertexStart: number, vertexCount: number}|null} vertexRange  combined mode only (04 5.3; spec 02 reads it too)
  */
 
 /**
@@ -99,6 +130,12 @@ export class LEDWallView {
   #wallGroup = null;
   /** @type {THREE.Group|null} legacy `frameGroup` */
   #frameGroup = null;
+  /**
+   * The layout of the last rebuild (04 6.12, 6.9): the live UV path and the hover resolution read the section grids of
+   * the meshes on screen from it. null before the first rebuild.
+   * @type {import('../geometry/WallLayout.js').WallLayout|null}
+   */
+  #layout = null;
   /** @type {import('./DebugMaterials.js').DebugMaterials} the shared debug-shading materials (01 F1-1) */
   #debugMaterials;
   /** The stash of the content materials while a debug shading is shown (no THREE allocation). */
@@ -164,6 +201,7 @@ export class LEDWallView {
     // 0. Put the content materials back (01 F1-1), so step 1 never disposes the shared debug materials.
     this.#override.restore();
     this.#display = display;
+    this.#layout = layout;
 
     // 1. Remove and dispose the previous wall group, then the previous frame group (legacy 1458-1474), with the
     // policy read in step 2 of the previous rebuild.
@@ -377,8 +415,11 @@ export class LEDWallView {
         const mesh = new THREE.Mesh(geometry, material);
         mesh.position.set(panel.x, panel.y, panel.z);
         mesh.rotation.y = panel.rotY;
+        // sectionUvs (04 6.12): the panel samples the shared section canvas through section-space UVs, so the live UV
+        // path rewrites its corners; the per-panel materials keep their PlaneGeometry 0..1 UVs.
         mesh.userData = {
           kind: 'led-wall', mode: 'panel', sectionId: sl.sectionId, sectionIndex: i, col: panel.col, row: panel.row,
+          sectionUvs: shared !== null,
         };
         this.#wallGroup.add(mesh);
       });
@@ -425,21 +466,178 @@ export class LEDWallView {
   sectionNodes() {
     /** @type {Map<string, SectionNode>} */
     const nodes = new Map();
-    const nodeFor = (sectionId, sectionIndex, indexRange) => {
+    const nodeFor = (sectionId, sectionIndex, indexRange, vertexRange) => {
       const key = String(sectionId);
-      if (!nodes.has(key)) nodes.set(key, { sectionId, sectionIndex, meshes: [], indexRange });
+      if (!nodes.has(key)) nodes.set(key, { sectionId, sectionIndex, meshes: [], indexRange, vertexRange });
       return nodes.get(key);
     };
     for (const mesh of this.meshes()) {
       const tag = mesh.userData;
       if (tag.mode === 'combined') {
         for (const r of tag.sectionRanges) {
-          nodeFor(r.sectionId, r.sectionIndex, { indexStart: r.indexStart, indexCount: r.indexCount }).meshes.push(mesh);
+          nodeFor(r.sectionId, r.sectionIndex, { indexStart: r.indexStart, indexCount: r.indexCount },
+            { vertexStart: r.vertexStart, vertexCount: r.vertexCount }).meshes.push(mesh);
         }
       } else {
-        nodeFor(tag.sectionId, tag.sectionIndex, null).meshes.push(mesh);
+        nodeFor(tag.sectionId, tag.sectionIndex, null, null).meshes.push(mesh);
       }
     }
     return nodes;
+  }
+
+  /**
+   * The live UV path of 04 6.12: rewrites one section's UVs in place from its new plan, with no texture, material or
+   * geometry created and no rebuild. Combined: the section's vertex range of the shared uv attribute (updateRange);
+   * Section: the section mesh's whole uv attribute; Panel: the four corners of each panel that samples the section
+   * canvas (PlaneGeometry order TL, TR, BL, BR). A no-op returning false for LED-mask content (its UVs stay the base
+   * UVs, 04 D4), for the legacy per-panel UVs and when no mesh of the section samples section-space UVs.
+   * Side effects: writes uv attributes (array, updateRange, needsUpdate); no THREE allocation.
+   * @param {*} sectionId
+   * @param {import('../geometry/UvMapper.js').SectionUvPlan} plan  planSectionUv of the section in the last layout
+   * @returns {boolean} whether any uv attribute was written
+   */
+  updateSectionUvs(sectionId, plan) {
+    const layout = this.#layout;
+    if (!layout || !plan || isLedMaskContent(this.#display?.content)) return false;
+    const i = plan.sectionIndex;
+    const sl = layout.sections[i];
+    if (!sl || sl.sectionId !== sectionId) return false;
+    let wrote = false;
+    for (const mesh of this.meshes()) {
+      const tag = mesh.userData;
+      if (tag.mode === 'combined') {
+        const r = tag.sectionRanges[i];
+        if (!r) continue;
+        const uvs = this.#builder.sectionUvs(sl, plan);
+        const attribute = mesh.geometry.attributes.uv;
+        attribute.array.set(uvs, r.vertexStart * 2);
+        markUvRange(attribute, r.vertexStart * 2, uvs.length);
+        wrote = true;
+      } else if (tag.mode === 'section' && tag.sectionIndex === i) {
+        const attribute = mesh.geometry.attributes.uv;
+        attribute.array.set(this.#builder.sectionUvs(sl, plan));
+        attribute.needsUpdate = true;
+        wrote = true;
+      } else if (tag.mode === 'panel' && tag.sectionIndex === i && tag.sectionUvs) {
+        const panel = sl.panels.find((p) => p.col === tag.col && p.row === tag.row);
+        writePanelUvs(mesh.geometry, this.#builder.panelUvs(panel, sl, plan));
+        mesh.geometry.attributes.uv.needsUpdate = true;
+        wrote = true;
+      }
+    }
+    return wrote;
+  }
+
+  /**
+   * The world corners of one panel of a section as a closed loop (04 6.9), read from the mesh's own position attribute
+   * (so the outline lands on the rendered wall in every mesh mode and pivot frame): strip modes BL, BR, TR, TL of the
+   * section grid; panel mode the PlaneGeometry vertices 0, 1, 3, 2.
+   * Side effects: updates the mesh's world matrix; allocates one THREE.Vector3 (no id).
+   * @param {*} sectionId
+   * @param {number} col  panel column within the section
+   * @param {number} row  panel row within the section (0 = bottom)
+   * @returns {{x: number, y: number, z: number}[]|null} four corners, null when the panel is not on screen
+   */
+  panelCornersWorld(sectionId, col, row) {
+    const layout = this.#layout;
+    if (!layout) return null;
+    const i = layout.sections.findIndex((sl) => sl.sectionId === sectionId);
+    if (i < 0) return null;
+    const cols = layout.sections[i].section.panelCols;
+    let mesh = null;
+    let indices = null;
+    for (const m of this.meshes()) {
+      const tag = m.userData;
+      if (tag.mode === 'combined' && tag.sectionRanges[i]) {
+        const vb = tag.sectionRanges[i].vertexStart + row * (cols + 1) + col;
+        mesh = m;
+        indices = [vb, vb + 1, vb + cols + 2, vb + cols + 1];
+      } else if (tag.mode === 'section' && tag.sectionIndex === i) {
+        const vb = row * (cols + 1) + col;
+        mesh = m;
+        indices = [vb, vb + 1, vb + cols + 2, vb + cols + 1];
+      } else if (tag.mode === 'panel' && tag.sectionIndex === i && tag.col === col && tag.row === row) {
+        mesh = m;
+        indices = [0, 1, 3, 2];
+      }
+      if (mesh) break;
+    }
+    if (!mesh) return null;
+    mesh.updateWorldMatrix(true, false);
+    const position = mesh.geometry.attributes.position;
+    const v = new THREE.Vector3();
+    return indices.map((k) => {
+      v.fromBufferAttribute(position, k);
+      mesh.localToWorld(v);
+      return { x: v.x, y: v.y, z: v.z };
+    });
+  }
+
+  /**
+   * Resolves a raycast hit on a front LED mesh to the section, panel and base UV under it (04 6.9). Strip modes: the
+   * barycentric weights of the hit in its triangle applied to the grid's base UVs (col / cols, row / rows), so the result
+   * ignores the UV transform, the content mode and the winding; panel mode: the hit in the plane's local frame. null
+   * for anything that is not tagged 'led-wall'.
+   * Side effects: allocates THREE.Vector3s (no ids).
+   * @param {{object: object, point: object, face?: {a: number, b: number, c: number}, faceIndex?: number}|null} hit
+   * @returns {{sectionId: *, sectionIndex: number, col: number, row: number, baseU: number, baseV: number,
+   *            panelCorners3D: {x: number, y: number, z: number}[]|null}|null}
+   */
+  resolveHit(hit) {
+    const layout = this.#layout;
+    const mesh = hit?.object;
+    const tag = mesh?.userData;
+    if (!layout || !tag || tag.kind !== 'led-wall') return null;
+    let sectionIndex;
+    let baseU;
+    let baseV;
+    const p = mesh.worldToLocal(hit.point.clone());
+    if (tag.mode === 'panel') {
+      sectionIndex = tag.sectionIndex;
+      const s = layout.sections[sectionIndex]?.section;
+      if (!s) return null;
+      const { width: pw, height: ph } = mesh.geometry.parameters;
+      let lu = clamp01(p.x / pw + 0.5);
+      if (tag.uMirrored) lu = 1 - lu;
+      const lv = clamp01(p.y / ph + 0.5);
+      baseU = (tag.col + lu) / s.panelCols;
+      baseV = (tag.row + lv) / s.panelRows;
+    } else {
+      let vertexBase = 0;
+      if (tag.mode === 'combined') {
+        const r = sectionRangeForFace(tag.sectionRanges, hit.faceIndex);
+        if (!r) return null;
+        sectionIndex = r.sectionIndex;
+        vertexBase = r.vertexStart;
+      } else {
+        sectionIndex = tag.sectionIndex;
+      }
+      const s = layout.sections[sectionIndex]?.section;
+      if (!s || !hit.face) return null;
+      const cols = s.panelCols;
+      const rows = s.panelRows;
+      const position = mesh.geometry.attributes.position;
+      const { a, b, c } = hit.face;
+      const A = new THREE.Vector3().fromBufferAttribute(position, a);
+      const B = new THREE.Vector3().fromBufferAttribute(position, b);
+      const C = new THREE.Vector3().fromBufferAttribute(position, c);
+      const w = THREE.Triangle.getBarycoord(p, A, B, C, new THREE.Vector3());
+      const uvOf = (idx) => {
+        const local = idx - vertexBase;
+        const col = local % (cols + 1);
+        return [col / cols, (local - col) / (cols + 1) / rows];
+      };
+      const [ua, va] = uvOf(a);
+      const [ub, vb] = uvOf(b);
+      const [uc, vc] = uvOf(c);
+      baseU = clamp01(w.x * ua + w.y * ub + w.z * uc);
+      baseV = clamp01(w.x * va + w.y * vb + w.z * vc);
+    }
+    const sl = layout.sections[sectionIndex];
+    const { col, row } = baseUvToPixel(sl.section, baseU, baseV);
+    return {
+      sectionId: sl.sectionId, sectionIndex, col, row, baseU, baseV,
+      panelCorners3D: this.panelCornersWorld(sl.sectionId, col, row),
+    };
   }
 }
