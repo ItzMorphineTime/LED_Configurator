@@ -73,7 +73,7 @@ import { ViewportToolbar } from '../ui/ViewportToolbar.js';
 import { ExportPanel } from '../ui/ExportPanel.js';
 import { DebugViewControls } from '../ui/DebugViewControls.js';
 import { UVViewer } from '../ui/UVViewer.js';
-import { bindCollapsibles } from '../ui/Collapsible.js';
+import { bindCollapsibles, revealCollapsible } from '../ui/Collapsible.js';
 import { SidebarToggle } from '../ui/SidebarToggle.js';
 import { SectionContextMenu } from '../ui/SectionContextMenu.js';
 
@@ -196,6 +196,7 @@ export class App {
     const hub = new CameraHub({ project, rig, preview: previewPass, safeDistance, pilotDriver, frameBounds, stageLayout, bus });
     const pilot = new PilotController({
       sceneManager, cine, driver: pilotDriver, orbit, keyboard, interaction, hub, bus, dialogs,
+      onPreviewRequired: () => revealCard('camera-frustum-section'),
     });
     const cameraController = new CameraController({ project, rig, preview, hub, pilot, selection, frameBounds, bus });
     const personController = new PropController({ prop: person, view: personView, selection, bus });
@@ -262,6 +263,7 @@ export class App {
       project, wallController, view: wallView, viewModel: uvViewModel, probe: uvProbe, history: new UvFallbackHistory(),
       bus, maxTextureSize: () => sceneManager.renderer.capabilities.maxTextureSize,
       raf: (fn) => win.requestAnimationFrame(fn),
+      onPanelIdsShown: () => revealCard('panel-ids-section'),
     });
     selection.addObserver(uvController);
     wallController.addRebuildObserver(uvController);
@@ -291,6 +293,13 @@ export class App {
     });
     // The collapsible side panel (#sidebar-toggle, #control-panel): every toggle fits the renderer to the new viewport.
     const sidebar = new SidebarToggle({ doc, onLayoutChange: () => sceneManager.fitContainer() });
+    // 2026-11-01: a feature that needs the controls of a collapsed card opens the side panel and that card (the pilot
+    // alert -> Camera Frustum Preview, the UV viewer's Show Panel IDs chip -> Panel IDs). Only called on user input,
+    // after start() has finished, so the PilotController and UvController closures above can refer to it.
+    const revealCard = (cardId) => {
+      sidebar.expand();
+      revealCollapsible(byId(doc, cardId));
+    };
     // 2026-10-31: the section context menu (created in the viewport on its first open).
     const sectionMenu = new SectionContextMenu({
       doc, win, host: canvasEl.parentElement,

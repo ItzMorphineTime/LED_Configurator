@@ -5,7 +5,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-import { bindCollapsibles, setCollapsibleExpanded } from '../../js/ui/Collapsible.js';
+import { bindCollapsibles, revealCollapsible, setCollapsibleExpanded } from '../../js/ui/Collapsible.js';
 
 /** A fake card: .collapsible with a toggle button and a body. */
 function card(collapsed = true) {
@@ -25,6 +25,20 @@ function card(collapsed = true) {
 }
 
 describe('ui/Collapsible', () => {
+  test('revealCollapsible opens a collapsed card and scrolls it into view; null is a no-op', () => {
+    const c = card();
+    const scrolls = [];
+    c.el.scrollIntoView = (opts) => scrolls.push(opts);
+    revealCollapsible(c.el);
+    assert.equal(c.el.classList.contains('collapsed'), false);
+    assert.equal(c.toggle.attrs['aria-expanded'], 'true');
+    assert.equal(c.body.hidden, false);
+    assert.deepEqual(scrolls, [{ block: 'nearest' }]);
+    revealCollapsible(c.el);                 // already open: stays open
+    assert.equal(c.body.hidden, false);
+    assert.doesNotThrow(() => revealCollapsible(null));
+  });
+
   test('a click expands, a second collapses; class, aria-expanded and hidden move together', () => {
     const c = card();
     assert.equal(bindCollapsibles({ querySelectorAll: () => [c.el] }), 1);

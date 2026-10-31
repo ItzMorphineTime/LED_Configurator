@@ -166,6 +166,8 @@ export class UvController {
   #refreshPending = false;
   /** @type {string} the last published hover (repeated identical readouts are not re-published) */
   #hoverKey = '';
+  /** @type {(() => void)|null} reveals the Panel IDs controls after the chip turned panel IDs on */
+  #onPanelIdsShown = null;
 
   /**
    * Stores the collaborators only (R4): no renderer is read here (maxTextureSize is a getter, read in onWallRebuilt).
@@ -178,10 +180,13 @@ export class UvController {
    *          history: import('./UvFallbackHistory.js').UvFallbackHistory,
    *          bus: import('../core/EventBus.js').EventBus,
    *          maxTextureSize: () => number,
-   *          raf: (fn: () => void) => *}} deps
-   *   maxTextureSize: () => renderer.capabilities.maxTextureSize; raf: coalesces the viewer refresh to one per frame
+   *          raf: (fn: () => void) => *,
+   *          onPanelIdsShown?: (() => void)|null}} deps
+   *   maxTextureSize: () => renderer.capabilities.maxTextureSize; raf: coalesces the viewer refresh to one per frame;
+   *   onPanelIdsShown: called after the Show Panel IDs chip turned panel IDs on (App: opens the Panel IDs card)
    */
-  constructor({ project, wallController, view, viewModel, probe = null, history, bus, maxTextureSize, raf }) {
+  constructor({ project, wallController, view, viewModel, probe = null, history, bus, maxTextureSize, raf,
+    onPanelIdsShown = null }) {
     this.#project = project;
     this.#wallController = wallController;
     this.#view = view;
@@ -191,6 +196,7 @@ export class UvController {
     this.#bus = bus;
     this.#maxTextureSize = maxTextureSize;
     this.#raf = raf;
+    this.#onPanelIdsShown = onPanelIdsShown;
   }
 
   // ---- viewer commands ------------------------------------------------------------------------------------------
@@ -791,9 +797,13 @@ export class UvController {
     this.#changeSetting('gltfCanvasTexcoord1', UvSettings.RULES.gltfCanvasTexcoord1(on));
   }
 
-  /** The colour-mode chip's action (04 3.7): panel IDs on, like the toggle. Side effects: WallController.setPanelIds(true). */
+  /**
+   * The colour-mode chip's action (04 3.7): panel IDs on, like the toggle, then the Panel IDs controls are revealed.
+   * Side effects: WallController.setPanelIds(true); onPanelIdsShown().
+   */
   showPanelIds() {
     this.#wallController.setPanelIds(true);
+    if (this.#onPanelIdsShown) this.#onPanelIdsShown();
   }
 
   // ---- hover (UV-15) and the canvas readout (UV-12) --------------------------------------------------------------

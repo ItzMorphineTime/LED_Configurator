@@ -26,6 +26,18 @@ export function setCollapsibleExpanded(card, expanded) {
 }
 
 /**
+ * Opens one collapsible card and scrolls it into view, for a feature that needs the controls inside it (2026-11-01:
+ * the pilot-mode alert opens "Camera Frustum Preview"; the UV viewer's Show Panel IDs chip opens "Panel IDs").
+ * Side effects: as setCollapsibleExpanded; scrolls the card into view.
+ * @param {HTMLElement|null} card  a `.collapsible` card (null: nothing happens)
+ */
+export function revealCollapsible(card) {
+  if (!card) return;
+  setCollapsibleExpanded(card, true);
+  if (typeof card.scrollIntoView === 'function') card.scrollIntoView({ block: 'nearest' });
+}
+
+/**
  * Binds every `.collapsible` card under `root`: its toggle's click flips the card (a native button also clicks on
  * Enter and Space).
  * Side effects: one click listener per card toggle.

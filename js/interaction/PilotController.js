@@ -111,6 +111,8 @@ export class PilotController {
   #bus;
   /** @type {{alert(msg: string): void}} */
   #dialogs;
+  /** @type {(() => void)|null} reveals the camera preview controls after the alert */
+  #onPreviewRequired = null;
   /** @type {{position: THREE.Vector3, orbit: import('./OrbitController.js').OrbitSnapshot, fov: number}|null}
    *  legacy `savedCameraState` (never cleared, as legacy) */
   #saved = null;
@@ -130,9 +132,11 @@ export class PilotController {
    *          interaction: import('./InputState.js').InteractionState,
    *          hub: import('../app/CameraController.js').CameraHub,
    *          bus: import('../core/EventBus.js').EventBus,
-   *          dialogs: {alert(msg: string): void}}} deps
+   *          dialogs: {alert(msg: string): void},
+   *          onPreviewRequired?: (() => void)|null}} deps  onPreviewRequired: called after the "Enable Camera Frustum
+   *          Preview first" alert (App: opens the side panel and the Camera Frustum Preview card)
    */
-  constructor({ sceneManager, cine, driver, orbit, keyboard, interaction, hub, bus, dialogs }) {
+  constructor({ sceneManager, cine, driver, orbit, keyboard, interaction, hub, bus, dialogs, onPreviewRequired = null }) {
     this.#sceneManager = sceneManager;
     this.#cine = cine;
     this.#driver = driver;
@@ -142,6 +146,7 @@ export class PilotController {
     this.#hub = hub;
     this.#bus = bus;
     this.#dialogs = dialogs;
+    this.#onPreviewRequired = onPreviewRequired;
   }
 
   /** Side effects: none. @returns {boolean} whether pilot mode is on (interaction.pilotMode) */
@@ -162,6 +167,7 @@ export class PilotController {
   toggle() {
     if (!this.#interaction.pilotMode && !this.#cine.enabled) {
       this.#dialogs.alert('Enable Camera Frustum Preview first to use Pilot Mode');
+      if (this.#onPreviewRequired) this.#onPreviewRequired();
       return;
     }
 
