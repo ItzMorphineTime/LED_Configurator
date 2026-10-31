@@ -167,23 +167,20 @@ export class WallDisplayPanel {
       const panelMode = this.#uvPanelMode;
       panelMode.addEventListener('change', () => uv.setPanelUvs(panelMode.value));
       const gltf = this.#uvGltfUv1;
-      gltf.addEventListener('change', () => uv.setGltfAtlasTexcoord1(gltf.checked));
+      gltf.addEventListener('change', () => uv.setGltfCanvasTexcoord1(gltf.checked));
     }
   }
 
   /**
-   * UV_SETTINGS_CHANGED mirror (04 UV-14): the select values, the glTF option (checked; enabled only for the
-   * per-section layout) and the atlas note lines.
+   * UV_SETTINGS_CHANGED mirror (04 UV-14): the select values, the glTF second-UV-channel option (checked; it applies to
+   * every mesh mode and layout, so it is never disabled) and the atlas note lines.
    * Side effects: writes the UV block's values and the note's children.
    * @param {object} s  the UV_SETTINGS_CHANGED payload
    */
   #mirrorUvSettings(s) {
     if (this.#uvCombinedLayout) this.#uvCombinedLayout.value = s.combinedLayout;
     if (this.#uvPanelMode) this.#uvPanelMode.value = s.panelUvs;
-    if (this.#uvGltfUv1) {
-      this.#uvGltfUv1.checked = !!s.gltfAtlasTexcoord1;
-      this.#uvGltfUv1.disabled = s.combinedLayout !== 'per-section';
-    }
+    if (this.#uvGltfUv1) this.#uvGltfUv1.checked = !!s.gltfCanvasTexcoord1;
     const note = this.#uvAtlasNote;
     if (!note) return;
     note.textContent = '';

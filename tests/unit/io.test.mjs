@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
 import { WallSection } from '../../js/domain/WallSection.js';
 import { Project } from '../../js/domain/Project.js';
 import { UvSettings, UvTransform } from '../../js/domain/UvSettings.js';
-import { planSectionUvs } from '../../js/geometry/UvMapper.js';
+import { canvasUvs, combinedCanvas, planSectionUvs } from '../../js/geometry/UvMapper.js';
 import { LegacyProfiles, Strategies, unsupportedStrategy } from '../../js/legacy/LegacyCompat.js';
 import { computeWallLayout, layoutProject, resolvePivot } from '../../js/geometry/WallLayout.js';
 import { WallPivot } from '../../js/domain/Wall.js';
@@ -1984,7 +1984,8 @@ describe('glTF: stage-facing winding and the NORMAL attribute (B-H2, 08 P2-2d)',
         for (const r of checkGltfOrientation(doc)) assert.equal(r.failures, 0, `${label} [${mode}] ${r.name}: ${r.first}`);
         for (const mesh of doc.meshes) {
           for (const prim of mesh.primitives) {
-            assert.deepEqual(Object.keys(prim.attributes), Strategies.mesh.gltf.attributes, `${label} [${mode}]`);
+            // the profile's attributes, then the combined-canvas TEXCOORD_1 (on by default, 2026-10-31)
+            assert.deepEqual(Object.keys(prim.attributes), [...Strategies.mesh.gltf.attributes, 'TEXCOORD_1'], `${label} [${mode}]`);
             const normal = doc.accessors[prim.attributes.NORMAL];
             assert.equal(normal.componentType, 5126);
             assert.equal(normal.type, 'VEC3');
@@ -2060,14 +2061,16 @@ describe('glTF: stage-facing winding and the NORMAL attribute (B-H2, 08 P2-2d)',
     }
   });
 
-  test('large_wall combined: the NORMAL view grows the buffer from 79,728 to 121,056 bytes (01 2.4; chunked base64 since P2-1a); TEXCOORD_0 (08 P2-7c) adds 8 bytes per vertex', () => {
+  test('large_wall combined: the NORMAL view grows the buffer from 79,728 to 121,056 bytes (01 2.4; chunked base64 since P2-1a); TEXCOORD_0 (08 P2-7c) and TEXCOORD_1 (2026-10-31) add 8 bytes per vertex each', () => {
     const project = projectFromConfig(CONFIGS.large_wall);
     const normals = makeGltf({ ...Strategies.mesh.gltf, attributes: ['POSITION', 'NORMAL'] }).write(writeArgs(project, 'combined'));
     const old = makeGltf({ ...LegacyProfiles.mesh.gltf, indexType: 'auto' }).write(writeArgs(project, 'combined'));
     assert.equal(old.buffers[0].byteLength, 79728);
     assert.equal(normals.buffers[0].byteLength, 121056);
     const vertices = 4 * 41 * 21;   // four sections of 40 x 20 panels: 41 x 21 grid vertices each
-    assert.equal(GLTF.write(writeArgs(project, 'combined')).buffers[0].byteLength, 121056 + 8 * vertices);
+    const uv0Only = { ...writeArgs(project, 'combined'), uvSettings: new UvSettings().assign({ gltfCanvasTexcoord1: false }) };
+    assert.equal(GLTF.write(uv0Only).buffers[0].byteLength, 121056 + 8 * vertices);
+    assert.equal(GLTF.write(writeArgs(project, 'combined')).buffers[0].byteLength, 121056 + 16 * vertices);
   });
 
   test('NORMAL without per-vertex normals is refused: strip modes name mesh.gltf.normals, panel mode mesh.panelNormal', () => {
@@ -2236,12 +2239,13 @@ describe('glTF TEXCOORD_0 (B-M7, 08 P2-7c, 08 6.7)', () => {
     assert.equal(perPanel.extensionsUsed, undefined);
     assert.equal(GLTF.write({ ...writeArgs(project, 'panel'), textures }).images.length, 3, 'section-space panels map their section texture');
     assert.equal(GLTF.write(writeArgs(project, 'section')).images, undefined, 'standalone: untextured');
-    // TEXCOORD_1: the atlas-layout UVs on the per-section combined primitives only
-    const t1 = GLTF.write({ ...writeArgs(project, 'combined'), uvSettings: new UvSettings().assign({ gltfAtlasTexcoord1: true }) });
-    const atlasUvs = new WallMeshBuilder(Strategies.mesh.viewport).combinedGrid(layout, computeAtlas(sections),
-      planSectionUvs({ layout, settings: atlasLayout, meshMode: 'combined', applyTransforms: true })).uvs;
-    assert.deepEqual(t1.meshes[0].primitives.flatMap((p) => floats(t1, p.attributes.TEXCOORD_1)), flipped(atlasUvs));
-    assert.equal(GLTF.write(writeArgs(project, 'combined')).meshes[0].primitives[0].attributes.TEXCOORD_1, undefined);
+    // TEXCOORD_1 (the combined canvas, on by default): no material uses it; switched off, none is written
+    assert.ok(doc.materials.every((m) => m.pbrMetallicRoughness.baseColorTexture === undefined || !m.pbrMetallicRoughness.baseColorTexture.texCoord));
+    const off = new UvSettings().assign({ gltfCanvasTexcoord1: false });
+    for (const mode of MODES) {
+      const d = GLTF.write({ ...writeArgs(project, mode), uvSettings: off });
+      assert.ok(d.meshes.every((m) => m.primitives.every((p) => p.attributes.TEXCOORD_1 === undefined)), `${mode}: off`);
+    }
     // a transformed section writes t = 1 - v of its transformed UVs (section mode)
     sections[0].setUvTransform(new UvTransform({ flipU: true, rotation: 90, sourceRotated: true }));
     const turned = GLTF.write(writeArgs(project, 'section'));
@@ -2268,6 +2272,106 @@ describe('glTF TEXCOORD_0 (B-M7, 08 P2-7c, 08 6.7)', () => {
           assert.deepEqual(a.accessors[prim.attributes.POSITION].min, b.accessors[other.attributes.POSITION].min);
           assert.deepEqual(a.accessors[prim.indices].count, b.accessors[other.indices].count);
         }));
+      }
+    }
+  });
+});
+
+describe('glTF TEXCOORD_1: the combined canvas (the owner request of 2026-10-31, LED_Wall_Gen.blend)', () => {
+  const builder = new WallMeshBuilder(Strategies.mesh.gltf);
+  const floats = (doc, a) => {
+    const accessor = doc.accessors[a];
+    const view = doc.bufferViews[accessor.bufferView];
+    const bytes = Buffer.from(doc.buffers[0].uri.split(',')[1], 'base64');
+    const n = accessor.count * { VEC2: 2, VEC3: 3 }[accessor.type];
+    return Array.from(new Float32Array(bytes.buffer.slice(bytes.byteOffset + view.byteOffset, bytes.byteOffset + view.byteOffset + 4 * n)));
+  };
+  const flipped = (uvs) => Array.from(new Float32Array(uvs.map((x, i) => (i % 2 ? 1 - x : x))));
+  const sec = (i, fields) => new WallSection({ ...WallSection.createDefault(), id: i, name: `Wall ${i + 1}`, ...fields });
+  const write = (project, meshMode, uvSettings = null, gltf = GLTF) =>
+    gltf.write({ sections: project.wall.sections, meshMode, layout: layoutProject(project), uvSettings });
+  /** The primitives of section i in a document of `mode` (panel meshes: `perSection` meshes per section). */
+  const primsOf = (doc, mode, i, perSection) => (mode === 'combined' ? [doc.meshes[0].primitives[i]]
+    : mode === 'section' ? doc.meshes[i].primitives
+      : doc.meshes.slice(i * perSection, (i + 1) * perSection).flatMap((m) => m.primitives));
+  /** [uMin, uMax, vMin, vMax] of TEXCOORD_1 over primitives (v = 1 - t). */
+  const range = (doc, prims) => {
+    const f = prims.flatMap((p) => floats(doc, p.attributes.TEXCOORD_1));
+    const us = f.filter((_, k) => k % 2 === 0);
+    const vs = f.filter((_, k) => k % 2 === 1).map((t) => 1 - t);
+    return [Math.min(...us), Math.max(...us), Math.min(...vs), Math.max(...vs)];
+  };
+  const nearAll = (got, want, label) => got.forEach((g, k) => assert.ok(Math.abs(g - want[k]) <= 1e-6, `${label}[${k}]: ${g} vs ${want[k]}`));
+
+  test('combinedCanvas / canvasUvs: x_i = sum of the previous pixel widths, u1 = (x_i + u0 w_i) / W, v1 = v0 h_i / W', () => {
+    const canvas = combinedCanvas([{ panelCols: 5, panelRows: 3, ledX: 32, ledY: 32 }, { panelCols: 10, panelRows: 4, ledX: 64, ledY: 48 }]);
+    assert.deepEqual(canvas, { W: 800, entries: [{ x: 0, w: 160, h: 96 }, { x: 160, w: 640, h: 192 }] });
+    assert.deepEqual(canvasUvs(canvas, 1, [0, 0, 1, 1, 0.5, 0.25]), [0.2, 0, 1, 0.24, 0.6, 0.06]);
+    assert.equal(combinedCanvas([]), null);
+    assert.equal(combinedCanvas([{ panelCols: 0, panelRows: 3, ledX: 32, ledY: 32 }]), null);
+  });
+
+  test('five equal 6 m x 6 m concave sections (the reference): strips [0.2 i, 0.2 (i + 1)], v in [0, 0.2], in every mode', () => {
+    const project = projectOf([0, 1, 2, 3, 4].map((i) => sec(i, { panelCols: 12, panelRows: 12, ledX: 32, ledY: 32, curveIntensity: 3 })), 'section');
+    for (const mode of MODES) {
+      const doc = write(project, mode);
+      assert.deepEqual(checkGltfDocument(doc), [], mode);
+      for (let i = 0; i < 5; i++) {
+        nearAll(range(doc, primsOf(doc, mode, i, 144)), [0.2 * i, 0.2 * (i + 1), 0, 0.2], `${mode} section ${i}`);
+      }
+      assert.ok(doc.materials.every((m) => !m.pbrMetallicRoughness.baseColorTexture), 'no material uses it');
+    }
+  });
+
+  test('unequal sections are proportional to their pixel sizes (square pixels); the values are exact', () => {
+    const project = projectOf([sec(0, { panelCols: 5, panelRows: 3, ledX: 32, ledY: 32 }), sec(1, { panelCols: 10, panelRows: 4, ledX: 64, ledY: 48 })], 'section');
+    const doc = write(project, 'section');
+    nearAll(range(doc, primsOf(doc, 'section', 0)), [0, 0.2, 0, 0.12], 'section 0');
+    nearAll(range(doc, primsOf(doc, 'section', 1)), [0.2, 1, 0, 0.24], 'section 1');
+    const layout = layoutProject(project);
+    const canvas = combinedCanvas(project.wall.sections);
+    layout.sections.forEach((sl, i) => {
+      assert.deepEqual(floats(doc, doc.meshes[i].primitives[0].attributes.TEXCOORD_1), flipped(canvasUvs(canvas, i, builder.sectionUvs(sl, null))));
+    });
+  });
+
+  test('a UV-editor transform is carried into TEXCOORD_1 (section and combined modes, either combined layout)', () => {
+    const project = projectOf([sec(0, {}), sec(1, { panelCols: 8 }), sec(2, {})], 'section');
+    project.wall.sections[1].setUvTransform(new UvTransform({ flipU: true, rotation: 90, sourceRotated: true }));
+    const layout = layoutProject(project);
+    const canvas = combinedCanvas(project.wall.sections);
+    const plan = planSectionUvs({ layout, settings: null, meshMode: 'section', applyTransforms: true })[1];
+    const want = flipped(canvasUvs(canvas, 1, builder.sectionUvs(layout.sections[1], plan)));
+    assert.notDeepEqual(want, flipped(canvasUvs(canvas, 1, builder.sectionUvs(layout.sections[1], null))), 'the transform changes UV1');
+    const sectionDoc = write(project, 'section');
+    assert.deepEqual(floats(sectionDoc, sectionDoc.meshes[1].primitives[0].attributes.TEXCOORD_1), want);
+    for (const combinedLayout of ['per-section', 'atlas']) {
+      const doc = write(project, 'combined', new UvSettings().assign({ combinedLayout }));
+      assert.deepEqual(floats(doc, doc.meshes[0].primitives[1].attributes.TEXCOORD_1), want, combinedLayout);
+    }
+  });
+
+  test('panel mode: the section-space panel corners on the canvas, also when TEXCOORD_0 is per panel', () => {
+    const project = projectOf([sec(0, { panelCols: 3, panelRows: 2 }), sec(1, { panelCols: 2, panelRows: 2, ledX: 64 })], 'panel');
+    project.wall.sections[0].setUvTransform(new UvTransform({ flipV: true }));
+    const layout = layoutProject(project);
+    const canvas = combinedCanvas(project.wall.sections);
+    const plans = planSectionUvs({ layout, settings: null, meshMode: 'section', applyTransforms: true });
+    const want = layout.sections.flatMap((sl, i) => sl.panels.map((panel) => flipped(canvasUvs(canvas, i, builder.panelUvs(panel, sl, plans[i]).flat()))));
+    for (const panelUvs of ['section', 'panel']) {
+      const doc = write(project, 'panel', new UvSettings().assign({ panelUvs }));
+      assert.equal(doc.meshes.length, want.length);
+      doc.meshes.forEach((mesh, m) => assert.deepEqual(floats(doc, mesh.primitives[0].attributes.TEXCOORD_1), want[m], `${panelUvs} ${mesh.name}`));
+    }
+  });
+
+  test('the Phase-1 profile never writes it; switched off, no mode writes it', () => {
+    const project = projectOf([sec(0, {}), sec(1, {})], 'combined');
+    const legacy = makeGltf(LegacyProfiles.mesh.gltf);
+    const off = new UvSettings().assign({ gltfCanvasTexcoord1: false });
+    for (const mode of MODES) {
+      for (const doc of [write(project, mode, null, legacy), write(project, mode, off)]) {
+        assert.ok(doc.meshes.every((m) => m.primitives.every((p) => p.attributes.TEXCOORD_1 === undefined)), mode);
       }
     }
   });

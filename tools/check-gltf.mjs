@@ -17,7 +17,7 @@
 //     stores the float64 extremes of values that the buffer holds as float32 (docs/DEFECTS.md, second rejected report),
 //     so a stored extreme passes when Math.fround(stored) equals the float32 extreme exactly, and fails when it is
 //     off by one float32 ulp;
-//   * NORMAL: VEC3 float, unit length within 1e-6; TEXCOORD_0: VEC2 with the POSITION count;
+//   * NORMAL: VEC3 float, unit length within 1e-6; TEXCOORD_0 and TEXCOORD_1: VEC2 with the POSITION count;
 //   * nodes, scenes and meshes reference valid indices.
 // The full Khronos glTF-Validator is a recorded manual step (08 section 8.6).
 import fs from 'node:fs';
@@ -209,11 +209,12 @@ export function checkGltfDocument(doc, { baseDir = null } = {}) {
                     } catch (e) { err(`${where}: ${e.message}`); }
                 }
             }
-            const ti = attrs.TEXCOORD_0;
-            if (ti !== undefined && isIndex(ti, accessors.length)) {
+            for (const key of ['TEXCOORD_0', 'TEXCOORD_1']) {
+                const ti = attrs[key];
+                if (ti === undefined || !isIndex(ti, accessors.length)) continue;
                 const acc = accessors[ti];
-                if (acc.type !== 'VEC2') err(`${where}: TEXCOORD_0 must be VEC2`);
-                if (isIndex(pi, accessors.length) && acc.count !== accessors[pi].count) err(`${where}: TEXCOORD_0 count ${acc.count} != POSITION count ${accessors[pi].count}`);
+                if (acc.type !== 'VEC2') err(`${where}: ${key} must be VEC2`);
+                if (isIndex(pi, accessors.length) && acc.count !== accessors[pi].count) err(`${where}: ${key} count ${acc.count} != POSITION count ${accessors[pi].count}`);
             }
 
             if (prim.indices !== undefined) {

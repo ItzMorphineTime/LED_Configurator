@@ -276,10 +276,11 @@ describe('UvController: observers and settings', () => {
     s.project.meshMode = 'combined';
     s.uv.setCombinedLayout('per-section');
     assert.deepEqual(s.rebuilds, ['edit']);
-    s.uv.setGltfAtlasTexcoord1(true);
+    s.uv.setGltfCanvasTexcoord1(false);
+    assert.equal(s.project.uv.gltfCanvasTexcoord1, false);
     assert.deepEqual(s.rebuilds, ['edit'], 'export-only');
     s.uv.undo();
-    assert.equal(s.project.uv.gltfAtlasTexcoord1, false);
+    assert.equal(s.project.uv.gltfCanvasTexcoord1, true);
     s.uv.undo();
     assert.equal(s.project.uv.combinedLayout, 'atlas');
     assert.deepEqual(s.rebuilds, ['edit', 'edit']);

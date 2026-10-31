@@ -119,7 +119,8 @@
                                 <option value="panel">Per panel 0–1 (legacy)</option>
                             </select>
                         </div>
-                        <label class="uv-check"><input type="checkbox" id="uv-gltf-uv1"><span>glTF: also write atlas UVs (TEXCOORD_1)</span></label>
+                        <label class="uv-check" title="Every glTF mesh also gets a second UV set: the sections side by side in wall order along the bottom of one square canvas, pixels square. OBJ holds one UV set and keeps UV channel 0 only."><input type="checkbox" id="uv-gltf-uv1" checked><span>glTF: second UV channel (combined canvas, TEXCOORD_1)</span></label>
+                        <div class="curve-hint">UV channel 1 places every section on one combined canvas, side by side in wall order; channel 0 is unchanged. glTF only: OBJ keeps UV channel 0.</div>
                         <div class="uv-atlas-note" id="uv-atlas-note"></div>
                         <div class="curve-hint">UV settings and UV edits (Edit UVs…, or U) are session-only: project files do not save them yet.</div>
                     </div>

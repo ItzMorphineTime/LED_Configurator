@@ -13,12 +13,18 @@ import { exportSectionName, exportPanelName, mtlTextureFile } from '../geometry/
 import { maxIndexOf, indexWidth, atlasUvRect } from '../geometry/WallMeshBuilder.js';
 import { computeAtlas } from '../geometry/TextureAtlas.js';
 import { isIdentityResolution } from '../geometry/WallLayout.js';
-import { planSectionUvs } from '../geometry/UvMapper.js';
+import { canvasUvs, combinedCanvas, planSectionUvs } from '../geometry/UvMapper.js';
 import { UvSettings } from '../domain/UvSettings.js';
 import { unsupportedStrategy } from '../legacy/LegacyCompat.js';
 
 /** The UV settings of a write that passes none: the defaults (04 4.1), frozen. */
 const DEFAULT_UV_SETTINGS = Object.freeze(new UvSettings());
+
+/**
+ * The settings of the TEXCOORD_1 source plans: each section's own 0..1 with its UV transform (the section-mode plan),
+ * in every mesh mode, so panel meshes use their section-space corners, never the per-panel 0..1. Frozen.
+ */
+const SECTION_SPACE_UVS = Object.freeze({ combinedLayout: 'per-section', panelUvs: 'section' });
 
 /**
  * The one texture sampler of a textured (ZIP) glTF (04 7.3): linear, trilinear mipmaps, clamped to the edge.
@@ -123,8 +129,10 @@ export class GltfExporter {
    * Spec 04 (UV-8b, UV-9; 04 7.3): TEXCOORD_0 comes from the export UV plans (uvPlans, default planSectionUvs of
    * uvSettings with the UV transforms): combined (profile.combinedUV 'plan') each section filling 0..1 in the per-section
    * layout or atlas-placed, section mode the section's transformed 0..1, panel mode the section-space panel corners
-   * (per-panel 0..1 with uv.panel_uvs = 'panel'). With uvSettings.gltfAtlasTexcoord1 the per-section combined primitives
-   * also get TEXCOORD_1 = the atlas-layout UVs (no material uses it). With `textures` (the ZIP: the files the archive
+   * (per-panel 0..1 with uv.panel_uvs = 'panel'). With uvSettings.gltfCanvasTexcoord1 (on by default) and TEXCOORD_0 in
+   * the profile, every primitive of every mode also gets TEXCOORD_1 = the combined canvas (#canvasUv1: the section-space
+   * UVs after the UV transform, panel meshes included, mapped by UvMapper.canvasUvs; written (u, 1 - v) like
+   * TEXCOORD_0; no material uses it). With `textures` (the ZIP: the files the archive
    * holds) each material whose UVs address a shipped texture (the 04 7.1 rules: the section texture in section mode,
    * combined per-section and panel 'section'; the atlas in the combined atlas layout) gets baseColorTexture (factor white)
    * and KHR_materials_unlit, the document gets one sampler, an image per distinct file (relative URI), a texture per
@@ -144,7 +152,7 @@ export class GltfExporter {
   write({ sections, meshMode, layout, uvSettings = null, uvPlans = null, textures = null }) {
     const settings = uvSettings ?? DEFAULT_UV_SETTINGS;
     const plans = uvPlans ?? planSectionUvs({ layout, atlas: computeAtlas(sections), settings, meshMode, applyTransforms: true });
-    const uv = { settings, plans, textures };
+    const uv = { settings, plans, textures, uv1: this.#canvasUv1(layout, settings) };
     const gltf = {
       asset: { version: "2.0", generator: this.#brand.gltfGenerator },
       scene: 0,
@@ -218,20 +226,16 @@ export class GltfExporter {
    * @param {BufferState} state
    * @param {import('../domain/WallSection.js').WallSection[]} sections
    * @param {import('../geometry/WallLayout.js').WallLayout} layout
-   * @param {{settings: UvSettings, plans: object[], textures: object|null}} uv
+   * @param {{settings: UvSettings, plans: object[], textures: object|null, uv1: object|null}} uv
    */
-  #writeCombined(state, sections, layout, { settings, plans, textures }) {
+  #writeCombined(state, sections, layout, { settings, plans, textures, uv1 }) {
     const uvFor = this.#combinedUvOption(sections, plans);
     const withUvs = this.#attributeList().includes('TEXCOORD_0');
     const perSection = withUvs && this.#builder.profile.combinedUV === 'plan' && settings.combinedLayout !== 'atlas';
-    const atlasPlans = perSection && settings.gltfAtlasTexcoord1
-      ? planSectionUvs({ layout, atlas: computeAtlas(sections), settings: { combinedLayout: 'atlas', panelUvs: settings.panelUvs },
-        meshMode: 'combined', applyTransforms: true })
-      : null;
     const primitives = layout.sections.map((sl, sectionIndex) => {
       const grid = this.#builder.sectionGrid(sl, { indexBase: 0, uv: uvFor(sectionIndex) });
       const attrs = { positions: grid.positions, normals: grid.normals, uvs: grid.uvs };
-      if (atlasPlans) attrs.uvs1 = this.#builder.sectionUvs(sl, atlasPlans[sectionIndex]);
+      if (uv1) attrs.uvs1 = canvasUvs(uv1.canvas, sectionIndex, this.#builder.sectionUvs(sl, uv1.plans[sectionIndex]));
       let textureFile = null;
       if (textures && withUvs) textureFile = perSection ? sectionTexture(textures.sectionFiles, sectionIndex) : textures.atlasFile;
       return {
@@ -274,22 +278,39 @@ export class GltfExporter {
   }
 
   /**
+   * The source of TEXCOORD_1 (the owner's request of 2026-10-31): null unless uvSettings.gltfCanvasTexcoord1 is on, the
+   * profile writes TEXCOORD_0 (so the Phase-1 profiles never gain it) and the wall has a positive canvas width; else the
+   * combined canvas of the layout's sections (UvMapper.combinedCanvas, wall order) and the section-space plans
+   * (SECTION_SPACE_UVS, the UV transforms applied) whose UVs UvMapper.canvasUvs maps onto it.
+   * @param {import('../geometry/WallLayout.js').WallLayout} layout
+   * @param {UvSettings} settings
+   * @returns {{canvas: {W: number, entries: object[]}, plans: object[]}|null}
+   */
+  #canvasUv1(layout, settings) {
+    if (!settings.gltfCanvasTexcoord1 || !this.#attributeList().includes('TEXCOORD_0')) return null;
+    const canvas = combinedCanvas(layout.sections.map((sl) => sl.section));
+    if (!canvas) return null;
+    return { canvas, plans: planSectionUvs({ layout, settings: SECTION_SPACE_UVS, meshMode: 'section', applyTransforms: true }) };
+  }
+
+  /**
    * Section mode, verbatim 4853-4868: per section its grid (indices from 0), then its colour, then its mesh. With
    * TEXCOORD_0 (08 P2-7c) the grid carries the section's own 0..1 UVs (the UVs of the section texture; 04 UV-8b: the
    * section's export plan, so its UV transform applies; identity plans give the 'unit' values bit for bit) and, in the
-   * ZIP, the material maps the section texture.
+   * ZIP, the material maps the section texture. TEXCOORD_1 as described in write().
    * @param {BufferState} state
    * @param {import('../geometry/WallLayout.js').WallLayout} layout
-   * @param {{plans: object[], textures: object|null}} uv
+   * @param {{plans: object[], textures: object|null, uv1: object|null}} uv
    */
-  #writeSections(state, layout, { plans, textures }) {
+  #writeSections(state, layout, { plans, textures, uv1 }) {
     const withUvs = this.#attributeList().includes('TEXCOORD_0');
     layout.sections.forEach((sl, sectionIndex) => {
       const grid = this.#builder.sectionGrid(sl, { indexBase: 0, uv: withUvs ? plans[sectionIndex] : null });
       const color = this.#colorToRgb(sl.section.color);
       const textureFile = textures && withUvs ? sectionTexture(textures.sectionFiles, sectionIndex) : null;
-      this.#addMesh(state, exportSectionName(sectionIndex),
-        [{ attrs: { positions: grid.positions, normals: grid.normals, uvs: grid.uvs }, indices: grid.indices, color, textureFile }]);
+      const attrs = { positions: grid.positions, normals: grid.normals, uvs: grid.uvs };
+      if (uv1) attrs.uvs1 = canvasUvs(uv1.canvas, sectionIndex, this.#builder.sectionUvs(sl, uv1.plans[sectionIndex]));
+      this.#addMesh(state, exportSectionName(sectionIndex), [{ attrs, indices: grid.indices, color, textureFile }]);
     });
   }
 
@@ -301,12 +322,13 @@ export class GltfExporter {
    * (08 P2-7c) the UVs are builder.panelUvs(panel, sl, plan) (04 UV-9: the panel's section-space corners with the UV
    * transform, the OBJ panel `vt`; per-panel 0..1, WallMeshBuilder.PANEL_UVS, with uv.panel_uvs = 'panel'), and in the
    * ZIP each material of a section-space panel maps its section texture. The attribute list is checked first
-   * (#attributeList), so a foreign list throws its own error before any builder call.
+   * (#attributeList), so a foreign list throws its own error before any builder call. TEXCOORD_1 (write()) maps the
+   * panel's section-space corners, whatever uv.panel_uvs says.
    * @param {BufferState} state
    * @param {import('../geometry/WallLayout.js').WallLayout} layout
-   * @param {{plans: object[], textures: object|null}} uv
+   * @param {{plans: object[], textures: object|null, uv1: object|null}} uv
    */
-  #writePanels(state, layout, { plans, textures }) {
+  #writePanels(state, layout, { plans, textures, uv1 }) {
     const builder = this.#builder;
     const withNormals = this.#attributeList().includes('NORMAL');
     const withUvs = this.#attributeList().includes('TEXCOORD_0');
@@ -321,10 +343,12 @@ export class GltfExporter {
         for (const c of builder.panelCorners(panel, panelW, panelH)) vertices.push(c.x, c.y, c.z);
         const normals = withNormals ? builder.panelNormals(panel) : [];
         const uvs = withUvs ? builder.panelUvs(panel, sl, plan).flat() : [];
+        const attrs = { positions: vertices, normals, uvs };
+        if (uv1) attrs.uvs1 = canvasUvs(uv1.canvas, sectionIndex, builder.panelUvs(panel, sl, uv1.plans[sectionIndex]).flat());
 
         const indices = builder.panelQuadIndices(0);
         const name = exportPanelName(sectionIndex, panel.row, panel.col);
-        this.#addMesh(state, name, [{ attrs: { positions: vertices, normals, uvs }, indices, color, textureFile }]);
+        this.#addMesh(state, name, [{ attrs, indices, color, textureFile }]);
       });
     });
   }
@@ -408,7 +432,8 @@ export class GltfExporter {
             throw unsupportedStrategy('mesh.gltf.attributes', attributes);
         }
       }
-      // 04 7.3 (Q3): the optional atlas UVs, after the profile's attributes (written (u, 1 - v) like TEXCOORD_0).
+      // The second UV channel (the combined canvas, write()), after the profile's attributes (written (u, 1 - v) like
+      // TEXCOORD_0).
       if (attrs.uvs1) accessors.TEXCOORD_1 = this.#addTexCoords(state, attrs.uvs1);
 
       const { IndexArray, componentType } = formats[p];

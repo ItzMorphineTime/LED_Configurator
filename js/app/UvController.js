@@ -33,7 +33,7 @@ const FIELD_LABELS = Object.freeze({
 const PRESET_LABELS = Object.freeze({ reset: 'Reset', fit: 'Fit 0–1', pixel: 'Pixel-accurate' });
 /** The settings and their history labels. */
 const SETTING_LABELS = Object.freeze({
-  combinedLayout: 'UV layout', panelUvs: 'Panel UVs', gltfAtlasTexcoord1: 'glTF atlas UVs',
+  combinedLayout: 'UV layout', panelUvs: 'Panel UVs', gltfCanvasTexcoord1: 'glTF second UV channel',
 });
 
 /** A raw UI value as a number (numbers as given, anything else through parseFloat). */
@@ -495,9 +495,12 @@ export class UvController {
     this.#changeSetting('panelUvs', UvSettings.RULES.panelUvs(value));
   }
 
-  /** Side effects: as #changeSetting (export-only: never rebuilds). @param {boolean} on */
-  setGltfAtlasTexcoord1(on) {
-    this.#changeSetting('gltfAtlasTexcoord1', UvSettings.RULES.gltfAtlasTexcoord1(on));
+  /**
+   * The glTF second UV channel (TEXCOORD_1, the combined canvas).
+   * Side effects: as #changeSetting (export-only: never rebuilds). @param {boolean} on
+   */
+  setGltfCanvasTexcoord1(on) {
+    this.#changeSetting('gltfCanvasTexcoord1', UvSettings.RULES.gltfCanvasTexcoord1(on));
   }
 
   /** The colour-mode chip's action (04 3.7): panel IDs on, like the toggle. Side effects: WallController.setPanelIds(true). */
@@ -713,7 +716,7 @@ export class UvController {
       if (cache.sectionScale) sectionTextures = { reduced: cache.sectionScale.reduced, pxPerLed: cache.sectionScale.pxPerLed };
     }
     this.#bus.emit(Events.UV_SETTINGS_CHANGED, {
-      combinedLayout: uv.combinedLayout, panelUvs: uv.panelUvs, gltfAtlasTexcoord1: uv.gltfAtlasTexcoord1, atlas, sectionTextures,
+      combinedLayout: uv.combinedLayout, panelUvs: uv.panelUvs, gltfCanvasTexcoord1: uv.gltfCanvasTexcoord1, atlas, sectionTextures,
     });
   }
 

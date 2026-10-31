@@ -234,15 +234,21 @@ export class UvTransform {
 
 /**
  * The project-wide UV settings (04 4.1; `Project.uv`, injected by reference and never replaced: assign() hydrates it in
- * place). Defaults: the per-section Combined layout (the owner's decision), section-space panel UVs, no glTF TEXCOORD_1.
+ * place). Defaults: the per-section Combined layout (the owner's decision), section-space panel UVs, and the glTF
+ * second UV channel (TEXCOORD_1, the combined canvas) on.
  */
 export class UvSettings {
   /** @type {'per-section'|'atlas'} */
   combinedLayout = UvLayout.PER_SECTION;
   /** @type {'section'|'panel'} */
   panelUvs = PanelUvMode.SECTION;
-  /** @type {boolean} write the atlas UVs as glTF TEXCOORD_1 in the per-section Combined layout (04 7.3, Q3) */
-  gltfAtlasTexcoord1 = false;
+  /**
+   * Write glTF TEXCOORD_1 = the combined canvas (every section side by side in wall order on one square canvas, pixels
+   * square; UvMapper.combinedCanvas) on every primitive of every mesh mode (the owner's request of 2026-10-31, the
+   * reference LED_Wall_Gen.blend's "UVMap_Combined"; it replaced 04 7.3's optional atlas TEXCOORD_1). On by default.
+   * @type {boolean}
+   */
+  gltfCanvasTexcoord1 = true;
 
   /**
    * The value rules (04 4.2): an unknown enum value gives the default; the boolean takes true or "true" only.
@@ -251,43 +257,43 @@ export class UvSettings {
   static RULES = Object.freeze({
     combinedLayout: (raw) => (Object.values(UvLayout).includes(raw) ? raw : UvLayout.PER_SECTION),
     panelUvs: (raw) => (Object.values(PanelUvMode).includes(raw) ? raw : PanelUvMode.SECTION),
-    gltfAtlasTexcoord1: bool,
+    gltfCanvasTexcoord1: bool,
   });
 
   /** Side effects: none. @returns {boolean} every setting has its default */
   get isDefault() {
     return this.combinedLayout === UvLayout.PER_SECTION && this.panelUvs === PanelUvMode.SECTION
-      && this.gltfAtlasTexcoord1 === false;
+      && this.gltfCanvasTexcoord1 === true;
   }
 
   /**
    * Hydrates the settings in place from validated values (07 4.1: aggregate parts are never replaced); an undefined
    * value leaves its setting unchanged.
    * Side effects: writes the given settings.
-   * @param {{combinedLayout?: string, panelUvs?: string, gltfAtlasTexcoord1?: boolean}} values
+   * @param {{combinedLayout?: string, panelUvs?: string, gltfCanvasTexcoord1?: boolean}} values
    * @returns {UvSettings} this
    */
-  assign({ combinedLayout, panelUvs, gltfAtlasTexcoord1 } = {}) {
+  assign({ combinedLayout, panelUvs, gltfCanvasTexcoord1 } = {}) {
     if (combinedLayout !== undefined) this.combinedLayout = combinedLayout;
     if (panelUvs !== undefined) this.panelUvs = panelUvs;
-    if (gltfAtlasTexcoord1 !== undefined) this.gltfAtlasTexcoord1 = gltfAtlasTexcoord1;
+    if (gltfCanvasTexcoord1 !== undefined) this.gltfCanvasTexcoord1 = gltfCanvasTexcoord1;
     return this;
   }
 
   /**
    * Side effects: none.
-   * @returns {{combined_layout: string, panel_uvs: string, gltf_atlas_texcoord1: boolean}} the full 04 4.2 object
+   * @returns {{combined_layout: string, panel_uvs: string, gltf_canvas_texcoord1: boolean}} the full 04 4.2 object
    */
   toJSON() {
-    return { combined_layout: this.combinedLayout, panel_uvs: this.panelUvs, gltf_atlas_texcoord1: this.gltfAtlasTexcoord1 };
+    return { combined_layout: this.combinedLayout, panel_uvs: this.panelUvs, gltf_canvas_texcoord1: this.gltfCanvasTexcoord1 };
   }
 
   /**
    * Side effects: none.
    * @param {object} v  a validated 04 4.2 `uv` object
-   * @returns {{combinedLayout: string, panelUvs: string, gltfAtlasTexcoord1: boolean}} the field object for assign()
+   * @returns {{combinedLayout: string, panelUvs: string, gltfCanvasTexcoord1: boolean}} the field object for assign()
    */
   static fromJSON(v) {
-    return { combinedLayout: v.combined_layout, panelUvs: v.panel_uvs, gltfAtlasTexcoord1: v.gltf_atlas_texcoord1 };
+    return { combinedLayout: v.combined_layout, panelUvs: v.panel_uvs, gltfCanvasTexcoord1: v.gltf_canvas_texcoord1 };
   }
 }

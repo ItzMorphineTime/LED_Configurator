@@ -458,7 +458,7 @@ are unchanged.
 |---|---|---|
 | Combined mesh UVs | **Per-section 0–1** (default, one material per section) / **Atlas, pixel-accurate** (one texture) | Atlas lays the sections side by side exactly like the Panel IDs PNG. For one feed per mesh (nDisplay mesh projection, a disguise screen object) use Atlas, or Individual Section Meshes. |
 | Panel UVs | **Section space** (default) / **Per panel 0–1** (legacy) | The legacy option gives every panel its own 0–1 square and its own panel-ID texture; UV edits do not apply to it. |
-| glTF: also write atlas UVs (TEXCOORD_1) | off / on | A second UV channel with the atlas UVs in the per-section layout (glTF only; OBJ has one UV set). |
+| glTF: second UV channel (combined canvas, TEXCOORD_1) | **on** (default) / off | Every glTF mesh, in every mesh mode, also gets UV channel 1: all sections side by side in wall order along the bottom of one square canvas, scaled uniformly so pixels stay square (five equal sections fill u 0–0.2, 0.2–0.4, … with v 0–0.2). UV edits carry over; panel meshes use their section-space position. glTF only: OBJ holds one UV set and keeps UV channel 0. |
 
 The note below the options gives the atlas size in LED pixels and the size of the Panel IDs PNG and ZIP atlas
 (`png px = LED px × px/LED`), with warnings when the wall is larger than 4K, beyond the GPU texture limit (the Atlas
@@ -506,6 +506,16 @@ textures themselves are never transformed (the UVs pick the part of the source e
 Unity or an Unreal static mesh each section is a material slot with its own 0–1 UVs. For nDisplay mesh projection or a
 disguise screen object use the Atlas layout or Individual Section Meshes, so one 0–1 canvas covers the mesh without the
 per-section islands repeating the feed.
+
+The glTF (Export glTF, and the glTF inside Export All) also carries a second UV channel, `TEXCOORD_1` (Blender names
+the layers `UVMap` and `UVMap.001`), by default: the combined canvas, with every section laid side by side in wall order
+along the bottom of one square 0–1 canvas whose side is the wall's total pixel width, so pixels stay square. Section i
+covers u from x_i / W to (x_i + w_i) / W and v from 0 to h_i / W, where w_i and h_i are its pixel width and height
+(panels × LEDs), x_i the pixel width of the sections before it and W the total width; UV edits are carried into it, and
+panel meshes use their place in their section. No material reads it, so use it for one feed across all sections (for
+example a camera-mapped or pre-rendered combined plate). OBJ holds a single UV set, so the OBJ export keeps UV channel 0
+only. Untick "glTF: second UV channel" to leave it out (for example when an engine's lightmap UV generation targets
+channel 1).
 
 ### Session only (for now)
 UV edits and the UV Mapping options last for the session: Export JSON and Export All (ZIP) do not save them yet, and
@@ -632,6 +642,7 @@ Contributions are welcome! Feel free to:
 ## 📋 Changelog
 
 ### Latest Updates
+- ✅ glTF second UV channel (`TEXCOORD_1`, on by default): every section on one combined canvas in wall order, pixels square, in every mesh mode (OBJ keeps UV channel 0)
 - ✅ "Centre on +X (LED faces −X)" alignment, now the default (the wall's centre on +X, facing the origin, like the reference Blender scene); new-project props stand in front of the LED face
 - ✅ Whole-wall orientation: "Centre on −X" alignment (the wall's centre on the −X axis, LED face toward +X) plus a yaw offset; camera and props follow the wall with Keep stage layout
 - ✅ New defaults for new projects: Individual Section Meshes, Wall centre on floor, Centre on −X; Mesh Options and Wall Pivot are collapsible and start collapsed

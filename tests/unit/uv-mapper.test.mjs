@@ -99,19 +99,20 @@ describe('UvTransform and UvSettings (04 4.1, UV-5a)', () => {
     assert.equal(t.offsetU, 0.1, 'a clone is independent');
   });
 
-  test('UvSettings: defaults (per-section, section, no TEXCOORD_1), RULES, assign in place, JSON shapes', () => {
+  test('UvSettings: defaults (per-section, section, the canvas TEXCOORD_1 on), RULES, assign in place, JSON shapes', () => {
     const s = new UvSettings();
     assert.equal(s.combinedLayout, UvLayout.PER_SECTION);
     assert.equal(s.panelUvs, PanelUvMode.SECTION);
-    assert.equal(s.gltfAtlasTexcoord1, false);
+    assert.equal(s.gltfCanvasTexcoord1, true);
     assert.ok(s.isDefault);
+    assert.equal(UvSettings.RULES.gltfCanvasTexcoord1('yes'), false);
     assert.equal(UvSettings.RULES.combinedLayout('mode'), 'per-section');
     assert.equal(UvSettings.RULES.panelUvs('panel'), 'panel');
     assert.equal(s.assign({ combinedLayout: 'atlas' }), s);
     assert.equal(s.combinedLayout, 'atlas');
     assert.equal(s.panelUvs, 'section', 'undefined values are left unchanged');
-    assert.deepEqual(s.toJSON(), { combined_layout: 'atlas', panel_uvs: 'section', gltf_atlas_texcoord1: false });
-    assert.deepEqual(UvSettings.fromJSON(s.toJSON()), { combinedLayout: 'atlas', panelUvs: 'section', gltfAtlasTexcoord1: false });
+    assert.deepEqual(s.toJSON(), { combined_layout: 'atlas', panel_uvs: 'section', gltf_canvas_texcoord1: true });
+    assert.deepEqual(UvSettings.fromJSON(s.toJSON()), { combinedLayout: 'atlas', panelUvs: 'section', gltfCanvasTexcoord1: true });
   });
 
   test('WallSection.uvTransform: identity by default, never an own field, setUvTransform stores a clone; Project.uv', () => {

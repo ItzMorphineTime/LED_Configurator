@@ -210,6 +210,46 @@ export function sectionUv(plan, u, v, out = [0, 0]) {
 }
 
 /**
+ * The combined canvas of the glTF second UV channel (TEXCOORD_1; the owner's request of 2026-10-31, after the reference
+ * LED_Wall_Gen.blend's "UVMap_Combined"): every section side by side in wall order along the bottom of one square
+ * canvas of side W = sum of w_j pixels, with w_i = panelCols·ledX and h_i = panelRows·ledY, so the pixels stay square;
+ * section i starts at x_i = sum of w_j for j < i. Five equal sections give the strips [0, 0.2] … [0.8, 1] with v in
+ * [0, 0.2].
+ * Side effects: none.
+ * @param {{panelCols: number, panelRows: number, ledX: number, ledY: number}[]} sections  in wall order
+ * @returns {{W: number, entries: {x: number, w: number, h: number}[]}|null} null when W is not positive and finite
+ */
+export function combinedCanvas(sections) {
+  let W = 0;
+  const entries = sections.map((s) => {
+    const e = { x: W, w: s.panelCols * s.ledX, h: s.panelRows * s.ledY };
+    W += e.w;
+    return e;
+  });
+  return Number.isFinite(W) && W > 0 ? { W, entries } : null;
+}
+
+/**
+ * Section-space UVs mapped onto the combined canvas (combinedCanvas): u1 = (x_i + u0·w_i) / W, v1 = v0·h_i / W, where
+ * (u0, v0) is the section-space UV after the section's UV transform.
+ * Side effects: none.
+ * @param {{W: number, entries: {x: number, w: number, h: number}[]}} canvas
+ * @param {number} i  the section's index in wall order
+ * @param {number[]} uvs  flat u0, v0 pairs
+ * @returns {number[]} a new flat array of u1, v1 pairs
+ */
+export function canvasUvs(canvas, i, uvs) {
+  const { x, w, h } = canvas.entries[i];
+  const { W } = canvas;
+  const out = new Array(uvs.length);
+  for (let k = 0; k < uvs.length; k += 2) {
+    out[k] = (x + uvs[k] * w) / W;
+    out[k + 1] = (uvs[k + 1] * h) / W;
+  }
+  return out;
+}
+
+/**
  * The island corners [BL, BR, TR, TL] = applyUv of (0, 0), (1, 0), (1, 1), (0, 1).
  * Side effects: none.
  * @param {UvTransform|null} t
