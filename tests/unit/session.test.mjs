@@ -144,6 +144,18 @@ describe('ProjectSession.apply (07 5.5.2)', () => {
 });
 
 describe('ProjectSession dirty, isPristineNew, save, new and the report (07 5.5.2)', () => {
+  test('setOnSaved runs after a save, once the project is clean (autosave records the saved state)', () => {
+    const r = rig();
+    const seen = [];
+    r.session.setOnSaved(() => seen.push(r.session.dirty));
+    r.project.wall.sections[0].setField('panelCols', '7');
+    r.session.saveFile();
+    assert.deepEqual(seen, [false]);
+    r.session.setOnSaved(null);
+    r.session.saveFile();
+    assert.deepEqual(seen, [false], 'cleared: not called again');
+  });
+
   test('dirty toggles on an edit and clears on save, open and new; isPristineNew until the first edit or an open', async () => {
     const r = rig();
     r.session.newProject();

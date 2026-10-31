@@ -126,6 +126,8 @@ export class ProjectSession {
   #cleanSnapshot = null;
   /** @type {string|null} capture('history') of the last new project; cleared by an open (07 5.5.2 isPristineNew) */
   #newSnapshot = null;
+  /** @type {(() => void)|null} called after a save (App: autosave records the now-clean project) */
+  #onSaved = null;
 
   /**
    * Stores the collaborators and registers the given feature hooks (R4: nothing else).
@@ -545,6 +547,16 @@ export class ProjectSession {
     const doc = this.#serializer.write(this.#project, { variant: 'file' });
     this.#downloader.saveText(JSON.stringify(doc, null, 2), fileName, 'application/json');
     this.markClean();
+    if (this.#onSaved) this.#onSaved();
+  }
+
+  /**
+   * Registers the after-save callback (App: autosave.schedule(), so the next autosave copy records the saved, clean
+   * project and a later Restore shows no "Unsaved changes" for work that matches the saved file).
+   * Side effects: none. @param {(() => void)|null} fn
+   */
+  setOnSaved(fn) {
+    this.#onSaved = fn;
   }
 
   /** Side effects: none. @returns {string} the project's name (project.meta.name; 07 D8's #project-name) */

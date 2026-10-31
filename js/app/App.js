@@ -326,6 +326,8 @@ export class App {
       suppressed: new URLSearchParams(win.location.search).get('autosave') === 'off',
     });
     history.setOnCommitted(() => autosave.schedule());
+    // After a Save the project is clean: the next autosave copy records that, so restoring it shows no unsaved changes.
+    session.setOnSaved(() => autosave.schedule());
     // 07 D8: the Project section (name, unsaved-changes indicator and title, Save / Open / New, Ctrl/Cmd+S and O); its
     // bus subscriptions only schedule the dirty re-check and keep the name field on the opened project. 07 H3: the
     // Autosave switch and note (AUTOSAVE_STATUS).
