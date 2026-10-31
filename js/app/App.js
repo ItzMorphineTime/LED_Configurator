@@ -326,7 +326,7 @@ export class App {
     sectionList.bindAddButton();               // 4154
     displayPanel.bind();                       // 4156-4227
     pivotPanel.bind();                         // 03 T6: the Wall Pivot panel (after Mesh Options in the sidebar)
-    bindCollapsibles(doc);                     // the collapsible Mesh Options and Wall Pivot cards (collapsed at start)
+    bindCollapsibles(doc);                     // the collapsible sidebar cards (ui/Collapsible.js; collapsed at start)
     cameraPanel.bind();                        // 4230-4329
     personControls.bind();                     // 4332-4361
     carControls.bind();                        // 4363-4392

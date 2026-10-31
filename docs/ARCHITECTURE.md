@@ -418,7 +418,8 @@ js/
                                                  the Orientation block (#pivot-align, #pivot-yaw-offset, yawReadoutText)
     Collapsible.js                         F3-O8  The collapsible sidebar cards (Mesh Options, Wall Pivot; collapsed at
                                                  start): bindCollapsibles(root), setCollapsibleExpanded(card, on); the title
-                                                 is a native button (aria-expanded, aria-controls); no model state
+                                                 is a native button (aria-expanded, aria-controls); no model state;
+                                                 2026-10-31: Panel IDs and Camera Frustum Preview too (collapsed at start)
     SidebarToggle.js                       2026-10-31  #sidebar-toggle (chevron handle on the viewport's edge) shows / hides
                                                  #control-panel (open by default; .sidebar-collapsed on .app-container);
                                                  onLayoutChange = sceneManager.fitContainer(); no model state, no events
@@ -538,7 +539,7 @@ tests/
     core.test.mjs                          WP3   EventBus semantics, LegacyCompat helpers, LEGACY_SITES shape
     domain.test.mjs                        WP3   rule tables vs legacy expressions, Wall/CineCamera/Prop/LogoLibrary semantics
     oracle/legacy-geometry.mjs             WP4   verbatim THREE-free copies of the legacy layout walks and grid builders
-    collapsible.test.mjs                   F3-O8  ui/Collapsible (click flips class, aria-expanded and hidden) and the two
+    collapsible.test.mjs                   F3-O8  ui/Collapsible (click flips class, aria-expanded and hidden) and the four
                                                  collapsed cards of index.html
     orientation.test.mjs                   F3-O1  the whole-wall orientation (03 12.12): the domain rules (test 1);
                                                  F3-O2: wallCentre, the alignment yaw (the flat wall exactly +90 on x = 0, the

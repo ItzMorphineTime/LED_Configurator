@@ -277,8 +277,9 @@ ${url}`;
     }
 
     /**
-     * Expand every collapsed sidebar card (Mesh Options and Wall Pivot start collapsed since 2026-10-17) through its
-     * header button, like a user. A no-op on a page without collapsible cards.
+     * Expand every collapsed sidebar card (Mesh Options and Wall Pivot start collapsed since 2026-10-17, Panel IDs and
+     * Camera Frustum Preview since 2026-10-31) through its header button, like a user. A no-op on a page without
+     * collapsible cards.
      */
     async expandSections() {
         await this.eval(`(() => { for (const b of document.querySelectorAll('.collapsible.collapsed .collapsible-toggle')) b.click(); return true; })()`);

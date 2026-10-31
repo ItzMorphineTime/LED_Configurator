@@ -1,5 +1,6 @@
-// The collapsible sidebar cards (ui/Collapsible.js; Mesh Options and Wall Pivot): the markup starts collapsed, a click on
-// the native toggle button flips the class, aria-expanded and the body's hidden flag together.
+// The collapsible sidebar cards (ui/Collapsible.js; Mesh Options, Wall Pivot, Panel IDs and Camera Frustum Preview): the
+// markup starts collapsed, a click on the native toggle button flips the class, aria-expanded and the body's hidden flag
+// together.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -39,9 +40,10 @@ describe('ui/Collapsible', () => {
     assert.equal(c.body.hidden, false);
   });
 
-  test('index.html: Mesh Options and Wall Pivot are collapsed cards with a button header naming its body', () => {
+  test('index.html: Mesh Options, Wall Pivot, Panel IDs and Camera Frustum Preview are collapsed cards with a button header naming its body', () => {
     const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
-    for (const [id, title, body] of [['mesh-options-section', 'Mesh Options', 'mesh-options-body'], ['pivot-section', 'Wall Pivot', 'pivot-section-body']]) {
+    for (const [id, title, body] of [['mesh-options-section', 'Mesh Options', 'mesh-options-body'], ['pivot-section', 'Wall Pivot', 'pivot-section-body'],
+      ['panel-ids-section', 'Panel IDs', 'panel-ids-body'], ['camera-frustum-section', 'Camera Frustum Preview', 'camera-frustum-body']]) {
       const re = new RegExp(`<div class="global-section[^"]* collapsible collapsed" id="${id}">\\s*`
         + `<button type="button" class="global-section-title collapsible-toggle" aria-expanded="false" aria-controls="${body}">\\s*`
         + `<span class="collapsible-title">${title}</span>[\\s\\S]*?</button>\\s*<div class="collapsible-body" id="${body}" hidden>`);

@@ -5,6 +5,7 @@
  * aria-controls naming its `.collapsible-body`; Enter and Space come with the button, and its :focus-visible ring with
  * 03-layout.css) followed by that body. The markup starts collapsed (`.collapsed`, aria-expanded="false", the body
  * `hidden`); a click flips the three together. View-only and session-only: no model state, no events.
+ * "Panel IDs" and "Camera Frustum Preview" use the same pattern since 2026-10-31 (collapsed at start too).
  * Legacy source: none (new feature).
  * Layer: ui (may import core, legacy, domain static rule tables and ui/dom.js).
  */

@@ -231,155 +231,165 @@
                 </div>
             </div>
 
-            <div class="global-section">
-                <div class="global-section-title">Panel IDs</div>
-                <div class="toggle-container">
-                    <span class="toggle-label">Show Panel Labels</span>
-                    <div class="toggle" id="toggle-panel-ids"></div>
-                </div>
-                <div id="panel-id-options" style="display: none;">
-                    <div class="input-field mt-10">
-                        <label>Border Thickness (px)</label>
-                        <input type="number" id="panel-border-thickness" value="8" min="1" max="32">
+            <div class="global-section collapsible collapsed" id="panel-ids-section">
+                <button type="button" class="global-section-title collapsible-toggle" aria-expanded="false" aria-controls="panel-ids-body">
+                    <span class="collapsible-title">Panel IDs</span>
+                    <svg class="collapsible-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6"/></svg>
+                </button>
+                <div class="collapsible-body" id="panel-ids-body" hidden>
+                    <div class="toggle-container">
+                        <span class="toggle-label">Show Panel Labels</span>
+                        <div class="toggle" id="toggle-panel-ids"></div>
                     </div>
-                    <div class="input-field mt-10">
-                        <label>Label Font Size (0=auto)</label>
-                        <input type="number" id="panel-font-size" value="0" min="0" max="200">
+                    <div id="panel-id-options" style="display: none;">
+                        <div class="input-field mt-10">
+                            <label>Border Thickness (px)</label>
+                            <input type="number" id="panel-border-thickness" value="8" min="1" max="32">
+                        </div>
+                        <div class="input-field mt-10">
+                            <label>Label Font Size (0=auto)</label>
+                            <input type="number" id="panel-font-size" value="0" min="0" max="200">
+                        </div>
+                        <div class="input-field mt-10">
+                            <label>Label Font Colour</label>
+                            <input type="color" id="panel-font-color" value="#ffffff" class="color-input-full">
+                        </div>
+                        <div class="toggle-container mt-10">
+                            <span class="toggle-label">Show Section Names</span>
+                            <div class="toggle active" id="toggle-section-labels"></div>
+                        </div>
+                        <div class="input-field mt-10">
+                            <label>Section Label Size (0=auto)</label>
+                            <input type="number" id="section-label-size" value="0" min="0" max="400">
+                        </div>
+                        <div class="input-field mt-10">
+                            <label>Section Label Colour</label>
+                            <input type="color" id="section-label-color" value="#888888" class="color-input-full">
+                        </div>
+                        <div class="subsection-title">Section Logos</div>
+                        <div id="section-logos-container"></div>
                     </div>
-                    <div class="input-field mt-10">
-                        <label>Label Font Colour</label>
-                        <input type="color" id="panel-font-color" value="#ffffff" class="color-input-full">
-                    </div>
-                    <div class="toggle-container mt-10">
-                        <span class="toggle-label">Show Section Names</span>
-                        <div class="toggle active" id="toggle-section-labels"></div>
-                    </div>
-                    <div class="input-field mt-10">
-                        <label>Section Label Size (0=auto)</label>
-                        <input type="number" id="section-label-size" value="0" min="0" max="400">
-                    </div>
-                    <div class="input-field mt-10">
-                        <label>Section Label Colour</label>
-                        <input type="color" id="section-label-color" value="#888888" class="color-input-full">
-                    </div>
-                    <div class="subsection-title">Section Logos</div>
-                    <div id="section-logos-container"></div>
                 </div>
             </div>
 
-            <div class="global-section">
-                <div class="global-section-title">Camera Frustum Preview</div>
-                <div class="toggle-container">
-                    <span class="toggle-label">Enable Camera Preview</span>
-                    <div class="toggle" id="toggle-camera-preview"></div>
-                </div>
-                <div id="camera-preview-options" style="display: none;">
-                    <div class="input-field mt-10">
-                        <label>Filmback / Sensor</label>
-                        <select id="camera-filmback" class="ui-select">
-                            <option value="full-frame">Full Frame (36×24mm)</option>
-                            <option value="super35">Super 35 (24.89×18.66mm)</option>
-                            <option value="arri-lf">ARRI LF (36.70×25.54mm)</option>
-                            <option value="arri-alexa">ARRI Alexa (28.17×18.13mm)</option>
-                            <option value="red-v-raptor">RED V-RAPTOR (40.96×21.60mm)</option>
-                            <option value="red-komodo">RED KOMODO (27.03×14.26mm)</option>
-                            <option value="sony-venice">Sony VENICE (36×24mm)</option>
-                            <option value="bmpcc-6k">BMPCC 6K (23.10×12.99mm)</option>
-                            <option value="aps-c">APS-C (23.6×15.6mm)</option>
-                            <option value="mft">Micro 4/3 (17.3×13mm)</option>
-                            <option value="custom">Custom</option>
-                        </select>
+            <div class="global-section collapsible collapsed" id="camera-frustum-section">
+                <button type="button" class="global-section-title collapsible-toggle" aria-expanded="false" aria-controls="camera-frustum-body">
+                    <span class="collapsible-title">Camera Frustum Preview</span>
+                    <svg class="collapsible-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6"/></svg>
+                </button>
+                <div class="collapsible-body" id="camera-frustum-body" hidden>
+                    <div class="toggle-container">
+                        <span class="toggle-label">Enable Camera Preview</span>
+                        <div class="toggle" id="toggle-camera-preview"></div>
                     </div>
-                    <div id="custom-filmback" style="display: none;">
-                        <div class="section-row section-row--flush">
+                    <div id="camera-preview-options" style="display: none;">
+                        <div class="input-field mt-10">
+                            <label>Filmback / Sensor</label>
+                            <select id="camera-filmback" class="ui-select">
+                                <option value="full-frame">Full Frame (36×24mm)</option>
+                                <option value="super35">Super 35 (24.89×18.66mm)</option>
+                                <option value="arri-lf">ARRI LF (36.70×25.54mm)</option>
+                                <option value="arri-alexa">ARRI Alexa (28.17×18.13mm)</option>
+                                <option value="red-v-raptor">RED V-RAPTOR (40.96×21.60mm)</option>
+                                <option value="red-komodo">RED KOMODO (27.03×14.26mm)</option>
+                                <option value="sony-venice">Sony VENICE (36×24mm)</option>
+                                <option value="bmpcc-6k">BMPCC 6K (23.10×12.99mm)</option>
+                                <option value="aps-c">APS-C (23.6×15.6mm)</option>
+                                <option value="mft">Micro 4/3 (17.3×13mm)</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                        </div>
+                        <div id="custom-filmback" style="display: none;">
+                            <div class="section-row section-row--flush">
+                                <div class="input-field">
+                                    <label>Sensor Width (mm)</label>
+                                    <input type="number" id="filmback-width" value="36" min="1" max="100" step="0.01">
+                                </div>
+                                <div class="input-field">
+                                    <label>Sensor Height (mm)</label>
+                                    <input type="number" id="filmback-height" value="24" min="1" max="100" step="0.01">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="input-field mt-10">
+                            <label>Focal Length (mm)</label>
+                            <input type="number" id="camera-focal-length" value="35" min="8" max="800" step="1">
+                        </div>
+                        <div class="camera-info readout">
+                            <div class="readout-row">
+                                <span class="readout-label">H-FOV:</span>
+                                <span id="camera-hfov" class="readout-value">54.4°</span>
+                            </div>
+                            <div class="readout-row">
+                                <span class="readout-label">V-FOV:</span>
+                                <span id="camera-vfov" class="readout-value">37.8°</span>
+                            </div>
+                            <div class="readout-row readout-row--last">
+                                <span class="readout-label">Aspect:</span>
+                                <span id="camera-aspect" class="readout-value">1.50:1</span>
+                            </div>
+                        </div>
+                        <div class="subsection-title">Camera Position</div>
+                        <div class="section-row mb-8">
                             <div class="input-field">
-                                <label>Sensor Width (mm)</label>
-                                <input type="number" id="filmback-width" value="36" min="1" max="100" step="0.01">
+                                <label>X Position (m)</label>
+                                <input type="number" id="camera-pos-x" value="0" step="0.1">
                             </div>
                             <div class="input-field">
-                                <label>Sensor Height (mm)</label>
-                                <input type="number" id="filmback-height" value="24" min="1" max="100" step="0.01">
+                                <label>Y Height (m)</label>
+                                <input type="number" id="camera-pos-y" value="1.5" min="0" step="0.1">
                             </div>
                         </div>
+                        <div class="input-field mb-10">
+                            <label>Z Position (m)</label>
+                            <input type="number" id="camera-pos-z" value="5" step="0.1">
+                        </div>
+                        <div class="subsection-title subsection-title--tight">Camera Rotation</div>
+                        <div class="section-row mb-8">
+                            <div class="input-field">
+                                <label>Tilt (°)</label>
+                                <input type="number" id="camera-rot-x" value="0" min="-90" max="90" step="0.5">
+                            </div>
+                            <div class="input-field">
+                                <label>Pan (°)</label>
+                                <input type="number" id="camera-rot-y" value="0" min="-180" max="360" step="0.5">
+                            </div>
+                        </div>
+                        <div class="section-row single mb-10">
+                            <div class="input-field">
+                                <label>Roll (°)</label>
+                                <input type="number" id="camera-rot-z" value="0" min="-180" max="180" step="0.5">
+                            </div>
+                        </div>
+                        <div class="frustum-status readout">
+                            <div class="readout-row">
+                                <span class="readout-label">Distance to wall plane:</span>
+                                <span id="camera-wall-distance" class="readout-value" title="Distance along the camera's optical axis to the wall plane it is aimed at (— when no wall plane is ahead)">--</span>
+                            </div>
+                            <div class="readout-row">
+                                <span class="readout-label">Frame Width at Wall:</span>
+                                <span id="frustum-width" class="readout-value">--</span>
+                            </div>
+                            <div class="readout-row">
+                                <span class="readout-label">Frame Height at Wall:</span>
+                                <span id="frustum-height" class="readout-value">--</span>
+                            </div>
+                            <div class="readout-row readout-row--gap">
+                                <span class="readout-label">Status:</span>
+                                <span id="frustum-status-text" class="status-pending">--</span>
+                            </div>
+                            <div class="readout-row readout-row--last">
+                                <span class="readout-label">Max Distance:</span>
+                                <span id="safe-distance" class="status-ok">--</span>
+                            </div>
+                        </div>
+                        <div class="toggle-container mt-12">
+                            <span class="toggle-label">Show Safe Distance 3D</span>
+                            <div class="toggle" id="toggle-safe-distance"></div>
+                        </div>
+                        <button class="export-btn secondary btn-block mt-10" id="reset-camera">Reset Camera Position</button>
+                        <button class="export-btn secondary btn-block mt-6" id="export-safe-distance" style="display: none;">Export Safe Distance OBJ</button>
                     </div>
-                    <div class="input-field mt-10">
-                        <label>Focal Length (mm)</label>
-                        <input type="number" id="camera-focal-length" value="35" min="8" max="800" step="1">
-                    </div>
-                    <div class="camera-info readout">
-                        <div class="readout-row">
-                            <span class="readout-label">H-FOV:</span>
-                            <span id="camera-hfov" class="readout-value">54.4°</span>
-                        </div>
-                        <div class="readout-row">
-                            <span class="readout-label">V-FOV:</span>
-                            <span id="camera-vfov" class="readout-value">37.8°</span>
-                        </div>
-                        <div class="readout-row readout-row--last">
-                            <span class="readout-label">Aspect:</span>
-                            <span id="camera-aspect" class="readout-value">1.50:1</span>
-                        </div>
-                    </div>
-                    <div class="subsection-title">Camera Position</div>
-                    <div class="section-row mb-8">
-                        <div class="input-field">
-                            <label>X Position (m)</label>
-                            <input type="number" id="camera-pos-x" value="0" step="0.1">
-                        </div>
-                        <div class="input-field">
-                            <label>Y Height (m)</label>
-                            <input type="number" id="camera-pos-y" value="1.5" min="0" step="0.1">
-                        </div>
-                    </div>
-                    <div class="input-field mb-10">
-                        <label>Z Position (m)</label>
-                        <input type="number" id="camera-pos-z" value="5" step="0.1">
-                    </div>
-                    <div class="subsection-title subsection-title--tight">Camera Rotation</div>
-                    <div class="section-row mb-8">
-                        <div class="input-field">
-                            <label>Tilt (°)</label>
-                            <input type="number" id="camera-rot-x" value="0" min="-90" max="90" step="0.5">
-                        </div>
-                        <div class="input-field">
-                            <label>Pan (°)</label>
-                            <input type="number" id="camera-rot-y" value="0" min="-180" max="360" step="0.5">
-                        </div>
-                    </div>
-                    <div class="section-row single mb-10">
-                        <div class="input-field">
-                            <label>Roll (°)</label>
-                            <input type="number" id="camera-rot-z" value="0" min="-180" max="180" step="0.5">
-                        </div>
-                    </div>
-                    <div class="frustum-status readout">
-                        <div class="readout-row">
-                            <span class="readout-label">Distance to wall plane:</span>
-                            <span id="camera-wall-distance" class="readout-value" title="Distance along the camera's optical axis to the wall plane it is aimed at (— when no wall plane is ahead)">--</span>
-                        </div>
-                        <div class="readout-row">
-                            <span class="readout-label">Frame Width at Wall:</span>
-                            <span id="frustum-width" class="readout-value">--</span>
-                        </div>
-                        <div class="readout-row">
-                            <span class="readout-label">Frame Height at Wall:</span>
-                            <span id="frustum-height" class="readout-value">--</span>
-                        </div>
-                        <div class="readout-row readout-row--gap">
-                            <span class="readout-label">Status:</span>
-                            <span id="frustum-status-text" class="status-pending">--</span>
-                        </div>
-                        <div class="readout-row readout-row--last">
-                            <span class="readout-label">Max Distance:</span>
-                            <span id="safe-distance" class="status-ok">--</span>
-                        </div>
-                    </div>
-                    <div class="toggle-container mt-12">
-                        <span class="toggle-label">Show Safe Distance 3D</span>
-                        <div class="toggle" id="toggle-safe-distance"></div>
-                    </div>
-                    <button class="export-btn secondary btn-block mt-10" id="reset-camera">Reset Camera Position</button>
-                    <button class="export-btn secondary btn-block mt-6" id="export-safe-distance" style="display: none;">Export Safe Distance OBJ</button>
                 </div>
             </div>
 
