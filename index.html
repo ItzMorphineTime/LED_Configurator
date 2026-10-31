@@ -40,6 +40,7 @@
     <link rel="stylesheet" href="css/features/section-selection.css">
     <link rel="stylesheet" href="css/features/project.css">
     <link rel="stylesheet" href="css/features/history.css">
+    <link rel="stylesheet" href="css/features/autosave.css">
     <link rel="stylesheet" href="css/12-responsive.css">
     <link rel="stylesheet" href="css/99-utilities.css">
 </head>
@@ -96,6 +97,12 @@
                         <button type="button" class="export-btn secondary" id="project-save" title="Save the project file, named after the project (Ctrl+S / ⌘S)">Save</button>
                     </div>
                     <input type="file" id="project-open-input" class="import-input" accept=".json,.zip,application/json,application/zip">
+                    <div class="toggle-container">
+                        <span class="toggle-label" id="autosave-label">Autosave</span>
+                        <div class="toggle active" id="toggle-autosave" role="switch" tabindex="0" aria-checked="true" aria-labelledby="autosave-label"
+                             title="Keep a copy of the project in this browser, a few seconds after each change, and offer it back after a reload or a crash (a setting of this browser, not of the project file)"></div>
+                    </div>
+                    <p class="autosave-note" id="autosave-note" data-state="idle" role="status" hidden></p>
                 </div>
             </div>
 
@@ -620,6 +627,13 @@
                 </div>
                 <img class="brand-watermark" src="assets/brand/morph-monogram-dark.svg" alt="" aria-hidden="true" width="233" height="172">
                 <div id="viewport-top-stack">
+                    <div class="restore-banner" id="autosave-banner" role="region" aria-label="Restore previous session" hidden>
+                        <span class="restore-banner__text" id="autosave-banner-text"></span>
+                        <div class="restore-banner__actions">
+                            <button type="button" class="export-btn restore-banner__restore" id="autosave-restore">Restore</button>
+                            <button type="button" class="export-btn secondary" id="autosave-discard">Discard</button>
+                        </div>
+                    </div>
                     <div class="debug-legend" id="debug-view-legend" aria-hidden="true" title="Face colours come from the GPU's front-facing flag, which some mobile GPUs report wrongly" hidden>
                         <div class="debug-legend-row" data-legend="faceOrientation" hidden>
                             <span class="debug-legend-name">Face orientation</span>

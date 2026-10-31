@@ -204,10 +204,12 @@ export class ProjectSession {
    * holds no view-only and no derived key and each asset by id only.
    * Side effects: none.
    * @param {'history'|'file'|'autosave'} [variant]
+   * @param {{maxInlineAssetBytes?: number}} [options]  'autosave' only: the inline-logo limit (07 H3's quota fallback
+   *   passes 0; default the serializer's 1,000,000)
    * @returns {string}
    */
-  capture(variant = 'history') {
-    return JSON.stringify(this.#serializer.write(this.#project, { variant }));
+  capture(variant = 'history', { maxInlineAssetBytes } = {}) {
+    return JSON.stringify(this.#serializer.write(this.#project, { variant, maxInlineAssetBytes }));
   }
 
   /**
@@ -440,14 +442,30 @@ export class ProjectSession {
   }
 
   /**
+   * The restore banner's Restore (07 H3, 6.11; app/Autosave.restore): an autosaved project text opened like a file
+   * (parse, read and validate through the serializer, the inline logos into the AssetStore, apply whole with reason
+   * 'restore', corrections reported as for an Open) and recorded as one history entry 'Restore session', so Ctrl+Z goes
+   * back to the project before it. The project stays dirty (it is not in a file) unless `clean` (it was saved when it
+   * was autosaved); the pristine-new snapshot is kept, so undoing the restore gives a project that autosave skips.
+   * Side effects: at most one alert; on success the whole project (see apply); a history entry.
+   * @param {string} text  the project JSON of an autosave slot
+   * @param {{clean?: boolean}} [options]
+   * @returns {Promise<boolean>} whether the project was restored; never rejects
+   */
+  restore(text, { clean = false } = {}) {
+    return this.#open(text, null, 'Restore session', { reason: 'restore', clean });
+  }
+
+  /**
    * Parse, read, load the assets, apply, record one history entry (07 H1: undo brings the previous project back),
-   * report (openFile after the read).
+   * report (openFile after the read; restore).
    * @param {string} text
    * @param {Map<string, {async(type: string): Promise<*>}>|null} entries  the archive's file entries by path (a ZIP), or null
-   * @param {string} label  the history label, 'Open "<file name>"'
+   * @param {string} label  the history label, 'Open "<file name>"' or 'Restore session'
+   * @param {{reason?: 'open'|'restore', clean?: boolean}} [options]  reason of a full apply; clean: take the clean snapshot
    * @returns {Promise<boolean>}
    */
-  async #open(text, entries, label) {
+  async #open(text, entries, label, { reason = 'open', clean = true } = {}) {
     try {
       const result = this.#serializer.read(JSON.parse(text));
       if (!result.ok) {
@@ -459,10 +477,10 @@ export class ProjectSession {
         this.apply(result.project, { reason: 'import', scope: 'wall' });
       } else {
         await this.#loadAssets(result.project, issues, entries);
-        this.apply(result.project, { reason: 'open', scope: 'full' });
-        this.#newSnapshot = null;
+        this.apply(result.project, { reason, scope: 'full' });
+        if (reason === 'open') this.#newSnapshot = null;
       }
-      this.markClean();
+      if (clean) this.markClean();
       this.#history.record(label);
       const report = ImportAlerts.report(issues);
       if (report) this.#dialogs.alert(report);

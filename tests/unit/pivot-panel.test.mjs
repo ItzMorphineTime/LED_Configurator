@@ -253,8 +253,10 @@ describe('the Wall Pivot switches are named (03 3.2, AC 18)', () => {
   test('every role="switch" of index.html is labelled by its visible .toggle-label text (aria-labelledby)', () => {
     const html = readFileSync(join(ROOT, 'index.html'), 'utf8');
     const switches = [...html.matchAll(/<div\b[^>]*\brole="switch"[^>]*>/g)].map((m) => m[0]);
-    assert.deepEqual(switches.map((t) => /\bid="([^"]+)"/.exec(t)[1]), ['toggle-pivot-keep-stage', 'toggle-pivot-marker']);
-    const expected = { 'toggle-pivot-keep-stage': 'Keep stage layout on pivot change', 'toggle-pivot-marker': 'Show pivot marker' };
+    assert.deepEqual(switches.map((t) => /\bid="([^"]+)"/.exec(t)[1]), ['toggle-autosave', 'toggle-pivot-keep-stage', 'toggle-pivot-marker']);
+    const expected = {
+      'toggle-autosave': 'Autosave', 'toggle-pivot-keep-stage': 'Keep stage layout on pivot change', 'toggle-pivot-marker': 'Show pivot marker',
+    };
     for (const tag of switches) {
       const id = /\bid="([^"]+)"/.exec(tag)[1];
       const ref = /\baria-labelledby="([^"]+)"/.exec(tag);

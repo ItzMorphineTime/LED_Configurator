@@ -100,10 +100,13 @@ async function main() {
             fs.rmSync(path.join(out, name), { recursive: true, force: true });
             const rec = new Recorder(out, name);
             const recordRequests = SCENARIOS[name].recordRequests === true;   // opt-in request log -> network.json
+            // 07 H3 / 8.3 item 3: autosave is off for every scenario (no storage write, no debounce timer, no banner)
+            // unless the scenario opts in (autosave_restore); the URL keeps the flag across AppPage.reload().
+            const autosave = SCENARIOS[name].autosave === true;
             let app = null;
             let fatal = null;
             try {
-                app = await AppPage.open(browser, appUrl, { recordRequests });
+                app = await AppPage.open(browser, autosave ? appUrl : `${appUrl}?autosave=off`, { recordRequests });
                 await SCENARIOS[name].run({ app, rec });
             } catch (e) {
                 fatal = e;

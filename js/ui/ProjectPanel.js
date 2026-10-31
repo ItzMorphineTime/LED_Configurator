@@ -19,7 +19,13 @@
  * modified chords): a focused text field's pending edit is committed first (blur fires its change, then the focus
  * returns), and the chord is consumed (preventDefault: no Save Page or Open File dialog of the browser; stopPropagation:
  * KeyboardState never sees S or O held, so the WASD movement never starts); an auto-repeat does nothing.
- * Owns #project-name, #project-dirty, #project-new, #project-open, #project-save, #project-open-input.
+ * Autosave (07 H3): the Autosave switch (#toggle-autosave, role="switch": click, Space or Enter) sets the device
+ * preference through app/Autosave.setEnabled; it shows on while the preference is on and storage works, and is
+ * aria-disabled (off, inert) with `?autosave=off` or without storage. #autosave-note shows Autosave's note (storage
+ * full, logos left out, storage unavailable, paused for the restore banner) and mirrors its state in data-state. Both
+ * follow AUTOSAVE_STATUS.
+ * Owns #project-name, #project-dirty, #project-new, #project-open, #project-save, #project-open-input,
+ * #toggle-autosave, #autosave-note.
  * Legacy source: none (new in 07 D8).
  * Layer: ui (may import core, legacy, domain static rule tables and ui/dom.js).
  */
@@ -100,40 +106,50 @@ export class ProjectPanel {
   /** @type {HTMLElement} */ #openBtn;
   /** @type {HTMLElement} */ #saveBtn;
   /** @type {HTMLInputElement} */ #openInput;
+  /** @type {{enabled: boolean, setEnabled(on: boolean): boolean}|null} app/Autosave (07 H3) */ #autosave;
+  /** @type {HTMLElement|null} */ #autosaveToggle;
+  /** @type {HTMLElement|null} */ #autosaveNote;
   /** @type {*} the pending re-check's timer id, or null */ #timer = null;
 
   /**
-   * Stores the collaborators, looks up the owned elements and subscribes the edit events (a dirty re-check) and
-   * PROJECT_REPLACED (the name field follows an Open, a New and an Import). No mutation, no DOM listener (R4).
+   * Stores the collaborators, looks up the owned elements and subscribes the edit events (a dirty re-check),
+   * PROJECT_REPLACED (the name field follows an Open, a New and an Import) and AUTOSAVE_STATUS (the switch and the
+   * note). No mutation, no DOM listener (R4).
    * Side effects: DOM lookups and bus subscriptions only.
    * @param {{doc: Document, win: Window, session: object, projectIO: object, bus: import('../core/EventBus.js').EventBus,
-   *          dialogs: {confirm(msg: string): boolean}, brand: {productName: string}}} deps
+   *          dialogs: {confirm(msg: string): boolean}, brand: {productName: string},
+   *          autosave?: {enabled: boolean, setEnabled(on: boolean): boolean}|null}} deps
    */
-  constructor({ doc, win, session, projectIO, bus, dialogs, brand }) {
+  constructor({ doc, win, session, projectIO, bus, dialogs, brand, autosave = null }) {
     this.#doc = doc;
     this.#win = win;
     this.#session = session;
     this.#projectIO = projectIO;
     this.#dialogs = dialogs;
     this.#product = brand.productName;
+    this.#autosave = autosave;
     this.#name = byId(doc, 'project-name');
     this.#dirty = byId(doc, 'project-dirty');
     this.#newBtn = byId(doc, 'project-new');
     this.#openBtn = byId(doc, 'project-open');
     this.#saveBtn = byId(doc, 'project-save');
     this.#openInput = byId(doc, 'project-open-input');
+    this.#autosaveToggle = byId(doc, 'toggle-autosave');
+    this.#autosaveNote = byId(doc, 'autosave-note');
     const schedule = () => this.#schedule();
     for (const type of EDIT_EVENTS) bus.on(type, schedule);
     bus.on(Events.PROJECT_REPLACED, () => {
       this.#name.value = session.name;
       schedule();
     });
+    bus.on(Events.AUTOSAVE_STATUS, (status) => this.#showAutosave(status));
   }
 
   /**
    * Adds the listeners: the name field (change renames, Escape restores the stored name), the three buttons, the
-   * picker's change, the window's capture-phase keydown (the two chords) and the document's capture-phase edit signals.
-   * Side effects: 6 element listeners, 1 window listener, 5 document listeners.
+   * picker's change, the Autosave switch (click; Space or Enter while focused), the window's capture-phase keydown (the
+   * two chords) and the document's capture-phase edit signals.
+   * Side effects: 6 element listeners (8 with autosave), 1 window listener, 5 document listeners.
    */
   bind() {
     this.#name.addEventListener('change', () => this.rename(this.#name.value));
@@ -144,8 +160,50 @@ export class ProjectPanel {
     this.#openBtn.addEventListener('click', () => this.openPicker());
     this.#newBtn.addEventListener('click', () => this.newProject());
     this.#openInput.addEventListener('change', (e) => this.openChosen(e));
+    if (this.#autosave && this.#autosaveToggle) {
+      this.#autosaveToggle.addEventListener('click', () => this.toggleAutosave());
+      this.#autosaveToggle.addEventListener('keydown', (e) => {
+        if (e.key !== ' ' && e.key !== 'Enter') return;
+        e.preventDefault();
+        this.toggleAutosave();
+      });
+    }
     this.#win.addEventListener('keydown', (e) => this.#onKeydown(e), true);
     for (const type of EDIT_DOM_EVENTS) this.#doc.addEventListener(type, () => this.#schedule(), true);
+  }
+
+  /**
+   * The Autosave switch: flips the preference (Autosave.setEnabled; ignored while the switch is aria-disabled).
+   * Side effects: see Autosave.setEnabled (its AUTOSAVE_STATUS redraws the switch).
+   * @returns {boolean} the preference after the call
+   */
+  toggleAutosave() {
+    if (!this.#autosave) return false;
+    return this.#autosave.setEnabled(!this.#autosave.enabled);
+  }
+
+  /**
+   * AUTOSAVE_STATUS: the switch (on while the preference is on and storage works; aria-disabled with `?autosave=off` or
+   * without storage) and the note (Autosave's message; hidden without one; data-state mirrors the state).
+   * @param {{state: string, message: string|null, enabled: boolean, available: boolean, suppressed: boolean}} status
+   */
+  #showAutosave(status) {
+    const toggle = this.#autosaveToggle;
+    if (toggle) {
+      const inert = status.suppressed || !status.available;
+      const on = status.enabled && !inert;
+      toggle.classList.toggle('active', on);
+      toggle.setAttribute('aria-checked', String(on));
+      toggle.setAttribute('aria-disabled', String(inert));
+      toggle.tabIndex = inert ? -1 : 0;
+      if (status.suppressed) toggle.title = 'Autosave is off for this page load (autosave=off in the address)';
+    }
+    const note = this.#autosaveNote;
+    if (note) {
+      note.dataset.state = status.state;
+      note.textContent = status.message ?? '';
+      note.hidden = !status.message;
+    }
   }
 
   /**

@@ -250,6 +250,78 @@ async function projectRoundtripScenario(ctx) {
     await record(ctx, '07_new_after_edit', async () => ({ ...await pageCall(app, pageProjectState), newDialogs: (await app.dialogs()).slice(n1) }));
 }
 
+// ---- autosave_restore (07 8.3, H3) ------------------------------------------------------------------------------
+
+/** The autosave UI and two edited values: the banner, the note's state, the switch, the person toggle and the stats. */
+function pageAutosaveState() {
+    const banner = document.getElementById('autosave-banner');
+    const text = document.getElementById('autosave-banner-text');
+    const note = document.getElementById('autosave-note');
+    const toggle = document.getElementById('toggle-autosave');
+    const person = document.getElementById('toggle-person');
+    return {
+        bannerShown: banner ? !banner.hidden : null,
+        bannerText: banner && !banner.hidden && text ? text.textContent : null,
+        noteState: note ? note.dataset.state : null,
+        noteText: note && !note.hidden ? note.textContent : null,
+        switchOn: toggle ? toggle.getAttribute('aria-checked') === 'true' : null,
+        personOn: person ? person.classList.contains('active') : null,
+        panels: (document.getElementById('total-panels') || {}).textContent ?? null,
+    };
+}
+
+/** Wait (up to 10 s) until #autosave-note's data-state is `state` and the name field shows `name` (null: any). */
+function pageWaitAutosave(state, name) {
+    return (async () => {
+        const ok = () => {
+            const note = document.getElementById('autosave-note');
+            return !!note && note.dataset.state === state && (name === null || document.getElementById('project-name').value === name);
+        };
+        const t0 = performance.now();
+        while (performance.now() - t0 < 10000 && !ok()) await new Promise((r) => setTimeout(r, 50));
+        return ok();
+    })();
+}
+
+/**
+ * 07 8.3 autosave_restore (loaded without `?autosave=off`): edit (the name, the person, a section's columns); wait for
+ * the autosave; reload: the restore banner offers it (autosave paused); Restore: the edits are back, unsaved, as one
+ * step: Ctrl+Z gives the fresh project (which autosave does not write); reload: the banner again; Discard: the fresh
+ * project, no banner; reload: still none. The note's state is recorded only once it is settled (the debounce is 2 s).
+ */
+async function autosaveRestoreScenario(ctx) {
+    const { app } = ctx;
+    const state = async () => ({ ...await pageCall(app, pageProjectState), ...await pageCall(app, pageAutosaveState) });
+    const waitFor = async (label, noteState, name) => {
+        if (!await pageCall(app, pageWaitAutosave, noteState, name)) throw new Error(`${label}: autosave state "${noteState}" not reached`);
+        await app.settle(100);
+    };
+    await record(ctx, '00_fresh', state);
+    await step(ctx, 'name', () => app.setValue('#project-name', 'Autosave Stage'));
+    await step(ctx, 'person-on', () => app.click('#toggle-person'));
+    await step(ctx, 'columns', () => app.setValue('#wall-sections > :nth-child(1) input[data-field="panelCols"]', '7'));
+    await step(ctx, 'wait-saved', () => waitFor('wait-saved', 'saved', null));
+    await record(ctx, '01_saved', state);
+    await step(ctx, 'reload', () => app.reload());
+    await record(ctx, '02_banner', state);
+    await step(ctx, 'restore', async () => {
+        await app.click('#autosave-restore');
+        await waitFor('restore', 'saved', 'Autosave Stage');
+    });
+    await record(ctx, '03_restored', state);
+    await step(ctx, 'undo', async () => {
+        await app.keyPress('z', { modifiers: MODIFIERS.Ctrl });
+        await waitFor('undo', 'idle', 'Untitled stage');
+    });
+    await record(ctx, '04_undone', state);
+    await step(ctx, 'reload-2', () => app.reload());
+    await record(ctx, '05_banner_again', state);
+    await step(ctx, 'discard', () => app.click('#autosave-discard'));
+    await record(ctx, '06_discarded', state);
+    await step(ctx, 'reload-3', () => app.reload());
+    await record(ctx, '07_next_load', state);
+}
+
 export const PROJECT_SCENARIOS = {
     import_v1_matrix: {
         description: '07 D2: the six v1 configs imported in turn (wall scope): stats, cards, glTF in the file\'s mesh mode and the re-centred view after each.',
@@ -262,5 +334,10 @@ export const PROJECT_SCENARIOS = {
     project_v2_roundtrip: {
         description: '07 D8: the Project section: non-default name, camera, props, LED sim and panel-ID style; Ctrl+S; a fresh page; Open the saved file; Save: identical bytes; New when clean (no question) and after an edit (one confirm).',
         run: projectRoundtripScenario,
+    },
+    autosave_restore: {
+        description: '07 H3 (autosave on): edit; wait for the autosave; reload: the restore banner; Restore (the edits back as one step: Ctrl+Z gives the fresh project); reload: the banner again; Discard; reload: no banner.',
+        autosave: true,
+        run: autosaveRestoreScenario,
     },
 };

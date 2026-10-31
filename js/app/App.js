@@ -8,6 +8,7 @@
  * panels) the only one that looks up DOM ids: '#three-canvas' for SceneManager, the six preview-window ids for
  * PreviewWindow and '#debug-normals-stats' for NormalsDebugView (01 F1-2, 5.6).
  * After the reset view it starts the font gate (app/fontGate.js, 06 T5, ARCHITECTURE 6.2 row F6-1), fire-and-forget.
+ * Last, autosave starts (07 H3): it may show the restore banner of the previous session's work.
  * Nothing is attached to window.
  * Legacy source: index.html@cd3fd3f 1426-1455 (init), 3884-3890 (animate: the frame tick), 4148-4489 (setupUI,
  * statement order), 5093-5095 (bootstrap).
@@ -63,6 +64,8 @@ import { DebugViewController } from './DebugViewController.js';
 import { UvViewModel } from './UvViewModel.js';
 import { UvController } from './UvController.js';
 import { History } from './History.js';
+import { Autosave } from './Autosave.js';
+import { Prefs } from './Prefs.js';
 import { SectionSelection } from './SectionSelection.js';
 import { runFontGate } from './fontGate.js';
 import { byId, createDialogs } from '../ui/dom.js';
@@ -77,6 +80,7 @@ import { ViewportToolbar } from '../ui/ViewportToolbar.js';
 import { ExportPanel } from '../ui/ExportPanel.js';
 import { ProjectPanel } from '../ui/ProjectPanel.js';
 import { HistoryControls } from '../ui/HistoryControls.js';
+import { RestoreBanner } from '../ui/RestoreBanner.js';
 import { DebugViewControls } from '../ui/DebugViewControls.js';
 import { UVViewer } from '../ui/UVViewer.js';
 import { bindCollapsibles, revealCollapsible } from '../ui/Collapsible.js';
@@ -314,9 +318,20 @@ export class App {
     const carControls = new PropControls({ doc, prefix: 'car', controller: carController, prop: car, bus });
     const toolbar = new ViewportToolbar({ doc, orbit, sceneManager, gizmo, pilot, bus });
     const exportPanel = new ExportPanel({ doc, projectIO });
+    // 07 H3: autosave to two alternating localStorage slots, scheduled after every committed history step (History's
+    // onCommitted); `?autosave=off` in the address turns it off for the page load (the harness, 07 8.3) without
+    // touching the device preference (app/Prefs).
+    const autosave = new Autosave({
+      session, prefs: new Prefs({ win }), bus, win, clock: () => Date.now(), appVersion: APP_VERSION,
+      suppressed: new URLSearchParams(win.location.search).get('autosave') === 'off',
+    });
+    history.setOnCommitted(() => autosave.schedule());
     // 07 D8: the Project section (name, unsaved-changes indicator and title, Save / Open / New, Ctrl/Cmd+S and O); its
-    // bus subscriptions only schedule the dirty re-check and keep the name field on the opened project.
-    const projectPanel = new ProjectPanel({ doc, win, session, projectIO, bus, dialogs, brand });
+    // bus subscriptions only schedule the dirty re-check and keep the name field on the opened project. 07 H3: the
+    // Autosave switch and note (AUTOSAVE_STATUS).
+    const projectPanel = new ProjectPanel({ doc, win, session, projectIO, bus, dialogs, brand, autosave });
+    // 07 H3: the restore banner of the previous session's autosaved work (#viewport-top-stack's first child).
+    const restoreBanner = new RestoreBanner({ doc, autosave, clock: () => Date.now() });
     // 07 H2: the header's ↶ / ↷ (#history-undo, #history-redo) and the history chords; a drag blocks them.
     const historyControls = new HistoryControls({
       doc, win, history, bus, isBusy: () => interaction.isDraggingGizmo || uvController.dragging,
@@ -397,6 +412,9 @@ export class App {
     projectPanel.bind();
     // 07 H2: the header's two buttons and the window capture-phase keydown of Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z and Ctrl/Cmd+Y.
     historyControls.bind();
+    // 07 H3: the restore banner's Restore / Discard, and autosave's pagehide and visibilitychange (hidden) writes.
+    restoreBanner.bind();
+    autosave.attachLifecycle(doc);
 
     // ---- legacy setView('reset') (5095) ----
     orbit.setView('reset');
@@ -417,5 +435,9 @@ export class App {
     history.reset();
     // 07 D8: the indicator and the title of the clean bootstrap project ("Morph LED Configurator — Untitled stage")
     projectPanel.refresh();
+    // 07 H3: the preference, the storage check and the newest valid autosave slot; when it holds work that differs from
+    // this fresh project, the restore banner offers it (autosave writes nothing until it is answered).
+    const offer = autosave.start();
+    if (offer) restoreBanner.show(offer);
   }
 }

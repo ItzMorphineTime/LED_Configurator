@@ -73,6 +73,9 @@ export class AppPage {
      * Open the app in a new tab. `recordRequests` turns on the opt-in request log: the URL of every
      * Network.requestWillBeSent from the scenario's first step on, except while a page (re)load is in progress
      * (AppPage.open and reload()); externalRequests() returns the http(s) ones of other origins.
+     * 07 H3 / 8.3 item 1: the app origin's localStorage and IndexedDB are cleared before the page loads, so every
+     * scenario starts with empty storage (no autosave slot, restore banner or preference left by an earlier scenario:
+     * they all share one browser profile). Scenarios also load with `?autosave=off` (run.mjs) unless they opt in.
      */
     static async open(browser, appUrl, { width = 1600, height = 1000, recordRequests = false } = {}) {
         const page = await browser.newPage();
@@ -82,6 +85,7 @@ export class AppPage {
         await page.send('Page.enable');
         await page.send('Runtime.enable');
         await page.send('Network.enable');
+        await page.send('Storage.clearDataForOrigin', { origin: new URL(appUrl).origin, storageTypes: 'local_storage,indexeddb' });
         await page.send('Network.setCacheDisabled', { cacheDisabled: false });
         await page.send('Page.addScriptToEvaluateOnNewDocument', { source: INJECT_SOURCE });
         await page.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });

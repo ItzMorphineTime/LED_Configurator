@@ -214,6 +214,28 @@ once you have chosen a file); Cancel leaves everything as it was. View settings 
 two shortcuts also work while you type in a field: what you typed is kept first. Export JSON and Import JSON in the
 Export section work as before.
 
+### Autosave
+
+With **Autosave** on (the switch in the Project card, on by default), the browser keeps a copy of your project about
+2 seconds after each change, and again when you close or leave the tab. If the page is reloaded, closed or crashes, the
+next visit shows a banner at the top of the 3D view: "Restore unsaved work from 5 minutes ago — Main Stage?".
+
+- **Restore** brings that project back (checked like an opened file; anything corrected is reported). It counts as one
+  step: Ctrl+Z goes back to what you had before it (the fresh project of the reload). The restored project still shows
+  **Unsaved changes** until you Save it, unless it had just been saved when it was autosaved.
+- **Discard** deletes the autosaved copy. Ignoring the banner keeps it: you can keep working, but nothing new is
+  autosaved until you choose Restore or Discard.
+- A fresh, untouched project is never autosaved, so pressing New by mistake and reloading still offers the work from
+  before New.
+- The copy lives in this browser only (its local storage for this site, two slots used in turn, each checked with a
+  SHA-256 so a damaged copy is never offered); it is not a file and not shared between browsers or computers. Save
+  still makes the project file.
+- Logos are kept up to 1 MB in total. If the browser's storage is full, autosave keeps the project without its logos
+  and says so in the Project card; if even that does not fit, the card says autosave is paused. In a browser that
+  blocks storage (some private modes), autosave is off and the card says so.
+- Turning the switch off stops autosaving on this browser (a setting of the browser, not of the project file); the last
+  copy is kept until you Discard it. Adding `?autosave=off` to the page address turns autosave off for that visit only.
+
 ## Undo and redo
 
 **↶** and **↷** in the header undo and redo every change to the project, one step at a time: the wall sections (every
