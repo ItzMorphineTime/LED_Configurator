@@ -107,7 +107,8 @@ export class PropControls {
 
   /**
    * PROP_POSE_CHANGED mirror: the gizmo write-backs of this prop, and (03 T4, 5.5) the re-expression after a pivot edit
-   * moved the stage origin ('pivot': pos-x, pos-z toFixed(2), as the translate write-back).
+   * moved the stage origin ('pivot': pos-x, pos-z toFixed(2), as the translate write-back; rot-y toFixed(1) when an
+   * orientation edit turned the prop).
    * Ports: index.html@cd3fd3f lines 3351-3352 / 3358-3359 (translate), 3391 / 3397 (rotate).
    * @param {{id: string, source: 'gizmo-translate'|'gizmo-rotate'|'pivot'}} payload
    */
@@ -117,6 +118,11 @@ export class PropControls {
     if (source === 'gizmo-translate' || source === 'pivot') {
       this.#posX.value = prop.posX.toFixed(2);
       this.#posZ.value = prop.posZ.toFixed(2);
+      // An orientation edit re-expresses the pose with a turn (03 §12): mirror the rotation too, but only when it
+      // changed, so a translate-only pivot edit leaves the field's text exactly as it was.
+      if (source === 'pivot' && Number(this.#rotY.value) !== Number(prop.rotY.toFixed(1))) {
+        this.#rotY.value = prop.rotY.toFixed(1);
+      }
     } else if (source === 'gizmo-rotate') {
       this.#rotY.value = prop.rotY.toFixed(1);
     }
