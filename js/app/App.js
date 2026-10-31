@@ -22,6 +22,7 @@ import { Theme } from '../theme/Theme.js';
 import { buildTheme } from '../theme/ThemeBridge.js';
 import { Project } from '../domain/Project.js';
 import { DebugViewSettings } from '../domain/DebugViewSettings.js';
+import { UvSettings } from '../domain/UvSettings.js';
 import { framingBounds } from '../geometry/WallLayout.js';
 import { WallMeshBuilder } from '../geometry/WallMeshBuilder.js';
 import { SceneManager } from '../render/SceneManager.js';
@@ -112,6 +113,13 @@ export class App {
     const dialogs = createDialogs(win);
     // 06 T7; the owner's new-project defaults (03 12.11): section meshes, 'wall-center', Centre on −X
     const project = Project.createNew({ defaultSectionColor: theme.palette.defaultSectionColor });
+    // 04 UV-7 / UV-9: until 04 UV-14 adds the sidebar UV options, the UV settings can be chosen in the URL query
+    // (`?uv_layout=atlas`, `?panel_uvs=panel`); missing or unknown values keep the defaults. Session-only, like all UV state.
+    const query = new URLSearchParams(win.location?.search ?? '');
+    project.uv.assign({
+      combinedLayout: UvSettings.RULES.combinedLayout(query.get('uv_layout')),
+      panelUvs: UvSettings.RULES.panelUvs(query.get('panel_uvs')),
+    });
     const display = project.display;
     const style = project.panelIdStyle;
     const logos = project.logos;

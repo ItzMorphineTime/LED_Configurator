@@ -40,7 +40,7 @@ function deepFreeze(value) {
  */
 export const Strategies = deepFreeze({
   mesh: {
-    viewport: { winding: 'ccw', normals: 'averaged', combinedUV: 'atlas-pixel-accurate', side: 'double' },
+    viewport: { winding: 'ccw', normals: 'averaged', combinedUV: 'plan', side: 'double' },
     obj:      { winding: 'ccw', normals: 'averaged', stripNormals: 'per-vertex',
                 combinedUV: 'atlas-pixel-accurate', panelNormal: 'facing' },
     gltf:     { winding: 'ccw', normals: 'averaged', panelNormal: 'facing', attributes: ['POSITION', 'NORMAL', 'TEXCOORD_0'],
@@ -57,7 +57,8 @@ export const Strategies = deepFreeze({
                                                    // Phase-1 'atlas-u-full-v'; obj.combinedUV: 'atlas-pixel-accurate'
                                                    // since 08 P2-7b (B-M6), Phase-1 'per-section-overlap';
                                                    // gltf.attributes + 'TEXCOORD_0' and the new leaf gltf.combinedUV since
-                                                   // 08 P2-7c (B-M7)
+                                                   // 08 P2-7c (B-M7); viewport.combinedUV: 'plan' since 04 UV-7 (the UV
+                                                   // plans of Project.uv: per-section 0..1 by default, or the atlas)
   framingBounds: 'layout',                         // since 08 P2-11c (B-L2, B-M10): FramingPolicy's three named boxes of
                                                    // the stage layout; Phase-1 'flat', 03 T2's 'flat-pivot' (both deleted)
   curveBeforeFirstPanel: true,                     // B-L1

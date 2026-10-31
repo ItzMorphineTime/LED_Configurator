@@ -257,7 +257,8 @@ js/
                                                  the case 'plan', panelUvs(panel, sl, plan)
     TextureAtlas.js                        WP4   computeAtlas (LED totals, px/LED, start columns, x offsets, UV offsets),
                                                  sectionPxPerLed, panelPxPerLed (wall-wide budget since 08 P2-12d);
-                                                 CANVAS_HARD_LIMITS, canvasFits (08 P2-1c)
+                                                 CANVAS_HARD_LIMITS, canvasFits (08 P2-1c); 04 UV-7: sectionTextureScale (the
+                                                 16 MP viewport budget of every section canvas, 04 6.4)
     UvMapper.js                            04 UV-6  The UV transform maths of 04 6.3-6.8: applyUv / invertUv (identity
                                                  short-circuit), planSectionUvs / planSectionUv (the SectionUvPlan of every
                                                  consumer), sectionUv, presets, quarterTurn, pixelAccuracy, drag maths
@@ -279,20 +280,25 @@ js/
                                                  nearestHit, frameDistance, quadOverlapsFrame, MAX_FRUSTUM_DEPTH_M (imports
                                                  nothing)
   render/
-    ResourceTracker.js                     WP6   disposeObject3D(root, {maps}) + ResourceTracker
+    ResourceTracker.js                     WP6   disposeObject3D(root, {maps}) + ResourceTracker; 04 UV-7: disposeObject3D
+                                                 de-duplicates geometries, materials (Material[] members) and maps
     SceneManager.js                        WP6   Scene, main camera, renderer, lights, grid, axes (explicit init()), helper registry,
                                                  LAYERS, grid toggle, resize, render loop; 03 T5: addPreRender (07 C46); 07 R1:
                                                  LAYER_MASKS, addHelper(o, {layer}), tagHelper, per-frame layer enforcement,
                                                  withPassHidden, setHelpersVisibleInMain, the ?debug=1 helper audit
     LEDWallView.js                         WP6   Wall + frame groups from a WallLayout; mode dispatch; mesh tagging; section nodes;
                                                  debug-shading override and withContentMaterials (01 F1-1); 06 T5: each
-                                                 section's frames in its adaptive frame colour
+                                                 section's frames in its adaptive frame colour; 04 UV-7/UV-9: UVs from the
+                                                 rebuild's UV plans, one combined geometry group per section, budgeted
+                                                 section canvases, the per-panel option uv.panel_uvs = 'panel'
     frameColor.js                          06 T5  relativeLuminance, contrastRatio, frameColorFor: the adaptive panel-frame
                                                  colour (06 6.7; pure, imports nothing)
     MaterialOverride.js                    01 F1-1  Stash / restore of mesh materials under a shared override material
     DebugMaterials.js                      01 F1-1  Lazily created face-orientation and normal-colour ShaderMaterials, line material
     NormalsDebugView.js                    01 F1-1  Merged normal-line LineSegments on LAYERS.DEBUG since 07 R1 (WALL_REBUILT subscriber)
-    LEDMaterialFactory.js                  WP6   The only constructor of wall materials (panel IDs > LED sim > colour)
+    LEDMaterialFactory.js                  WP6   The only constructor of wall materials (panel IDs > LED sim > colour); 04 UV-7:
+                                                 combined(sections, atlas, layout, sectionScale) -> Material[] per section in
+                                                 the per-section layout; section/sectionShared take the budgeted scale
     textures/LEDPixelTextureFactory.js     WP6   installCanvasPolyfills, LED tile cache, 5 tile painters, tiled clones
     textures/PanelIdRenderer.js            WP6   Panel / section / atlas panel-ID canvases (styling, section names, logos);
                                                  06 T5: takePendingFonts (the font gate's (font, text) pairs)
@@ -771,7 +777,7 @@ The single home of every output-affecting legacy switch and helper. The file hea
 ```js
 export const Strategies = deepFreeze({
   mesh: {
-    viewport: { winding: 'ccw', normals: 'averaged', combinedUV: 'atlas-pixel-accurate', side: 'double' },
+    viewport: { winding: 'ccw', normals: 'averaged', combinedUV: 'plan', side: 'double' },
     obj:      { winding: 'ccw', normals: 'averaged', stripNormals: 'per-vertex',
                 combinedUV: 'atlas-pixel-accurate', panelNormal: 'facing' },
     gltf:     { winding: 'ccw', normals: 'averaged', panelNormal: 'facing', attributes: ['POSITION', 'NORMAL', 'TEXCOORD_0'],
@@ -3486,7 +3492,11 @@ Boundaries of these proofs (recorded at WP10 integration from the WP4, WP6 and W
 ```
 1. prev = #pivotResolution; layout = layoutProject(project)         // 1479-1549 (PR1); the stage frame (03 T3, 5.6)
    #pivotResolution = layout.pivot.resolution; shift = stageShift(prev, #pivotResolution)
-2. view.rebuild({ layout, meshMode: project.meshMode, display })    // 1458-1477 dispose + groups, 1551-1557 dispatch,
+2. atlas = computeAtlas(sections); sectionScale = sectionTextureScale(sections)                  // 04 6.13 steps 2-3 (UV-7;
+   uvPlans = planSectionUvs({layout, atlas, settings: project.uv, meshMode, applyTransforms:      // pure, no ids)
+                             !isLedMaskContent(display.content)})
+   view.rebuild({ layout, meshMode: project.meshMode, display, atlas, uvPlans, sectionScale, uvSettings: project.uv })
+                                                                    // 1458-1477 dispose + groups, 1551-1557 dispatch,
                                                                     // 1559-1569 frames, 1571-1572 scene.add
 3. this.publishStats()  -> emit WALL_STATS_CHANGED (HeaderStats)    // 1574
 4. orbit.updateCameraPosition()                                     // 1575  the wall's generative box centre (08 P2-11c, via framingBounds); moves the camera even in pilot
@@ -3804,7 +3814,7 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `mesh.viewport.winding = 'ccw'` (08 P2-2a; Phase-1 value `'legacy-cw'`, kept as a case for `LegacyProfiles`) | B-H1 (fixed) | Landed: combined/section strips wound `(bl, br, tr)/(bl, tr, tl)`, counter-clockwise toward the stage (08 6.4); `'legacy-cw'` wound them `(bl, tl, tr)/(bl, tr, br)` (clockwise from +Z) against +Z normals | viewport `WallMeshBuilder` (`LEDWallView`'s builder): `sectionGrid` passes `this.profile.winding` to `quadIndices` | switch in `quadIndices` | landed in 08 P2-2a (invariance gate, empty `expect`: the same diagonal and unlit DoubleSide materials keep coverage and plain colours; the reviewed `mayChange` screenshots are the wireframe line directions, 1-level UV-interpolation rounding on textured walls and one edge-on pixel, 08 6.4); panel mode (`PlaneGeometry`) was already correct |
 | `mesh.viewport.side = 'double'` | – (design choice since 08 P2-2a) | DoubleSide: the orbit can go behind the wall (it no longer hides a winding defect, B-H1 is fixed) | `LEDMaterialFactory.#side()`: `Strategies.mesh.viewport.side` | switch | optional `'front'` (Feature 1 F1-5 with its back shell, or Feature 5) |
 | `mesh.viewport.normals = 'averaged'` (08 P2-2b; Phase-1 value `'right-panel'`, kept as a case for `LegacyProfiles`) | B-L3 (fixed) | Landed: a curved section's interior vertex normal is the unit bisector of its two adjacent panel normals and its end columns keep their panel normal; a flat section keeps the `'right-panel'` normals verbatim (08 6.4 with 01 CR-1: the test is per section, `sl.isFlat`); `'right-panel'` was the normal of the panel to the right, the last column copying the previous | `WallMeshBuilder.sectionGrid`: `opts.normals ?? this.profile.normals` | switch | landed in 08 P2-2b (invariance gate: the unlit `MeshBasicMaterial` never reads normals) |
-| `mesh.viewport.combinedUV = 'atlas-pixel-accurate'` (08 P2-7a; Phase-1 value `'atlas-u-full-v'`, kept as a case for `LegacyProfiles`) | B-M5 (fixed) | Landed: combined v = (row/rows) * `uvHeight` (08 6.7), each bottom-aligned section samples its own share of the atlas, so panel IDs and the LED-sim repeat are pixel-accurate; equal heights give `uvHeight` 1 and the legacy v bit for bit; `'atlas-u-full-v'` gave every section v = row/rows over the full atlas height | `WallMeshBuilder.combinedGrid`: `this.profile.combinedUV` | switch | landed in 08 P2-7a; 04 UV-7 later adds the case `'plan'` and selects it (`'atlas-pixel-accurate'` stays a supported case) |
+| `mesh.viewport.combinedUV = 'plan'` (04 UV-7; 08 P2-7a's `'atlas-pixel-accurate'` stays a supported case, equal to `'plan'` with the atlas layout and identity transforms; Phase-1 value `'atlas-u-full-v'`, kept as a case for `LegacyProfiles`) | B-M5 (fixed) | 04 UV-7: the UVs of `UvMapper.planSectionUvs` (per-section 0..1 by default, or atlas-placed, with the UV transforms). 08 P2-7a landed: combined v = (row/rows) * `uvHeight` (08 6.7), each bottom-aligned section samples its own share of the atlas, so panel IDs and the LED-sim repeat are pixel-accurate; equal heights give `uvHeight` 1 and the legacy v bit for bit; `'atlas-u-full-v'` gave every section v = row/rows over the full atlas height | `WallMeshBuilder.combinedGrid`: `this.profile.combinedUV` | switch | landed in 08 P2-7a; 04 UV-7 later adds the case `'plan'` and selects it (`'atlas-pixel-accurate'` stays a supported case) |
 | `mesh.obj.winding = 'ccw'` (08 P2-2c; Phase-1 value `'legacy-cw'`, kept as a case for `LegacyProfiles`) | B-H2 (OBJ half fixed) | Landed: OBJ strip faces wound counter-clockwise toward the stage and panel faces `v, v+1, v+2 / v, v+2, v+3`; `'legacy-cw'` wrote clockwise strips and panel faces `v, v+3, v+2 / v, v+2, v+1` | OBJ `WallMeshBuilder`: `sectionGrid` and `panelQuadIndices` pass `this.profile.winding` to `quadIndices`; `ObjExporter.#faceConventionLine()`: `profile.winding` (the 01 CR-3 header line, written for `'ccw'` only) | switch in `quadIndices`; switch in `#faceConventionLine` | landed in 08 P2-2c |
 | `mesh.obj.normals = 'averaged'` (08 P2-2c; Phase-1 value `'none'`, kept as a case for `LegacyProfiles`) | B-H2 (OBJ half fixed) | Landed: the OBJ grids carry the 08 6.4 averaged normals (flat sections bit-equal to `'right-panel'`, 01 CR-1); `'none'` pushed no normals (the writer emitted the constant `vn` instead) | `WallMeshBuilder.sectionGrid` (OBJ builder): `this.profile.normals` | switch | landed in 08 P2-2c |
 | `mesh.obj.stripNormals = 'per-vertex'` (08 P2-2c; Phase-1 value `'constant-z'`, kept as a case for `LegacyProfiles`) | B-H2 (OBJ half fixed) | Landed: one `vn` per vertex from the builder normals (`toFixed(6)`) and strip faces `f a/a/a`; `'constant-z'` wrote one `vn 0 0 1` per combined/section object | `ObjExporter.#stripNormalLines(normals, constantIndex)`: `profile.stripNormals` | switch | landed in 08 P2-2c |
@@ -4504,3 +4514,11 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 2.2, 3.5: `domain/UvSettings.js` (new): `UvLayout`, `PanelUvMode`, `UvTransform`, `UvSettings` (defaults: Combined layout `'per-section'`, the owner's decision; panel UVs `'section'`; no glTF TEXCOORD_1). `WallSection.uvTransform` is an accessor over a private field with `setUvTransform(t)` (a clone), so `SECTION_FIELDS` keeps the 11 legacy fields (a deviation from 04 4.1, which appends the key; it keeps the legacy-parity tests and `{...section}` copies unchanged). `Project.uv` (constructor default `new UvSettings()`). UV state is session-only: project file v2 and 04 UV-5c have not landed (the owner skipped UV-5c for now).
 - 2.2, 3.6: `geometry/UvMapper.js` and `geometry/PixelMap.js` (new, pure); `WallLayout.transformPoint` is exported for `PixelMap.wallPointFromBaseUv`. `WallMeshBuilder`: the `SectionUvPlan` uv option (an identity plan is the `'unit'` writer itself, so identity outputs are bit-identical), `sectionUvs(sl, plan)`, `combinedGrid(layout, atlas, plans)` with the case `'plan'` (default plans: per-section, no transforms), `panelUvs(panel, sl, plan)`.
 - 2.3: `tests/unit/uv-mapper.test.mjs`.
+
+**04 UV-7, the per-section Combined layout in the viewport, the section-texture budget, and the viewport half of UV-9** (docs/improvements/04-uvs-uv-editor.md 5.1, 6.4, 6.5, 6.13; Q1, Q17):
+- 3.3, 8.1: `Strategies.mesh.viewport.combinedUV = 'plan'` (`'atlas-pixel-accurate'` stays a supported case).
+- 6.1 P1 step 2 (04 6.13 steps 2-3): `WallController.rebuild` computes the atlas, `sectionTextureScale(sections)` and `planSectionUvs({layout, atlas, settings: project.uv, meshMode, applyTransforms: !isLedMaskContent(display.content)})` and passes them with `uvSettings` to `LEDWallView.rebuild` (which computes defaults when a caller passes none). The rebuild-observer hook (`addRebuildObserver`) is left to 04 UV-11.
+- 3.7: the combined mesh gets one geometry group per section (`addGroup(indexStart, indexCount, i)`); `LEDMaterialFactory.combined(sections, atlas, combinedLayout, sectionScale)` returns a `Material[]` in the per-section layout for panel IDs (slot i = the Section-mode material) and LED sim (slot i = the white tile repeated (cols_i·ledX_i, rows_i·ledY_i) times the vertex colours); colour content keeps one vertex-colour material. Section mode and panel mode take their UVs from the plans (the UV transforms apply; LED-mask content keeps base UVs). Every section canvas of the viewport follows `TextureAtlas.sectionTextureScale` (16 MP, 04 Q17: only `large_wall` among the harness walls is reduced, 3 -> 2 px/LED). With `uv.panel_uvs = 'panel'` panel mode with panel IDs draws the per-panel canvases at the wall-wide `panelPxPerLed` with the PlaneGeometry's own UVs. `disposeObject3D` de-duplicates by identity.
+- 3.12: until 04 UV-14 adds the sidebar UV options, `App` reads `?uv_layout=atlas` and `?panel_uvs=panel` from the URL query into `project.uv` (session-only).
+- LED simulation in panel mode keeps one material per panel with the per-panel UVs (as 08 P2-12d landed; 04 6.5 assumed section-space LED-sim UVs), so `toggles/06_ledsim_panel` does not change.
+- 2.3: `uv-mapper.test.mjs` (`sectionTextureScale`), `materials.test.mjs` (per-section slots, the single-section LED-sim equality with the atlas material, groups and per-section 0..1 islands on the combined mesh); the fake geometries of `led-wall-view`, `scene-overlays` and `materials` tests gain `addGroup`.

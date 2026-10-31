@@ -46,6 +46,7 @@ class FakeGeometry {
   constructor() { this.attributes = {}; this.index = undefined; }
   setAttribute(name, attribute) { this.attributes[name] = attribute; }
   setIndex(index) { this.index = index; }
+  addGroup(start, count, materialIndex) { (this.groups ??= []).push({ start, count, materialIndex }); }
 }
 class FakeObject3D {
   constructor() { this.children = []; this.userData = {}; }
@@ -368,5 +369,82 @@ describe('combined LED sim takes the section colours (B-L18; 08 P2-7e)', () => {
     assert.notEqual(tiles.tile('#00f0ff').master, a.master, 'the layout is part of the key');
     const tiled = tiles.tiled(7, 3, '#00f0ff');
     assert.deepEqual(tiled.repeat.value, [7, 3]);
+  });
+});
+
+describe('04 UV-7: the per-section combined layout (Material[] and geometry groups) and the section budget', () => {
+  const two = () => [section({ name: 'A', color: '#ff0000' }), section({ id: 1, name: 'B', color: '#00ff00', panelCols: 2, panelRows: 5, ledX: 64 })];
+  /** A panel-ID renderer stand-in recording every sectionCanvas call (section name, index, scale, start column). */
+  const recordingIds = () => {
+    const calls = [];
+    return {
+      calls,
+      sectionCanvas: (s, i, scale, startCol) => { calls.push([s.name, i, scale, startCol]); return { width: 1, height: 1 }; },
+      sectionSize: () => ({ width: 1, height: 1 }),
+      atlasCanvas: () => { calls.push(['atlas']); return { width: 1, height: 1 }; },
+      atlasSize: () => ({ width: 1, height: 1 }),
+    };
+  };
+  const factoryFor = (display, panelIds, tileCalls = []) => new LEDMaterialFactory({
+    display: { wireframe: false, ...display }, panelIds,
+    ledTiles: { tiled: (x, y, color) => { tileCalls.push([x, y, color]); return new FakeCanvasTexture({ tile: true }); } },
+    win: { console: { warn() {} } },
+  });
+
+  test('panel IDs: one slot per section, the Section-mode canvas; overrideScale null unless the budget reduced it', () => {
+    const sections = two();
+    const atlas = computeAtlas(sections);
+    const ids = recordingIds();
+    const slots = factoryFor({ panelIdsEnabled: true }, ids).combined(sections, atlas, 'per-section', { scales: [4, 4], reduced: false });
+    assert.ok(Array.isArray(slots) && slots.length === 2);
+    assert.ok(slots.every((m) => m.params.map instanceof FakeCanvasTexture && !m.params.vertexColors));
+    assert.deepEqual(ids.calls, [['A', 0, null, 0], ['B', 1, null, 5]]);
+    const reduced = recordingIds();
+    factoryFor({ panelIdsEnabled: true }, reduced).combined(sections, atlas, 'per-section', { scales: [2, 3], reduced: true });
+    assert.deepEqual(reduced.calls.map((c) => c[2]), [2, 3]);
+    const atlasIds = recordingIds();
+    assert.ok(!Array.isArray(factoryFor({ panelIdsEnabled: true }, atlasIds).combined(sections, atlas, 'atlas')));
+    assert.deepEqual(atlasIds.calls, [['atlas']]);
+  });
+
+  test('LED sim: white tile slots repeated (cols·ledX, rows·ledY) times the vertex colours; one section equals the atlas material', () => {
+    const sections = two();
+    const tiles = [];
+    const slots = factoryFor({ ledSimEnabled: true }, recordingIds(), tiles).combined(sections, computeAtlas(sections), 'per-section');
+    assert.equal(slots.length, 2);
+    assert.deepEqual(tiles.map((t) => t.slice(0, 2)), [[160, 96], [128, 160]]);
+    assert.ok(tiles.every((t) => t[2].getHexString() === 'ffffff') && slots.every((m) => m.params.vertexColors === true));
+    const one = [section({ name: 'Only' })];
+    const a = []; const b = [];
+    const perSection = factoryFor({ ledSimEnabled: true }, recordingIds(), a).combined(one, computeAtlas(one), 'per-section')[0];
+    const atlasMaterial = factoryFor({ ledSimEnabled: true }, recordingIds(), b).combined(one, computeAtlas(one), 'atlas');
+    assert.deepEqual(a.map((t) => t.slice(0, 2)), b.map((t) => t.slice(0, 2)));
+    const params = (m) => ({ ...m.params, map: undefined });
+    assert.deepEqual(params(perSection), params(atlasMaterial));
+    const colour = factoryFor({}, recordingIds()).combined(sections, computeAtlas(sections), 'per-section');
+    assert.ok(!Array.isArray(colour) && colour.params.vertexColors === true, 'colour: one vertex-colour material');
+  });
+
+  test('LEDWallView: one geometry group per section (index = sectionIndex); UVs and slots follow the plans and settings', () => {
+    const sections = two();
+    let combinedArgs = null;
+    const materials = {
+      beginRebuild() {},
+      combined: (...args) => { combinedArgs = args; return [new FakeMaterial({ slot: 0 }), new FakeMaterial({ slot: 1 })]; },
+    };
+    const view = new LEDWallView({ sceneManager: { add() {}, remove() {} }, materials, builder: new WallMeshBuilder(Strategies.mesh.viewport), theme: { scene: { frame: 0x4a4a5a } } });
+    const layout = computeWallLayout(sections);
+    view.rebuild({ layout, meshMode: 'combined', display: { showFrame: false, panelIdsEnabled: true, content: 'panelIds' } });
+    const [mesh] = view.meshes();
+    const ranges = mesh.userData.sectionRanges;
+    assert.deepEqual(mesh.geometry.groups, ranges.map((r, i) => ({ start: r.indexStart, count: r.indexCount, materialIndex: i })));
+    assert.equal(combinedArgs[2], 'per-section', 'the default layout');
+    assert.equal(combinedArgs[3].reduced, false);
+    const uvs = mesh.geometry.attributes.uv.array;
+    for (const r of ranges) {
+      const us = []; const vs = [];
+      for (let k = r.vertexStart; k < r.vertexStart + r.vertexCount; k++) { us.push(uvs[2 * k]); vs.push(uvs[2 * k + 1]); }
+      assert.deepEqual([Math.min(...us), Math.max(...us), Math.min(...vs), Math.max(...vs)], [0, 1, 0, 1], 'each island fills 0..1');
+    }
   });
 });

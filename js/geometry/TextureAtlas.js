@@ -10,7 +10,7 @@
  * Layer: geometry (may import domain, legacy; THREE-free and DOM-free).
  */
 
-import { panelModePxPerLed, MAX_CANVAS_SIDE } from './TextureBudget.js';
+import { panelModePxPerLed, MAX_CANVAS_SIDE, SECTION_TEXTURE_BUDGET_PX } from './TextureBudget.js';
 
 /**
  * The largest canvas every supported browser can create (08 6.3): 32,767 px per side and 268,435,456 px (16,384 x 16,384)
@@ -99,6 +99,38 @@ export function computeAtlas(sections) {
  */
 export function sectionPxPerLed(w, h) {
   return Math.max(1, Math.min(4, Math.floor(4096 / Math.max(w, h))));
+}
+
+/**
+ * The viewport density of the section panel-ID canvases of one rebuild (04 6.4, UV-7; 07 C38): every viewport path that
+ * draws section canvases (Section mode, Combined per-section, Panel with section UVs) stays within
+ * SECTION_TEXTURE_BUDGET_PX (16 MP, 04 Q17) in total. Exports never use it (the ZIP keeps sectionPxPerLed).
+ *   base_i = clamp(floor(maxSide / max(W_i, H_i)), 1, 4)   (sectionPxPerLed for the default maxSide 4096)
+ *   sum W_i·H_i·base_i² <= budget -> {scales: base, reduced: false, pxPerLed: null} (the canvases get overrideScale null)
+ *   cap = floor(sqrt(budget / sum W_i·H_i)) >= 1 -> {scales: min(base_i, cap), reduced: true, pxPerLed: cap}
+ *   otherwise s = sqrt(budget / sum W_i·H_i) (< 1 px/LED, fractional, viewport only) for every section
+ * Of the harness walls only large_wall is reduced: 4 sections of 1280 x 640 LEDs go from 3 to 2 px/LED (13.1 MP).
+ * Side effects: none.
+ * @param {import('../domain/WallSection.js').WallSection[]} sections
+ * @param {{budgetPx?: number, maxSide?: number}} [limits]  defaults SECTION_TEXTURE_BUDGET_PX and MAX_CANVAS_SIDE
+ * @returns {{scales: number[], reduced: boolean, pxPerLed: number|null}}
+ */
+export function sectionTextureScale(sections, { budgetPx = SECTION_TEXTURE_BUDGET_PX, maxSide = MAX_CANVAS_SIDE } = {}) {
+  let leds = 0;
+  let pixels = 0;
+  const base = sections.map((s) => {
+    const W = s.panelCols * s.ledX;
+    const H = s.panelRows * s.ledY;
+    const b = Math.max(1, Math.min(4, Math.floor(maxSide / Math.max(W, H))));
+    leds += W * H;
+    pixels += W * H * b * b;
+    return b;
+  });
+  if (pixels <= budgetPx) return { scales: base, reduced: false, pxPerLed: null };
+  const cap = Math.floor(Math.sqrt(budgetPx / leds));
+  if (cap >= 1) return { scales: base.map((b) => Math.min(b, cap)), reduced: true, pxPerLed: cap };
+  const s = Math.sqrt(budgetPx / leds);
+  return { scales: base.map(() => s), reduced: true, pxPerLed: s };
 }
 
 /**

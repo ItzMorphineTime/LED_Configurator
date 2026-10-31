@@ -198,7 +198,7 @@ describe('Strategies', () => {
   test('has exactly the keys and values of ARCHITECTURE.md 3.3 (Phase-1 values except the Phase-2 flips)', () => {
     assert.deepEqual(Strategies, {
       mesh: {
-        viewport: { winding: 'ccw', normals: 'averaged', combinedUV: 'atlas-pixel-accurate', side: 'double' },
+        viewport: { winding: 'ccw', normals: 'averaged', combinedUV: 'plan', side: 'double' },
         obj: { winding: 'ccw', normals: 'averaged', stripNormals: 'per-vertex',
                combinedUV: 'atlas-pixel-accurate', panelNormal: 'facing' },
         gltf: { winding: 'ccw', normals: 'averaged', panelNormal: 'facing', attributes: ['POSITION', 'NORMAL', 'TEXCOORD_0'],

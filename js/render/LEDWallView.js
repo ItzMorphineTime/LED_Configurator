@@ -11,6 +11,9 @@
  * Panel mode with panel IDs (08 P2-12d, 08 6.15): one material per section, shared by its panels, samples the section
  * canvas; each panel's PlaneGeometry UVs are rewritten into section space (WallMeshBuilder.panelUvs). LED sim and colour
  * keep one material per panel and the per-panel 0..1 UVs of legacy.
+ * Spec 04 (UV-7, UV-9): every mode takes its UVs from the rebuild's UV plans (the UV transforms; base UVs for LED-mask
+ * content); the combined mesh has one geometry group per section and, in the default per-section layout, one material
+ * per section; section canvases follow the 16 MP viewport budget; uv.panel_uvs = 'panel' restores the per-panel canvases.
  * Panel frames are adaptive (docs/improvements/06-morph-branding.md 6.7, 06 T5): each section's frames take the light
  * or the dark frame colour of SceneTheme, whichever contrasts more with the section colour (render/frameColor.js).
  * Legacy source: index.html@cd3fd3f 1457-1577, 1646-1678, 1710-1802.
@@ -18,11 +21,17 @@
  */
 
 import THREE from '../vendor/three.js';
-import { computeAtlas } from '../geometry/TextureAtlas.js';
+import { computeAtlas, sectionTextureScale, panelPxPerLed } from '../geometry/TextureAtlas.js';
 import { maxIndexOf, indexWidth } from '../geometry/WallMeshBuilder.js';
+import { planSectionUvs, isLedMaskContent } from '../geometry/UvMapper.js';
+import { UvSettings } from '../domain/UvSettings.js';
 import { ResourceTracker } from './ResourceTracker.js';
 import { MaterialOverride } from './MaterialOverride.js';
 import { frameColorFor } from './frameColor.js';
+import { scaleOf } from './LEDMaterialFactory.js';
+
+/** The UV settings of a rebuild that passes none (unit tests): the defaults, frozen. */
+const DEFAULT_UV_SETTINGS = Object.freeze(new UvSettings());
 
 /**
  * The argument of geometry.setIndex for a combined or section grid (08 P2-1e; the viewport side of B-L5, 08 6.2): a
@@ -139,13 +148,19 @@ export class LEDWallView {
    * content materials back first, so step 1 disposes the real materials and never the shared debug ones, and step 6
    * shows the shading on the new meshes.
    * Ports: index.html@cd3fd3f lines 1458-1477, 1551-1572.
+   * The UV inputs of 04 6.13 (UV-7) come from WallController's P1 steps 2-3: the atlas, the section-texture scale (the
+   * 16 MP viewport budget) and one UV plan per section (UvMapper.planSectionUvs, base UVs for LED-mask content) with the
+   * project's UV settings; a caller that passes none (unit tests) gets them computed here with the default settings.
    * Side effects: scene removals/additions; THREE allocations and dispose events; canvases for panel IDs and LED tiles;
    *   mesh.material writes (debug shading).
    * @param {{layout: import('../geometry/WallLayout.js').WallLayout, meshMode: *,
-   *          display: import('../domain/Project.js').DisplaySettings}} args
+   *          display: import('../domain/Project.js').DisplaySettings, atlas?: object|null,
+   *          uvPlans?: import('../geometry/UvMapper.js').SectionUvPlan[]|null,
+   *          sectionScale?: {scales: number[], reduced: boolean, pxPerLed: number|null}|null,
+   *          uvSettings?: import('../domain/UvSettings.js').UvSettings|null}} args
    * @returns {void}
    */
-  rebuild({ layout, meshMode, display }) {
+  rebuild({ layout, meshMode, display, atlas = null, uvPlans = null, sectionScale = null, uvSettings = null }) {
     // 0. Put the content materials back (01 F1-1), so step 1 never disposes the shared debug materials.
     this.#override.restore();
     this.#display = display;
@@ -168,19 +183,27 @@ export class LEDWallView {
     this.#tracker.track(wallGroup, { detach: () => this.#sceneManager.remove(wallGroup) });
     this.#tracker.track(frameGroup, { detach: () => this.#sceneManager.remove(frameGroup) });
 
-    // 3. Atlas bookkeeping (pure, PR1), then the mesh-mode dispatch. The material factory starts a new rebuild, so its
-    // panel-ID fallback warning (08 P2-1d) is given once per section and rebuild.
+    // 3. Atlas bookkeeping, section-texture scale and UV plans (pure, PR1; WallController's P1 steps 2-3 since 04 UV-7),
+    // then the mesh-mode dispatch. The material factory starts a new rebuild, so its panel-ID fallback warning
+    // (08 P2-1d) is given once per section and rebuild.
     const sections = layout.sections.map((sl) => sl.section);
-    const atlas = computeAtlas(sections);
+    const uv = {
+      atlas: atlas ?? computeAtlas(sections),
+      settings: uvSettings ?? DEFAULT_UV_SETTINGS,
+      scale: sectionScale ?? sectionTextureScale(sections),
+      plans: uvPlans,
+    };
+    uv.plans ??= planSectionUvs({ layout, atlas: uv.atlas, settings: uv.settings, meshMode,
+      applyTransforms: !isLedMaskContent(display.content) });
     this.#materials.beginRebuild();
     // The three mesh modes (B-L8 fixed in 08 P2-3b: the validator maps an unknown imported mode to 'combined', so the
     // throw is unreachable from the app; legacy rendered any unknown mode as panels).
     if (meshMode === 'combined') {
-      this.#buildCombined(layout, sections, atlas);
+      this.#buildCombined(layout, sections, uv);
     } else if (meshMode === 'section') {
-      this.#buildSections(layout, atlas);
+      this.#buildSections(layout, uv);
     } else if (meshMode === 'panel') {
-      this.#buildPanels(layout, atlas, display);
+      this.#buildPanels(layout, sections, display, uv);
     } else {
       throw new Error(`Unknown mesh mode ${JSON.stringify(meshMode)}`);
     }
@@ -242,25 +265,29 @@ export class LEDWallView {
   }
 
   /**
-   * One mesh for the whole wall, coloured per vertex (or textured by the atlas / LED tiles).
+   * One mesh for the whole wall, coloured per vertex (or textured by the atlas / LED tiles). Since 04 UV-7 the UVs come
+   * from the plans (each section filling 0..1 in the default per-section layout, atlas-placed in the atlas layout, with
+   * the UV transforms) and the geometry has one group per section (index = sectionIndex), so the per-section layout's
+   * Material[] gives every section its own texture; a single material ignores the groups (r128).
    * Ports: index.html@cd3fd3f lines 1646-1677 (the arrays of 1580-1644 come from builder.combinedGrid).
    * @param {import('../geometry/WallLayout.js').WallLayout} layout
    * @param {import('../domain/WallSection.js').WallSection[]} sections
-   * @param {object} atlas
+   * @param {{atlas: object, settings: object, scale: object, plans: object[]}} uv  the rebuild's UV inputs
    */
-  #buildCombined(layout, sections, atlas) {
-    const g = this.#builder.combinedGrid(layout, atlas);
+  #buildCombined(layout, sections, uv) {
+    const g = this.#builder.combinedGrid(layout, uv.atlas, uv.plans);
 
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(g.positions, 3));
     geometry.setAttribute('normal', new THREE.Float32BufferAttribute(g.normals, 3));
     geometry.setAttribute('uv', new THREE.Float32BufferAttribute(g.uvs, 2));
     geometry.setIndex(indexAttribute(g.indices));
+    g.sectionRanges.forEach((r, i) => geometry.addGroup(r.indexStart, r.indexCount, i));
 
     // For combined mesh, use vertex colors to support multiple section colors
     geometry.setAttribute('color', new THREE.Float32BufferAttribute(this.#vertexColors(layout), 3));
 
-    const material = this.#materials.combined(sections, atlas);
+    const material = this.#materials.combined(sections, uv.atlas, uv.settings.combinedLayout, uv.scale);
 
     const mesh = new THREE.Mesh(geometry, material);
     mesh.userData = { kind: 'led-wall', mode: 'combined', sectionRanges: g.sectionRanges };
@@ -288,14 +315,16 @@ export class LEDWallView {
   }
 
   /**
-   * One mesh per section with 0..1 UVs.
+   * One mesh per section with 0..1 UVs (04 UV-7: the section's plan, with its UV transform; base UVs for LED-mask
+   * content) and the budgeted section canvas.
    * Ports: index.html@cd3fd3f lines 1710-1774 (the arrays of 1713-1751 come from builder.sectionGrid).
    * @param {import('../geometry/WallLayout.js').WallLayout} layout
-   * @param {object} atlas
+   * @param {{atlas: object, scale: object, plans: object[]}} uv  the rebuild's UV inputs
    */
-  #buildSections(layout, atlas) {
+  #buildSections(layout, uv) {
+    const { atlas } = uv;
     layout.sections.forEach((sl, i) => {
-      const grid = this.#builder.sectionGrid(sl, { uv: 'unit' });
+      const grid = this.#builder.sectionGrid(sl, { uv: uv.plans[i] });
 
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute('position', new THREE.Float32BufferAttribute(grid.positions, 3));
@@ -303,7 +332,7 @@ export class LEDWallView {
       geometry.setAttribute('uv', new THREE.Float32BufferAttribute(grid.uvs, 2));
       geometry.setIndex(indexAttribute(grid.indices));
 
-      const material = this.#materials.section(sl.section, sl.sectionIndex, atlas.entries[i].startCol);
+      const material = this.#materials.section(sl.section, sl.sectionIndex, atlas.entries[i].startCol, scaleOf(uv.scale, i));
 
       const mesh = new THREE.Mesh(geometry, material);
       mesh.userData = { kind: 'led-wall', mode: 'section', sectionId: sl.sectionId, sectionIndex: i };
@@ -317,23 +346,32 @@ export class LEDWallView {
    * materials.sectionShared (the section canvas, with its logo and section-label size), shared by all of its panels, and
    * each panel's UVs are rewritten into section space: legacy drew one 4-16 px/LED canvas per panel, without the logo.
    * LED sim and colour keep one materials.panel per panel and the PlaneGeometry's own 0..1 UVs.
+   * 04 UV-9: the panel UVs come from the section's plan (builder.panelUvs(panel, sl, plan)), so the section's UV
+   * transform applies; with the legacy option uv.panel_uvs = 'panel' each panel instead gets its own per-panel canvas
+   * (materials.panel at the wall-wide panelPxPerLed of the rebuild) and the PlaneGeometry's own 0..1 UVs. The shared
+   * section canvas follows the 16 MP budget (04 6.4).
    * Ports: index.html@cd3fd3f lines 1776-1802.
    * @param {import('../geometry/WallLayout.js').WallLayout} layout
-   * @param {object} atlas
+   * @param {import('../domain/WallSection.js').WallSection[]} sections
    * @param {import('../domain/Project.js').DisplaySettings} display  panelIdsEnabled
+   * @param {{atlas: object, scale: object, plans: object[]}} uv  the rebuild's UV inputs
    */
-  #buildPanels(layout, atlas, display) {
+  #buildPanels(layout, sections, display, uv) {
+    const perPanelIds = display.panelIdsEnabled && uv.plans.some((p) => p.panelUvs === 'panel');
+    const panelScale = perPanelIds ? panelPxPerLed(sections) : undefined;
     layout.sections.forEach((sl, i) => {
-      const startCol = atlas.entries[i].startCol;
-      const shared = display.panelIdsEnabled ? this.#materials.sectionShared(sl.section, sl.sectionIndex, startCol) : null;
+      const plan = uv.plans[i];
+      const startCol = uv.atlas.entries[i].startCol;
+      const shared = display.panelIdsEnabled && plan.panelUvs !== 'panel'
+        ? this.#materials.sectionShared(sl.section, sl.sectionIndex, startCol, scaleOf(uv.scale, i)) : null;
       sl.panels.forEach((panel) => {
         const geometry = new THREE.PlaneGeometry(sl.panelW, sl.panelH);
         let material;
         if (shared !== null) {
-          writePanelUvs(geometry, this.#builder.panelUvs(panel, sl));
+          writePanelUvs(geometry, this.#builder.panelUvs(panel, sl, plan));
           material = shared;
         } else {
-          material = this.#materials.panel(sl.section, sl.sectionIndex, startCol + panel.col, panel.row);
+          material = this.#materials.panel(sl.section, sl.sectionIndex, startCol + panel.col, panel.row, panelScale);
         }
 
         const mesh = new THREE.Mesh(geometry, material);

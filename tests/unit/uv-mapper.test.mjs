@@ -434,3 +434,29 @@ describe('PixelMap (04 6.9, 6.10, 4.2)', () => {
     assert.deepEqual(json.atlas, { width_led: 480, height_led: 96, png_px_per_led: 4, png_width_px: 1920, png_height_px: 384, texture_file: 'textures/a.png' });
   });
 });
+
+describe('TextureAtlas.sectionTextureScale: the 16 MP viewport budget (04 6.4, UV-7, Q17)', async () => {
+  const { sectionTextureScale } = await import('../../js/geometry/TextureAtlas.js');
+  const { CONFIGS } = await import('../regression/configs.mjs');
+  const fromConfig = (c) => c.sections.map((s) => ({ panelCols: s.panel.columns, panelRows: s.panel.rows, ledX: s.led_resolution.x, ledY: s.led_resolution.y }));
+
+  test('unchanged for every harness wall but large_wall; large_wall drops from 3 to 2 px/LED (13,107,200 px)', () => {
+    assert.deepEqual(sectionTextureScale([sec()]), { scales: [4], reduced: false, pxPerLed: null });
+    for (const [key, config] of Object.entries(CONFIGS)) {
+      const r = sectionTextureScale(fromConfig(config));
+      if (key === 'large_wall') {
+        assert.deepEqual(r, { scales: [2, 2, 2, 2], reduced: true, pxPerLed: 2 });
+        assert.equal(4 * 1280 * 640 * 2 * 2, 13107200);
+      } else {
+        assert.equal(r.reduced, false, key);
+      }
+    }
+  });
+
+  test('a 25,600 x 10,240 LED section gets a fractional scale within the budget', () => {
+    const r = sectionTextureScale([{ panelCols: 200, panelRows: 80, ledX: 128, ledY: 128 }]);
+    assert.equal(r.reduced, true);
+    assert.ok(r.pxPerLed < 1 && r.pxPerLed > 0);
+    assert.ok(25600 * 10240 * r.pxPerLed ** 2 <= 16777216 * (1 + 1e-12));
+  });
+});

@@ -6,13 +6,26 @@
  * argument evaluation order; THREE ids come from global counters, R5). A panel-ID canvas that the browser cannot
  * create (PanelIdRenderer returns null, 08 P2-1d, B-L4) falls back to the colour material of that mesh, with one
  * console warning per section and rebuild.
- * Panel mode with panel IDs takes one material per section, shared by its panels (sectionShared, 08 P2-12d).
+ * Panel mode with panel IDs takes one material per section, shared by its panels (sectionShared, 08 P2-12d). The combined
+ * mesh takes one material per section (a Material[]) in the per-section UV layout (04 UV-7), and every section canvas
+ * of the viewport follows the 16 MP budget of TextureAtlas.sectionTextureScale (04 6.4).
  * Legacy source: index.html@cd3fd3f 1664-1675 (combined), 1759-1769 (section), 1783-1793 + 2047-2048 (panel).
  * Layer: render (may import vendor/three, core, legacy, domain, geometry). Collaborators are injected.
  */
 
 import THREE from '../vendor/three.js';
 import { Strategies, unsupportedStrategy } from '../legacy/LegacyCompat.js';
+
+/**
+ * The section-canvas scale of section i under a sectionTextureScale result (04 6.4): its px/LED when the budget reduced
+ * the wall, else null (the legacy sectionPxPerLed).
+ * @param {{scales: number[], reduced: boolean}|null} sectionScale
+ * @param {number} i
+ * @returns {number|null}
+ */
+export function scaleOf(sectionScale, i) {
+  return sectionScale && sectionScale.reduced ? sectionScale.scales[i] : null;
+}
 
 /**
  * Builds wall materials from the current display settings.
@@ -54,18 +67,31 @@ export class LEDMaterialFactory {
   }
 
   /**
-   * The material of the combined mesh.
-   * panel IDs: the atlas canvas as a CanvasTexture; LED sim: one white tile repeated over the whole atlas (one tile per
-   * LED: the pixel-accurate atlas UVs of 08 P2-7a give each section its own LED rows) multiplied by the vertex colours, so
-   * every section's LEDs take its colour (08 P2-7e, B-L18 fixed); colour: vertex colours.
+   * The material(s) of the combined mesh, by content and UV layout (04 6.4).
+   * 'atlas' layout: one material. panel IDs: the atlas canvas as a CanvasTexture; LED sim: one white tile repeated over the
+   * whole atlas (one tile per LED: the pixel-accurate atlas UVs of 08 P2-7a give each section its own LED rows)
+   * multiplied by the vertex colours, so every section's LEDs take its colour (08 P2-7e, B-L18 fixed); colour: vertex
+   * colours.
+   * 'per-section' layout (04 UV-7, the default): panel IDs and LED sim give a Material[] with one slot per section
+   * (index = sectionIndex; LEDWallView adds one geometry group per section): panel IDs slot i = section(section_i, i,
+   * startCol_i, scale_i), the Section-mode material (scale_i null unless the 16 MP budget reduced it); LED sim slot i = the
+   * white tile repeated (cols_i·ledX_i, rows_i·ledY_i) times the vertex colours (one section: exactly the atlas material's
+   * parameters). Colour: one vertex-colour material (r128 ignores groups for a single material).
    * Ports: index.html@cd3fd3f lines 1664-1675 (the canvas of 1667 is PanelIdRenderer.atlasCanvas).
-   * Side effects: allocates the texture(s) then the material (THREE ids).
+   * Side effects: allocates the texture(s) then the material (THREE ids), slot by slot.
    * @param {import('../domain/WallSection.js').WallSection[]} sections  the wall's sections, in order
    * @param {{totalLedX: number, totalLedY: number, pxPerLed: number, entries: object[]}} atlas  computeAtlas(sections)
-   * @returns {THREE.MeshBasicMaterial}
+   * @param {'atlas'|'per-section'} [combinedLayout]  Project.uv.combinedLayout; default 'atlas'
+   * @param {{scales: number[], reduced: boolean}|null} [sectionScale]  TextureAtlas.sectionTextureScale(sections)
+   * @returns {THREE.MeshBasicMaterial|THREE.MeshBasicMaterial[]}
    */
-  combined(sections, atlas) {
+  combined(sections, atlas, combinedLayout = 'atlas', sectionScale = null) {
     const display = this.#display;
+    if (combinedLayout === 'per-section' && (display.panelIdsEnabled || display.ledSimEnabled)) {
+      return sections.map((section, i) => (display.panelIdsEnabled
+        ? this.section(section, i, atlas.entries[i].startCol, scaleOf(sectionScale, i))
+        : new THREE.MeshBasicMaterial({ map: this.#ledTiles.tiled(section.panelCols * section.ledX, section.panelRows * section.ledY, new THREE.Color("white")), vertexColors: true, side: this.#side(), wireframe: display.wireframe })));
+    }
     let material;
     if (display.panelIdsEnabled) {
       // Create combined panel ID texture
@@ -99,16 +125,18 @@ export class LEDMaterialFactory {
    * @param {import('../domain/WallSection.js').WallSection} section
    * @param {number} sectionIndex
    * @param {*} startCol  the section's first global column (atlas.entries[i].startCol)
+   * @param {number|null} [scale]  the canvas px/LED when the viewport budget reduced it (04 6.4,
+   *   TextureAtlas.sectionTextureScale); null: the legacy sectionPxPerLed
    * @returns {THREE.MeshBasicMaterial}
    */
-  section(section, sectionIndex, startCol) {
+  section(section, sectionIndex, startCol, scale = null) {
     const display = this.#display;
     let material;
     if (display.panelIdsEnabled) {
-      const panelIdCanvas = this.#panelIds.sectionCanvas(section, sectionIndex, null, startCol);
+      const panelIdCanvas = this.#panelIds.sectionCanvas(section, sectionIndex, scale, startCol);
       if (panelIdCanvas === null) {
         // 08 P2-1d (B-L4): the section canvas does not fit; show the section colour.
-        this.#warnNotShown(section, section.name, this.#panelIds.sectionSize(section, null));
+        this.#warnNotShown(section, section.name, this.#panelIds.sectionSize(section, scale));
         return this.#colorMaterial(section);
       }
       const texture = this.#canvasTexture(panelIdCanvas);
@@ -126,15 +154,16 @@ export class LEDMaterialFactory {
    * the viewport, B-L19 fixed): the section material of section(), so the panels sample the section canvas (with its
    * logo and section-label size, at most one canvas per section instead of one per panel) through the section-space UVs
    * LEDWallView writes into each panel (WallMeshBuilder.panelUvs). A canvas that does not fit falls back to the section
-   * colour with the warning of section(). 04 UV-9 later passes the budgeted scale (04 5.3).
+   * colour with the warning of section(). The budgeted scale of 04 6.4 (UV-7) as in section().
    * Side effects: as section().
    * @param {import('../domain/WallSection.js').WallSection} section
    * @param {number} sectionIndex
    * @param {*} startCol  the section's first global column (atlas.entries[i].startCol)
+   * @param {number|null} [scale]  as section()
    * @returns {THREE.MeshBasicMaterial}
    */
-  sectionShared(section, sectionIndex, startCol) {
-    return this.section(section, sectionIndex, startCol);
+  sectionShared(section, sectionIndex, startCol, scale = null) {
+    return this.section(section, sectionIndex, startCol, scale);
   }
 
   /**

@@ -53,6 +53,8 @@
  */
 import { Events } from '../core/EventBus.js';
 import { computeWallLayout, layoutProject, resolvePivot, stageShift, yawShift } from '../geometry/WallLayout.js';
+import { computeAtlas, sectionTextureScale } from '../geometry/TextureAtlas.js';
+import { planSectionUvs, isLedMaskContent } from '../geometry/UvMapper.js';
 import { Wall } from '../domain/Wall.js';
 
 /**
@@ -194,9 +196,16 @@ export class WallController {
     this.#pivotResolution = layout.pivot.resolution;
     const shift = stageShift(prev, this.#pivotResolution);
     const yawShiftDeg = yawShift(prev, this.#pivotResolution);   // 03 12.4
-    // 2. dispose + groups + build + frames + scene.add (1458-1477, 1551-1572)
+    // 2. (04 6.13 steps 2-3, UV-7; pure) the atlas, the section-texture scale of the 16 MP viewport budget and one UV
+    // plan per section (base UVs for LED-mask content), then dispose + groups + build + frames + scene.add (1458-1477,
+    // 1551-1572)
     const meshMode = project.meshMode;
-    this.#view.rebuild({ layout, meshMode, display: project.display });
+    const sections = layout.sections.map((sl) => sl.section);
+    const atlas = computeAtlas(sections);
+    const sectionScale = sectionTextureScale(sections);
+    const uvPlans = planSectionUvs({ layout, atlas, settings: project.uv, meshMode,
+      applyTransforms: !isLedMaskContent(project.display.content) });
+    this.#view.rebuild({ layout, meshMode, display: project.display, atlas, uvPlans, sectionScale, uvSettings: project.uv });
     // 3. updateStats() (1574)
     this.publishStats();
     // 4. updateCameraPosition() (1575): flat target; moves the camera even in pilot mode

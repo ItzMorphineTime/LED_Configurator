@@ -33,6 +33,7 @@ class FakeGeometry {
   constructor() { this.attributes = {}; this.index = null; this.name = `geometry-${nextId++}`; }
   setAttribute(name, attribute) { this.attributes[name] = attribute; }
   setIndex(index) { this.index = index; }
+  addGroup() {}
   dispose() { disposed.push(this.name); }
 }
 class FakeMesh extends FakeObject3D { constructor(geometry, material) { super(); this.geometry = geometry; this.material = material; this.isMesh = true; } }

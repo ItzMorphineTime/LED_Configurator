@@ -1327,11 +1327,13 @@ describe('panel-mode section-space UVs (B-M16, B-L19; 08 P2-12d, 08 6.15)', () =
 });
 
 describe("pixel-accurate atlas UVs (B-M5; 08 P2-7a, 08 6.7)", () => {
-  const production = new WallMeshBuilder(Strategies.mesh.viewport);
+  // 04 UV-7 selects 'plan'; 'atlas-pixel-accurate' stays a supported case (equal to 'plan' with the atlas layout and identity
+  // transforms, tests/unit/uv-mapper.test.mjs), tested here as before.
+  const production = new WallMeshBuilder({ ...Strategies.mesh.viewport, combinedUV: 'atlas-pixel-accurate' });
   const mixed = CONFIG_WALLS.find((w) => w.label === 'config:mixed').sections;
 
-  test("the production viewport profile is 'atlas-pixel-accurate'; LegacyProfiles keeps 'atlas-u-full-v'", () => {
-    assert.equal(Strategies.mesh.viewport.combinedUV, 'atlas-pixel-accurate');
+  test("the production viewport profile is 'plan' (04 UV-7); LegacyProfiles keeps 'atlas-u-full-v'", () => {
+    assert.equal(Strategies.mesh.viewport.combinedUV, 'plan');
     assert.equal(LegacyProfiles.mesh.viewport.combinedUV, 'atlas-u-full-v');
   });
 

@@ -2059,7 +2059,7 @@ describe('combined OBJ: pixel-accurate atlas vt (B-M6, 08 P2-7b, 08 6.7)', () =>
   });
 
   test('every combined vt equals the viewport combinedGrid UV (toFixed(6)); every other line equals the Phase-1 UV option', () => {
-    const viewport = new WallMeshBuilder(Strategies.mesh.viewport);
+    const viewport = new WallMeshBuilder({ ...Strategies.mesh.viewport, combinedUV: 'atlas-pixel-accurate' });   // until 04 UV-8a/UV-8b
     const OVERLAP = makeObj({ ...Strategies.mesh.obj, combinedUV: 'per-section-overlap' });
     for (const [label, project] of handPicked()) {
       if (!project.wall.sections.length) continue;
@@ -2134,7 +2134,7 @@ describe('glTF TEXCOORD_0 (B-M7, 08 P2-7c, 08 6.7)', () => {
   });
 
   test("the values are the builder UVs written (u, 1 - v): combined = the viewport's pixel-accurate atlas UVs, section = 0..1, panel = PANEL_UVS", () => {
-    const viewport = new WallMeshBuilder(Strategies.mesh.viewport);
+    const viewport = new WallMeshBuilder({ ...Strategies.mesh.viewport, combinedUV: 'atlas-pixel-accurate' });   // until 04 UV-8a/UV-8b
     const builder = new WallMeshBuilder(Strategies.mesh.gltf);
     for (const key of ['default', 'flat3', 'mixed', 'box_corner']) {
       const project = key === 'default' ? Project.createDefault() : projectFromConfig(CONFIGS[key]);

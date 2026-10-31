@@ -26,12 +26,21 @@
  * @returns {void}
  */
 export function disposeObject3D(root, { maps = false } = {}) {
+  // De-duplicated by identity (04 UV-7; 01 T10's rule): a material shared by many meshes (08 P2-12d's section material of
+  // panel mode) or listed in a Material[] (04's per-section combined slots) is disposed once, with its map.
+  const seen = new Set();
+  const once = (resource) => {
+    if (seen.has(resource)) return false;
+    seen.add(resource);
+    return true;
+  };
   root.traverse((child) => {
-    if (child.geometry) child.geometry.dispose();
+    if (child.geometry && once(child.geometry)) child.geometry.dispose();
     if (child.material) {
       const materials = Array.isArray(child.material) ? child.material : [child.material];
       for (const m of materials) {
-        if (maps && m.map) m.map.dispose();
+        if (!once(m)) continue;
+        if (maps && m.map && once(m.map)) m.map.dispose();
         m.dispose();
       }
     }

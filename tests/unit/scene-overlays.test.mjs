@@ -42,6 +42,7 @@ class FakeGeometry {
   constructor(kind = 'BufferGeometry', source = null) { this.kind = kind; this.source = source; this.attributes = {}; this.index = null; this.name = `${kind}-${nextId++}`; }
   setAttribute(name, attribute) { this.attributes[name] = attribute; }
   setIndex(index) { this.index = index; }
+  addGroup() {}
   dispose() { disposed.push(this.name); }
 }
 class FakeMaterial {

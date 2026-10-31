@@ -107,7 +107,10 @@ describe('WallController.rebuild (P1, ARCHITECTURE.md 6.1)', () => {
     r.project.meshMode = 'section';
     r.wc.rebuild();
     const [args] = r.view.calls;
-    assert.deepEqual(Object.keys(args), ['layout', 'meshMode', 'display']);
+    assert.deepEqual(Object.keys(args), ['layout', 'meshMode', 'display', 'atlas', 'uvPlans', 'sectionScale', 'uvSettings']);
+    assert.equal(args.uvSettings, r.project.uv, '04 UV-7: the UV inputs of P1 steps 2-3');
+    assert.equal(args.uvPlans.length, 2);
+    assert.equal(args.sectionScale.reduced, false);
     assert.deepEqual(args.layout, layoutProject(r.project));
     assert.equal(args.meshMode, 'section');
     assert.equal(args.display, r.project.display);
