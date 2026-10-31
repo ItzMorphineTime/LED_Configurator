@@ -283,9 +283,9 @@ export class App {
       doubleClick: !viewportInput.handlesDoubleClick,
     });
     // 04 UV-11 (5.3; path B, the owner's decision): the UV viewer's view model (its state in memory) and the UV use cases
-    // (recording on the app's one undo stack since 07 H1), registered as a selection observer and a rebuild observer before the bootstrap
-    // rebuild, so the first onWallRebuilt caches the layout and fills the sidebar atlas note. Nothing reads the renderer
-    // here (maxTextureSize is a getter). UV state is saved in the project file (04 UV-5c, M7a): its hook is registered here.
+    // (recording on the app's one undo stack since 07 H1), registered as a selection observer and a rebuild observer
+    // before the bootstrap rebuild, so the first onWallRebuilt caches the layout and fills the sidebar atlas note. Nothing
+    // reads the renderer here (maxTextureSize is a getter). UV state is saved in the project file (04 UV-5c, M7a): its hook is registered here.
     const uvViewModel = new UvViewModel({ project, panelIds, ledTiles, bus });
     const uvController = new UvController({
       project, wallController, view: wallView, viewModel: uvViewModel, probe: uvProbe, history,
