@@ -286,8 +286,9 @@ Export and import whole projects. The JSON project file (`"format": "morph-led-p
 - The logo images, once per distinct image, stored in the file itself
 - Totals (sections, panels, pixels)
 
-Importing a version 2.0 file restores all of it, including a camera position saved while the preview was off (it is
-used when you next turn the preview on). Version 2.0 files keep every key of version 1.0 in the same place, so a tool
+Importing a version 2.0 file restores all of it in one step, including a camera position saved while the preview was
+off (it is used when you next turn the preview on). Pilot mode is left first, and a selected camera or prop stays
+selected. Version 2.0 files keep every key of version 1.0 in the same place, so a tool
 that reads version 1.0 files still reads the same wall. Version 1.0 files still import as before: they replace the wall
 and the mesh mode only, keep the camera, props, display and styling as they are, and clear the section logos.
 

@@ -28,6 +28,12 @@ import {
  */
 const cloneJson = (v) => JSON.parse(JSON.stringify(v ?? {}));
 
+/** The writer's variants (07 4.2, 5.5.1): 08 P2-13e's 'file' and 'zip', 07 D4's 'history' and 'autosave'. */
+export const VARIANTS = Object.freeze(['file', 'zip', 'history', 'autosave']);
+
+/** The most data-URI characters an 'autosave' document inlines before its assets become 'missing' (07 4.2). */
+export const MAX_INLINE_ASSET_BYTES = 1000000;
+
 /** Writes and reads the project file (schema v2; v1 files are read). */
 export class ProjectSerializer {
   /** @type {{sectionColors: string[], legacySectionColors?: string[]}} */
@@ -55,26 +61,36 @@ export class ProjectSerializer {
    *   'zip' (Export All ZIP): each section's `texture_file` is `'textures/' + textureNames[i]`, or null where
    *   textureNames[i] is null (its texture is not in the ZIP, 08 P2-1c). The names are PanelNaming.textureFileNames
    *   (08 P2-6b), computed once by the caller for the ZIP entries, this document and the MTL.
+   *   'history' (07 D4, 4.2: a snapshot of the session, never a file): no derived key (pixel_pitch_mm, curvature.type,
+   *   totals), no view-only key (the rows marked viewOnly: display.show_grid) and each asset as `{id}` only (the
+   *   image stays in the session's asset store).
+   *   'autosave' (07 D4, 4.2): the 'file' document, except that when the inline assets together exceed
+   *   `maxInlineAssetBytes` (characters of their data URIs) every asset is written as `storage: 'missing'`
+   *   (metadata only).
    * Section values are the model's (validated on import, normalised by the card rules); a section without a name is
    * written as `Wall ${i + 1}` (the v1 fallback, which the validator would apply on read). A logo is written only
-   * when its entry holds a stored image (LogoLoader's dataUri and assetId; 08 P2-13a).
+   * when its entry holds a stored image (LogoLoader's dataUri and assetId; 08 P2-13a). One writer for every variant;
+   * no clock.
    * Ports: index.html@cd3fd3f lines 4943-4963 ('file') and 4499-4519 ('zip'): the v1 keys and their derived values.
    * Side effects: none.
    * @param {import('../domain/Project.js').Project} project
-   * @param {{variant?: 'file'|'zip', textureNames?: (string|null)[]|null}} [options]  textureNames: required by 'zip'
-   *   (one entry per section: a file name of the ZIP's textures folder, or null for a texture left out)
+   * @param {{variant?: 'file'|'zip'|'history'|'autosave', textureNames?: (string|null)[]|null,
+   *          maxInlineAssetBytes?: number}} [options]  textureNames: required by 'zip' (one entry per section: a file
+   *   name of the ZIP's textures folder, or null for a texture left out); maxInlineAssetBytes: 'autosave' only
+   *   (default 1,000,000, 07 4.2)
    * @returns {object} the plain JSON document
    * @throws {TypeError} 'zip' variant without one textureNames entry per section; RangeError for an unknown variant
    */
-  write(project, { variant = 'file', textureNames = null } = {}) {
+  write(project, { variant = 'file', textureNames = null, maxInlineAssetBytes = MAX_INLINE_ASSET_BYTES } = {}) {
     const wallSections = project.wall.sections;
     if (variant === 'zip') {
       if (!Array.isArray(textureNames) || textureNames.length !== wallSections.length) {
         throw new TypeError("ProjectSerializer.write: the 'zip' variant needs one textureNames entry per section");
       }
-    } else if (variant !== 'file') {
+    } else if (!VARIANTS.includes(variant)) {
       throw new RangeError(`Unknown ProjectSerializer variant ${JSON.stringify(variant)}`);
     }
+    const history = variant === 'history';
 
     // The logo assets: one per distinct stored image, in order of first use (07 4.5).
     const assets = [];
@@ -84,8 +100,8 @@ export class ProjectSerializer {
       if (!e || !e.image || typeof e.dataUri !== 'string' || typeof e.assetId !== 'string') return null;
       if (!assetIds.has(e.assetId)) {
         assetIds.add(e.assetId);
-        assets.push({ id: e.assetId, kind: 'logo', name: e.name ?? '', mime: e.mime, bytes: e.bytes, sha256: e.sha256,
-          storage: 'inline', data_uri: e.dataUri });
+        assets.push(history ? { id: e.assetId } : { id: e.assetId, kind: 'logo', name: e.name ?? '', mime: e.mime, bytes: e.bytes,
+          sha256: e.sha256, storage: 'inline', data_uri: e.dataUri });
       }
       return { asset_id: e.assetId, position: e.position, scale: e.scale };
     };
@@ -95,9 +111,10 @@ export class ProjectSerializer {
         name: s.name || `Wall ${i + 1}`,
         id: s.id,
         panel: { columns: s.panelCols, rows: s.panelRows, width_mm: s.panelWidth, height_mm: s.panelHeight },
-        led_resolution: { x: s.ledX, y: s.ledY, pixel_pitch_mm: parseFloat((s.panelWidth / s.ledX).toFixed(2)) },
+        led_resolution: history ? { x: s.ledX, y: s.ledY }
+          : { x: s.ledX, y: s.ledY, pixel_pitch_mm: parseFloat((s.panelWidth / s.ledX).toFixed(2)) },
         curvature: {
-          type: s.curveIntensity === 0 ? 'flat' : (s.curveIntensity > 0 ? 'concave' : 'convex'),
+          ...(history ? {} : { type: s.curveIntensity === 0 ? 'flat' : (s.curveIntensity > 0 ? 'concave' : 'convex') }),
           angle_degrees: s.curveIntensity,
           angle_offset_degrees: s.angleOffset || 0,
         },
@@ -108,6 +125,12 @@ export class ProjectSerializer {
       out.extensions = cloneJson(s.extensions);
       return out;
     });
+    if (variant === 'autosave' && assets.reduce((n, a) => n + a.data_uri.length, 0) > maxInlineAssetBytes) {
+      for (const a of assets) {
+        delete a.data_uri;
+        a.storage = 'missing';
+      }
+    }
 
     const props = {};
     for (const p of PROPS) props[p.key] = blockFromDomain(PROP_ROWS, project[p.key]);
@@ -119,16 +142,16 @@ export class ProjectSerializer {
       ...(meta && !meta.isDefault() ? { project: blockFromDomain(PROJECT_ROWS, meta) } : {}),
       sections,
       mesh_mode: project.meshMode,
-      display: blockFromDomain(DISPLAY_ROWS, project.display),
+      display: blockFromDomain(history ? DISPLAY_ROWS.filter((r) => !r.viewOnly) : DISPLAY_ROWS, project.display),
       panel_id_style: blockFromDomain(PANEL_ID_STYLE_ROWS, project.panelIdStyle),
       camera: blockFromDomain(CAMERA_ROWS, project.camera),
       props,
       assets,
-      totals: {
+      ...(history ? {} : { totals: {
         sections: wallSections.length,
         total_panels: wallSections.reduce((sum, s) => sum + s.panelCols * s.panelRows, 0),
         total_pixels: wallSections.reduce((sum, s) => sum + s.panelCols * s.panelRows * s.ledX * s.ledY, 0),
-      },
+      } }),
       extensions: cloneJson(project.extensions),
     };
   }

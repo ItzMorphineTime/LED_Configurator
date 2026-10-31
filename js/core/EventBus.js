@@ -37,13 +37,13 @@ export const Events = Object.freeze({
   PILOT_CHANGED:                'pilot:changed',
   // Feature events, each classified visual (it changes what the canvas shows) or non-visual (07 C47).
   DEBUG_VIEW_CHANGED:           'debug:viewChanged',   // visual (01 F1-2): DebugViewController -> DebugViewControls
-  WALL_PIVOT_CHANGED:           'wall:pivotChanged',   // visual (03 T4): PivotController, WallController.applyImport -> PivotPanel, PivotMarkerView
+  WALL_PIVOT_CHANGED:           'wall:pivotChanged',   // visual (03 T4): PivotController, WallController.applyPivot (07 D5) -> PivotPanel, PivotMarkerView
   UV_VIEWER_CHANGED:            'uv:viewerChanged',    // non-visual (04 UV-12): UvViewModel setters -> UVViewer
   UV_DATA_CHANGED:              'uv:dataChanged',      // non-visual (04 UV-12): UvViewModel.refresh -> UVViewer
   UV_TRANSFORM_CHANGED:         'uv:transformChanged', // visual (04 UV-12): UvController -> UVViewer, SectionListPanel (UV-14)
   UV_HOVER_CHANGED:             'uv:hoverChanged',     // visual (04 UV-12): UvViewModel.publishHover -> UVViewer, UvHighlightView (UV-15)
   UV_SETTINGS_CHANGED:          'uv:settingsChanged',  // visual (04 UV-14): UvController -> WallDisplayPanel
-  PROJECT_REPLACED:             'project:replaced',    // non-visual (08 P2-13e, 07 5.10): ProjectIO.#applyV2 -> WallDisplayPanel, CameraPanel, PropControls x2, ViewportToolbar
+  PROJECT_REPLACED:             'project:replaced',    // non-visual (08 P2-13e, 07 5.10, D5): ProjectSession.apply -> SectionListPanel, WallDisplayPanel, SectionLogosPanel, CameraPanel, PropControls x2, ViewportToolbar
 });
 
 /** The set of valid wire names (never mutated). */

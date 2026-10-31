@@ -55,7 +55,8 @@ export class PropControls {
 
     bus.on(Events.PROP_VISIBILITY_CHANGED, (payload) => this.#mirrorVisibility(payload));
     bus.on(Events.PROP_POSE_CHANGED, (payload) => this.#mirrorPose(payload));
-    bus.on(Events.PROJECT_REPLACED, () => this.syncFromModel());
+    // 07 D5: a wall-scope (v1) apply keeps the props as they are
+    bus.on(Events.PROJECT_REPLACED, ({ scope }) => { if (scope !== 'wall') this.syncFromModel(); });
   }
 
   /**

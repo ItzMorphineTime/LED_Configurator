@@ -19,6 +19,7 @@ import { WallController } from '../../js/app/WallController.js';
 import { PivotController } from '../../js/app/PivotController.js';
 import { PivotPanel, pivotReadoutText, pivotStatusText, rebuildStatusText } from '../../js/ui/PivotPanel.js';
 import { CameraPanel } from '../../js/ui/CameraPanel.js';
+import { wallImport } from './fixtures/wall-import.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -240,7 +241,7 @@ describe('PivotPanel mirrors and listeners with the real controller (03 3.2; AC 
     const r = makeRig();
     r.pc.setMode('mesh-center');
     r.pc.setOffsetAxis('y', '2');
-    r.wc.applyImport({ sections: r.project.wall.sections.slice(), meshMode: null });
+    wallImport(r, { sections: r.project.wall.sections.slice() });
     assert.equal(r.labels[1].radio.checked, true);
     assert.equal(r.$('pivot-offset-y').value, '2.000');
     assert.equal(r.$('pivot-status').textContent, '');

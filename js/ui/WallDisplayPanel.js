@@ -117,7 +117,8 @@ export class WallDisplayPanel {
     bus.on(Events.WALL_MESH_MODE_CHANGED, (payload) => this.#mirrorMeshMode(payload));
     bus.on(Events.DISPLAY_CONTENT_CHANGED, (payload) => this.#mirrorDisplayContent(payload));
     bus.on(Events.UV_SETTINGS_CHANGED, (payload) => this.#mirrorUvSettings(payload));
-    bus.on(Events.PROJECT_REPLACED, () => this.syncFromModel());
+    // 07 D5: a wall-scope (v1) apply changes only the wall; its mesh-mode labels follow WALL_MESH_MODE_CHANGED
+    bus.on(Events.PROJECT_REPLACED, ({ scope }) => { if (scope !== 'wall') this.syncFromModel(); });
   }
 
   /**

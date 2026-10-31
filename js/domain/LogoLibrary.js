@@ -135,6 +135,17 @@ export class LogoLibrary {
   }
 
   /**
+   * Replaces every entry (07 5.5.2 step 3, D5): the logos of an applied project file (none for a wall-scope import,
+   * B-L21). Each entry is stored as a fresh object.
+   * Side effects: replaces the store.
+   * @param {Iterable<[*, LogoEntry]>} entriesBySectionId  [sectionId, entry] pairs (a Map works)
+   */
+  replaceAll(entriesBySectionId) {
+    this.#entries = {};
+    for (const [sectionId, entry] of entriesBySectionId) this.#entries[sectionId] = { ...entry };
+  }
+
+  /**
    * Ports: index.html@cd3fd3f lines 2282, 4131.
    * Side effects: deletes the entry (no-op when absent).
    * @param {*} sectionId

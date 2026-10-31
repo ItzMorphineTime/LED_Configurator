@@ -40,6 +40,8 @@ import { validateProject } from '../../js/io/ProjectValidator.js';
 import { ObjExporter } from '../../js/io/ObjExporter.js';
 import { GltfExporter, chunkedBase64 } from '../../js/io/GltfExporter.js';
 import { ProjectIO, Downloader } from '../../js/app/ProjectIO.js';
+import { ProjectSession } from '../../js/app/ProjectSession.js';
+import { EventBus } from '../../js/core/EventBus.js';
 import { ExportPanel } from '../../js/ui/ExportPanel.js';
 import { PanelIdRenderer } from '../../js/render/textures/PanelIdRenderer.js';
 import { Brand, Palette } from '../../js/theme/Theme.js';
@@ -1257,7 +1259,6 @@ function fakeIO(project, log, extra = {}) {
   const wallController = {
     layout: ({ frame = 'stage' } = {}) => { log.push(['layout']); extra.frames?.push(frame); return layoutProject(project, { frame }); },
     pivotResolution: extra.pivotResolution ?? null,
-    applyImport: (parsed) => log.push(['applyImport', parsed]),
   };
   const panelIds = {
     atlasSize: () => extra.atlasSize ?? { width: 640, height: 384 },
@@ -1289,8 +1290,11 @@ function fakeIO(project, log, extra = {}) {
   };
   const dialogs = { alert: (msg) => log.push(['alert', msg]) };
   const safeDistance = { object3D: extra.group ?? null, lastBand: extra.band ?? null };
+  // 07 D5: Export JSON and the import are the session's (saveFile over the same serializer and downloader; openFile logged)
+  const session = new ProjectSession({ project, serializer: extra.serializer ?? serializer, downloader, brand: Brand });
+  session.openFile = (file) => log.push(['openFile', file]);
   return new ProjectIO({ project, wallController, serializer: extra.serializer ?? serializer, objExporter: OBJ,
-    gltfExporter: GLTF, panelIds, safeDistance, downloader, JSZip: FakeZip, dialogs, brand: Brand, win, sectionsFromProject });
+    gltfExporter: GLTF, panelIds, safeDistance, downloader, JSZip: FakeZip, dialogs, brand: Brand, win, session });
 }
 
 /** The M-EXP-1 text of 08 3.3. */
@@ -1698,22 +1702,38 @@ describe('ProjectIO use cases', () => {
     assert.deepEqual(log4, [['alert', mExp1('Export JSON', 'plain')], ['warn', 'plain']]);
   });
 
-  test('importFromInputEvent: P-IMPORT (size check, read, reset input synchronously; refusals and corrections alerted, 08 P2-3b)', async () => {
+  test('importFromInputEvent: P-IMPORT hands the file to ProjectSession.openFile (07 D5) and resets the input synchronously', () => {
+    const log = [];
+    const io = fakeIO(Project.createDefault(), log);
+    const empty = { target: { files: [], value: 'C:\\fakepath\\none.json' } };
+    io.importFromInputEvent(empty);
+    assert.deepEqual(log, [], 'no file: nothing');
+    assert.equal(empty.target.value, 'C:\\fakepath\\none.json');
+    const file = { name: 'wall.json', size: 10 };
+    const e = { target: { files: [file], value: 'C:\\fakepath\\wall.json' } };
+    io.importFromInputEvent(e);
+    assert.deepEqual(log, [['openFile', file]]);
+    assert.equal(e.target.value, '', 'the input is reset synchronously (V-7)');
+  });
+
+  test('the import pipeline through ProjectSession.openFile (07 D5): size check, read, refusals and corrections alerted (08 P2-3b)', async () => {
     const readers = [];
     class FakeFileReader {
       constructor() { readers.push(this); }
       readAsText(file) { this.file = file; this.onloadAtRead = typeof this.onload; }
     }
-    await withGlobals([[globalThis, 'FileReader', FakeFileReader]], () => {
+    await withGlobals([[globalThis, 'FileReader', FakeFileReader]], async () => {
       const log = [];
-      const io = fakeIO(Project.createDefault(), log);
+      const project = Project.createDefault();
+      const dialogs = { alert: (msg) => log.push(['alert', msg]) };
+      const session = new ProjectSession({ project, serializer, dialogs, win: globalThis, pilot: { active: false },
+        selection: { selectedId: null }, sectionsFromProject, bus: new EventBus(),
+        wallController: { applyPivot: () => log.push(['applyPivot']), rebuild: ({ cause }) => log.push(['rebuild', cause]) },
+        features: { pivot: { hydrate: () => log.push(['pivot hook']) } } });
+      const io = { importFromInputEvent: (e) => { const f = e.target.files[0]; if (!f) return; session.openFile(f); e.target.value = ''; } };
+      const settle = () => new Promise((resolve) => setImmediate(resolve));
 
-      const empty = { target: { files: [], value: 'C:\\fakepath\\none.json' } };
-      io.importFromInputEvent(empty);
-      assert.equal(readers.length, 0);
-      assert.equal(empty.target.value, 'C:\\fakepath\\none.json');
-
-      const load = (text) => {
+      const load = async (text) => {
         const e = { target: { files: [{ name: 'wall.json', size: text.length }], value: 'C:\\fakepath\\wall.json' } };
         io.importFromInputEvent(e);
         const reader = readers.at(-1);
@@ -1722,30 +1742,30 @@ describe('ProjectIO use cases', () => {
         assert.equal(e.target.value, '', 'the input is reset synchronously');
         log.length = 0;
         reader.onload({ target: { result: text } });
+        await settle();
         return log.slice();
       };
 
-      const ok = load(JSON.stringify(CONFIGS.flat3));
-      assert.equal(ok.length, 1);
-      assert.equal(ok[0][0], 'applyImport');
-      assert.equal(ok[0][1].meshMode, 'combined');
-      assert.deepEqual(ok[0][1].sections.map((s) => s.name), ['Left', 'Center', 'Right']);
+      const ok = await load(JSON.stringify(CONFIGS.flat3));
+      assert.deepEqual(ok, [['pivot hook'], ['rebuild', 'import']]);
+      assert.equal(project.meshMode, 'combined');
+      assert.deepEqual(project.wall.sections.map((s) => s.name), ['Left', 'Center', 'Right']);
 
-      assert.deepEqual(load('{"foo": 1}'), [['alert', 'Import failed: the file does not contain a "sections" list.']]);
-      assert.deepEqual(load('null'), [['alert', 'Import failed: this is not an LED wall project file.']]);
-      assert.deepEqual(load('{"sections": []}'), [['alert', 'Import failed: the file contains no wall sections.']]);
-      assert.deepEqual(load('{"version": "3.0", "sections": [{}]}'),
+      assert.deepEqual(await load('{"foo": 1}'), [['alert', 'Import failed: the file does not contain a "sections" list.']]);
+      assert.deepEqual(await load('null'), [['alert', 'Import failed: this is not an LED wall project file.']]);
+      assert.deepEqual(await load('{"sections": []}'), [['alert', 'Import failed: the file contains no wall sections.']]);
+      assert.deepEqual(await load('{"version": "3.0", "sections": [{}]}'),
         [['alert', 'Import failed: this project was saved by a newer version of the app (version 3.0).']]);
       const syntax = run(() => JSON.parse('{oops')).error.message;
-      assert.deepEqual(load('{oops'), [['alert', 'Error parsing JSON file: ' + syntax]]);
+      assert.deepEqual(await load('{oops'), [['alert', 'Error parsing JSON file: ' + syntax]]);
       // A corrected import is applied first, then M-IMP-5 lists the corrections (at most 10 lines, then a count).
-      const fixed = load('{"sections": [null], "mesh_mode": "panel"}');
-      assert.equal(fixed[0][0], 'applyImport');
-      assert.equal(fixed[0][1].meshMode, 'panel');
-      assert.deepEqual(fixed.slice(1), [['alert', 'Imported with 1 correction(s):\n• Section 1 "Wall 1": not a section, replaced by a default section']]);
-      const many = load(JSON.stringify({ sections: Array.from({ length: 12 }, (_, i) => ({ id: 1, name: `S${i}` })) }));
-      assert.equal(many[1][0], 'alert');
-      const lines = many[1][1].split('\n');
+      const fixed = await load('{"sections": [null], "mesh_mode": "panel"}');
+      assert.deepEqual(fixed.slice(0, 2), [['pivot hook'], ['rebuild', 'import']]);
+      assert.equal(project.meshMode, 'panel');
+      assert.deepEqual(fixed.slice(2), [['alert', 'Imported with 1 correction(s):\n• Section 1 "Wall 1": not a section, replaced by a default section']]);
+      const many = await load(JSON.stringify({ sections: Array.from({ length: 12 }, (_, i) => ({ id: 1, name: `S${i}` })) }));
+      assert.equal(many[2][0], 'alert');
+      const lines = many[2][1].split('\n');
       assert.equal(lines[0], 'Imported with 11 correction(s):');
       assert.equal(lines.length, 12, 'the header, 10 corrections and the count');
       assert.equal(lines[1], '• Section 2 "S1": id 1 → 2');
@@ -1764,10 +1784,13 @@ describe('ProjectIO use cases', () => {
       log.length = 0;
       readers.at(-1).error = { name: 'NotReadableError' };
       readers.at(-1).onerror();
+      await settle();
       assert.deepEqual(log, [['alert', 'Import failed: the file could not be read (NotReadableError).']]);
+      io.importFromInputEvent(atCap);
       log.length = 0;
       readers.at(-1).error = null;
       readers.at(-1).onerror();
+      await settle();
       assert.deepEqual(log, [['alert', 'Import failed: the file could not be read (unknown error).']]);
     });
   });
@@ -1872,21 +1895,25 @@ describe('structure', () => {
     }
   });
 
-  test('no try/catch except #runExport (R13 amendment, 08 P2-1a) and the legacy import one; exportZIP, exportPanelIds and exportOBJ (08 P2-6e) are async', () => {
+  test('no try/catch except #runExport (R13 amendment, 08 P2-1a) and the legacy import one (ProjectSession since 07 D5); exportZIP, exportPanelIds and exportOBJ (08 P2-6e) are async', () => {
     for (const rel of ['js/io/ProjectSerializer.js', 'js/io/ObjExporter.js', 'js/io/GltfExporter.js', 'js/io/ProjectValidator.js',
       'js/io/ProjectMigrations.js', 'js/io/ProjectSchema.js', 'js/ui/ExportPanel.js']) {
       assert.doesNotMatch(code(rel), /\btry\s*\{|\bcatch\s*[({]/, rel);
     }
     const io = code('js/app/ProjectIO.js');
     const tries = [...io.matchAll(/\btry\s*\{/g)].map((m) => m.index);
-    assert.equal(tries.length, 2);
-    assert.equal([...io.matchAll(/\bcatch\s*\(/g)].length, 2);
+    assert.equal(tries.length, 1);
+    assert.equal([...io.matchAll(/\bcatch\s*\(/g)].length, 1);
     const runExportAt = io.indexOf('#runExport(label, fn) {');
-    const importAt = io.indexOf('importFromInputEvent(e) {');
-    assert.ok(runExportAt > 0 && importAt > 0);
-    const owner = (at) => (at > importAt ? 'import' : at > runExportAt ? 'runExport' : 'other');
-    assert.deepEqual(tries.map(owner).sort(), ['import', 'runExport'], 'one try in #runExport, one in importFromInputEvent');
-    assert.ok(runExportAt < importAt, '#runExport is defined before importFromInputEvent');
+    assert.ok(runExportAt > 0 && tries[0] > runExportAt, 'the one try of ProjectIO is #runExport\'s');
+    // 07 D5: the legacy import try/catch moved with the import into ProjectSession (#open); apply has a try/finally
+    const session = code('js/app/ProjectSession.js');
+    const sessionTries = [...session.matchAll(/\btry\s*\{/g)].map((m) => m.index);
+    assert.equal(sessionTries.length, 2);
+    assert.equal([...session.matchAll(/\bcatch\s*\(/g)].length, 1);
+    const openAt = session.indexOf('async #open(text');
+    const applyAt = session.indexOf('  apply(v2, {');
+    assert.ok(applyAt > 0 && openAt > 0 && sessionTries.some((t) => t > openAt) && sessionTries.some((t) => t > applyAt && t < openAt));
     for (const name of ['exportZIP', 'exportPanelIds', 'exportOBJ']) assert.equal(ProjectIO.prototype[name].constructor.name, 'AsyncFunction');
     for (const name of ['exportJSON', 'exportGLTF', 'exportSafeDistanceOBJ', 'importFromInputEvent']) {
       assert.equal(ProjectIO.prototype[name].constructor.name, 'Function', name);

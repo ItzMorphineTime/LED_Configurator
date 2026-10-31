@@ -1,8 +1,8 @@
 // Unit tests of project file v2 (docs/improvements/08-bugfix-roadmap.md 4.6, 6.17, P2-13e; spec 07 4.2-4.7): the writer's
 // key order and v1 superset, the validator's v2 path (hostile values clamped, defaulted or dropped; unknown keys
 // dropped; idempotence; fidelity over fuzzed projects the app can produce), and the full round trip through
-// ProjectIO.#applyV2 over model-level fakes: export -> import -> export gives the identical file, a v1 import stays
-// wall-only, and the restore order of 08 6.17.
+// ProjectSession (07 D5, which absorbed 08's ProjectIO.#applyV2) over model-level fakes: export -> open -> export gives
+// the identical file, a v1 import stays wall-only, and the apply order of 07 5.5.2.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
@@ -15,7 +15,8 @@ import { MAX_LOGO_BYTES } from '../../js/domain/rules.js';
 import { ProjectSerializer } from '../../js/io/ProjectSerializer.js';
 import { validateProject } from '../../js/io/ProjectValidator.js';
 import { KNOWN_REVISION, REVISIONS, VERSION, sectionsFromProject, stateFromProject } from '../../js/io/ProjectSchema.js';
-import { ProjectIO } from '../../js/app/ProjectIO.js';
+import { ProjectSession } from '../../js/app/ProjectSession.js';
+import { AssetStore } from '../../js/app/AssetStore.js';
 import { Palette } from '../../js/theme/Theme.js';
 
 const serializer = new ProjectSerializer({ palette: Palette });
@@ -116,13 +117,43 @@ describe('project file v2: the writer (07 4.2, 08 4.6)', () => {
   });
 });
 
+describe('07 D4: the history and autosave variants (07 4.2)', () => {
+  test('history: no derived key, no view-only key, assets by id; one writer, the same values as the file', () => {
+    const p = busyProject();
+    const file = serializer.write(p);
+    const h = serializer.write(p, { variant: 'history' });
+    assert.deepEqual(Object.keys(h), Object.keys(file).filter((k) => k !== 'totals'));
+    assert.deepEqual(Object.keys(h.sections[0].led_resolution), ['x', 'y']);
+    assert.deepEqual(Object.keys(h.sections[0].curvature), ['angle_degrees', 'angle_offset_degrees']);
+    assert.equal('show_grid' in h.display, false);
+    assert.deepEqual(h.assets, file.assets.map((a) => ({ id: a.id })));
+    assert.deepEqual(h.sections.map((s) => s.logo), file.sections.map((s) => s.logo));
+    assert.deepEqual(h.camera, file.camera);
+    assert.equal(json2(serializer.write(p, { variant: 'history' })), json2(h), 'no clock: byte-stable');
+    assert.throws(() => serializer.write(p, { variant: 'share' }), RangeError);
+  });
+
+  test('autosave: the file document, its assets inline up to maxInlineAssetBytes, otherwise all of them missing (metadata only)', () => {
+    const p = busyProject();
+    const file = serializer.write(p);
+    assert.deepEqual(serializer.write(p, { variant: 'autosave' }), file);
+    const total = file.assets.reduce((n, a) => n + a.data_uri.length, 0);
+    assert.deepEqual(serializer.write(p, { variant: 'autosave', maxInlineAssetBytes: total }), file, 'at the limit: inline');
+    const over = serializer.write(p, { variant: 'autosave', maxInlineAssetBytes: total - 1 });
+    assert.deepEqual(over.assets, file.assets.map(({ data_uri: _, ...meta }) => ({ ...meta, storage: 'missing' })));
+    const r = serializer.read(JSON.parse(json2(over)));
+    assert.deepEqual(r.project.assets, [], 'a missing asset is not restored; its logos are dropped with a warning');
+    assert.ok(r.issues.some((i) => i.code === 'missing-asset'));
+  });
+});
+
 describe('project file v2: the validator (07 4.7, 08 6.16)', () => {
   test('fidelity and idempotence: the app\'s own files validate to themselves with no issue (busy project and 300 fuzzed ones)', () => {
     const rand = mulberry(0x2b13e);
     const projects = [busyProject(), Project.createNew(), Project.createDefault()];
     for (let k = 0; k < 300; k++) projects.push(fuzzProject(rand));
     for (const [k, p] of projects.entries()) {
-      for (const variant of ['file', 'zip']) {
+      for (const variant of ['file', 'zip', 'autosave']) {
         const textureNames = variant === 'zip' ? p.wall.sections.map((s, i) => (i % 2 ? null : `S${i}.png`)) : null;
         const doc = JSON.parse(json2(serializer.write(p, { variant, textureNames })));
         const r = serializer.read(doc);
@@ -243,31 +274,17 @@ describe('project file v2: the validator (07 4.7, 08 6.16)', () => {
   });
 });
 
-// ---- ProjectIO over model-level fakes ---------------------------------------------------------------------------
+// ---- ProjectSession over model-level fakes (07 D5; 08 6.17's restore lives in ProjectSession.apply) ----------------
 
-/** A ProjectIO whose collaborators write the model the way the real controllers do (no views), recording the calls. */
-function modelIO(project, calls) {
+/** A ProjectSession whose collaborators write the model the way the real controllers do (no views), recording the calls. */
+function modelSession(project, calls, { selected = null } = {}) {
   const display = project.display;
   const wallController = {
-    applyImport: ({ sections, meshMode, logos }) => {
-      calls.push(`applyImport(${logos === null ? 'null' : logos.length})`);
-      project.logos.clear();
-      if (logos) for (const [id, e] of logos) project.logos.set(id, e);
-      project.wall.replaceAll(sections);
-      if (meshMode) project.meshMode = meshMode;
-    },
-    setPanelIdStyle: (k, v) => { calls.push(`style ${k}`); return project.panelIdStyle.set(k, v); },
-    setLedLayout: (v) => { calls.push('ledLayout'); display.ledLayout = v; },
-    setWireframe: (v) => { calls.push('wireframe'); display.wireframe = v; },
-    setShowFrame: (v) => { calls.push('frame'); display.showFrame = v; },
-    setLedSim: (on) => { calls.push(`ledSim ${on}`); display.setLedSim(on); },
-    setPanelIds: (on) => { calls.push(`panelIds ${on}`); display.setPanelIds(on); },
-    rebuildIfPanelIds: () => calls.push('rebuildIfPanelIds'),
+    applyPivot: () => calls.push('pivot hook'),
+    rebuild: ({ cause }) => calls.push(`rebuild ${cause}`),
   };
   const cine = project.camera;
   const cameraController = {
-    setFilmback: (k) => { calls.push(`filmback ${k}`); cine.applyPreset(k); },
-    setCameraField: (f, raw) => { calls.push(`camera ${f}`); return cine.setField(f, raw); },
     setPreviewEnabled: (on) => { calls.push(`preview ${on}`); cine.enabled = on; if (on) cine.resetTo({ wallBox: { center: { x: 9, y: 9, z: 9 } }, facing: { x: 0, z: 1 } }); },
     applyImportedPose: (pose) => { calls.push('cameraPose'); cine.assign(pose); },
     setSafeDistanceEnabled: (on) => { calls.push(`safeDistance ${on}`); display.showSafeDistance = on; },
@@ -284,76 +301,81 @@ function modelIO(project, calls) {
       return { ok: true, image: { w: 1 }, meta: { dataUri, mime: dataUri.slice(5, dataUri.indexOf(';')), bytes: bytes.length, name, sha256: s, assetId: logoAssetId(s) } };
     },
   };
+  const selection = {
+    selectedId: selected,
+    deselect() { calls.push('deselect'); this.selectedId = null; },
+    find: (id) => ({ id, isPickable: () => true }),
+    select(id) { calls.push(`select ${id}`); this.selectedId = id; },
+  };
   const bus = new EventBus();
   bus.on(Events.PROJECT_REPLACED, (payload) => calls.push(`PROJECT_REPLACED ${JSON.stringify(payload)}`));
   const alerts = [];
-  const io = new ProjectIO({
-    project, wallController, serializer, objExporter: null, gltfExporter: null, panelIds: null, safeDistance: null,
-    downloader: { saveText: () => {} }, JSZip: null, dialogs: { alert: (m) => { alerts.push(m); calls.push('alert'); } },
-    brand: { files: { json: 'x.json' } }, win: {}, sectionsFromProject, stateFromProject, cameraController,
+  const session = new ProjectSession({
+    project, serializer, assets: new AssetStore({ logoLoader }), wallController, cameraController,
     personController: propController(project.person), carController: propController(project.car),
-    pilot: { active: true, toggle: () => calls.push('pilot.toggle') }, selection: { deselect: () => calls.push('deselect') },
-    logoLoader, sceneManager: { toggleGrid: () => { calls.push('grid'); display.showGrid = !display.showGrid; } }, bus,
+    pilot: { active: true, toggle: () => calls.push('pilot.toggle') }, selection,
+    sceneManager: { toggleGrid: () => { calls.push('grid'); display.showGrid = !display.showGrid; } },
+    ledTiles: { clearCache: () => calls.push('clearCache') }, bus,
+    dialogs: { alert: (m) => { alerts.push(m); calls.push('alert'); } }, downloader: { saveText: () => calls.push('saveText') },
+    brand: { files: { json: 'x.json' } }, win: { FileReader: SyncFileReader }, stateFromProject, sectionsFromProject,
+    createProject: () => Project.createNew({ defaultSectionColor: Palette.defaultSectionColor }),
+    features: { pivot: { hydrate: () => wallController.applyPivot(null) } },
   });
-  return { io, alerts };
+  return { session, alerts };
 }
 
-/** Imports `text` through importFromInputEvent with a synchronous FileReader, then lets the async restore finish. */
-async function importText(io, text) {
-  const saved = globalThis.FileReader;
-  globalThis.FileReader = class { readAsText() { this.onload({ target: { result: text } }); } };
-  try {
-    io.importFromInputEvent({ target: { files: [{ name: 'p.json', size: text.length }], value: 'x' } });
-  } finally {
-    globalThis.FileReader = saved;
-  }
-  for (let k = 0; k < 20; k++) await new Promise((resolve) => setImmediate(resolve));
+/** A FileReader that reads a fake file's `text` synchronously. */
+class SyncFileReader {
+  readAsText(file) { this.onload({ target: { result: file.text } }); }
 }
 
-describe('ProjectIO v2 import (08 6.17)', () => {
-  test('export -> import on a new project -> export gives the identical file, in the 6.17 restore order', async () => {
+/** Opens `text` through ProjectSession.openFile. */
+const openText = (session, text) => session.openFile({ name: 'p.json', size: text.length, text });
+
+describe('ProjectSession.openFile and apply (07 D5; the 08 6.17 restore)', () => {
+  test('export -> open on a new project -> export gives the identical file, in the 07 5.5.2 apply order', async () => {
     const text = json2(serializer.write(busyProject()));
     const fresh = Project.createNew({ defaultSectionColor: Palette.defaultSectionColor });
     const calls = [];
-    const { io, alerts } = modelIO(fresh, calls);
-    await importText(io, text);
+    const { session, alerts } = modelSession(fresh, calls);
+    assert.equal(await openText(session, text), true);
     assert.deepEqual(alerts, []);
     assert.equal(json2(serializer.write(fresh)), text, 'the second export is byte-identical');
-    assert.deepEqual(calls, ['load logo.png', 'load mark.svg', 'pilot.toggle', 'deselect', 'applyImport(3)',
-      'style borderThickness', 'style fontSize', 'style fontColor', 'style sectionLabelEnabled', 'style sectionLabelColor',
-      'ledLayout', 'wireframe', 'frame', 'panelIds true', 'grid',
-      'filmback custom', 'camera filmbackWidth', 'camera filmbackHeight', 'camera focalLength', 'preview true', 'cameraPose',
-      'safeDistance true', 'personPose', 'person true', 'carPose', 'car true',
-      'PROJECT_REPLACED {"reason":"import","scope":"full"}']);
+    assert.deepEqual(calls, ['load logo.png', 'load mark.svg', 'pilot.toggle', 'pivot hook',
+      'preview true', 'cameraPose', 'personPose', 'carPose', 'grid', 'safeDistance true', 'person true', 'car true',
+      'clearCache', 'rebuild import', 'PROJECT_REPLACED {"reason":"open","scope":"full"}']);
     assert.deepEqual(Object.keys(fresh.logos.get(3)).sort(), ['assetId', 'bytes', 'dataUri', 'image', 'mime', 'name', 'position', 'scale', 'sha256']);
+    assert.equal(session.dirty, false, 'an open is clean');
   });
 
-  test('a pose saved with the preview off is assigned while the preview stays off; corrections are alerted after the restore', async () => {
+  test('a pose saved with the preview off is assigned while the preview stays off; corrections are alerted after the apply', async () => {
     const saved = busyProject();
     saved.camera.enabled = false;
     const doc = JSON.parse(json2(serializer.write(saved)));
     doc.camera.position_m.y = -2;   // corrected to the floor
     const fresh = Project.createNew();
     const calls = [];
-    const { io, alerts } = modelIO(fresh, calls);
-    await importText(io, json2(doc));
+    const { session, alerts } = modelSession(fresh, calls);
+    await openText(session, json2(doc));
     assert.ok(!calls.includes('preview true') && !calls.includes('preview false'), 'the preview state already matches');
     assert.deepEqual([fresh.camera.posX, fresh.camera.posY, fresh.camera.posZ], [2, 0, -4]);
     assert.deepEqual(alerts, ['Imported with 1 correction(s):\n• Camera Y Height (m): -2 → 0']);
     assert.equal(calls.at(-1), 'alert');
   });
 
-  test('a v1 file stays a wall-only import: no restore step, the camera, props, display and logos untouched', async () => {
+  test('a v1 file is a wall-scope apply: the wall, the mesh mode, logos cleared; camera, props, display and style untouched', async () => {
     const fresh = busyProject();
     const before = serializer.write(fresh);
     const calls = [];
-    const { io } = modelIO(fresh, calls);
-    await importText(io, json2({ version: '1.0', sections: [{ name: 'Only', panel: { columns: 3, rows: 2 } }], mesh_mode: 'panel' }));
-    assert.deepEqual(calls, ['applyImport(null)']);
+    const { session } = modelSession(fresh, calls, { selected: 'person' });
+    await openText(session, json2({ version: '1.0', sections: [{ name: 'Only', panel: { columns: 3, rows: 2 } }], mesh_mode: 'panel' }));
+    assert.deepEqual(calls, ['pilot.toggle', 'deselect', 'pivot hook', 'rebuild import',
+      'PROJECT_REPLACED {"reason":"import","scope":"wall"}', 'select person']);
     const after = serializer.write(fresh);
     for (const key of ['display', 'panel_id_style', 'camera', 'props', 'extensions']) assert.deepEqual(after[key], before[key], key);
     assert.deepEqual(after.sections.map((s) => [s.name, s.panel.columns, s.color, s.logo]), [['Only', 3, '#00f0ff', null]]);
     assert.equal(after.mesh_mode, 'panel');
+    assert.deepEqual(after.assets, [], 'B-L21: the logos are cleared');
   });
 });
 

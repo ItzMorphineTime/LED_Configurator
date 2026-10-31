@@ -25,6 +25,7 @@ const { Project } = await import('../../js/domain/Project.js');
 const { WallSection } = await import('../../js/domain/WallSection.js');
 const { WallController } = await import('../../js/app/WallController.js');
 const { PivotController } = await import('../../js/app/PivotController.js');
+const { wallImport } = await import('./fixtures/wall-import.mjs');
 
 /** A listener collector that dispatches in registration order (a canvas or the window). */
 const eventTarget = () => ({
@@ -335,7 +336,7 @@ describe('test 20: the WALL_REBUILT re-anchor of a selected pivot (03 5.4)', () 
     r.pc.setMode('mesh-center');
     r.pc.setOffsetAxis('y', '1.25');
     assert.equal(r.gizmo.group.position.y, 1.25);
-    r.wc.applyImport({ sections: [new WallSection({ ...WallSection.createDefault(), panelRows: 7 })], meshMode: null });
+    wallImport({ project: r.project, wc: r.wc, bus: r.bus }, { sections: [new WallSection({ ...WallSection.createDefault(), panelRows: 7 })] });
     assert.equal(r.gizmo.group.position.y, 1.25, 'the session pivot on the imported (v1) wall');
   });
 

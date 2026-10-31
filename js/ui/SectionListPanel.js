@@ -194,9 +194,11 @@ export class SectionListPanel {
   #addDisabled = false;
 
   /**
-   * Looks up #wall-sections and #add-section-btn and subscribes WALL_SECTIONS_CHANGED:
-   *  'import' -> render(); expandFirst()   (4998-5001)
-   *  'add' / 'delete' -> snapshot the collapse states -> render() -> restore them (expanding the added card on 'add')
+   * Looks up #wall-sections and #add-section-btn and subscribes WALL_SECTIONS_CHANGED and (07 D5) PROJECT_REPLACED:
+   *  WALL_SECTIONS_CHANGED 'add' / 'delete' -> snapshot the collapse states -> render() -> restore them (expanding the
+   *    added card on 'add')
+   *  PROJECT_REPLACED -> render(); expandFirst() (4998-5001, the import), or for undo / redo the collapse states kept by
+   *    section id
    * Side effects: DOM lookups (no mutation); one bus subscription.
    * @param {{doc: Document, project: import('../domain/Project.js').Project,
    *          wallController: import('../app/WallController.js').WallController,
@@ -216,6 +218,7 @@ export class SectionListPanel {
     this.#addButton = byId(doc, 'add-section-btn');
 
     bus.on(Events.WALL_SECTIONS_CHANGED, (payload) => this.#onSectionsChanged(payload));
+    bus.on(Events.PROJECT_REPLACED, (payload) => this.#onProjectReplaced(payload));
     bus.on(Events.UV_TRANSFORM_CHANGED, (payload) => this.#onUvTransform(payload));
     bus.on(Events.SELECTION_CHANGED, ({ id }) => this.#mirrorSelection(id));
   }
@@ -473,17 +476,36 @@ export class SectionListPanel {
   }
 
   /**
-   * WALL_SECTIONS_CHANGED mirror.
-   * Ports: index.html@cd3fd3f lines 4083-4086 + 4105 + 4109-4116 (add), 4125-4128 + 4134 + 4138-4143 (delete),
-   * 4998-5001 (import).
+   * PROJECT_REPLACED mirror (07 D5, 5.10): the cards of the applied project, rendered after its rebuild. Undo and redo
+   * keep each card's collapsed state by section id (a section that reappears is expanded); every other reason (open,
+   * import, new, restore) renders them with the first card expanded, as the legacy import did: after an open an equal id
+   * names another section (02 CR-07-d), so no state is carried over.
+   * Ports: index.html@cd3fd3f lines 4998-5001 (import).
    * Side effects: re-renders the cards; writes their 'collapsed' classes.
-   * @param {{reason: 'add'|'delete'|'import', addedId?: *}} payload
+   * @param {{reason: string}} payload
+   */
+  #onProjectReplaced({ reason }) {
+    if (reason === 'undo' || reason === 'redo') {
+      const collapsedStates = this.#snapshotCollapsed();
+      this.render();
+      this.#doc.querySelectorAll('.wall-section').forEach((el, idx) => {
+        const state = collapsedStates[this.#renderedSections[idx].id];
+        el.classList.toggle('collapsed', state === true);
+      });
+      return;
+    }
+    this.render();
+    this.expandFirst();
+  }
+
+  /**
+   * WALL_SECTIONS_CHANGED mirror (the import re-renders on PROJECT_REPLACED since 07 D5).
+   * Ports: index.html@cd3fd3f lines 4083-4086 + 4105 + 4109-4116 (add), 4125-4128 + 4134 + 4138-4143 (delete).
+   * Side effects: re-renders the cards; writes their 'collapsed' classes.
+   * @param {{reason: 'add'|'delete', addedId?: *}} payload
    */
   #onSectionsChanged({ reason, addedId }) {
-    if (reason === 'import') {
-      this.render();
-      this.expandFirst();
-    } else if (reason === 'add' || reason === 'delete') {
+    if (reason === 'add' || reason === 'delete') {
       const collapsedStates = this.#snapshotCollapsed();
       this.render();
       this.#restoreCollapsed(collapsedStates, reason === 'add', addedId);

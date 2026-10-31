@@ -77,6 +77,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
  */
 export const ALLOWLIST = Object.freeze([
     { file: 'js/app/WallController.js', receiver: 'project', field: 'meshMode' },
+    // ProjectSession.apply (07 D5, 5.5.2 step 3): the mesh mode of an applied project file.
+    { file: 'js/app/ProjectSession.js', receiver: 'project', field: 'meshMode' },
     { file: 'js/app/WallController.js', receiver: 'display', field: 'wireframe' },
     { file: 'js/app/WallController.js', receiver: 'display', field: 'showFrame' },
     { file: 'js/app/WallController.js', receiver: 'display', field: 'ledLayout' },

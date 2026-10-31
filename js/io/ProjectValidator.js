@@ -758,10 +758,11 @@ function validateV2(input, { limits, palette, knownRevision, revision, exportLim
   issues.push(...assetIssues);
 
   if (revision > knownRevision) {
-    // the keys outside `extensions` (a malformed extension key is not a newer setting) and other than whole asset entries
-    // (an unused asset, an asset of another kind), section indexes folded
+    // the keys outside `extensions` (a malformed extension key is not a newer setting), other than whole asset entries
+    // (an unused asset, an asset of another kind) and the forbidden keys, section indexes folded
     const ignored = [...new Set(issues
-      .filter((i) => i.code === 'dropped-unknown' && !/^assets(\[\d+\])?$/.test(i.path) && !/(^|\.)extensions\./.test(i.path))
+      .filter((i) => i.code === 'dropped-unknown' && !/^assets(\[\d+\])?$/.test(i.path) && !/(^|\.)extensions\./.test(i.path)
+        && !FORBIDDEN_KEYS.has(i.path.slice(i.path.lastIndexOf('.') + 1)))
       .map((i) => i.path.replace(/\[\d+\]/g, '[]')))];
     issues.unshift({ path: 'version', code: 'newer-revision', severity: 'warning',
       message: ImportMessages.newerRevision(String(input.version), knownRevision, ignored), from: input.version, to: `2.${knownRevision}` });

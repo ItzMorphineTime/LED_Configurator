@@ -9,12 +9,10 @@
  * export frame. Sync/async shape is legacy (R13): exportZIP and exportPanelIds stay async; exportOBJ is async since
  * 08 P2-6e (it builds an archive). Every export runs inside #runExport (08 P2-1a, B-H3), which reports a
  * failure as the M-EXP-1 alert instead of an uncaught exception or an unhandled rejection; its try/catch and the legacy
- * one around the import parse are the only ones (R13 amendment).
- * Since 08 P2-3b (B-L8 fixed) the import is validated (io/ProjectValidator through the injected serializer) and every
- * refusal and correction is reported (08 3.3: M-IMP-1 to M-IMP-7). Since 08 P2-13e (B-L31 fixed) Export JSON and the
- * ZIP's JSON are project file v2, and a v2 import restores the whole project in the order of 08 6.17 (#applyV2: the
- * logos through the injected LogoLoader, the wall, display and style, the camera lens, preview and pose, the safe
- * distance, the props, then PROJECT_REPLACED); a v1 import stays wall-only.
+ * one around the import parse (app/ProjectSession since 07 D5) are the only ones (R13 amendment).
+ * Since 08 P2-13e (B-L31 fixed) Export JSON and the ZIP's JSON are project file v2. Since 07 D5 Export JSON and the
+ * import are app/ProjectSession's (saveFile, openFile: the size guard, the read, validation, the logo assets and the
+ * one apply); this module keeps the exports and delegates those two.
  * Legacy source: index.html@cd3fd3f 2786-2827 (exportSafeDistanceOBJ), 4491-4554 (exportZIP), 4911-4924
  * (exportOBJ, exportGLTF), 4926-4940 (exportPanelIds), 4942-4965 (exportJSON), 4967-5010 (importJSON),
  * 5082-5091 (downloadFile).
@@ -23,9 +21,7 @@
 
 import { computeAtlas, canvasFits, CANVAS_HARD_LIMITS } from '../geometry/TextureAtlas.js';
 import { textureFileNames, atlasTexturePath } from '../geometry/PanelNaming.js';
-import { MAX_IMPORT_BYTES } from '../domain/rules.js';
 import { turnXZ, yawTrig } from '../geometry/WallOrientation.js';
-import { Events } from '../core/EventBus.js';
 
 /**
  * The dialogs facade (ui/dom.js createDialogs).
@@ -54,36 +50,6 @@ const ExportMessages = Object.freeze({
   /** @param {string[]} names  the left-out ZIP entry names @returns {string} */
   zipTexturesLeftOut: (names) => `The ZIP was created, but ${names.length} texture(s) were too large for this browser and ` +
     `were left out: ${names.join(', ')}.`,
-});
-
-/**
- * The import alerts of 08 3.3 that are not an issue of the serializer (P2-3b): M-IMP-6 (the file is too large; never
- * read), M-IMP-7 (the read failed) and M-IMP-5 (the corrections of an applied import: up to 10 lines, then a count).
- */
-const ImportAlerts = Object.freeze({
-  /** M-IMP-6 @returns {string} */
-  tooLarge: () => `Import failed: the file is larger than ${Math.round(MAX_IMPORT_BYTES / 1048576)} MB, the maximum for a project file.`,
-  /** M-IMP-7 @param {string} name  reader.error?.name @returns {string} */
-  unreadable: (name) => `Import failed: the file could not be read (${name}).`,
-  /** M-IMP-5 @param {{message: string}[]} warnings @returns {string} */
-  corrections: (warnings) => {
-    const lines = warnings.slice(0, 10).map((w) => `• ${w.message}`);
-    if (warnings.length > 10) lines.push(`• …and ${warnings.length - 10} more`);
-    return `Imported with ${warnings.length} correction(s):\n${lines.join('\n')}`;
-  },
-  /**
-   * The alert of an applied import: M-IMP-5 over the warnings that are corrections, then (07 D2) one "Note: " line per
-   * `budget` warning (a note about the wall, not a correction); null when there is neither.
-   * @param {{severity: string, code: string, message: string}[]} issues
-   * @returns {string|null}
-   */
-  report: (issues) => {
-    const warnings = issues.filter((i) => i.severity === 'warning');
-    const corrections = warnings.filter((w) => w.code !== 'budget');
-    const notes = warnings.filter((w) => w.code === 'budget').map((w) => `Note: ${w.message}`);
-    const parts = corrections.length ? [ImportAlerts.corrections(corrections), ...notes] : notes;
-    return parts.length ? parts.join('\n\n') : null;
-  },
 });
 
 /** The single anchor-download sequence (legacy 5082-5091 == 4547-4553 == 4932-4938). */
@@ -163,13 +129,8 @@ export class ProjectIO {
   #brand;
   /** @type {Window} */
   #win;
-  /** @type {(project: object) => import('../domain/WallSection.js').WallSection[]} io/ProjectSchema.sectionsFromProject */
-  #sectionsFromProject;
-  /** @type {(project: object) => object} io/ProjectSchema.stateFromProject (08 P2-13e) */
-  #stateFromProject;
-  /** @type {{cameraController: object, personController: object, carController: object, pilot: object,
-   *          selection: object, logoLoader: object, sceneManager: object, bus: object}|null} the v2 restore's collaborators */
-  #restore;
+  /** @type {import('./ProjectSession.js').ProjectSession} the session: Export JSON and the import (07 D5) */
+  #session;
 
   /**
    * Side effects: none.
@@ -181,25 +142,11 @@ export class ProjectIO {
    *          panelIds: import('../render/textures/PanelIdRenderer.js').PanelIdRenderer,
    *          safeDistance: import('../render/SafeDistanceView.js').SafeDistanceView,
    *          downloader: Downloader, JSZip: new () => object, dialogs: Dialogs, brand: IoBrand,
-   *          win: Window, sectionsFromProject: (project: object) => import('../domain/WallSection.js').WallSection[],
-   *          stateFromProject?: (project: object) => object,
-   *          cameraController?: import('./CameraController.js').CameraController,
-   *          personController?: import('./PropController.js').PropController,
-   *          carController?: import('./PropController.js').PropController,
-   *          pilot?: import('../interaction/PilotController.js').PilotController,
-   *          selection?: import('../interaction/SelectionManager.js').SelectionManager,
-   *          logoLoader?: import('../render/textures/LogoLoader.js').LogoLoader,
-   *          sceneManager?: import('../render/SceneManager.js').SceneManager,
-   *          bus?: import('../core/EventBus.js').EventBus}} deps
-   *   sectionsFromProject: io/ProjectSchema.sectionsFromProject, injected by App (app/ may not import io/; 08 P2-3b);
-   *   stateFromProject (io/ProjectSchema) and the controllers, pilot, selection, logo loader, scene manager (the grid)
-   *   and bus are the v2 restore's (08 P2-13e, 6.17); without them (unit tests of the exports) a v2 import alerts that it
-   *   cannot be restored and changes nothing
+   *          win: Window, session: import('./ProjectSession.js').ProjectSession}} deps
+   *   session: Export JSON (saveFile) and the import (openFile), 07 D5
    */
   constructor({ project, wallController, serializer, objExporter, gltfExporter, panelIds, safeDistance, downloader,
-    JSZip, dialogs, brand, win, sectionsFromProject, stateFromProject = null, cameraController = null,
-    personController = null, carController = null, pilot = null, selection = null, logoLoader = null, sceneManager = null,
-    bus = null }) {
+    JSZip, dialogs, brand, win, session = null }) {
     this.#project = project;
     this.#wallController = wallController;
     this.#serializer = serializer;
@@ -212,24 +159,17 @@ export class ProjectIO {
     this.#dialogs = dialogs;
     this.#brand = brand;
     this.#win = win;
-    this.#sectionsFromProject = sectionsFromProject;
-    this.#stateFromProject = stateFromProject;
-    this.#restore = stateFromProject && cameraController && personController && carController && pilot && selection
-      && logoLoader && sceneManager && bus
-      ? { cameraController, personController, carController, pilot, selection, logoLoader, sceneManager, bus }
-      : null;
+    this.#session = session;
   }
 
   /**
-   * Export JSON: the 'file' document (project file v2 since 08 P2-13e), pretty-printed with 2 spaces.
+   * Export JSON: ProjectSession.saveFile (07 D5): the 'file' document (project file v2 since 08 P2-13e), pretty-printed
+   * with 2 spaces, then the session's clean snapshot.
    * Ports: index.html@cd3fd3f lines 4942-4965.
    * Side effects: one download (brand.files.json, application/json), or the M-EXP-1 alert (#runExport).
    */
   exportJSON() {
-    this.#runExport('Export JSON', () => {
-      const exportData = this.#serializer.write(this.#project, { variant: 'file' });
-      this.#downloader.saveText(JSON.stringify(exportData, null, 2), this.#brand.files.json, 'application/json');
-    });
+    this.#runExport('Export JSON', () => this.#session.saveFile());
   }
 
   /**
@@ -591,165 +531,17 @@ export class ProjectIO {
   }
 
   /**
-   * P-IMPORT (ARCHITECTURE.md 6.10; 08 4.3, P2-3b): a file larger than MAX_IMPORT_BYTES is refused before it is read
-   * (M-IMP-6); a read failure alerts M-IMP-7 (legacy had no handler, B-L8); on load the text is parsed (a parse error
-   * keeps the legacy alert text, V-5) and read through the serializer (version detection, v1 migration, validation).
-   * A document with an error issue is refused with that issue's message and changes nothing (atomic import, 07 4.7);
-   * otherwise a v1 file's validated wall is applied (wall scope: sections, and the mesh mode when the file names one)
-   * and, if the validator corrected anything, M-IMP-5 lists the corrections; a v2 file (08 P2-13e) is restored whole by
-   * #applyV2 (asynchronous: its logos are loaded first; a failure there alerts like a parse error). The parse, read and
-   * apply steps stay inside the legacy try/catch, so any other error still becomes the legacy alert. The input is reset synchronously so the same
-   * file can be chosen again. A v1 import resets the logos (no logo is in a v1 file; B-L21 fixed in 08 P2-3d) and the
-   * logo list re-renders when panel IDs are on.
+   * P-IMPORT (ARCHITECTURE.md 6.10): the #import-input change hands the chosen file to ProjectSession.openFile (07 D5:
+   * the size guard, the read, validation, the logo assets, apply and the report) and resets the input synchronously,
+   * so the same file can be chosen again (V-7). Without a file, nothing.
    * Ports: index.html@cd3fd3f lines 4967-5010.
-   * Side effects: one alert (M-IMP-6), or starts a FileReader; resets the input's value; later (on load or error) the
-   * wall import pipeline and at most one alert (M-IMP-5), or one alert (an error message).
+   * Side effects: session.openFile(file) (asynchronous; never rejects); resets the input's value.
    * @param {Event} e  the #import-input change event
    */
   importFromInputEvent(e) {
     const file = e.target.files[0];
     if (!file) return;
-
-    if (file.size > MAX_IMPORT_BYTES) {
-      this.#dialogs.alert(ImportAlerts.tooLarge());
-      e.target.value = ''; // Reset input
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const data = JSON.parse(event.target.result);
-        const result = this.#serializer.read(data);
-        if (!result.ok) {
-          this.#dialogs.alert(result.issues.find((issue) => issue.severity === 'error').message);
-          return;
-        }
-        if (result.scope === 'full') {
-          // a rejection of the asynchronous restore (no new try/catch, R13) alerts like the legacy parse error
-          this.#applyV2(result).then(null, (err) => this.#dialogs.alert('Error parsing JSON file: ' + err.message));
-          return;
-        }
-        this.#wallController.applyImport({
-          sections: this.#sectionsFromProject(result.project), meshMode: result.project.mesh_mode, logos: null,
-        });
-        const report = ImportAlerts.report(result.issues);
-        if (report) this.#dialogs.alert(report);
-      } catch (err) {
-        this.#dialogs.alert('Error parsing JSON file: ' + err.message);
-      }
-    };
-    reader.onerror = () => {
-      this.#dialogs.alert(ImportAlerts.unreadable(reader.error?.name ?? 'unknown error'));
-    };
-    reader.readAsText(file);
+    this.#session.openFile(file);
     e.target.value = ''; // Reset input
-  }
-
-  /**
-   * The v2 restore (08 6.17, P2-13e; until 07 D5 moves it into ProjectSession.apply). Every referenced logo asset is
-   * loaded first through the LogoLoader (an SVG is sanitised again, every image decode-checked and hashed): a failure
-   * drops that logo with a warning, an SVG the sanitiser changed or a raster whose SHA-256 differs from the file's is
-   * kept with a warning (07 4.5). Then, in order: (1) a clean pilot exit, (2) deselect, (4) the wall with the logos
-   * (WallController.applyImport installs them after its reset and before its rebuild) and the file extensions,
-   * (5) display and style, each setter only when the value differs (panel-ID style, LED layout, wireframe, frames,
-   * content, then rebuildIfPanelIds when only the style changed; the grid), (6) the camera lens, (7) the preview when
-   * it differs (enabling resets the pose), (8) the camera pose (CameraController.applyImportedPose; kept for the next
-   * enable when the preview is off, Q19), (9) the safe-distance floor, (10) each prop's pose, then its visibility,
-   * (11) PROJECT_REPLACED {reason: 'import', scope: 'full'} (the panels sync their controls), (12) M-IMP-5 when there
-   * are warnings.
-   * Side effects: the whole project, the scene and every mirror; at most one alert.
-   * @param {{project: object, issues: import('../io/ProjectValidator.js').Issue[]}} result  a successful v2 read
-   * @returns {Promise<void>}
-   */
-  async #applyV2(result) {
-    const r = this.#restore;
-    if (!r) throw new Error('this build cannot restore a version 2 project');
-    const state = this.#stateFromProject(result.project);
-    const issues = [...result.issues];
-    const warn = (path, message) => issues.push({ path, code: 'sanitized', severity: 'warning', message });
-
-    // 3. the logo entries, keyed by section id
-    const loaded = new Map();
-    for (const asset of state.assets) {
-      const res = await r.logoLoader.load({ dataUri: asset.data_uri, name: asset.name });
-      if (!res.ok) {
-        warn('assets', `Logo "${asset.name}": dropped (the image could not be loaded)`);
-        continue;
-      }
-      if (res.meta.dataUri !== asset.data_uri) warn('assets', `Logo "${asset.name}": unsafe or unsized SVG content was removed`);
-      else if (asset.sha256 && asset.sha256 !== res.meta.sha256) warn('assets', `Logo "${asset.name}": the image does not match its checksum`);
-      loaded.set(asset.id, res);
-    }
-    const logos = [];
-    for (const logo of state.logos) {
-      const res = loaded.get(logo.assetId);
-      if (res) logos.push([logo.sectionId, { position: logo.position, scale: logo.scale, image: res.image, ...res.meta }]);
-    }
-
-    // 1-2
-    if (r.pilot.active) r.pilot.toggle();
-    r.selection.deselect();
-    // 4. the wall (logos installed after the reset, before the rebuild) and the file extensions
-    const wc = this.#wallController;
-    wc.applyImport({ sections: state.sections, meshMode: state.meshMode, logos });
-    this.#project.setExtensions(state.extensions);
-
-    // 5. display and style
-    const display = this.#project.display;
-    const style = this.#project.panelIdStyle;
-    let styleChanged = false;
-    for (const [key, value] of Object.entries(state.panelIdStyle)) {
-      if (style[key] === value) continue;
-      wc.setPanelIdStyle(key, typeof value === 'number' ? String(value) : value);
-      styleChanged = true;
-    }
-    let rebuilt = false;
-    const want = state.display;
-    if (display.ledLayout !== want.ledLayout) {
-      rebuilt = display.ledSimEnabled;
-      wc.setLedLayout(want.ledLayout);
-    }
-    if (display.wireframe !== want.wireframe) {
-      wc.setWireframe(want.wireframe);
-      rebuilt = true;
-    }
-    if (display.showFrame !== want.showFrame) {
-      wc.setShowFrame(want.showFrame);
-      rebuilt = true;
-    }
-    if (display.content !== want.content) {
-      if (want.content === 'ledSim') wc.setLedSim(true);
-      else if (want.content === 'panelIds') wc.setPanelIds(true);
-      else if (display.content === 'ledSim') wc.setLedSim(false);
-      else wc.setPanelIds(false);
-      rebuilt = true;
-    }
-    if (styleChanged && !rebuilt) wc.rebuildIfPanelIds();
-    if (display.showGrid !== want.showGrid) r.sceneManager.toggleGrid();
-
-    // 6-8. the camera: lens, preview, pose
-    const cc = r.cameraController;
-    const cam = state.camera;
-    cc.setFilmback(cam.filmback);
-    if (cam.filmback === 'custom') {
-      cc.setCameraField('filmbackWidth', String(cam.filmbackWidth));
-      cc.setCameraField('filmbackHeight', String(cam.filmbackHeight));
-    }
-    cc.setCameraField('focalLength', String(cam.focalLength));
-    if (this.#project.camera.enabled !== cam.enabled) cc.setPreviewEnabled(cam.enabled);
-    cc.applyImportedPose(cam);
-    // 9. the safe-distance floor
-    if (display.showSafeDistance !== want.showSafeDistance) cc.setSafeDistanceEnabled(want.showSafeDistance);
-    // 10. the props
-    for (const [controller, prop, values] of [[r.personController, this.#project.person, state.person],
-      [r.carController, this.#project.car, state.car]]) {
-      controller.applyImportedPose(values);
-      if (prop.visible !== values.visible) controller.setVisible(values.visible);
-    }
-    // 11-12
-    r.bus.emit(Events.PROJECT_REPLACED, { reason: 'import', scope: 'full' });
-    const report = ImportAlerts.report(issues);
-    if (report) this.#dialogs.alert(report);
   }
 }

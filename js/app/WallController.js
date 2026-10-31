@@ -5,7 +5,7 @@
  * mirror events at the legacy DOM-write points. It never imports or calls ui/ (the panels mirror its events).
  * Legacy source: index.html@cd3fd3f 1457-1577 (createLEDWall: layout, view, tail 1574-1576), 2307-2313
  * (updateStats call), 3997-4074 (card handlers' model writes and rebuilds), 4081-4146 (addSection, deleteSection),
- * 4156-4227 (setupUI display handlers), 4976-5002 (import tail).
+ * 4156-4227 (setupUI display handlers); the import tail (4976-5002) is app/ProjectSession.apply's since 07 D5.
  * Layer: app (may import core, legacy, domain, geometry; collaborators are injected).
  *
  * Rebuild policy (ARCHITECTURE.md 6.2): this module is the only place, besides the bootstrap, that decides wall
@@ -37,7 +37,7 @@
  * | 21 | 2285   | logo clear                       | rebuildIfPanelIds                    | iff panel IDs                           | entry deleted, logo list render                         |
  * | 22 | 2292   | logo position change             | rebuildIfPanelIds                    | iff the entry exists and panel IDs      | -                                                       |
  * | 23 | 2303   | logo scale change                | rebuildIfPanelIds                    | iff the entry exists and panel IDs      | write-back always                                       |
- * | 24 | 5002   | import FileReader.onload         | applyImport                          | always (cause 'import'), in the `try`   | logos reset, pivot reset + WALL_PIVOT_CHANGED{import} (03 4.4), labels iff mesh_mode, WALL_SECTIONS_CHANGED{import} |
+ * | 24 | 5002   | import FileReader.onload         | ProjectSession.apply (07 D5): applyPivot (the pivot hook), rebuild({cause: 'import'}) | always (cause 'import'), once per apply | logos reset or installed, WALL_PIVOT_CHANGED{import} (03 4.4), labels iff a v1 mesh_mode, PROJECT_REPLACED after the rebuild |
  * | F6-1 | -    | web fonts settled (App.start, runFontGate) | rebuildIfPanelIds          | iff a panel-ID canvas was drawn with a pending (font, text) and panel IDs are on | none |
  * | F3-1 | -    | pivot mode radio `change`        | PivotController.setMode -> commitPivot | iff the stage origin moved (cause 'pivot') | re-express iff keep; WALL_PIVOT_CHANGED{mode} |
  * | F3-2 | -    | pivot offset input `change`      | PivotController.setOffsetAxis -> commitPivot | iff the origin's x or z moved (never for y) | write-back toFixed(3) |
@@ -48,7 +48,7 @@
  * No other path calls rebuild() (row F6-1, the font gate of 06 5.6, calls rebuildIfPanelIds at most once after the
  * web fonts settled), except commitPivot (03 5.6, rows F3-1 to F3-4 through app/PivotController's P-PIVOT, 03 T4:
  * rebuild({cause: 'pivot'}) iff the stage origin moved, else the pivot cache only). WALL_REBUILT carries the cause:
- * 'init' (row 1), 'import' (row 24), 'pivot' (commitPivot) and 'edit' (every other row). Never de-duplicate or debounce (row 8 is the one guarded row since 08 P2-8d: an unchanged mode is a no-op): rows 3, 16 and 19 rebuild
+ * 'init' (row 1), 'import' (row 24, ProjectSession.apply), 'pivot' (commitPivot) and 'edit' (every other row). Never de-duplicate or debounce (row 8 is the one guarded row since 08 P2-8d: an unchanged mode is a no-op): rows 3, 16 and 19 rebuild
  * on every `input` event, exactly like legacy.
  */
 import { Events } from '../core/EventBus.js';
@@ -198,7 +198,7 @@ export class WallController {
    * (iff the preview is on) -> WALL_REBUILT. Exceptions of steps 1-5 propagate unchanged (no try/catch, R13).
    * Step 1 (03 5.6) lays the wall out in the stage frame, caches its pivot resolution and measures the stage-origin
    * shift against the previously cached one; WALL_REBUILT carries both with the cause (03 5.5): 'init' (the bootstrap),
-   * 'pivot' (commitPivot), 'import' (applyImport) or 'edit' (every other call site).
+   * 'pivot' (commitPivot), 'import' (ProjectSession.apply, 07 D5) or 'edit' (every other call site).
    * Ports: index.html@cd3fd3f lines 1457-1577 (orchestration; tail 1574-1576).
    * Side effects: writes the layout and pivot caches; view.rebuild (scene); emits WALL_STATS_CHANGED; orbit.updateCameraPosition
    *   (main camera); hub.refresh (iff project.camera.enabled); emits WALL_REBUILT {layout, meshMode, view, cause,
@@ -454,47 +454,23 @@ export class WallController {
   }
 
   /**
-   * The tail of P-IMPORT (ARCHITECTURE.md 6.10), inside the import `try`: reset the logo library and install only the
-   * logos given (08 P2-3d, B-L21 fixed: legacy kept every entry, so logos keyed by old ids reattached to imported
-   * sections that reused those ids; a v1 import passes none), replace the sections (and the id allocator), adopt a
-   * truthy mesh mode (label mirror), re-render the cards (first expanded) and, with panel IDs on, the logo list, rebuild.
-   * Feature 3 (03 4.4, Q14; 12.11): the file's pivot replaces the session's; a file without one (every file until project
-   * file v2: the pivot is session-only, the owner's decision of 2026-10-17) keeps the session's pivot and orientation
-   * (the owner's rule of 2026-10-17). Either way after the sections and before the rebuild, which runs with cause 'import'. An import is a load: nothing is re-expressed. Since 03 T4 the pivot
-   * mirrors hear of it at once (WALL_PIVOT_CHANGED {source: 'import'}, 03 5.5), before the other import mirrors.
-   * Ports: index.html@cd3fd3f lines 4976 + 4989 (via Wall.replaceAll), 4991-4996, 4998-5002.
-   * Side effects: model (logos, wall, wall.pivot, project.meshMode iff truthy); emits WALL_PIVOT_CHANGED {source:
-   *   'import', pivot, resolution: resolvePivotNow(), stageShift against the cache, reexpressed: false, rebuilds: true},
-   *   then WALL_MESH_MODE_CHANGED {mode} iff meshMode is truthy, then WALL_SECTIONS_CHANGED {reason: 'import'};
-   *   rebuild({cause: 'import'}).
-   * @param {{sections: import('../domain/WallSection.js').WallSection[], meshMode: *,
-   *          logos?: Array<[*, import('../domain/LogoLibrary.js').LogoEntry]>|null,
-   *          pivot?: import('../domain/Wall.js').WallPivot|null}} parsed
-   *   sections and meshMode from the validated read; logos: [sectionId, entry] pairs to install after the reset (the
-   *   later v2 restore, 08 6.17), null for a v1 import; pivot: the file's validated pivot (03 T7, with project file v2),
-   *   null or absent for a v1 file (the identity)
+   * The pivot step of P-IMPORT (07 5.5.2 step 3: App registers it as ProjectSession's 'pivot' feature hook; 03 4.4,
+   * Q14, 12.11): a validated pivot replaces the session's; null keeps the session's pivot and orientation (the owner's
+   * rule of 2026-10-17 for a file without one: every file until project file v2 saves the pivot). Either way the pivot
+   * mirrors hear of it at once (WALL_PIVOT_CHANGED {source: 'import'}, 03 5.5), after the new sections are in place and
+   * before the apply's other mirrors and its one rebuild (cause 'import'). A load is not an edit: nothing is re-expressed.
+   * Side effects: maybe writes wall.pivot; emits WALL_PIVOT_CHANGED {source: 'import', pivot (a copy), resolution:
+   *   resolvePivotNow(), stageShift and yawShiftDeg against the cache, reexpressed: false, rebuilds: true}.
+   * @param {import('../domain/Wall.js').WallPivot|null} [pivot]  the file's validated pivot, or null to keep the session's
    */
-  applyImport({ sections, meshMode, logos = null, pivot = null }) {
+  applyPivot(pivot = null) {
     const project = this.#project;
-    project.logos.clear();
-    if (logos) for (const [sectionId, entry] of logos) project.logos.set(sectionId, entry);
-    project.wall.replaceAll(sections);
-    // Owner rule (03 12.11): a file without a pivot (every v1 file) keeps the session's pivot and orientation
     if (pivot) project.wall.pivot = pivot;
-    // 03 T4 (4.4, 5.5): the pivot mirrors follow the file's pivot before the rebuild; nothing is re-expressed.
     const resolution = this.resolvePivotNow();
     this.#bus.emit(Events.WALL_PIVOT_CHANGED, {
       source: 'import', pivot: project.wall.pivot.clone(), resolution,
       stageShift: stageShift(this.#pivotResolution, resolution), yawShiftDeg: yawShift(this.#pivotResolution, resolution),
       reexpressed: false, rebuilds: true,
     });
-
-    if (meshMode) {
-      project.meshMode = meshMode;
-      this.#bus.emit(Events.WALL_MESH_MODE_CHANGED, { mode: meshMode });
-    }
-
-    this.#bus.emit(Events.WALL_SECTIONS_CHANGED, { reason: 'import' });
-    this.rebuild({ cause: 'import' });
   }
 }

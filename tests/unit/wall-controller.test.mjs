@@ -28,6 +28,8 @@ import { WallController } from '../../js/app/WallController.js';
 import { ProjectSerializer } from '../../js/io/ProjectSerializer.js';
 import { sectionsFromProject } from '../../js/io/ProjectSchema.js';
 import { runFontGate } from '../../js/app/fontGate.js';
+import { ProjectSession } from '../../js/app/ProjectSession.js';
+import { wallImport } from './fixtures/wall-import.mjs';
 import { HeaderStats } from '../../js/ui/HeaderStats.js';
 import { escapeHtml, setTitleWithWarning } from '../../js/ui/dom.js';
 import { SectionListPanel } from '../../js/ui/SectionListPanel.js';
@@ -229,7 +231,7 @@ describe('the pivot cache, WALL_REBUILT cause and stageShift, commitPivot (03 5.
     assert.equal(r.wc.pivotResolution, null);
   });
 
-  test('applyImport keeps the session pivot for a v1 file (the owner rule of 03 12.11); the rebuild has cause import', () => {
+  test('applyPivot, the pivot hook of a wall-scope apply (07 D5), keeps the session pivot (03 12.11); the rebuild has cause import', () => {
     const r = makeRig();
     const session = pivotOf('wall-center', { x: 0, y: 0, z: 2 });
     r.project.wall.pivot = session;
@@ -237,7 +239,7 @@ describe('the pivot cache, WALL_REBUILT cause and stageShift, commitPivot (03 5.
     r.project.camera.posX = 0.5;
     let pivotAtRebuild;
     r.view.rebuild = () => { pivotAtRebuild = r.project.wall.pivot; r.trace.push('view.rebuild'); };
-    r.wc.applyImport({ sections: [new WallSection(fields())], meshMode: 'combined' });
+    wallImport(r, { sections: [new WallSection(fields())], meshMode: 'combined' });
     assert.equal(pivotAtRebuild, session, 'the session pivot is kept');
     const rebuilt = r.emitted('WALL_REBUILT').at(-1);
     assert.equal(rebuilt.cause, 'import');
@@ -254,7 +256,7 @@ describe('the pivot cache, WALL_REBUILT cause and stageShift, commitPivot (03 5.
     assert.equal(changed.rebuilds, true);
     assert.ok(r.trace.lastIndexOf('WALL_PIVOT_CHANGED') < r.trace.lastIndexOf('WALL_MESH_MODE_CHANGED'));
     const given = pivotOf('mesh-center');
-    r.wc.applyImport({ sections: [new WallSection(fields())], meshMode: null, pivot: given });
+    r.wc.applyPivot(given);
     assert.equal(r.project.wall.pivot, given, "a file's pivot (03 T7, with project file v2) is assigned as given");
   });
 });
@@ -354,7 +356,7 @@ describe('rebuild policy (ARCHITECTURE.md 6.2): run counts and tile-cache clears
     assert.deepEqual(read.issues.filter((i) => i.severity !== 'info'), []);
     const imported = sectionsFromProject(read.project);
     assert.deepEqual(imported.map((x) => ({ ...x })), r.project.wall.sections.map((x) => ({ ...x })), 'the same wall');
-    r.wc.applyImport({ sections: imported, meshMode: read.project.mesh_mode });
+    wallImport(r, { sections: imported, meshMode: read.project.mesh_mode });
     assert.equal(r.project.wall.nextSectionId, 200);
     r.wc.addSection();
     assert.deepEqual(r.alerts, ['A wall can have at most 200 sections.']);
@@ -367,7 +369,7 @@ describe('rebuild policy (ARCHITECTURE.md 6.2): run counts and tile-cache clears
     const file = { version: '1.0', sections: [{ name: 'Top', id: 2147483647 }, { name: 'One', id: 1 }] };
     const read = serializer.read(JSON.parse(JSON.stringify(file)));
     assert.ok(read.ok);
-    r.wc.applyImport({ sections: sectionsFromProject(read.project), meshMode: read.project.mesh_mode });
+    wallImport(r, { sections: sectionsFromProject(read.project), meshMode: read.project.mesh_mode });
     r.wc.addSection();
     r.wc.addSection();
     const ids = r.project.wall.sections.map((s) => s.id);
@@ -518,50 +520,34 @@ describe('rebuild policy (ARCHITECTURE.md 6.2): run counts and tile-cache clears
     assert.equal(on.ledTiles.clears, 0);
   });
 
-  test('row 24 applyImport with a mesh mode: replace, WALL_MESH_MODE_CHANGED, WALL_SECTIONS_CHANGED {import}, rebuild', () => {
+  test('row 24 (ProjectSession.apply, wall scope; 07 D5) with a mesh mode: replace, pivot, label event, one rebuild, PROJECT_REPLACED', () => {
     const r = makeRig();
     r.project.logos.ensure(0).position = 'top-left';
     const sections = [new WallSection(fields({ id: 5 })), new WallSection(fields({ id: 2 }))];
     const seen = [];
     r.bus.on(Events.WALL_MESH_MODE_CHANGED, () => seen.push(['mode', r.project.meshMode, r.project.wall.sections === sections]));
-    r.bus.on(Events.WALL_SECTIONS_CHANGED, () => seen.push(['sections', r.project.wall.count]));
-    r.wc.applyImport({ sections, meshMode: 'panel' });
-    assert.deepEqual(r.trace, ['WALL_PIVOT_CHANGED', 'WALL_MESH_MODE_CHANGED', 'WALL_SECTIONS_CHANGED', ...P1]);
+    r.bus.on(Events.PROJECT_REPLACED, () => seen.push(['replaced', r.project.wall.count]));
+    wallImport(r, { sections, meshMode: 'panel' });
+    assert.deepEqual(r.trace, ['WALL_PIVOT_CHANGED', 'WALL_MESH_MODE_CHANGED', ...P1, 'PROJECT_REPLACED']);
     assert.deepEqual(r.emitted('WALL_MESH_MODE_CHANGED'), [{ mode: 'panel' }]);
-    assert.deepEqual(r.emitted('WALL_SECTIONS_CHANGED'), [{ reason: 'import' }]);
-    assert.deepEqual(seen, [['mode', 'panel', true], ['sections', 2]]);
+    assert.deepEqual(r.emitted('WALL_SECTIONS_CHANGED'), [], 'the import re-renders on PROJECT_REPLACED since 07 D5');
+    assert.deepEqual(r.emitted('PROJECT_REPLACED'), [{ reason: 'import', scope: 'wall' }]);
+    assert.deepEqual(seen, [['mode', 'panel', true], ['replaced', 2]]);
     assert.equal(r.project.wall.sections, sections);
     assert.equal(r.project.wall.nextSectionId, 6);
     assert.equal(r.project.meshMode, 'panel');
     assert.equal(r.project.logos.get(0), undefined, 'B-L21 fixed in 08 P2-3d: the logo library is reset');
     assert.equal(r.rebuilds(), 1);
+    assert.equal(r.emitted('WALL_REBUILT')[0].cause, 'import');
   });
 
-  test('row 24 applyImport resets the logos first and installs only the given ones (08 P2-3d, B-L21)', () => {
-    const r = makeRig();
-    r.project.logos.ensure(0).position = 'top-left';
-    r.project.logos.ensure(7).scale = 0.5;
-    const seen = [];
-    r.bus.on(Events.WALL_SECTIONS_CHANGED, () => seen.push([r.project.logos.get(0), r.project.logos.get(3)?.position]));
-    const entry = { position: 'bottom-right', scale: 0.4 };
-    r.wc.applyImport({ sections: [new WallSection(fields({ id: 3 }))], meshMode: null, logos: [[3, entry]] });
-    assert.equal(r.project.logos.get(7), undefined);
-    assert.deepEqual(r.project.logos.get(3), entry);
-    assert.notEqual(r.project.logos.get(3), entry, 'a fresh object');
-    assert.deepEqual(seen, [[undefined, 'bottom-right']], 'the logos are in place before the mirrors run');
-    const v1 = makeRig();
-    v1.project.logos.ensure(0);
-    v1.wc.applyImport({ sections: [new WallSection(fields())], meshMode: 'combined' });
-    assert.equal(v1.project.logos.get(0), undefined, 'logos omitted (a v1 import): none');
-  });
-
-  test('row 24 applyImport without a (truthy) mesh mode keeps the mode and emits no label event', () => {
+  test('row 24 (wall scope) without a (truthy) mesh mode keeps the mode and emits no label event', () => {
     for (const meshMode of [undefined, '', 0, null]) {
       const r = makeRig();
       r.project.meshMode = 'section';
-      r.wc.applyImport({ sections: [new WallSection(fields({ id: 7 }))], meshMode });
+      wallImport(r, { sections: [new WallSection(fields({ id: 7 }))], meshMode });
       assert.equal(r.project.meshMode, 'section');
-      assert.deepEqual(r.trace, ['WALL_PIVOT_CHANGED', 'WALL_SECTIONS_CHANGED', ...P1]);
+      assert.deepEqual(r.trace, ['WALL_PIVOT_CHANGED', ...P1, 'PROJECT_REPLACED']);
       assert.equal(r.project.wall.nextSectionId, 8, 'the next free id (07 6.8)');
     }
   });
@@ -1011,7 +997,10 @@ function buildModern(doc) {
   const sectionList = new SectionListPanel({ doc, project, wallController, bus, palette: Palette });
   const displayPanel = new WallDisplayPanel({ doc, wallController, bus });
   const logosPanel = new SectionLogosPanel({ doc, project, wallController, bus, logoLoader: syncLogoLoader, dialogs });
-  return { project, bus, wallController, headerStats, sectionList, displayPanel, logosPanel };
+  // 07 D5: the import is ProjectSession.apply (the wall-scope steps only touch these collaborators)
+  const session = new ProjectSession({ project, serializer: null, wallController, bus, pilot: { active: false },
+    selection: { selectedId: null }, sectionsFromProject, features: { pivot: { hydrate: () => wallController.applyPivot(null) } } });
+  return { project, bus, wallController, headerStats, sectionList, displayPanel, logosPanel, session };
 }
 
 /** Section values compared with Object.is, the display/style flags and the logo entries. */
@@ -1273,15 +1262,17 @@ describe('legacy parity: panels + WallController vs index.html@cd3fd3f', { skip:
       const read = serializer.read(JSON.parse(JSON.stringify(data)));
       if (!read.ok) return;
       if (which === 'legacy') { L.importTail(validatedV1(read)); return; }
-      M.wallController.applyImport({ sections: sectionsFromProject(read.project), meshMode: read.project.mesh_mode });
+      M.session.apply(read.project, { reason: 'import', scope: 'wall' });
     };
-    log = step('import with mesh_mode and string/missing ids (validated: the string id renumbered, B-L8 fixed)', importAs(importData));
+    // 07 D5: PROJECT_REPLACED re-renders the cards and the logo list after the rebuild (07 5.5.2 step 8), so the import
+    // steps compare per region; each region's writes are the legacy import tail's.
+    log = step('import with mesh_mode and string/missing ids (validated: the string id renumbered, B-L8 fixed)', importAs(importData), { regions: true });
     assert.equal(rebuilds(log), 1);
     step('add after the import (the next free id; the new card is expanded)', (doc) => click(doc, 'add-section-btn'), { regions: true });
     step('delete the renumbered section', (doc) => card(doc, 1).querySelector('.section-delete').fire('click'), { regions: true });
     step('collapse/expand cards', (doc) => { card(doc, 0).querySelector('.section-header').fire('click'); card(doc, 2).querySelector('.section-header').fire('click'); });
     step('add after a delete keeps the collapse states', (doc) => click(doc, 'add-section-btn'), { regions: true });
-    step('import without mesh_mode', importAs({ sections: [{ id: 3, name: 'Solo' }, { id: 8 }] }));
+    step('import without mesh_mode', importAs({ sections: [{ id: 3, name: 'Solo' }, { id: 8 }] }), { regions: true });
     step('mesh mode after import', (doc) => label(doc, 'section').fire('click'));
     log = step('import of an empty list is refused: nothing changes (M-IMP-2 is ProjectIO\'s alert)', importAs({ mesh_mode: 'panel', sections: [] }));
     assert.deepEqual(log, []);

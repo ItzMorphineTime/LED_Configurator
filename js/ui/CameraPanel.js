@@ -124,7 +124,8 @@ export class CameraPanel {
     bus.on(Events.CAMERA_COVERAGE_CHANGED, (payload) => this.#mirrorCoverage(payload));
     bus.on(Events.CAMERA_POSE_CHANGED, (payload) => this.#mirrorPose(payload));
     bus.on(Events.CAMERA_SAFE_DISTANCE_TOGGLED, (payload) => this.#mirrorSafeDistanceToggle(payload));
-    bus.on(Events.PROJECT_REPLACED, () => this.syncFromModel());
+    // 07 D5: a wall-scope (v1) apply keeps the camera as it is
+    bus.on(Events.PROJECT_REPLACED, ({ scope }) => { if (scope !== 'wall') this.syncFromModel(); });
   }
 
   /**

@@ -56,6 +56,8 @@ import { CameraHub, CameraController } from './CameraController.js';
 import { PropController } from './PropController.js';
 import { PivotController } from './PivotController.js';
 import { Downloader, ProjectIO } from './ProjectIO.js';
+import { ProjectSession } from './ProjectSession.js';
+import { AssetStore } from './AssetStore.js';
 import { DebugViewController } from './DebugViewController.js';
 import { UvViewModel } from './UvViewModel.js';
 import { UvController } from './UvController.js';
@@ -221,6 +223,20 @@ export class App {
     const serializer = new ProjectSerializer({ palette: theme.palette });
     const objExporter = new ObjExporter({ brand, colorToRgb, builder: new WallMeshBuilder(Strategies.mesh.obj) });
     const gltfExporter = new GltfExporter({ brand, colorToRgb, builder: new WallMeshBuilder(Strategies.mesh.gltf) });
+    const downloader = new Downloader({ doc, win });
+    // 07 D5 (5.5.3): the session's logo images by asset id, loaded through the one logo loader.
+    const assetStore = new AssetStore({ logoLoader });
+    // 07 D5 (5.5.2): open, save, new, capture and the one apply. `features` is the hook map of 07 C41: each landed
+    // feature's step-3 restore step. The pivot and orientation are session-only until project file v2 saves them, so
+    // their hook keeps them and announces them to the pivot mirrors (03 4.4, the owner's rule of 03 12.11).
+    const session = new ProjectSession({
+      project, serializer, assets: assetStore, wallController, cameraController, personController, carController, pilot,
+      selection, sceneManager, ledTiles, bus, dialogs, downloader, brand, win, stateFromProject, sectionsFromProject,
+      createProject: () => Project.createNew({ defaultSectionColor: theme.palette.defaultSectionColor }),
+      features: {
+        pivot: { hydrate: () => wallController.applyPivot(null) },
+      },
+    });
     const projectIO = new ProjectIO({
       project,
       wallController,
@@ -229,22 +245,12 @@ export class App {
       gltfExporter,
       panelIds,
       safeDistance,
-      downloader: new Downloader({ doc, win }),
+      downloader,
       JSZip,
       dialogs,
       brand,
       win,
-      sectionsFromProject,
-      // 08 P2-13e (6.17): the v2 restore's collaborators
-      stateFromProject,
-      cameraController,
-      personController,
-      carController,
-      pilot,
-      selection,
-      logoLoader,
-      sceneManager,
-      bus,
+      session,
     });
     // ViewportInput is constructed here (it stores its collaborators only) so the UV hover probe can read
     // handlesDoubleClick; its U command reaches the UV controller lazily (04 3.6 path B).
@@ -381,5 +387,8 @@ export class App {
       fonts: doc.fonts, preloadFonts: theme.canvas.preloadFonts, panelIds, wallController,
       onError: (err) => win.console.error(err),
     });
+
+    // ---- 07 D5: the bootstrap project is clean and a pristine new project (session.dirty, session.isPristineNew) ----
+    session.markClean({ pristineNew: true });
   }
 }
