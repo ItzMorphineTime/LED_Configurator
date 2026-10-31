@@ -62,6 +62,9 @@
  *  20  (03 8.2, since 03 T6) the gizmo interaction state has one writer: InteractionState.isDraggingGizmo and
  *      .gestureCancelled are assigned only in js/interaction/TransformGizmo.js, and InteractionState.snap only through
  *      TransformGizmo.setSnapIncrements (an Object.assign of it there; no assignment to x.snap or x.snap.k anywhere).
+ *  21  (07 S1, since 07 D7) in js/ui/, every `${` of a template literal written as markup (assigned or appended to
+ *      .innerHTML / .outerHTML, or the second argument of insertAdjacentHTML) starts with `${escapeHtml(` (guards
+ *      08 P2-3a's fix of B-M4). A template built elsewhere (a helper's return value) is not this rule's.
  *
  * "Identifier" means a token of code: comments and the text of string, template and regex literals
  * are blanked first (the code inside template `${...}` is kept), and a name after `.` or `?.` is a
@@ -124,6 +127,7 @@ const RULE_TITLES = Object.freeze({
     18: 'pivot markup (03 8.2)',
     19: 'pivot radios focusable (03 8.2)',
     20: 'interaction state writer (03 8.2)',
+    21: 'markup templates escaped (07 S1)',
 });
 
 /**
@@ -1210,6 +1214,79 @@ function checkInteractionWriters(mod, ctx) {
     }
 }
 
+/** Rule 21 (07 S1): a markup sink, `.innerHTML =`, `.innerHTML +=`, `.outerHTML =` or `.insertAdjacentHTML(`. */
+const MARKUP_SINK_RE = /\.\s*(?:innerHTML|outerHTML)\s*\+?=(?!=)|\.\s*insertAdjacentHTML\s*\(/g;
+
+/**
+ * The end of a `${...}` expression of blanked code (07 S1): the index after its matching '}', skipping nested
+ * template literals (their text is blank, their own `${` nest).
+ * @param {string} code  lex(src).code
+ * @param {number} k     the index after '${'
+ * @returns {number}
+ */
+function skipTemplateExpression(code, k) {
+    let depth = 1;
+    while (k < code.length) {
+        const c = code[k];
+        if (c === '`') { k = skipTemplate(code, k); continue; }
+        if (c === '{') depth++;
+        else if (c === '}' && --depth === 0) return k + 1;
+        k++;
+    }
+    return k;
+}
+
+/** The index after the template literal of blanked code that opens at `k`. @param {string} code @param {number} k @returns {number} */
+function skipTemplate(code, k) {
+    k++;
+    while (k < code.length && code[k] !== '`') {
+        if (code[k] === '$' && code[k + 1] === '{') { k = skipTemplateExpression(code, k + 2); continue; }
+        k++;
+    }
+    return k + 1;
+}
+
+/**
+ * Rule 21 (07 S1): the offsets of every `${` of a template literal written as markup that does not start with
+ * `${escapeHtml(`. Comments, strings and template text are blank in lex().code, so only real sinks count.
+ * Side effects: none.
+ * @param {string} src  module source
+ * @param {{code: string}} [lx]  lex(src)
+ * @returns {number[]}
+ */
+export function unescapedMarkupInterpolations(src, lx = lex(src)) {
+    const { code } = lx;
+    const out = [];
+    for (const m of code.matchAll(MARKUP_SINK_RE)) {
+        let k = m.index + m[0].length;
+        if (m[0].endsWith('(')) {
+            k = nextArgument(code, k);   // insertAdjacentHTML(position, markup)
+            if (k < 0) continue;
+        }
+        k = nextNonSpace(code, k);
+        if (code[k] !== '`') continue;
+        k++;
+        while (k < code.length && code[k] !== '`') {
+            if (code[k] === '$' && code[k + 1] === '{') {
+                if (!code.startsWith('escapeHtml(', k + 2)) out.push(k);
+                k = skipTemplateExpression(code, k + 2);
+                continue;
+            }
+            k++;
+        }
+    }
+    return out;
+}
+
+/** Rule 21 (07 S1) over one module of js/ui/. */
+function checkMarkupEscaping(mod, ctx) {
+    if (!mod.jsRel.startsWith('ui/')) return;
+    for (const index of unescapedMarkupInterpolations(mod.src, mod.lx)) {
+        ctx.report(mod.rel, mod.lx.lineOf(index), 21, 'an interpolation in a template written as markup (innerHTML / '
+            + 'insertAdjacentHTML) must be ${escapeHtml(...)} (07 S1; B-M4, 08 P2-3a)');
+    }
+}
+
 // ---- runner -----------------------------------------------------------------------------------
 
 /**
@@ -1244,6 +1321,7 @@ export async function runChecks(rootDir) {
         checkDomainWrites(mod, ctx);
         checkRenderOrder(mod, ctx);
         checkInteractionWriters(mod, ctx);
+        checkMarkupEscaping(mod, ctx);
     }
     checkLookups(ctx);
     checkInlineStyles(ctx);
@@ -1362,6 +1440,7 @@ const EXPECTED_BAD = Object.freeze([
     ['js/interaction/Gizmo.js', 20, 'write to .isDraggingGizmo outside'],
     ['js/interaction/Gizmo.js', 20, 'assignment to .snap.pivotM'],
     ['js/interaction/Gizmo.js', 20, 'Object.assign into .snap outside'],
+    ['js/ui/PanelMarkup.js', 21, 'must be ${escapeHtml(...)}'],
 ]);
 
 /**
@@ -1370,6 +1449,9 @@ const EXPECTED_BAD = Object.freeze([
  */
 const CLEAN_IN_BAD = Object.freeze([
     ['js/ui/PanelB.js', 17, 6, 'morph-led-wall-panel-ids.png and panel-ids.png.bak only contain a legacy file name'],
+    ['js/ui/PanelMarkup.js', 21, 12, 'every interpolation is escaped'],
+    ['js/ui/PanelMarkup.js', 21, 13, 'a comment that names innerHTML = `${x}`'],
+    ['js/ui/PanelMarkup.js', 21, 14, 'a plain string and a helper call are not templates'],
 ]);
 
 async function selfTest() {
