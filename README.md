@@ -210,11 +210,14 @@ it used to show white LEDs on every section.
 | Q | Move down |
 | E | Move up |
 | Side panel handle (chevron on the viewport's left edge; bottom edge on narrow screens) | Hide / show the side panel; hidden, the 3D view takes the whole width (Tab to it, Enter or Space) |
+| Left click on a wall section | Select it (outlined and tinted in the 3D view, its card highlighted, "Selected: *name*"); works in every mesh mode, not in pilot mode. A click on empty space or Escape deselects; a drag (4 px or more) only orbits. The camera, person, car and pivot keep their own clicks |
+| Right click on a wall section | Select it and open the section menu: **Change settings** (shows the side panel and opens the section's card), **Edit UVs…**, **Deselect**. ↑ / ↓ move, Enter runs, Escape closes |
+| Double-click on a wall section | Open the UV viewer on it |
 
 ### Gizmo Controls
 | Key | Action |
 |-----|--------|
-| G | Toggle Translate mode |
+| G | Toggle Translate mode (a selected wall section has no gizmo yet) |
 | R | Toggle Rotate mode |
 | L | Toggle World/Local space |
 | P | Toggle Pilot camera mode |

@@ -78,6 +78,10 @@ export const SceneTheme = deepFreeze({
     opacity: 0.9, glyphHalfSize: 0.25, coreRadius: 0.06, pickRadius: 0.15, dash: 0.05,   // metres (opacity 0..1)
     minScreenHalfSizePx: 24,                                                // the cross is never shorter than this per arm (3.3)
   },
+  selection: {                                                              // 2026-10-31: the selected wall section (02 5.2;
+    color: 0xf7f7f5, haloColor: 0x0a0a0a,                                   // 06 5.12's values): dashed core over the
+    fillOpacity: 0.18, dashSize: 0.12, gapSize: 0.06,                       // Morph Black halo (06 D15), the tint opacity;
+  },                                                                        // dash and gap in metres
 });
 
 /**

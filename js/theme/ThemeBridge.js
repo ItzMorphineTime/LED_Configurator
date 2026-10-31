@@ -44,6 +44,8 @@ export const COLOR_BINDINGS = Object.freeze([
   ['scene.pivot.selectedColor',     '--scene-pivot-selected', 'num'],
   ['scene.pivot.anchorColor',       '--scene-pivot-anchor',   'num'],
   ['scene.pivot.haloColor',         '--scene-overlay-halo',   'num'],
+  ['scene.selection.color',         '--scene-selection',      'num'],   // the selected wall section (2026-10-31; 02 5.2)
+  ['scene.selection.haloColor',     '--scene-overlay-halo',   'num'],
   ['canvas.background',             '--canvas-background',    'hex'],
   ['ui.status.within',              '--status-within',        'hex'],
   ['ui.status.offCenter',           '--status-off-center',    'hex'],

@@ -151,7 +151,8 @@ export class ViewportToolbar {
   #badgeName() {
     const { label, modes } = this.#selection;
     const name = label || 'Unknown';
-    return this.#mode === 'rotate' && !modes.includes('rotate') ? `${name} (translate only)` : name;
+    // 2026-10-31: a target without any gizmo mode (a wall section) gets no suffix
+    return this.#mode === 'rotate' && modes.includes('translate') && !modes.includes('rotate') ? `${name} (translate only)` : name;
   }
 
   /**

@@ -1,0 +1,91 @@
+/* css/features/section-selection.css: the wall section selection (the owner's request of 2026-10-31).
+   The selected section's card (ui/SectionListPanel: .wall-section.is-selected, an accent border and the accent bar of the
+   selection badge on its header) and its one-off flash after the section menu's "Change settings" (.is-flashing; a short
+   accent ring, instant under prefers-reduced-motion). The section context menu (ui/SectionContextMenu: .context-menu, a
+   role="menu" inside .viewport, opaque like the selection badge): z-index 120, above the floating panels (30), the side
+   panel handle (35), the pilot banner (100) and the debug popover (110); its items show the hover and focus fill, and
+   keyboard focus the ring of 03-layout.css, drawn inset. Colours only through the role tokens of 02-tokens.css (06 R-B1). */
+
+.wall-section.is-selected {
+    border-color: var(--color-accent);
+}
+
+.wall-section.is-selected .section-header {
+    box-shadow: inset 3px 0 0 var(--color-accent);
+}
+
+.wall-section.is-flashing {
+    animation: section-card-flash 0.9s ease-out;
+}
+
+@keyframes section-card-flash {
+    0%,
+    35% {
+        box-shadow: 0 0 0 2px var(--color-accent);
+    }
+    100% {
+        box-shadow: 0 0 0 2px transparent;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .wall-section.is-flashing {
+        animation-duration: 0.01s;
+    }
+}
+
+.context-menu {
+    position: absolute;
+    z-index: 120;
+    min-width: 172px;
+    max-width: 260px;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 8px;
+    box-shadow: var(--shadow-overlay);
+    font-family: var(--font-ui);
+}
+
+.context-menu[hidden] {
+    display: none;
+}
+
+.context-menu__title {
+    padding: 6px 10px 4px;
+    border-left: 3px solid var(--color-accent);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.context-menu__item {
+    display: block;
+    width: 100%;
+    padding: 8px 10px;
+    background: none;
+    border: 0;
+    border-radius: 6px;
+    color: var(--color-text-primary);
+    font-family: var(--font-ui);
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.context-menu__item:hover,
+.context-menu__item:focus {
+    background: var(--color-surface-hover);
+}
+
+.context-menu__item:focus-visible {
+    outline-offset: -2px;
+}

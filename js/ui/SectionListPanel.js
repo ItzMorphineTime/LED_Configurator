@@ -23,8 +23,13 @@
  * 04 UV-14 (docs/improvements/04-uvs-uv-editor.md 3.1, 3.3): a last card row, "UV Mapping", with the section's
  * UvTransform.summaryFor and an "Edit UVs…" button that opens the UV viewer on the section; the summary mirrors
  * UV_TRANSFORM_CHANGED (live while dragging or previewing) and follows a number edit (the summary depends on W x H).
+ * 2026-10-31 (the owner's request): the selected section's card has the class `is-selected` (and aria-current), a
+ * SELECTION_CHANGED mirror re-applied after every render; revealSection(id) (the section menu's "Change settings")
+ * expands the card, scrolls it into view, focuses its first field and flashes it (`is-flashing`, css/features/
+ * section-selection.css).
  */
 import { Events } from '../core/EventBus.js';
+import { sectionKeyOf, isSectionKey } from '../core/sectionIds.js';
 import { byId, escapeHtml, setTitleWithWarning } from './dom.js';
 
 /**
@@ -208,10 +213,60 @@ export class SectionListPanel {
 
     bus.on(Events.WALL_SECTIONS_CHANGED, (payload) => this.#onSectionsChanged(payload));
     bus.on(Events.UV_TRANSFORM_CHANGED, (payload) => this.#onUvTransform(payload));
+    bus.on(Events.SELECTION_CHANGED, ({ id }) => this.#mirrorSelection(id));
   }
 
   /** @type {import('../app/UvController.js').UvController|null} */
   #uvController;
+  /** @type {string|null} the selected section's key (core/sectionIds.js), null when no section is selected */
+  #selectedKey = null;
+
+  /**
+   * SELECTION_CHANGED mirror (2026-10-31): the card of the selected section gets `is-selected` and aria-current="true",
+   * every other card loses them.
+   * Side effects: writes the cards' class and aria-current.
+   * @param {string|null} id
+   */
+  #mirrorSelection(id) {
+    const before = this.#selectedKey;
+    this.#selectedKey = sectionKeyOf(id);
+    if (before === null && this.#selectedKey === null) return;
+    this.#paintSelection();
+  }
+
+  /** Marks the selected section's card (by the section list rendered last). */
+  #paintSelection() {
+    const key = this.#selectedKey;
+    this.#container.querySelectorAll('.wall-section').forEach((el, idx) => {
+      const section = this.#renderedSections[idx];
+      const on = !!section && isSectionKey(section, key);
+      el.classList.toggle('is-selected', on);
+      if (on) el.setAttribute('aria-current', 'true');
+      else el.removeAttribute('aria-current');
+    });
+  }
+
+  /**
+   * The section menu's "Change settings" (2026-10-31): expands the section's card (the other cards keep their state),
+   * scrolls it into view, focuses its first field (the name input) and flashes it once.
+   * Side effects: the card's classes; scroll position; focus.
+   * @param {*} sectionId  compared strictly with the ids of the list rendered last
+   * @returns {boolean} whether the card exists
+   */
+  revealSection(sectionId) {
+    const idx = this.#renderedSections.findIndex((s) => s.id === sectionId);
+    const card = idx < 0 ? null : this.#container.querySelectorAll('.wall-section')[idx];
+    if (!card) return false;
+    card.classList.remove('collapsed');
+    card.scrollIntoView({ block: 'nearest' });
+    const field = card.querySelector('.section-content input, .section-content select, .section-content button');
+    if (field) field.focus({ preventScroll: true });
+    card.classList.remove('is-flashing');
+    void card.offsetWidth;   // restart the flash animation when it is still running
+    card.classList.add('is-flashing');
+    card.addEventListener('animationend', () => card.classList.remove('is-flashing'), { once: true });
+    return true;
+  }
 
   /**
    * UV_TRANSFORM_CHANGED mirror (04 UV-14): the matching card's .section-uv-summary (by the section's index in the
@@ -264,6 +319,8 @@ export class SectionListPanel {
 
       this.#bindCard(sectionEl, section, index);
     });
+    // 2026-10-31: the new cards keep the selected section's mark (a deleted section's card is gone; its deselect follows)
+    if (this.#selectedKey !== null) this.#paintSelection();
   }
 
   /**

@@ -6,6 +6,10 @@
  * 03 T5 (docs/improvements/03-pivot.md 5.4; 07 C33): the path-B hook set of the Selectable typedef (shared with spec 02),
  * the required `kind` (inferred only for the three legacy ids), the pickAt rule (pickPriority counts only against wall,
  * i.e. section, hits; otherwise the nearest hit wins, the legacy rule) and the `modes` of SELECTION_CHANGED.
+ * 2026-10-31 (the owner's request; spec 02's PickProvider without its multi-selection): registerProvider (the wall
+ * sections, app/SectionSelection), find() through the providers, the click pick hitAt() (ViewportInput, on a release
+ * within the click threshold), prune() after rebuilds, and a press that misses keeps a selected section (only a click,
+ * Escape or the context menu deselects it, so an orbit drag never does).
  * Legacy source: index.html@cd3fd3f 1360 (selectedObject), 3139-3153 (selectObject, deselectObject),
  * 3427-3474 (handleViewportClick).
  * Layer: interaction (may import vendor/three, core, legacy, interaction, and render/ResourceTracker only).
@@ -56,6 +60,15 @@ const LEGACY_KINDS = Object.freeze({ camera: 'camera', person: 'prop', car: 'pro
 const GIZMO_MODES = Object.freeze(['translate', 'rotate']);
 
 /**
+ * @typedef {object} PickProvider   a source of Selectables that are not registered one by one (2026-10-31: the wall
+ *  sections, app/SectionSelection; spec 02's PickProvider without multi-selection)
+ * @property {() => boolean} isPickable
+ * @property {() => import('three').Object3D[]} pickMeshes   raycast by the click pick (hitAt) only, never by pickAt
+ * @property {(hit: object) => string|null} resolveHit       the selection id under a raw intersection (null: click-through)
+ * @property {(id: string) => Selectable|null} find          the Selectable of an id it owns (declares its kind), else null
+ */
+
+/**
  * The Selectable registry and the current selection. Owns the legacy global `selectedObject` (selectedId, the id
  * of a registered Selectable). select() / deselect() attach and detach the TransformGizmo and emit
  * SELECTION_CHANGED, which ViewportToolbar mirrors.
@@ -80,6 +93,10 @@ export class SelectionManager {
   #selectedId = null;
   /** @type {Selectable|null} */
   #selected = null;
+  /** @type {PickProvider[]} 2026-10-31: registration order */
+  #providers = [];
+  /** @type {WeakSet<Selectable>} the Selectables the providers made (kindOf reads their declared kind) */
+  #provided = new WeakSet();
 
   /**
    * Stores the collaborators.
@@ -151,12 +168,23 @@ export class SelectionManager {
   }
 
   /**
+   * Registers a pick provider (2026-10-31), after every Selectable registration: find() asks the providers after the
+   * registered Selectables, and the click pick (hitAt) raycasts their meshes.
+   * Side effects: none besides the registration.
+   * @param {PickProvider} provider
+   */
+  registerProvider(provider) {
+    this.#providers.push(provider);
+  }
+
+  /**
    * Side effects: none.
    * @param {Selectable|null} selectable
-   * @returns {string|null} its kind (declared, or inferred for a legacy id), null when it is not registered
+   * @returns {string|null} its kind (declared, or inferred for a legacy id; the declared kind of a provider's
+   *   Selectable), null when it is neither registered nor made by a provider
    */
   kindOf(selectable) {
-    return this.#kinds.get(selectable) ?? null;
+    return this.#kinds.get(selectable) ?? (selectable && this.#provided.has(selectable) ? selectable.kind ?? null : null);
   }
 
   /** Side effects: none. @returns {string|null} legacy selectedObject: 'camera' | 'person' | 'car' | null */
@@ -181,10 +209,20 @@ export class SelectionManager {
   /**
    * Side effects: none.
    * @param {string} id
-   * @returns {Selectable|null} the registered Selectable with that id, or null
+   * @returns {Selectable|null} the registered Selectable with that id, else the first provider's Selectable for it
+   *   (2026-10-31), or null
    */
   find(id) {
-    return this.#selectables.find((s) => s.id === id) ?? null;
+    const registered = this.#selectables.find((s) => s.id === id);
+    if (registered) return registered;
+    for (const p of this.#providers) {
+      const s = p.find(id);
+      if (s) {
+        this.#provided.add(s);
+        return s;
+      }
+    }
+    return null;
   }
 
   /**
@@ -225,45 +263,101 @@ export class SelectionManager {
    * 03 5.4: the hit is chosen by #choose (pickPriority only against wall hits); without wall hits, which is every hit list
    * before spec 02 makes sections pickable, it is the nearest hit, the legacy rule bit for bit.
    * Ports: index.html@cd3fd3f lines 3427-3474.
+   * 2026-10-31: returns whether a registered target was hit (ViewportInput then leaves the press to it, never to the
+   * click pick), and a miss keeps a selected section (kind 'section'): a press is not a click.
    * Side effects: tags pick meshes with userData.selectType; may select() or deselect().
    * @param {MouseEvent} event
+   * @returns {boolean} a pick mesh was hit
    */
   pickAt(event) {
     // LEGACY(B-M14): picking runs on mousedown (not on click), so every miss, including the start of an
     // orbit drag or a right click, deselects; a hit on the already selected object does nothing.
-    if (this.#interaction.isDraggingGizmo || this.#interaction.pilotMode) return;
-    if (!this.#gizmo.mode) return;
+    if (this.#interaction.isDraggingGizmo || this.#interaction.pilotMode) return false;
+    if (!this.#gizmo.mode) return false;
 
     const raycaster = this.#pointerRay.fromEvent(event);
     const intersects = raycaster.intersectObjects(this.#collectPickMeshes(), false);
 
     if (intersects.length > 0) {
-      const selectType = this.#choose(intersects).object.userData.selectType;
+      const entries = intersects.map((hit) => ({ hit, sel: this.find(hit.object.userData.selectType) }));
+      const selectType = this.#choose(entries).hit.object.userData.selectType;
       if (selectType && selectType !== this.#selectedId) {
         this.select(selectType);
       }
-    } else {
-      this.deselect();
+      return true;
     }
+    if (this.kindOf(this.#selected) !== 'section') this.deselect();
+    return false;
+  }
+
+  /**
+   * The click pick (2026-10-31; ViewportInput calls it for a press and release within the click threshold): the
+   * registered targets' pick meshes and every pickable provider's meshes (the wall sections, in every mesh mode) are
+   * raycast together and the hit is chosen by #choose, so a camera body, prop or pivot in front of a section, and the
+   * pivot (pickPriority) behind one, keep the click. A provider hit that resolves to no id is clicked through.
+   * Side effects: tags the registered pick meshes with userData.selectType (as pickAt); selects nothing.
+   * @param {MouseEvent} event
+   * @returns {{id: string, kind: string|null}|null} the chosen hit's selection id and kind; null for empty space, in pilot
+   *   mode and during a gizmo drag
+   */
+  hitAt(event) {
+    if (this.#interaction.isDraggingGizmo || this.#interaction.pilotMode) return null;
+    const meshes = this.#collectPickMeshes();
+    /** @type {Map<object, PickProvider>} */
+    const providerOf = new Map();
+    for (const p of this.#providers) {
+      if (!p.isPickable()) continue;
+      for (const m of p.pickMeshes()) {
+        if (providerOf.has(m)) continue;
+        providerOf.set(m, p);
+        meshes.push(m);
+      }
+    }
+    if (meshes.length === 0) return null;
+    const hits = this.#pointerRay.fromEvent(event).intersectObjects(meshes, false);
+    const entries = [];
+    for (const hit of hits) {
+      const p = providerOf.get(hit.object);
+      const id = p ? p.resolveHit(hit) : hit.object.userData.selectType;
+      if (id === null || id === undefined) continue;
+      entries.push({ hit, id, sel: this.find(id) });
+    }
+    if (entries.length === 0) return null;
+    const chosen = this.#choose(entries);
+    return { id: chosen.id, kind: this.kindOf(chosen.sel) };
+  }
+
+  /**
+   * Re-resolves a section selection after the wall changed (2026-10-31; app/SectionSelection calls it after rebuilds and
+   * renames): a section that no longer exists is deselected; one whose label changed (a rename) is selected again, so the
+   * badge shows the new name. Any other selection is left alone (legacy targets always exist).
+   * Side effects: maybe deselect() or select(the same id).
+   */
+  prune() {
+    const selected = this.#selected;
+    if (this.kindOf(selected) !== 'section') return;
+    const now = this.find(this.#selectedId);
+    if (!now) this.deselect();
+    else if (now.label !== selected.label) this.select(this.#selectedId);
   }
 
   /**
    * The pick rule of 03 5.4: when the nearest hit is not a wall (section) hit, it wins (camera, prop, pivot, projector:
    * the legacy nearest-first rule). When it is a wall hit, the hit with the highest positive pickPriority behind it wins
    * (strictly higher, so the nearer of equal priorities), and the wall hit itself when there is none.
-   * @param {{object: import('three').Object3D}[]} hits  raycaster order, nearest first (not empty)
-   * @returns {{object: import('three').Object3D}} the chosen hit
+   * @template {{sel: Selectable|null}} E
+   * @param {E[]} entries  one per hit, raycaster order (nearest first, not empty), each with the hit's Selectable
+   * @returns {E} the chosen entry
    */
-  #choose(hits) {
-    const owner = (h) => this.find(h.object.userData.selectType);
-    const kindOf = (h) => this.kindOf(owner(h));
-    const prio = (h) => owner(h)?.pickPriority ?? 0;
-    const first = hits[0];
+  #choose(entries) {
+    const kindOf = (e) => this.kindOf(e.sel);
+    const prio = (e) => e.sel?.pickPriority ?? 0;
+    const first = entries[0];
     if (kindOf(first) !== 'section') return first;
     let best = null;
-    for (const h of hits) {
-      if (kindOf(h) === 'section' || prio(h) <= 0) continue;
-      if (!best || prio(h) > prio(best)) best = h;
+    for (const e of entries) {
+      if (kindOf(e) === 'section' || prio(e) <= 0) continue;
+      if (!best || prio(e) > prio(best)) best = e;
     }
     return best ?? first;
   }

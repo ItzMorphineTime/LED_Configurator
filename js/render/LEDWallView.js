@@ -99,6 +99,25 @@ function markUvRange(attribute, offset, count) {
 }
 
 /**
+ * The section under a raycast hit on a wall mesh, in all three mesh modes (2026-10-31; cheaper than resolveHit: no
+ * barycentric work): combined, the section range of the hit face (sectionRangeForFace over the mesh's sectionRanges,
+ * which follow the geometry groups); section and panel, the mesh tag.
+ * Side effects: none.
+ * @param {{object: object, faceIndex?: number}|null} hit
+ * @returns {{sectionId: *, sectionIndex: number}|null}  null for anything that is not tagged 'led-wall' and for a
+ *   combined hit without a face in any range
+ */
+export function sectionOfWallHit(hit) {
+  const tag = hit?.object?.userData;
+  if (!tag || tag.kind !== 'led-wall') return null;
+  if (tag.mode === 'combined') {
+    const r = Number.isInteger(hit.faceIndex) ? sectionRangeForFace(tag.sectionRanges ?? [], hit.faceIndex) : null;
+    return r ? { sectionId: r.sectionId, sectionIndex: r.sectionIndex } : null;
+  }
+  return { sectionId: tag.sectionId, sectionIndex: tag.sectionIndex };
+}
+
+/**
  * @typedef {object} SectionNode
  * @property {*} sectionId
  * @property {number} sectionIndex
@@ -571,6 +590,17 @@ export class LEDWallView {
       mesh.localToWorld(v);
       return { x: v.x, y: v.y, z: v.z };
     });
+  }
+
+  /**
+   * The section under a raycast hit on a wall mesh (the click pick of the section selection, 2026-10-31): see
+   * sectionOfWallHit. Hits from behind count (the LED faces are DoubleSide).
+   * Side effects: none.
+   * @param {{object: object, faceIndex?: number}|null} hit
+   * @returns {{sectionId: *, sectionIndex: number}|null}
+   */
+  sectionOfHit(hit) {
+    return sectionOfWallHit(hit);
   }
 
   /**

@@ -36,6 +36,7 @@ import { PreviewPass } from '../render/PreviewPass.js';
 import { PersonPropView, CarPropView } from '../render/PropViews.js';
 import { PivotMarkerView } from '../render/PivotMarkerView.js';
 import { UvHighlightView } from '../render/UvHighlightView.js';
+import { SectionHighlightView } from '../render/SectionHighlightView.js';
 import { DebugMaterials } from '../render/DebugMaterials.js';
 import { NormalsDebugView } from '../render/NormalsDebugView.js';
 import { InteractionState, KeyboardState, PointerRay } from '../interaction/InputState.js';
@@ -58,6 +59,7 @@ import { DebugViewController } from './DebugViewController.js';
 import { UvViewModel } from './UvViewModel.js';
 import { UvController } from './UvController.js';
 import { UvFallbackHistory } from './UvFallbackHistory.js';
+import { SectionSelection } from './SectionSelection.js';
 import { runFontGate } from './fontGate.js';
 import { byId, createDialogs } from '../ui/dom.js';
 import { HeaderStats } from '../ui/HeaderStats.js';
@@ -73,6 +75,7 @@ import { DebugViewControls } from '../ui/DebugViewControls.js';
 import { UVViewer } from '../ui/UVViewer.js';
 import { bindCollapsibles } from '../ui/Collapsible.js';
 import { SidebarToggle } from '../ui/SidebarToggle.js';
+import { SectionContextMenu } from '../ui/SectionContextMenu.js';
 
 /**
  * The application: wires the modules together and runs the legacy bootstrap.
@@ -181,6 +184,9 @@ export class App {
     const pivotMarker = new PivotMarkerView({ sceneManager, bus, display, theme });
     // 04 UV-15 (5.6): the hovered panel's outline on the wall (subscribes UV_HOVER_CHANGED; allocated on the first hover).
     const uvHighlight = new UvHighlightView({ sceneManager, bus, theme });
+    // 2026-10-31: the selected wall section's tint and outline (subscribes SELECTION_CHANGED and WALL_REBUILT before the
+    // bootstrap rebuild; allocated on the first section selection).
+    const sectionHighlight = new SectionHighlightView({ sceneManager, bus, theme });
     // Subscribed before the bootstrap rebuild, so the first WALL_STATS_CHANGED reaches the header.
     const headerStats = new HeaderStats({ doc, bus });
     const orbit = new OrbitController({ sceneManager, keyboard, interaction, frameBounds });
@@ -230,7 +236,14 @@ export class App {
     // handlesDoubleClick; its U command reaches the UV controller lazily (04 3.6 path B).
     const viewportInput = new ViewportInput({
       doc, win, sceneManager, interaction, gizmo, selection, pilot, onPivotShortcut: () => pivotController.toggleSelect(),
-      commands: { toggleUvViewer: () => uvController.toggleViewer() },
+      commands: {
+        toggleUvViewer: () => uvController.toggleViewer(),
+        // 2026-10-31: a right click on a wall section (already selected by the router) opens the section menu there
+        openSectionMenu: ({ id, clientX, clientY }) => {
+          const s = selection.find(id);
+          if (s) sectionMenu.open({ sectionId: s.sectionId, label: s.label, clientX, clientY });
+        },
+      },
     });
     // 04 UV-15 (5.3): the wall hover probe in its own-raycast mode (spec 02's shared hover raycast does not exist):
     // the front LED meshes only, at most one raycast per frame while the viewer is open; a double-click on the wall
@@ -252,6 +265,11 @@ export class App {
     });
     selection.addObserver(uvController);
     wallController.addRebuildObserver(uvController);
+    // 2026-10-31: wall sections are selectable by a click in the viewport (the provider SelectionManager raycasts on a
+    // click, in every mesh mode) and stay valid across rebuilds (a deleted section is deselected, a rename re-announced).
+    const sectionSelection = new SectionSelection({ project, view: wallView, selection });
+    selection.registerProvider(sectionSelection);
+    wallController.addRebuildObserver(sectionSelection);
     // Panels: WALL_SECTIONS_CHANGED runs SectionListPanel then SectionLogosPanel, and DISPLAY_CONTENT_CHANGED runs
     // WallDisplayPanel then SectionLogosPanel (construction order = subscription order, ARCHITECTURE.md 5.2).
     const sectionList = new SectionListPanel({ doc, project, wallController, bus, palette: theme.palette, uvController });
@@ -273,6 +291,18 @@ export class App {
     });
     // The collapsible side panel (#sidebar-toggle, #control-panel): every toggle fits the renderer to the new viewport.
     const sidebar = new SidebarToggle({ doc, onLayoutChange: () => sceneManager.fitContainer() });
+    // 2026-10-31: the section context menu (created in the viewport on its first open).
+    const sectionMenu = new SectionContextMenu({
+      doc, win, host: canvasEl.parentElement,
+      commands: {
+        changeSettings: (sectionId) => {
+          sidebar.expand();
+          sectionList.revealSection(sectionId);
+        },
+        editUvs: (sectionId) => uvController.openViewer(sectionId),
+        deselect: () => selection.deselect(),
+      },
+    });
     // Legacy animate body (3886-3889). 07 R2: one frame of the main renderer, its main pass then the preview pass.
     const tick = () => {
       orbit.tickKeyboard();

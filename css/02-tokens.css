@@ -90,6 +90,7 @@
     --scene-pivot: var(--morph-neutral-50);         /* 03 T1: the pivot marker's two-tone cores (06 5.12) */
     --scene-pivot-selected: var(--morph-red-600);
     --scene-pivot-anchor: var(--ui-grey-400);
+    --scene-selection: var(--morph-neutral-50);     /* 2026-10-31: the selected wall section's outline and tint */
     --canvas-background: var(--morph-black-950);
     --status-within: var(--color-success);       /* also used by .status-ok */
     --status-off-center: var(--color-warning);   /* also used by .status-pending */
