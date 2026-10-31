@@ -13,6 +13,7 @@
 import { Events } from '../core/EventBus.js';
 import { sectionKeyOf } from '../core/sectionIds.js';
 import { MAX_IMPORT_BYTES } from '../domain/rules.js';
+import { ProjectMeta } from '../domain/Project.js';
 
 /** The largest ZIP an import reads (07 4.7 too-large: 2 GiB, the practical ArrayBuffer limit). */
 export const MAX_ZIP_BYTES = 2 * 1024 * 1024 * 1024;
@@ -58,6 +59,27 @@ export const ImportAlerts = Object.freeze({
     return parts.length ? parts.join('\n\n') : null;
   },
 });
+
+/** Device names Windows reserves for any extension (a download named `con.json` cannot be written there). */
+const RESERVED_FILE_NAME = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/;
+
+/**
+ * The download name of the Project section's Save (07 D8, the owner's rule): the project name as a safe slug (NFKD with
+ * the combining marks dropped, so "Bühne" gives "buhne"; lower case; every run of characters other than a-z and 0-9
+ * becomes one '-', none at either end; at most 64 characters) plus '.json'. The default name ("Untitled stage"), a name
+ * without a letter or digit of a-z / 0-9 and a name Windows reserves give the brand's file name (Brand.files.json,
+ * `morph-led-wall.json`).
+ * Side effects: none.
+ * @param {string} name  project.meta.name
+ * @param {{files: {json: string}}} brand
+ * @returns {string}
+ */
+export function projectFileName(name, brand) {
+  if (typeof name !== 'string' || name === ProjectMeta.DEFAULT_NAME) return brand.files.json;
+  const slug = name.normalize('NFKD').replace(/\p{M}+/gu, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+/, '').slice(0, 64).replace(/-+$/, '');
+  return slug === '' || RESERVED_FILE_NAME.test(slug) ? brand.files.json : `${slug}.json`;
+}
 
 /**
  * A feature's restore step (07 C41, 4.4 rule 7): `hydrate(v2, ctx)` writes the feature's live state from the validated
@@ -473,20 +495,39 @@ export class ProjectSession {
   }
 
   /**
-   * Export JSON / Save (07 5.5.2 saveFile): the 'file' document pretty-printed with 2 spaces as brand.files.json, then
-   * the clean snapshot.
+   * Export JSON / Save (07 5.5.2 saveFile): the 'file' document pretty-printed with 2 spaces as `fileName` (Export JSON:
+   * brand.files.json; the Project section's Save names it after the project, projectFileName, 07 D8), then the clean
+   * snapshot.
    * Ports: index.html@cd3fd3f lines 4942-4965.
    * Side effects: one download; writes the clean snapshot. A throw propagates (ProjectIO.#runExport reports it).
+   * @param {{fileName?: string}} [options]
    */
-  saveFile() {
+  saveFile({ fileName = this.#brand.files.json } = {}) {
     const doc = this.#serializer.write(this.#project, { variant: 'file' });
-    this.#downloader.saveText(JSON.stringify(doc, null, 2), this.#brand.files.json, 'application/json');
+    this.#downloader.saveText(JSON.stringify(doc, null, 2), fileName, 'application/json');
     this.markClean();
   }
 
+  /** Side effects: none. @returns {string} the project's name (project.meta.name; 07 D8's #project-name) */
+  get name() {
+    return this.#project.meta.name;
+  }
+
   /**
-   * A new project (07 5.5.2 newProject; no UI until 07 D8): the 'file' document of createProject(), read back through the
-   * serializer (valid by construction) and applied whole (reason 'new'); then the clean and new-project snapshots.
+   * Renames the project (07 3.3, D8): ProjectMeta.setName (the validator's text rule: sanitizeText to 64 units, trimmed,
+   * empty gives the default). A rename is an edit: the project is dirty until it is saved. (No history entry until 07 H1.)
+   * Side effects: writes project.meta.name.
+   * @param {*} raw  the typed value
+   * @returns {string} the stored name
+   */
+  setName(raw) {
+    return this.#project.meta.setName(raw);
+  }
+
+  /**
+   * A new project (07 5.5.2 newProject; the Project section's New, 07 D8): the 'file' document of createProject(), read
+   * back through the serializer (valid by construction) and applied whole (reason 'new'); then the clean and new-project
+   * snapshots.
    * Side effects: see apply.
    */
   newProject() {

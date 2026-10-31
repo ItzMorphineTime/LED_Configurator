@@ -22,6 +22,7 @@
 import { computeAtlas, canvasFits, CANVAS_HARD_LIMITS } from '../geometry/TextureAtlas.js';
 import { textureFileNames, atlasTexturePath } from '../geometry/PanelNaming.js';
 import { turnXZ, yawTrig } from '../geometry/WallOrientation.js';
+import { projectFileName } from './ProjectSession.js';
 
 /**
  * The dialogs facade (ui/dom.js createDialogs).
@@ -170,6 +171,15 @@ export class ProjectIO {
    */
   exportJSON() {
     this.#runExport('Export JSON', () => this.#session.saveFile());
+  }
+
+  /**
+   * The Project section's Save (07 D8): the same 'file' document as Export JSON, named after the project
+   * (projectFileName: a safe slug of the name, else brand.files.json), then the session's clean snapshot.
+   * Side effects: one download, or the M-EXP-1 alert with the label 'Save Project' (#runExport).
+   */
+  saveProject() {
+    this.#runExport('Save Project', () => this.#session.saveFile({ fileName: projectFileName(this.#session.name, this.#brand) }));
   }
 
   /**
@@ -525,7 +535,7 @@ export class ProjectIO {
    * Side effects: those of fn; on failure one alert and one console warning.
    * @template T
    * @param {string} label  the export's button label: 'Export JSON' | 'Export OBJ (ZIP)' | 'Export glTF' |
-   *   'Export Panel IDs' | 'Export All (ZIP)' | 'Export Safe Distance OBJ'
+   *   'Export Panel IDs' | 'Export All (ZIP)' | 'Export Safe Distance OBJ' | 'Save Project' (07 D8)
    * @param {() => T} fn
    * @returns {T|Promise<*>|undefined} fn's value (a returned promise is chained so that it never rejects), or
    *   undefined after a synchronous failure
@@ -561,12 +571,14 @@ export class ProjectIO {
    * so the same file can be chosen again (V-7). Without a file, nothing.
    * Ports: index.html@cd3fd3f lines 4967-5010.
    * Side effects: session.openFile(file) (asynchronous; never rejects); resets the input's value.
-   * @param {Event} e  the #import-input change event
+   * @param {Event} e  the #import-input (or 07 D8's #project-open-input) change event
+   * @returns {Promise<boolean>|undefined} openFile's promise (whether the file was applied), or undefined without a file
    */
   importFromInputEvent(e) {
     const file = e.target.files[0];
-    if (!file) return;
-    this.#session.openFile(file);
+    if (!file) return undefined;
+    const opened = this.#session.openFile(file);
     e.target.value = ''; // Reset input
+    return opened;
   }
 }

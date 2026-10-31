@@ -1,0 +1,50 @@
+/* css/features/project.css: the Project section (ui/ProjectPanel; spec 07 3.3, D8): the first card of the side panel,
+   open at start (the .collapsible card of 06-controls.css). The name field is an .input-field whose label row also holds
+   the unsaved-changes indicator (#project-dirty: a dot and "Unsaved changes" in the warning role colour; the hidden
+   attribute removes it while the project is saved); New, Open… and Save are .export-btn.secondary buttons in one row,
+   a little tighter than the Export section's.
+   Colours only through the role tokens of 02-tokens.css (06 R-B1). */
+
+.project-name-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.input-field .project-name-head label {
+    margin-bottom: 0;
+}
+
+.project-dirty {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-warning);
+    white-space: nowrap;
+}
+
+.project-dirty::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.project-dirty[hidden] {
+    display: none;
+}
+
+.project-actions {
+    margin-top: 12px;
+}
+
+.project-actions .export-btn {
+    padding: 10px 8px;
+}

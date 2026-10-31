@@ -500,12 +500,13 @@ pixels may differ by more than 8 levels, the pair-diff thresholds of 04 8.2), so
 needed. Without spec 02 there is no `uv_select`; without project file v2 (04 UV-5c) `uv_transforms` sets its transforms
 through the viewer instead of importing them.
 
-[`scenarios-project.mjs`](scenarios-project.mjs) adds the project-file scenarios of spec 07 8.3 (task D2), kept small:
+[`scenarios-project.mjs`](scenarios-project.mjs) adds the project-file scenarios of spec 07 8.3 (tasks D2 and D8), kept small:
 
 | Scenario | Steps | Records |
 |---|---|---|
 | `import_v1_matrix` | the six `CONFIGS` imported in turn into one page (wall scope) | per config the import result, `<key>_state` (stats, mesh-mode radios, cards), the glTF in the mode the file set and the re-centred view |
 | `import_hostile` | one newer-revision (2.7) v2 file with a markup name, a quoted name, `__proto__` / `constructor` keys, `"columns": "10"`, 100000 columns, `"x": "1e400"`, duplicate, `"NaN"` and 2^31 - 1 ids; then six refused files (3.0, another format, invalid JSON, no `sections` key, an empty list, 201 sections) | `dialogs` (the correction and refusal texts), `01_hostile` / `02_after_refusals` (card titles as text, image count, no injected element, no prototype pollution), `01_hostile_cards` |
+| `project_v2_roundtrip` | 07 D8, the Project section: the name "Roundtrip Stage"; the preview on, then focal 50 and X 1.5; person on at X 1; car on; LED sim with `rgb-stripe`; panel-ID font size 40; Ctrl+S (`KEYS.s`); a fresh page; the saved file through `#project-open-input`; `#project-save`; then New on the clean project and New after an edit (person X 2) | `00_fresh` … `07_new_after_edit` (name field, `#project-dirty` shown, `document.title`, card open; the new dialogs of each New), `01_edited_camera` / `01_edited_ui` and `04_opened_camera` / `04_opened_ui`, `open_result`, both saves (`save_1__roundtrip-stage.json`, `save_2__…`), `postcheck` (the file names, `identical` bytes, the name in the file, the camera and display/prop states after Open equal to those before Save, compared numerically); `dialogs.json` holds the one "Discard unsaved changes?" |
 
 ## Output layout
 

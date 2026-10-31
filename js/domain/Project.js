@@ -8,7 +8,7 @@
  * Layer: domain (may import legacy; THREE-free and DOM-free).
  */
 
-import { deepFreeze, finiteOr } from './rules.js';
+import { deepFreeze, finiteOr, sanitizeText } from './rules.js';
 import { Wall, WallPivot, alignNormalAzimuthDeg } from './Wall.js';
 import { WallSection } from './WallSection.js';
 import { LogoLibrary } from './LogoLibrary.js';
@@ -164,10 +164,13 @@ export class PanelIdStyle {
   }
 }
 
-/** The project's name and notes (07 4.1, 4.3, D1): the `project` key of the file; no UI writes them yet (07 D8). */
+/** The project's name and notes (07 4.1, 4.3, D1): the `project` key of the file. The Project section's name field
+ *  writes the name through setName (07 D8); no UI writes the notes yet. */
 export class ProjectMeta {
   /** The name of a project that has none (07 4.3). */
   static DEFAULT_NAME = 'Untitled stage';
+  /** The longest name in UTF-16 code units (07 4.3; the `maxlength` of #project-name). */
+  static NAME_MAX_LENGTH = 64;
 
   /** @type {string} at most 64 UTF-16 code units, trimmed, never empty */
   name = ProjectMeta.DEFAULT_NAME;
@@ -182,6 +185,19 @@ export class ProjectMeta {
   assign(fields) {
     this.name = typeof fields?.name === 'string' && fields.name !== '' ? fields.name : ProjectMeta.DEFAULT_NAME;
     this.notes = typeof fields?.notes === 'string' ? fields.notes : '';
+  }
+
+  /**
+   * Stores a typed name through the validator's text rule (07 C28, 4.3): sanitizeText(String(raw), 64), then trimmed;
+   * an empty result restores the default. So Save then Open never changes a name.
+   * Side effects: writes name.
+   * @param {*} raw  the field's value
+   * @returns {string} the stored name
+   */
+  setName(raw) {
+    const name = sanitizeText(String(raw ?? ''), ProjectMeta.NAME_MAX_LENGTH).trim();
+    this.name = name === '' ? ProjectMeta.DEFAULT_NAME : name;
+    return this.name;
   }
 
   /**

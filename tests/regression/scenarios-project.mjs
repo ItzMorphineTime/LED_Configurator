@@ -4,6 +4,7 @@
 //
 // Exported as PROJECT_SCENARIOS ({ name: { description, run } }) and spread into SCENARIOS after the UV scenarios.
 import { CONFIGS } from './configs.mjs';
+import { MODIFIERS } from './lib/app.mjs';
 
 /** Run one step; a harness-level failure is recorded as an error (and fails comparison) instead of aborting. */
 async function step(ctx, name, fn) {
@@ -143,6 +144,112 @@ async function importHostileScenario(ctx) {
     await record(ctx, 'dialogs', () => app.dialogs());
 }
 
+// ---- project_v2_roundtrip (07 8.3, D8) --------------------------------------------------------------------------
+
+/** The Project section as the user sees it: the name field, the unsaved-changes indicator, the title, the card state. */
+function pageProjectState() {
+    const dirty = document.getElementById('project-dirty');
+    const card = document.getElementById('project-section');
+    const name = document.getElementById('project-name');
+    return {
+        name: name ? name.value : null,
+        unsavedShown: dirty ? !dirty.hidden : null,
+        title: document.title,
+        cardOpen: card ? !card.classList.contains('collapsed') : null,
+    };
+}
+
+/** Open a project through the Project section's picker (#project-open-input) with raw file text; resolve when the name field shows `expectName`, or after 10 s. */
+function pageOpenProject(text, filename, expectName) {
+    return (async () => {
+        const input = document.getElementById('project-open-input');
+        if (!input) return { ok: false, reason: 'no #project-open-input' };
+        const before = window.__dialogs.length;
+        const dt = new DataTransfer();
+        dt.items.add(new File([text], filename, { type: 'application/json' }));
+        input.files = dt.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        const name = () => document.getElementById('project-name').value;
+        const t0 = performance.now();
+        while (performance.now() - t0 < 10000 && name() !== expectName) await new Promise((r) => setTimeout(r, 25));
+        return { ok: name() === expectName, name: name(), newDialogs: window.__dialogs.slice(before), inputReset: input.value === '' };
+    })();
+}
+
+/**
+ * 07 8.3 project_v2_roundtrip, through the Project section: non-default values (the name; the preview on, then a lens and
+ * a pose; both props shown, the person moved; LED simulation with a layout; a panel-ID font size), Ctrl+S, a fresh page,
+ * Open the saved file (#project-open-input), Save (#project-save): the two files are byte-identical and the camera and
+ * display/prop DOM states after Open equal those before Save. Then New on a clean project (no question) and New after an
+ * edit (one "Discard unsaved changes?"). Logos are p2_project_v2's.
+ */
+async function projectRoundtripScenario(ctx) {
+    const { app, rec } = ctx;
+    const numeric = (state) => JSON.stringify(state, (k, v) => (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : v));
+    const dialogCount = async () => (await app.dialogs()).length;
+    await record(ctx, '00_fresh', () => pageCall(app, pageProjectState));
+    await step(ctx, 'name', () => app.setValue('#project-name', 'Roundtrip Stage'));
+    await step(ctx, 'preview-on', () => app.click('#toggle-camera-preview'));
+    await step(ctx, 'lens', () => app.setValue('#camera-focal-length', '50'));
+    await step(ctx, 'pose', () => app.setValue('#camera-pos-x', '1.5'));
+    await step(ctx, 'person-on', () => app.click('#toggle-person'));
+    await step(ctx, 'person-x', () => app.setValue('#person-pos-x', '1'));
+    await step(ctx, 'car-on', () => app.click('#toggle-car'));
+    await step(ctx, 'led-sim', () => app.click('#toggle-led-sim'));
+    await step(ctx, 'led-layout', () => app.setValue('#led-layout', 'rgb-stripe'));
+    await step(ctx, 'panel-font', () => app.setValue('#panel-font-size', '40'));
+    await app.settle(300);
+    await record(ctx, '01_edited', () => pageCall(app, pageProjectState));
+    const beforeCamera = await app.cameraState();
+    const beforeUi = await app.uiState();
+    rec.state('01_edited_camera', beforeCamera);
+    rec.state('01_edited_ui', beforeUi);
+    let first = null;
+    await step(ctx, 'save-ctrl-s', async () => {
+        first = (await app.captureDownloads(() => app.keyPress('s', { modifiers: MODIFIERS.Ctrl }), { expect: 1 }))[0] ?? null;
+        rec.downloads('save_1', first ? [first] : []);
+    });
+    await app.settle(300);
+    await record(ctx, '02_saved', () => pageCall(app, pageProjectState));
+    await step(ctx, 'reload', () => app.reload());
+    await record(ctx, '03_fresh_page', () => pageCall(app, pageProjectState));
+    await step(ctx, 'open', async () => {
+        const r = await pageCall(app, pageOpenProject, first ? first.data.toString('utf8') : '{}', first ? first.filename : 'none.json', 'Roundtrip Stage');
+        rec.state('open_result', r);
+        if (!r.ok) throw new Error('the saved file did not open: ' + JSON.stringify(r));
+    });
+    await app.settle(300);
+    await record(ctx, '04_opened', () => pageCall(app, pageProjectState));
+    const afterCamera = await app.cameraState();
+    const afterUi = await app.uiState();
+    rec.state('04_opened_camera', afterCamera);
+    rec.state('04_opened_ui', afterUi);
+    let second = null;
+    await step(ctx, 'save-button', async () => {
+        second = (await app.captureDownloads(() => app.click('#project-save'), { expect: 1 }))[0] ?? null;
+        rec.downloads('save_2', second ? [second] : []);
+    });
+    await record(ctx, 'postcheck', async () => ({
+        fileNames: [first && first.filename, second && second.filename],
+        identical: !!first && !!second && first.data.equals(second.data),
+        nameInFile: first ? (JSON.parse(first.data.toString('utf8')).project || {}).name ?? null : null,
+        // numerically: after an open the panels write their fixed decimals ("1.50" for a typed "1.5")
+        cameraAfterOpenEqualsSaved: numeric(afterCamera) === numeric(beforeCamera),
+        uiAfterOpenEqualsSaved: numeric(afterUi) === numeric(beforeUi),
+    }));
+    const n0 = await dialogCount();
+    await step(ctx, 'new-clean', () => app.click('#project-new'));
+    await app.settle(300);
+    await record(ctx, '05_new_clean', async () => ({ ...await pageCall(app, pageProjectState), newDialogs: (await dialogCount()) - n0 }));
+    await step(ctx, 'edit', () => app.setValue('#person-pos-x', '2'));
+    await app.settle(300);
+    await record(ctx, '06_edited', () => pageCall(app, pageProjectState));
+    const n1 = await dialogCount();
+    await step(ctx, 'new-dirty', () => app.click('#project-new'));
+    await app.settle(300);
+    await record(ctx, '07_new_after_edit', async () => ({ ...await pageCall(app, pageProjectState), newDialogs: (await app.dialogs()).slice(n1) }));
+}
+
 export const PROJECT_SCENARIOS = {
     import_v1_matrix: {
         description: '07 D2: the six v1 configs imported in turn (wall scope): stats, cards, glTF in the file\'s mesh mode and the re-centred view after each.',
@@ -151,5 +258,9 @@ export const PROJECT_SCENARIOS = {
     import_hostile: {
         description: '07 D2: a newer-revision v2 file with markup and quote names, __proto__ keys, numeric strings, huge and 1e400 values, duplicate, NaN and 2^31-1 ids; then six refused files (3.0, other format, invalid JSON, no sections key, empty, 201 sections). Dialogs, card titles, image count.',
         run: importHostileScenario,
+    },
+    project_v2_roundtrip: {
+        description: '07 D8: the Project section: non-default name, camera, props, LED sim and panel-ID style; Ctrl+S; a fresh page; Open the saved file; Save: identical bytes; New when clean (no question) and after an edit (one confirm).',
+        run: projectRoundtripScenario,
     },
 };

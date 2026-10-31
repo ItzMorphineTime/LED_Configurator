@@ -197,6 +197,25 @@ it used to show white LEDs on every section.
 
 ---
 
+## Projects: Save, Open, New
+
+The **Project** card at the top of the side panel (open at start) holds the project's name and three buttons:
+
+| Control | What it does |
+|---------|--------------|
+| Project name | Names the project (up to 64 characters; an empty name goes back to "Untitled stage"). It is saved in the project file and shown in the browser tab's title. |
+| **New** | Starts a new project with the same defaults as a freshly loaded page. |
+| **Open…** (Ctrl+O / ⌘O) | Opens a project file (`.json`) or an Export All archive (`.zip`), exactly as Import JSON does; corrections are reported the same way. |
+| **Save** (Ctrl+S / ⌘S) | Downloads the project file named after the project (`main-stage.json` for "Main Stage"; an untitled project, or a name without any letter or digit a–z / 0–9, saves as `morph-led-wall.json`). It is the same file as Export JSON. |
+
+While the project differs from what was last saved, opened or started, **Unsaved changes** shows next to the name
+and the tab's title ends with "•". With unsaved changes, New and Open ask "Discard unsaved changes?" first (Open asks
+once you have chosen a file); Cancel leaves everything as it was. View settings such as the grid are not changes. The
+two shortcuts also work while you type in a field: what you typed is kept first. Export JSON and Import JSON in the
+Export section work as before.
+
+---
+
 ## 🎮 Controls
 
 ### Viewport Navigation
@@ -225,6 +244,12 @@ it used to show white LEDs on every section.
 | O | Select / deselect the wall pivot (switches the gizmo to Translate) |
 | U | Open / close the UV viewer (see [UVs and the UV editor](#uvs-and-the-uv-editor)) |
 | Escape | Cancel a pivot drag / Exit pilot mode / Deselect object |
+
+### Project Shortcuts
+| Key | Action |
+|-----|--------|
+| Ctrl+S / ⌘S | Save the project file (see [Projects](#projects-save-open-new)); the browser's Save Page dialog does not open |
+| Ctrl+O / ⌘O | Open a project file or an Export All archive; the browser's Open File dialog does not open |
 
 ### Pilot Mode Controls
 | Control | Action |
@@ -316,7 +341,7 @@ happens to reuse an old section id.
 Release note: a project file saved by a newer version of the app opens with a message that names the settings this
 version cannot use (they are left out; data under `extensions` is kept as it is). A wall too large for the browser's
 images, or with more than 20,000 panels, opens with a note that says what will not work. A project's name and notes
-(`project`) are kept when a file has them; this version has no field to edit them yet.
+(`project`) are kept when a file has them; the name is edited in the Project card ([Projects](#projects-save-open-new)).
 
 Release note: project files now save the camera, the props, the display settings, the panel ID styling and the section
 logos (format version 2.0), and since format version 2.1 also the pivot and orientation, the pivot marker switch, the
@@ -679,8 +704,8 @@ The modules use modern JavaScript class syntax (private fields and methods), so 
      the +X axis and the LED face toward −X (Centre on +X)
    - Choose another pivot mode, an offset or a yaw offset if your pipeline needs it
 
-7. **Export your design**:
-   - JSON for configuration backup
+7. **Save and export your design**:
+   - Name the project and click Save in the Project card (Ctrl/⌘+S); Open… brings it back
    - OBJ (one ZIP with `.obj`, `.mtl` and textures) or glTF for 3D software
    - Export All (ZIP) for the complete package
 
@@ -708,6 +733,7 @@ Contributions are welcome! Feel free to:
 ## 📋 Changelog
 
 ### Latest Updates
+- ✅ Project card at the top of the side panel: the project name, Save (Ctrl/⌘+S, named after the project), Open… (Ctrl/⌘+O) and New, an "Unsaved changes" indicator and the name in the tab title; New and Open ask before discarding unsaved changes
 - ✅ Project files (format 2.1) save the pivot and orientation, the pivot marker switch, the UV Mapping options and every section's UV transform and moved UV vertices, and name the app that wrote them; opening a file restores them
 - ✅ Panel IDs and Camera Frustum Preview are collapsible cards too, collapsed at start like Mesh Options and Wall Pivot (click the title, or focus it and press Enter or Space)
 - ✅ glTF second UV channel (`TEXCOORD_1`, on by default): every section on one combined canvas in wall order, pixels square, in every mesh mode (OBJ keeps UV channel 0)

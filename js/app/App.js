@@ -75,6 +75,7 @@ import { PivotPanel } from '../ui/PivotPanel.js';
 import { PropControls } from '../ui/PropsPanel.js';
 import { ViewportToolbar } from '../ui/ViewportToolbar.js';
 import { ExportPanel } from '../ui/ExportPanel.js';
+import { ProjectPanel } from '../ui/ProjectPanel.js';
 import { DebugViewControls } from '../ui/DebugViewControls.js';
 import { UVViewer } from '../ui/UVViewer.js';
 import { bindCollapsibles, revealCollapsible } from '../ui/Collapsible.js';
@@ -308,6 +309,9 @@ export class App {
     const carControls = new PropControls({ doc, prefix: 'car', controller: carController, prop: car, bus });
     const toolbar = new ViewportToolbar({ doc, orbit, sceneManager, gizmo, pilot, bus });
     const exportPanel = new ExportPanel({ doc, projectIO });
+    // 07 D8: the Project section (name, unsaved-changes indicator and title, Save / Open / New, Ctrl/Cmd+S and O); its
+    // bus subscriptions only schedule the dirty re-check and keep the name field on the opened project.
+    const projectPanel = new ProjectPanel({ doc, win, session, projectIO, bus, dialogs, brand });
     // Subscribes DEBUG_VIEW_CHANGED (its only subscriber, 01 F1-2).
     const debugControls = new DebugViewControls({ doc, win, controller: debugController, bus, theme });
     // 04 UV-12 (5.3): the UV viewer panel (#uv-viewer, floating in the viewport, clear of the camera preview window) and
@@ -379,6 +383,9 @@ export class App {
     // follows its container whenever the panel collapses or expands, not only on window resizes.
     sidebar.bind();
     sceneManager.observeResize();
+    // 07 D8: the Project section's listeners (a window capture-phase keydown for the two chords, capture-phase document
+    // edit signals), after every legacy listener.
+    projectPanel.bind();
 
     // ---- legacy setView('reset') (5095) ----
     orbit.setView('reset');
@@ -395,5 +402,7 @@ export class App {
 
     // ---- 07 D5: the bootstrap project is clean and a pristine new project (session.dirty, session.isPristineNew) ----
     session.markClean({ pristineNew: true });
+    // 07 D8: the indicator and the title of the clean bootstrap project ("Morph LED Configurator — Untitled stage")
+    projectPanel.refresh();
   }
 }

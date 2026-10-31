@@ -11,6 +11,7 @@
 /**
  * @typedef {object} Dialogs
  * @property {(msg: string) => void} alert  shows a blocking message (window.alert, looked up at call time)
+ * @property {(msg: string) => boolean} confirm  asks OK / Cancel (window.confirm, looked up at call time); true for OK
  */
 
 /** The five characters escapeHtml replaces (08 6.5). */
@@ -82,9 +83,10 @@ export function setDisplay(el, visible) {
 }
 
 /**
- * The dialogs facade injected into controllers. `alert` looks `win.alert` up at call time (never cached),
- * which is the legacy semantics of calling the global `alert`.
- * Side effects: none at creation; `alert` calls win.alert(msg).
+ * The dialogs facade injected into controllers. `alert` and `confirm` look `win.alert` / `win.confirm` up at call time
+ * (never cached), which is the legacy semantics of calling the global functions (and lets the harness capture them).
+ * `confirm` (07 D8: "Discard unsaved changes?" before Open and New) stands in for 07 E1's Dialog until it lands.
+ * Side effects: none at creation; `alert` calls win.alert(msg), `confirm` win.confirm(msg).
  * @param {Window} win
  * @returns {Dialogs}
  */
@@ -93,5 +95,6 @@ export function createDialogs(win) {
     alert: (msg) => {
       win.alert(msg);
     },
+    confirm: (msg) => win.confirm(msg) === true,
   };
 }

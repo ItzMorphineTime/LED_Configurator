@@ -445,6 +445,10 @@ js/
                                                  wheel / resize close; menuKeyAction, clampMenuPosition
     ViewportToolbar.js                     WP8   View presets, grid button, gizmo buttons, selection badge, pilot banner
     ExportPanel.js                         WP5   Export buttons, #import-json -> #import-input, file input change
+    ProjectPanel.js                        07 D8  The Project section (first sidebar card, open): #project-name, the
+                                                 #project-dirty indicator and the document title, Save / Open… / New
+                                                 (#project-save, #project-open + #project-open-input, #project-new),
+                                                 "Discard unsaved changes?" while dirty, Ctrl/Cmd+S and Ctrl/Cmd+O
     DebugViewControls.js                   01 F1-2  #toggle-normals, #debug-view-btn, the debug popover, #debug-view-legend
                                                  (in #viewport-top-stack), #debug-view-status; N / Shift+N; DEBUG_VIEW_CHANGED mirror
 ```
@@ -3003,6 +3007,9 @@ export class ProjectIO {
   #runExport(label, fn)
   /** 4942-4965: downloader.saveText(JSON.stringify(serializer.write(project, {variant: 'file'}), null, 2), brand.files.json, 'application/json') */
   exportJSON()
+  /** 07 D8, the Project section's Save: #runExport('Save Project', () => session.saveFile({fileName:
+   *  projectFileName(session.name, brand)})): the Export JSON bytes named after the project, then the clean snapshot. */
+  saveProject()
   /** 08 P2-6e (the owner's decision of 2026-10-17; replaces 08 Q7's two downloads, B-L7 fixed): async, one download.
    *  #writeObjZip(): zip = new JSZip(); layout = wallController.layout({frame: 'export'}) (03 T3); plan = meshMode === 'section' ?
    *  #planSectionTextures(sections) : null; atlasPlan = meshMode === 'combined' ? #planAtlas(sections) : null (08 P2-7f);
@@ -3108,7 +3115,8 @@ export function setTitleWithWarning(titleEl, name, warn)
 export function flipToggle(el)
 /** el.style.display = visible ? 'block' : 'none' */
 export function setDisplay(el, visible)
-/** @returns {{alert(msg: string): void}} calling win.alert(msg) at call time */
+/** @returns {{alert(msg: string): void, confirm(msg: string): boolean}} calling win.alert(msg) / win.confirm(msg) at
+ *  call time (confirm since 07 D8) */
 export function createDialogs(win)
 ```
 
@@ -3348,6 +3356,31 @@ export class ExportPanel {
    *  #import-input change -> projectIO.importFromInputEvent(e). Listeners return the promise of async exports (an unhandled
    *  rejection stays unhandled, as legacy). */
   bind()
+}
+```
+
+#### `js/ui/ProjectPanel.js` (07 D8, 07 3.3)
+```js
+export const DISCARD_MESSAGE = 'Discard unsaved changes?';
+export const REFRESH_MS = 150;
+/** 'save' for Ctrl/Cmd+S, 'open' for Ctrl/Cmd+O (no Alt, no Shift; e.key on a Latin layout, else e.code), else null */
+export function projectShortcut(e)
+/** `${product} — ${name}`, plus ' •' while dirty */
+export function projectDocTitle(product, name, dirty)
+export class ProjectPanel {
+  /** Owns #project-name, #project-dirty, #project-new, #project-open, #project-save, #project-open-input. Subscribes the
+   *  edit events (a re-check at most every REFRESH_MS) and PROJECT_REPLACED (the name field shows session.name). */
+  constructor({ doc, win, session, projectIO, bus, dialogs, brand })
+  /** name change -> rename; Escape restores the stored name; Save / Open… / New clicks; picker change -> openChosen;
+   *  win keydown (capture): the two chords, consumed; doc input / change / click / pointerup / keyup (capture): re-check */
+  bind()
+  /** #project-dirty.hidden = !session.dirty; doc.title = projectDocTitle(...); never writes the name field */
+  refresh()
+  rename(raw)          // session.setName, the stored name shown, refresh
+  save()               // commit the focused text field, projectIO.saveProject(), refresh
+  openPicker()         // commit the focused text field, #project-open-input.click()
+  openChosen(e)        // while dirty: confirm first (Cancel resets the picker); projectIO.importFromInputEvent(e), then refresh
+  newProject()         // while dirty: confirm first; session.newProject(); the name field; refresh
 }
 ```
 
@@ -3861,6 +3894,7 @@ toolbar = new ViewportToolbar({ doc, orbit, sceneManager, gizmo, pilot, bus })
 viewportInput = new ViewportInput({ doc, win, sceneManager, interaction, gizmo, selection, pilot,
                                    onPivotShortcut: () => pivotController.toggleSelect() })   // 03 T5: the O key
 exportPanel = new ExportPanel({ doc, projectIO })
+projectPanel = new ProjectPanel({ doc, win, session, projectIO, bus, dialogs, brand })   // 07 D8: re-check and name subscriptions
 debugControls = new DebugViewControls({ doc, win, controller: debugController, bus, theme })   // subscribes DEBUG_VIEW_CHANGED
 tick = () => { orbit.tickKeyboard(); pilot.tickKeyboard(); sceneManager.renderFrame() }   // 07 R2: the main pass, then the preview pass
 
@@ -3884,6 +3918,8 @@ viewportInput.attachShortcuts()           // 4410-4434 (doc keydown, after Keybo
 viewportInput.attachPointer()             // 4437-4479 (canvas listeners after the orbit ones; win mouseup; wheel passive:false)
 exportPanel.bind()                        // 4481-4488
 debugControls.bind(); debugControls.bindShortcuts()   // 01 F1-2: after every legacy listener (N / Shift+N after the shortcuts)
+// ... uvViewer.bind(), sidebar.bind(), sceneManager.observeResize(), then 07 D8: projectPanel.bind() (window capture keydown,
+// document capture edit signals); after session.markClean({pristineNew: true}) at the end: projectPanel.refresh()
 
 // ---- legacy setView('reset') (5095) ----
 orbit.setView('reset')
@@ -4724,3 +4760,10 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - Deviations: a wall-scope (v1) import keeps the session's UV settings (07 4.6 and 04 4.2 reset them; this applies the owner's pivot rule and the wall-only scope); `uv_vertex_edits` is this build's key for the owner's per-vertex edits (no spec row; always written, `[]` for none); the glTF switch is `uv.gltf_canvas_texcoord1` (default `true`, the owner's change of 2026-10-31) instead of 04's `gltf_atlas_texcoord1`; `REVISIONS` names nested keys by path; the generator is written only by a serializer that was given one.
 - 2.3 tests: `project-v2.test.mjs` (the busy project and the 300 fuzzed projects set every new key through the app's own setters: key order, fidelity and idempotence of file, zip and autosave; hostile pivot, uv, transform and vertex-edit values with their messages; export -> open -> export byte-identical through the session with the real `PivotController` and `UvController` hooks, the ZIP and autosave variants included; a 2.0 file and a v1 file keep the session pivot, 2.0 takes the uv and marker defaults, v1 keeps them; undo keeps the marker), `pivot-controller.test.mjs` (`hydrate` over the real `WallController`: one `WALL_PIVOT_CHANGED {import}`, no `translateStage`, no rebuild; the kept pivot; undo, redo and the wall scope keep the marker), `uv-controller.test.mjs` (`hydrate`), `validator.test.mjs` (revision 1 keys read; newer-revision messages name 2.1), `io.test.mjs` (key order, `atlas.texture_file`, the generator, the golden round trips restore the pivot and uv), `tools.test.mjs` and `tests/fixtures/normals-max-wall.json` (regenerated as 2.1).
 - Re-baseline of M7a (one full run, 42 scenarios, no errors; 21 passed, 21 failed, every difference intended): the 37 Export JSON downloads and the JSON entry of the 19 Export All ZIPs (`generator`, `"version": "2.1"`, `pivot` with `resolved_m`, `uv`, `atlas` with its `texture_file` in the ZIP, `display.show_pivot_marker`, each section's `uv_transform`, `uv_vertex_edits` and `pixel_map`; no other ZIP entry changes); `ui_visual` (the UV Mapping block's session-only hint is gone: the text snapshots, the Mesh Options card 30 px shorter, the sidebar screenshots and scroll heights); `pivot_roundtrip` (`jsonHasPivotKey` true); `uv_transforms` (`session_only_json_check`: `hasUvKeys` true, the larger JSON); `import_hostile` (its 2.7 file's `pivot` and `uv_transform` are now read: the fourth card's UV summary "Offset 1.0000, 0.0000", and the newer-revision line names 2.1 and no ignored key); warnings: `uv_viewer`'s three screenshots (the island hint's last sentence is gone) and the known 1-level PNG and 2-pixel screenshot jitter. Every config scenario's `roundtrip` (and box_corner's `zipjson_roundtrip`) equals `final`, `p2_project_v2`'s `v2_second` equals `v2_first`, and the golden unit tests reproduce every 2.1 file byte for byte. A real-browser round trip through the harness library (mesh-center with offset (0.5, 0, 2), Centre on −X with a 15° yaw offset, the marker hidden, the person shown, the atlas layout with the glTF second channel off, Offset U 0.25 and Flip U on the section and two vertices dragged in the viewer -> Export All -> Import that ZIP on a fresh page with the viewer open -> Export All) gave byte-identical ZIP entries (JSON, OBJ, MTL, glTF, both textures), the same pivot panel (mode, offsets, alignment, yaw, both switches, both readouts), UV options, card summary, viewer fields and "2 edited", and the same prop inputs, with no dialog or console error. The camera panel's Y and rotation inputs differed only because the pre-existing 'pivot' pose mirror writes X and Z, not the pan that an orientation edit turns (the model and the file held a -165° pan, which the open shows).
+
+**07 D8, the Project section: Save, Open and New** (the owner's request of 2026-11-01; one commit; re-baselined in one full harness run, below):
+- 2.2, 3.11 `ui/ProjectPanel.js` (new): the first card of `#control-panel` (`#project-section`, a `.collapsible` card open at start, `css/features/project.css`). Owns `#project-name`, `#project-dirty`, `#project-new`, `#project-open`, `#project-save` and `#project-open-input`. The name field's `change` calls `ProjectSession.setName` (Escape restores the stored name); `#project-dirty` ("Unsaved changes") shows while `session.dirty`, and the document title is `<Brand.productName> — <name>`, plus ` •` while dirty. Save is `ProjectIO.saveProject`; Open… clicks `#project-open-input` and hands its `change` to `ProjectIO.importFromInputEvent` (the Import path: `ProjectSession.openFile`, M-IMP-5 as before); New is `ProjectSession.newProject`. Open (once a file is chosen: a picker opened after a blocking confirm can fail the ~5 s user-activation check) and New (before it applies) ask `dialogs.confirm("Discard unsaved changes?")` while dirty; Cancel changes nothing. Dirty stays the session's capture comparison (07 5.5.2; view-only keys such as the grid are not edits): the panel re-reads it at most every 150 ms after a model event (the wall, display, camera, prop, pivot and UV events, `SELECTABLE_MOVED`, `PROJECT_REPLACED`) or a capture-phase `input`, `change`, `click`, `pointerup` or `keyup` on the document, and at once after a rename, Save, Open and New; App calls `refresh()` after the bootstrap's `markClean`. Ctrl/Cmd+S and Ctrl/Cmd+O (no Alt or Shift; `projectShortcut`) are one capture-phase `keydown` on the window: they work in text fields, first commit a focused text field's pending edit (blur, then focus back), then run; the chord is consumed (`preventDefault`: no Save Page or Open File dialog; `stopPropagation`: `KeyboardState` never holds S or O, so the WASD movement cannot start), an auto-repeat runs nothing. No other key changes (G R L P O N Shift+N U W A S D Q E, the arrows and Escape ignore modified chords; the UV viewer's Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y and Ctrl+A are not S or O). App constructs it after `ExportPanel` and binds it after `sidebar.bind()` / `observeResize()`.
+- 3.5 `ProjectMeta.setName(raw)` (the validator's text rule: `sanitizeText(String(raw), 64)`, trimmed, empty gives "Untitled stage"; `ProjectMeta.NAME_MAX_LENGTH`). 3.10 `ProjectSession`: `name`, `setName(raw)` (no history entry until H1), `saveFile({fileName = brand.files.json})`, and the pure `projectFileName(name, brand)`: a safe slug (NFKD without combining marks, lower case, runs of anything but a-z / 0-9 become one `-`, at most 64 characters) plus `.json`; the default name, a name without a-z / 0-9 and a Windows device name give `brand.files.json`. `ProjectIO.saveProject()` runs it inside `#runExport('Save Project', ...)` (M-EXP-1 on failure); `importFromInputEvent` returns `openFile`'s promise. `ui/dom.js` `createDialogs(win)` gains `confirm` (`win.confirm` looked up at call time; the harness records it).
+- Unchanged: `#export-json` and `#import-json` stay in the Export section with their labels and behaviour (no confirm), so every harness id contract holds; no `beforeunload` guard (autosave, H3, comes later).
+- Deviations from 07 3.3 / 3.5 (the owner's request; the missing E1, H1, H3 and I1): the two kept ids do not move and Save is a new `#project-save` named after the project; New and Open confirm while dirty instead of an undoable New with a toast; no import report dialog (M-IMP-5's alert stays); no `#toggle-autosave` or restore banner; the shortcuts are the panel's own listener, not the I1 keymap; the unsaved indicator and the title are additions.
+- 2.3 tests: `tests/unit/project-panel.test.mjs` (the file name slug, `setName` equals the validator's result, a rename's dirty and Save's clean through the real session and `ProjectIO`, Save's M-EXP-1, `dialogs.confirm`, the chord table, the title, and the panel over a fake DOM: R4, the refresh, the rename, New and Open with and without unsaved changes, Save committing a focused field, the chords consumed and run once, a UV viewer field committed before Save, the throttled re-check). Harness: `KEYS.s` (`lib/app.mjs`) and `project_v2_roundtrip` (`scenarios-project.mjs`).

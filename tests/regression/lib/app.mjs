@@ -27,6 +27,7 @@ const KEYS = {
     Enter: { code: 'Enter', vk: 13, text: '\r' },    // 01 T8: activates a focused button (keyboard open, click detail 0)
     ArrowDown: { code: 'ArrowDown', vk: 40 },         // 01 T8: moves the checked radio of a focused radio group
     o: { code: 'KeyO', vk: 79, text: 'o' },          // 03 T8: the pivot selection (O)
+    s: { code: 'KeyS', vk: 83, text: 's' },          // 07 D8: Ctrl+S (the Project section's Save)
     Tab: { code: 'Tab', vk: 9 },                      // 03 T8: keyboard focus order
     u: { code: 'KeyU', vk: 85, text: 'u' },          // 04 UV-16: the UV viewer (U)
     w: { code: 'KeyW', vk: 87, text: 'w' },          // 04 UV-16: a movement key held on the UV canvas

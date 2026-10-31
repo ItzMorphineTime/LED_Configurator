@@ -38,6 +38,7 @@
     <link rel="stylesheet" href="css/features/uv-viewer.css">
     <link rel="stylesheet" href="css/features/sidebar.css">
     <link rel="stylesheet" href="css/features/section-selection.css">
+    <link rel="stylesheet" href="css/features/project.css">
     <link rel="stylesheet" href="css/12-responsive.css">
     <link rel="stylesheet" href="css/99-utilities.css">
 </head>
@@ -71,6 +72,28 @@
         </header>
 
         <aside class="control-panel" id="control-panel">
+            <div class="global-section collapsible" id="project-section">
+                <button type="button" class="global-section-title collapsible-toggle" aria-expanded="true" aria-controls="project-section-body">
+                    <span class="collapsible-title">Project</span>
+                    <svg class="collapsible-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6"/></svg>
+                </button>
+                <div class="collapsible-body" id="project-section-body">
+                    <div class="input-field">
+                        <div class="project-name-head">
+                            <label for="project-name">Project name</label>
+                            <span class="project-dirty" id="project-dirty" hidden>Unsaved changes</span>
+                        </div>
+                        <input type="text" id="project-name" value="Untitled stage" maxlength="64" autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="export-row project-actions">
+                        <button type="button" class="export-btn secondary" id="project-new" title="Start a new project with the default wall (asks first if there are unsaved changes)">New</button>
+                        <button type="button" class="export-btn secondary" id="project-open" title="Open a project file (.json) or an Export All archive (.zip) (Ctrl+O / ⌘O)">Open…</button>
+                        <button type="button" class="export-btn secondary" id="project-save" title="Save the project file, named after the project (Ctrl+S / ⌘S)">Save</button>
+                    </div>
+                    <input type="file" id="project-open-input" class="import-input" accept=".json,.zip,application/json,application/zip">
+                </div>
+            </div>
+
             <div class="wall-sections" id="wall-sections"></div>
 
             <button class="add-section-btn" id="add-section-btn">
