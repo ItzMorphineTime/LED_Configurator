@@ -203,8 +203,8 @@ js/
     sectionIds.js                          2026-10-31  sectionSelectionId(id) = 'section:' + String(id), sectionKeyOf,
                                                  isSectionKey: the selection ids of wall sections (02 5.2's sectionIdOf)
   legacy/
-    LegacyCompat.js                        WP3   Strategies (deep-frozen switches), LegacyProfiles, legacy helpers (orDefault;
-                                                 legacyHtml deleted by 08 P2-3a), unsupportedStrategy, LEGACY_SITES
+    LegacyCompat.js                        WP3   Strategies (deep-frozen switches), LegacyProfiles, legacy helpers (none left:
+                                                 legacyHtml deleted by 08 P2-3a, orDefault by 08 P2-8b), unsupportedStrategy, LEGACY_SITES
   theme/
     Theme.js                               WP3   SceneTheme, CanvasTheme, UiColors, Palette, Brand, Theme (ThemeBridge-ready shape);
                                                  06 T5: the Morph scene, canvas and status values, frameOnLight,
@@ -891,8 +891,7 @@ export const LegacyProfiles = deepFreeze({
 /** @returns {Error} Error(`Unsupported strategy ${key}=${JSON.stringify(value)}`) */
 export function unsupportedStrategy(key, value)
 
-/** LEGACY(B-L9): `v || d` (0, '', NaN fall back to the default). Every input rule table uses it. */
-export const orDefault = (v, d) => v || d;
+// orDefault (the `v || d` idiom of B-L9) was deleted by 08 P2-8b: the rule tables use domain/rules.js finiteOr (3.5).
 
 // legacyHtml (the identity "escaper" of B-M4) was deleted by 08 P2-3a: ui/dom.js escapeHtml replaces it (3.11).
 
@@ -1025,12 +1024,12 @@ export class WallSection {
    *  ledX / ledY 8..65536 int 32; curveIntensity -180..180 0; angleOffset -180..180 0 */
   static LIMITS
 
-  /** 4030-4036, applied to v = parseFloat(raw), with the 08 P2-8a rounding and caps (B-L15 fixed). B-L9 via orDefault
-   *  (tagged in LegacyCompat) until 08 P2-8b. With L = LIMITS[field]: x = orDefault(v, fallback);
+  /** 4030-4036, applied to v = parseFloat(raw), with the 08 P2-8a rounding and caps (B-L15 fixed). Since 08 P2-8b (B-L9
+   *  fixed) the fallback is finiteOr. With L = LIMITS[field]: x = finiteOr(v, fallback);
    *  clamp(L.int ? roundInt(x) : x, L.min, L.max) (domain/rules.js), the fallbacks being the legacy ones:
    *  panelCols, panelRows 1; panelWidth, panelHeight 500; ledX, ledY 32; curveIntensity, angleOffset 0.
    *  panelWidth and angleOffset give the legacy values (clamp equals Math.max(lo, Math.min(hi, x)) for every number
-   *  orDefault returns); columns, rows and LEDs are rounded; panel height, the LEDs and the curve gain their caps. */
+   *  finiteOr returns); columns, rows and LEDs are rounded; panel height, the LEDs and the curve gain their caps. */
   static FIELD_RULES
 
   /** const v = parseFloat(raw); return Object.prototype.hasOwnProperty.call(FIELD_RULES, field) ? FIELD_RULES[field](v) : v;
@@ -1188,9 +1187,9 @@ export class PanelIdStyle {
   borderThickness = 8; fontSize = 0; fontColor = '#ffffff';
   sectionLabelEnabled = true; sectionLabelFontSize = 0; sectionLabelColor = '#888888';   // 1295-1296, 1387-1390
   /** Verbatim 4201/4206/4220 (parseInt WITHOUT radix):
-   *  borderThickness: raw => Math.max(1, Math.min(32, orDefault(parseInt(raw), 8)))
-   *  fontSize: raw => Math.max(0, Math.min(200, orDefault(parseInt(raw), 0)))
-   *  sectionLabelFontSize: raw => Math.max(0, Math.min(400, orDefault(parseInt(raw), 0))) */
+   *  borderThickness: raw => Math.max(1, Math.min(32, finiteOr(parseInt(raw), 8)))
+   *  fontSize: raw => Math.max(0, Math.min(200, finiteOr(parseInt(raw), 0)))
+   *  sectionLabelFontSize: raw => Math.max(0, Math.min(400, finiteOr(parseInt(raw), 0))) */
   static RULES
   /** this[key] = Object.prototype.hasOwnProperty.call(RULES, key) ? RULES[key](rawOrValue) : rawOrValue: the numeric
    *  keys (own keys of RULES) go through RULES; fontColor, sectionLabelColor, sectionLabelEnabled are stored as given
@@ -1240,7 +1239,7 @@ export class LogoLibrary {
   setScale(sectionId, fraction)     // same shape for .scale                                                    (2301-2302)
   clear()                           // this.#entries = {}   (08 P2-3d, B-L21: an import resets the logos)
   set(sectionId, entry)             // this.#entries[sectionId] = { ...entry }   (08 P2-3d: the logos an import installs after clear())
-  /** Math.max(5, Math.min(100, orDefault(parseInt(raw), 30)))  (2298) */
+  /** Math.max(5, Math.min(100, finiteOr(parseInt(raw), 30)))  (2298) */
   static parseScalePercent(raw)
 }
 ```
@@ -1255,18 +1254,18 @@ export class CineCamera {
   posX = 0; posY = 1.5; posZ = 5; rotX = 0; rotY = 0; rotZ = 0;   // legacy cameraSettings field names (1320-1331)
 
   /** Verbatim 4266-4317. writeBack mirrors whether legacy assigned `this.value` afterwards.
-   *  filmbackWidth:  { parse: r => Math.max(1, Math.min(100, orDefault(parseFloat(r), 36))), writeBack: true }
-   *  filmbackHeight: { parse: r => Math.max(1, Math.min(100, orDefault(parseFloat(r), 24))), writeBack: true }
-   *  focalLength:    { parse: r => Math.max(8, Math.min(800, orDefault(parseFloat(r), 35))), writeBack: true }
-   *  posX: { parse: r => orDefault(parseFloat(r), 0), writeBack: false }
-   *  posY: { parse: r => Math.max(0, orDefault(parseFloat(r), 1.5)), writeBack: true }      (B-L9 via orDefault: '0' gives 1.5)
+   *  filmbackWidth:  { parse: r => Math.max(1, Math.min(100, finiteOr(parseFloat(r), 36))), writeBack: true }
+   *  filmbackHeight: { parse: r => Math.max(1, Math.min(100, finiteOr(parseFloat(r), 24))), writeBack: true }
+   *  focalLength:    { parse: r => Math.max(8, Math.min(800, finiteOr(parseFloat(r), 35))), writeBack: true }
+   *  posX: { parse: r => finiteOr(parseFloat(r), 0), writeBack: false }
+   *  posY: { parse: r => Math.max(0, finiteOr(parseFloat(r), 1.5)), writeBack: true }      (since 08 P2-8b '0' gives 0)
    *  posZ: { parse: (r, ctx = {wallZ: 0}) => finiteOr(parseFloat(r), r3(ctx.wallZ + 5)), writeBack: true }
    *        (08 P2-11c, Q13, 03 4.1 step F: no minimum, so 0 and negative values are kept (B-L10's Z half); a non-numeric
    *        entry is 5 m in front of the wall's start plane, ctx.wallZ its stage z; r3(v) = Math.round(v * 1000) / 1000;
    *        03 T1's branch on ctx.wallZ === 0 and its minimum r3(wallZ + 0.1) are gone)
-   *  rotX: { parse: r => Math.max(-90, Math.min(90, orDefault(parseFloat(r), 0))), writeBack: true }
-   *  rotY: { parse: r => Math.max(-180, Math.min(360, orDefault(parseFloat(r), 0))), writeBack: true }
-   *  rotZ: { parse: r => Math.max(-180, Math.min(180, orDefault(parseFloat(r), 0))), writeBack: true } */
+   *  rotX: { parse: r => Math.max(-90, Math.min(90, finiteOr(parseFloat(r), 0))), writeBack: true }
+   *  rotY: { parse: r => Math.max(-180, Math.min(360, finiteOr(parseFloat(r), 0))), writeBack: true }
+   *  rotZ: { parse: r => Math.max(-180, Math.min(180, finiteOr(parseFloat(r), 0))), writeBack: true } */
   static FIELD_RULES
   /** 03 T1: the 07 C22 writer bounds (deep-frozen): posX, posZ {min: -100000, max: 100000}, posY {min: 0, max: 100000}
    *  (domain/rules.js STAGE_POSITION_LIMIT_M). Read by translateStage; 08 P2-13e makes every other writer clamp too. */
@@ -1299,20 +1298,20 @@ export class CineCamera {
 
   // Gizmo arithmetic (the Selectable 'camera' is CameraController; it calls these)
   /** posX += dx; posY = Math.max(0, posY + dy); posZ += dz   (3338-3340; untagged since 08 P2-11c: the input rule has no
-   *  Z minimum either, so input and gizmo agree; B-L10 keeps the pilot's 0.1 floor) */
+   *  Z minimum either, so input and gizmo agree; the pilot floors posY at 0 too since 08 P2-8c, B-L10 fixed) */
   translateBy(dx, dy, dz)
-  /** x: rotX = Math.max(-90, Math.min(90, rotX + deltaDeg)); y: rotY += deltaDeg;
-   *  any other axis (the legacy `else`, normally 'z'): rotZ = Math.max(-180, Math.min(180, rotZ + deltaDeg)).  deltaDeg already carries Strategies.gizmoRotateSign,
+  /** x: rotX = Math.max(-90, Math.min(90, rotX + deltaDeg)); y: rotY = wrapDeg(rotY + deltaDeg);
+   *  any other axis (the legacy `else`, normally 'z'): rotZ = wrapDeg(rotZ + deltaDeg) (both wrapped since 08 P2-8c, B-L10).  deltaDeg already carries Strategies.gizmoRotateSign,
    *  so `rotX + (-a)` is bit-identical to legacy `rotX - a` (3376-3384). LEGACY(B-L28): Euler channels. */
   rotateBy(axis, deltaDeg)
 
   // Pilot arithmetic
-  /** rotY -= deltaX * 0.3; rotX = Math.max(-90, Math.min(90, rotX - deltaY * 0.3))  (3551-3552) */
+  /** rotY = wrapDeg(rotY - deltaX * 0.3) (08 P2-8c); rotX = Math.max(-90, Math.min(90, rotX - deltaY * 0.3))  (3551-3552) */
   pilotLook(deltaX, deltaY)
   /** Verbatim 3578-3611 with keys = {forward, back, left, right, down, up} booleans and plain {x,y,z} vectors:
    *  per pressed key, in this order, the legacy += / -= statements (forward: x,y,z += forward*speed; back: -=;
    *  left: x,z -= right*speed; right: +=; down: posY -= speed; up: posY += speed); then ALWAYS
-   *  posY = Math.max(0.1, posY)  LEGACY(B-L10) silent per-frame clamp.  @returns {boolean} moved */
+   *  posY = Math.max(0, posY), the stage floor (0.1 until 08 P2-8c, B-L10 fixed).  @returns {boolean} moved */
   pilotFly(keys, forward, right, speed)
 }
 ```
@@ -1325,10 +1324,10 @@ export class Prop {
   visible = false;                    // legacy showPerson / showCar
   posX; posZ; rotY; scale;            // legacy personSettings / carSettings
   /** Verbatim 4345-4358 (car 4376-4389):
-   *  posX: { parse: r => orDefault(parseFloat(r), 0), writeBack: false }
-   *  posZ: { parse: r => orDefault(parseFloat(r), 0), writeBack: false }
-   *  rotY: { parse: r => Math.max(-180, Math.min(180, orDefault(parseFloat(r), 0))), writeBack: true }
-   *  scale: { parse: r => Math.max(0.5, Math.min(2, orDefault(parseFloat(r), 1))), writeBack: true } */
+   *  posX: { parse: r => finiteOr(parseFloat(r), 0), writeBack: false }
+   *  posZ: { parse: r => finiteOr(parseFloat(r), 0), writeBack: false }
+   *  rotY: { parse: r => Math.max(-180, Math.min(180, finiteOr(parseFloat(r), 0))), writeBack: true }
+   *  scale: { parse: r => Math.max(0.5, Math.min(2, finiteOr(parseFloat(r), 1))), writeBack: true } */
   static FIELD_RULES
   static LIMITS                       // 03 T1: posX, posZ {min: -100000, max: 100000} (07 C22 writer bounds, deep-frozen)
   setField(field, raw)                // stores and returns FIELD_RULES[field].parse(raw)
@@ -1336,7 +1335,7 @@ export class Prop {
   translateBy(dx, dy, dz)
   /** 03 T1 (6.5, 07 C45): posX = clamp(posX + dx, LIMITS.posX); posZ = clamp(posZ + dz, LIMITS.posZ) */
   translateStage(dx, dz)
-  /** axis === 'y' ? (rotY += deltaDeg, true) : false. LEGACY(B-L22) (3389-3399) */
+  /** axis === 'y' ? (rotY = wrapDeg(rotY + deltaDeg) (08 P2-8c), true) : false. LEGACY(B-L22) (3389-3399) */
   rotateBy(axis, deltaDeg)
   placeInFront(point, azDeg, distance, side)   // 03 12.16: distance out along the LED normal, side to the right, rotY = az
 }
@@ -3597,7 +3596,7 @@ This table is the documentation of `WallController`'s rebuild policy and is repe
 | 5 | 4074 | number `change` | `SectionListPanel` | `setSectionField`, `commitSectionEdit` | always, stats first | write-back, card patch, `WALL_STATS_CHANGED` twice (before and inside the rebuild) |
 | 6 | 4118 | `#add-section-btn` | `SectionListPanel.bindAddButton` | `addSection` | always, unless the wall has `Wall.MAX_SECTIONS` (M-SEC-1 alert, nothing else; 08 P2-3b) | `WALL_SECTIONS_CHANGED{add}` (cards, collapse, logo list iff panel IDs) |
 | 7 | 4145 | `.section-delete` | `SectionListPanel` card | `deleteSection` | always unless `count <= 1` (then nothing at all) | logo entry removed, `WALL_SECTIONS_CHANGED{delete}` |
-| 8 | 4161 | mesh-mode label click (fires twice) | `WallDisplayPanel` | `setMeshMode` x2 | always, twice per click (LEGACY(B-L13)) | label classes, `WALL_MESH_MODE_CHANGED` |
+| 8 | 4161 | mesh-mode label click (fires twice) | `WallDisplayPanel` | `setMeshMode` x2 | once per click, iff the mode changed: the second call is a no-op (08 P2-8d, B-L13 fixed) | label classes, `WALL_MESH_MODE_CHANGED` |
 | 9 | 4165 | `#toggle-wireframe` | `WallDisplayPanel` | `setWireframe` | always | toggle class |
 | 10 | 4166 | `#toggle-frame` | `WallDisplayPanel` | `setShowFrame` | always | toggle class |
 | 11 | 4178 | `#toggle-led-sim` | `WallDisplayPanel` | `setLedSim` | always, after `ledTiles.clearCache()` | `DISPLAY_CONTENT_CHANGED{ledSim}` |
@@ -3946,11 +3945,11 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | B-L6 | Combined exports use section 0's colour | `ObjExporter` + `GltfExporter` combined writers (fixed; `Strategies.exportCombinedColor` retired) | Landed in 08 P2-7d (one material per section in the combined exports: OBJ `newmtl Wall_<i+1>` with `usemtl` before each section's faces, glTF one primitive per section with its own accessors and `Wall_<i+1>_Material`; `LED_Wall_Combined` stays the object and mesh name; `Strategies.exportCombinedColor` retired; no tag site) |
 | B-L7 | MTL second download, textures missing | `ObjExporter.write` + `ProjectIO.exportOBJ` (fixed; `Strategies.mtlDownloadDelayMs` retired) | Landed in 08 P2-6c (the standalone MTL has no `map_Kd`: `ObjExporter.write` references a texture only when the caller ships it (`textureNames`); `Strategies.mtlDownloadDelayMs` retired as `ProjectIO.MTL_DOWNLOAD_DELAY_MS`; the possibly blocked second download was an ARCHITECTURE 8.4 observation until 08 P2-6e, the owner's decision: Export OBJ downloads one ZIP with the OBJ, the MTL and every texture the MTL references; no tag site) |
 | B-L8 | No import validation; unknown mode renders as panels; raw coercion | `ProjectSerializer.read` + `io/ProjectValidator.js` (fixed) | Landed in 08 P2-3b (`ProjectSerializer.read`: `detectVersion`, `migrateV1toV2` and `validateProject` of `io/ProjectMigrations.js`, `io/ProjectValidator.js`, `io/ProjectSchema.js`; `Strategies.importValidation` retired; `Wall.MAX_SECTIONS` with M-SEC-1; the size limit and the read error; the three-mode dispatch; `WallSection.setName`; no tag site) |
-| B-L9 | `\|\| default` turns 0 into the default (D-7, J-5, V-3) | `orDefault` | change `orDefault` or per rule |
-| B-L10 | Gizmo posY >= 0 vs pilot >= 0.1 per frame; Z unclamped | `CineCamera.pilotFly` (tag; the Z half fixed) | validated setter; the Z half landed in 08 P2-11c (no Z minimum in the input rule either, so input, gizmo and pilot agree on Z; `CineCamera.translateBy` untagged); the pilot floor stays for 08 P2-8c |
+| B-L9 | `\|\| default` turns 0 into the default (D-7, J-5, V-3) | `domain/rules.js finiteOr` (fixed) | Landed in 08 P2-8b (`domain/rules.js finiteOr` replaces `orDefault` in every input rule table: `WallSection.FIELD_RULES`, `CineCamera.FIELD_RULES`, `Prop.FIELD_RULES`, `PanelIdStyle.RULES` and `LogoLibrary.parseScalePercent`; a typed 0 is kept and then clamped, only a non-numeric entry takes the default; `orDefault` deleted; no tag site) |
+| B-L10 | Gizmo posY >= 0 vs pilot >= 0.1 per frame; Z unclamped | `CineCamera.pilotFly`, `rotateBy`, `pilotLook`; `Prop.rotateBy` (fixed) | Landed in 08 P2-8c (`CineCamera.pilotFly` floors posY at 0, the floor of the input and the gizmo, and never clamps Z; the gizmo and pilot rotation writes wrap the pan (and the gizmo roll) into (-180, 180] with `wrapDeg`, the tilt stays clamped to [-90, 90]; the Z half in 08 P2-11c; no tag site) |
 | B-L11 | Shortcuts ignore SELECT focus, modifiers, repeat (W-1) | `core/typingTarget.js isTypingTarget` + `ViewportInput.attachShortcuts` (fixed) | Landed in 08 P2-9b (`core/typingTarget.js isTypingTarget` with the 07 3.8 truth table, re-exported by `InputState` as `isShortcutIgnoredTarget`; `ViewportInput.attachShortcuts` also ignores Ctrl, Meta, Alt and auto-repeat; no tag site) |
 | B-L12 | Gizmo resources leak (memory only) | `TransformGizmo.rebuild/detach` (fixed; the switch `Strategies.dispose.gizmo` retired by 08 P2-12a) | Landed in Phase 1C H2 (`dispose.gizmo = true`; the key retired by 08 P2-12a: the replaced or removed gizmo group is always disposed; no tag site) |
-| B-L13 | Mesh-mode handler fires twice (C-4) | `WallDisplayPanel.bind` (tag + warning) | "mode unchanged -> no-op" guard, never radio `change` |
+| B-L13 | Mesh-mode handler fires twice (C-4) | `WallController.setMeshMode` (fixed) | Landed in 08 P2-8d (`WallController.setMeshMode` is a no-op when the mode is unchanged, so a label click rebuilds once; the listener stays on the label `click`, never the radio `change`; no tag site) |
 | B-L14 | Colliding ZIP texture names (U-3) | `PanelNaming.textureFileNames` (fixed; `Strategies.zipTextureNaming` retired) | Landed in 08 P2-6b (`PanelNaming.textureFileNames`: the legacy names made unique case-insensitively with `_2`, `_3` suffixes, the one list of the ZIP texture entries and the JSON `texture_file`; `zipTextureFileName` deleted; `Strategies.zipTextureNaming` retired; no tag site) |
 | B-L15 | Fractional integer fields (D-8); declared vertex advance | `WallSection.FIELD_RULES` (fixed; the imported half of `WallMeshBuilder.sectionGrid` is B-L8's) | Landed in 08 P2-8a (`WallSection.LIMITS`; the card rules round columns, rows and LEDs and cap panel height, LEDs and curve; `step="1"` and the `max` attributes on the card inputs; no tag site) |
 | B-L16 | 4K ⚠ via `/Wall \d+/` (D-10) | `SectionListPanel.#patchCard` (fixed) | Landed in 08 P2-3c (`ui/dom.js setTitleWithWarning`: the live rename and `SectionListPanel#patchCard` rebuild the title from the model; no tag site) |
@@ -3983,11 +3982,9 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 
 | Site | Ids |
 |---|---|
-| `js/legacy/LegacyCompat.js#orDefault` | B-L9 |
 | `js/domain/WallSection.js#exceeds4K` | B-L17 |
 | `js/domain/CineCamera.js#presetShortName` | B-L34 |
 | `js/domain/CineCamera.js#rotateBy` | B-L28 |
-| `js/domain/CineCamera.js#pilotFly` | B-L10 |
 | `js/domain/Prop.js#translateBy` | B-L22 |
 | `js/domain/Prop.js#rotateBy` | B-L22 |
 | `js/geometry/WallLayout.js#computeWallLayout` | B-L1 |
@@ -4005,10 +4002,8 @@ Phase 1 preserves every output-affecting defect. A later fix changes exactly one
 | `js/interaction/PilotController.js#toggle` | B-L26 |
 | `js/interaction/PilotController.js#tickKeyboard` | B-M13, B-L27 |
 | `js/interaction/ViewportInput.js#attachPointer` | B-M14 |
-| `js/app/WallController.js#setMeshMode` | B-L13 |
 | `js/app/CameraController.js#CameraHub.refresh` | B-L30 |
 | `js/ui/SectionLogosPanel.js#onUpload` | B-L35 |
-| `js/ui/WallDisplayPanel.js#bind` | B-L13 |
 | `index.html` (markup, untagged; documentation-only) | B-L36 |
 
 Every bug id from B-H1 to B-H5, B-M1 to B-M16 and B-L1 to B-L36 appears at least once, except a landed fix: its 8.2 row stays (its "Fix lands as" cell starts with `Landed`) and its rows here are deleted together with its tags, so `LEGACY_SITES` no longer lists it (`tests/unit/core.test.mjs` derives the landed ids from 8.2). Landed so far: B-H5 (Phase 1C H1; its only site was a tag in `LEDWallView.rebuild`, which keeps B-L8) and B-L12 (Phase 1C H2; its sites were tags in `TransformGizmo.rebuild`, which keeps B-L22 and B-L26, and `TransformGizmo.detach`, which has no tag left); in Phase 2, B-M1 (08 P2-5a; its sites were `legacyMissingDownloadBlob`, deleted, and the tag in `ProjectIO.exportSafeDistanceOBJ`, which has no tag left) and B-H3 (08 P2-1a; its sites were `legacySpreadBase64`, deleted with `Strategies.gltfBase64`, and tags in `GltfExporter.write`, which keeps B-L6 and B-L8, and `ProjectIO.exportZIP`, which keeps B-L4 and B-L14) and B-L5 (08 P2-1b; its only site was the tag in `GltfExporter.addMesh`, which keeps B-H2 and B-M7) and B-L4 (08 P2-1c; its sites were the tags in `ProjectIO.exportPanelIds`, which has no tag left, and `ProjectIO.exportZIP`, which keeps B-L14; its viewport half never had a tag and is fixed by 08 P2-1d) and B-H1 (08 P2-2a; its sites were the tags in `WallMeshBuilder.quadIndices`, which keeps B-H2 until 08 P2-2d, and `LEDMaterialFactory.side`, whose `'double'` value is now a design choice) and B-L3 (08 P2-2b; its only site was the tag in `WallMeshBuilder.sectionGrid`, which keeps B-L15 and B-L8) and B-H2 (08 P2-2c and P2-2d; its sites were the tags in `ObjExporter.write`'s `#stripNormalLine`, which left with P2-2c (`write` keeps B-M6, B-L6 and B-L8), `WallMeshBuilder.quadIndices`, which has no tag left, and `GltfExporter.addMesh`, which keeps B-M7) and B-L11 (08 P2-9b; its sites were the tags in `InputState.isShortcutIgnoredTarget`, now a re-export of `core/typingTarget.js isTypingTarget`, and `ViewportInput.attachShortcuts`, which has no tag left) and B-L15 (08 P2-8a; its sites were the tags in `WallSection.FIELD_RULES`, which has no tag left, and `WallMeshBuilder.sectionGrid`, which keeps B-L8 for unvalidated imported counts) and B-M4 (08 P2-3a; its sites were `legacyHtml`, deleted, and the tags in `SectionListPanel.render`, which has no tag left, `SectionLogosPanel.render` and `ProjectSerializer.read`, which kept B-L8 until 08 P2-3b) and B-H4 (08 P2-4a; its sites were the tags in `PilotController.toggle`, which keeps B-L26, and `CameraController.setPreviewEnabled`, which kept B-M8 until 08 P2-4b) and B-M8 (08 P2-4b; its only site was the tag in `CameraController.setPreviewEnabled`, which has no tag left) and B-M15 and B-L29 (08 P2-5b; their sites were `Strategies.safeDistanceBand`, retired, and the tags in `SafeDistanceView.create` (both ids) and `WallLayout.flatEdges` (B-M15), which have no tag left) and B-M3 (08 P2-6a; its sites were `Strategies.zipJsonIncludesAngleOffset`, retired, and the tag in `ProjectSerializer.write`, which keeps B-L31) and B-L14 (08 P2-6b; its sites were `Strategies.zipTextureNaming` and `PanelNaming.zipTextureFileName`, both deleted, and the tag in `ProjectIO.exportZIP`, which has no tag left) and B-L7 (08 P2-6c; its sites were `Strategies.mtlDownloadDelayMs`, retired, and the tag in `ProjectIO.exportOBJ`, which has no tag left; the residual second download was an 8.4 observation until 08 P2-6e made Export OBJ one ZIP) and B-M2 (08 P2-6d; its sites were `Strategies.mtlTextureNaming`, retired, and the tag in `PanelNaming.mtlTextureFile`, which has no tag left) and B-M11 (08 P2-10a; its sites were `Strategies.previewRendersHelpers`, retired, and the tags in `SceneManager.addHelper` and `PreviewWindow.render`, which have no tag left) and B-L18 (08 P2-7e; its sites were `Strategies.combinedLedSimColor`, retired, and the tags in `LEDMaterialFactory.combined`, which has no tag left, and `LEDPixelTextureFactory.tile`, which keeps B-L20) and B-L6 (08 P2-7d; its sites were `Strategies.exportCombinedColor`, retired, and the tags in `ObjExporter.write` and `GltfExporter.write` (their combined writers), which have no tag left) and B-M7 (08 P2-7c; its only site was the tag in `GltfExporter.addMesh`, which has no tag left) and B-M6 (08 P2-7b; its only site was the tag in `ObjExporter.write`'s `#writeCombined`, which keeps B-L6) and B-M5 (08 P2-7a; its sites were the tags in `WallMeshBuilder.combinedGrid`, which has no tag left, and `LEDMaterialFactory.combined`, which keeps B-L18) and B-M16 (08 P2-12d; its sites were the tags in `TextureAtlas.panelPxPerLed`, which has no tag left, and `PanelIdRenderer.panelCanvas`, which keeps B-L19, reachable only with 04's `uv.panel_uvs = 'panel'`) and B-L21 (08 P2-3d; its sites were the tags in `WallController.applyImport` and `SectionLogosPanel`'s constructor, which have no tag left) and B-L16 (08 P2-3c; its only site was the tag in `SectionListPanel.patchCard`, now `setTitleWithWarning`) and B-L8 (08 P2-3b; its sites were `Strategies.importValidation`, retired, and the tags in `WallSection`'s constructor, `Wall.appendLikeLast` and `replaceAll`, `LogoLibrary.get`, `WallMeshBuilder.sectionGrid`, `ProjectSerializer.read`, `LEDWallView.rebuild` and `SectionLogosPanel.render`, which have no tag left, and `ObjExporter.write` and `GltfExporter.write`, which keep B-M6 / B-L6); in Phase 3, B-L24 (its `.view-btn.active` half in 01 F1-2, `css/features/debug-view.css`; its badge-overlap half in 06 T4a, `.selection-indicator` at `bottom: 64px` in `css/09-viewport-tools.css`; its two documentation-only entries, the `Legacy note B-L24` paragraphs of the `css/07-viewport.css` and `css/09-viewport-tools.css` header comments, left with 06 T4a, whose header comments now say where it landed), and B-M9 and B-L32 (07 R2, which took over 08 P2-10b, 07 C31; their sites were `Strategies.previewRendererSize`, retired, and the tags in `PreviewWindow.init` and `PreviewWindow.setupResize`, which have no tag left; B-L34's `PreviewWindow.updateCamera` tag moved with the code to `PreviewPass.updateCamera`).
@@ -4649,3 +4644,10 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 3.11: `SectionListPanel` mirrors `SELECTION_CHANGED` (`is-selected`, `aria-current`; re-applied after every render) and gains `revealSection(id)`; `ui/SectionContextMenu.js` (new) and `css/features/section-selection.css` (new, after `sidebar.css`); "Change settings" = `sidebar.expand()` + `revealSection`, "Edit UVs…" = `uvController.openViewer(id)`. The UV viewer follows a selected section through its existing selection observer (04 5.3) unless pinned.
 - 2.3: `tests/unit/section-selection.test.mjs` (new); `core.test.mjs` lists `SceneTheme.selection`.
 - Re-baseline of both 2026-10-31 changes (one full run, 40 scenarios, no errors; 39 passed, 1 failed): `ui_visual` fails only on its page button list (`#sidebar-toggle` joins it after `#three-canvas`); every computed-style record, state, text, export and console output is unchanged apart from the known 1-level `L4_PanelIDs.png` flake. The canvas, page and viewport screenshots warn within tolerance: the handle on the viewport's left edge (or its bottom edge at 800 px), plus anti-aliasing changes of up to 85 levels on the SVG icons of the overlay buttons, the preview window's title and the UV viewer (the new overlay button changes Chrome's layer assignment, as the watermark did in 06 T4b). No scenario clicks a wall section: the person and camera picks run in a gizmo mode and are taken by the B-M14 pick, and the UV double-click scenario records the same viewer state. A headless check with the harness library: collapsing the panel resizes `#three-canvas` from 1200 x 940 to 1600 x 940 (drawing buffer included) and back, and at 800 px wide from 800 x 490 to 800 x 840.
+
+**08 P2-8b–d, numeric input semantics: B-L9, B-L10 (the pilot half) and B-L13 landed** (one commit; re-baselined with the project file v2 commits in one full harness run, below):
+- 3.3, 8.2, 8.3: `orDefault` is deleted from `LegacyCompat` (no legacy helper is left); the B-L9, B-L10 and B-L13 rows read `Landed`, and their tag sites (`LegacyCompat.js#orDefault`, `CineCamera.js#pilotFly`, `WallController.js#setMeshMode`, `WallDisplayPanel.js#bind`) are gone.
+- 3.5 (P2-8b): every input rule table falls back through `domain/rules.js finiteOr`: `WallSection.FIELD_RULES`, `CineCamera.FIELD_RULES`, `Prop.FIELD_RULES`, `PanelIdStyle.RULES`, `LogoLibrary.parseScalePercent`. A typed 0 is kept and then clamped (camera Y 0 stays 0; a 0 panel width gives 50, a 0 border 1, a 0 focal length 8, a 0 logo scale 5 %); a non-numeric or infinite entry takes the default.
+- 3.5 (P2-8c): `CineCamera.pilotFly` floors posY at 0 (the floor of the input and the gizmo; legacy 0.1) and never clamps Z; `CineCamera.rotateBy` wraps the pan and the roll into (-180, 180] with `wrapDeg` (the tilt stays clamped to [-90, 90]), `pilotLook` wraps the pan, `Prop.rotateBy` wraps the rotation. B-L28 (Euler channels) and B-L22 (inert prop rings) keep their tags.
+- 6.2 row 8 (P2-8d): `WallController.setMeshMode` is a no-op when the mode is unchanged, so a mesh-mode label click (still two calls: the hidden radio's synthetic click) rebuilds once, and a click on the active mode rebuilds nothing. The listener stays on the label `click`.
+- 2.3: `domain.test.mjs`, `camera-hub.test.mjs`, `wall-controller.test.mjs` (the legacy parity world carries the declared P2-8b/P2-8d edits) and `core.test.mjs` (`PHASE2_LANDED`) follow.

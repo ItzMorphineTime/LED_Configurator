@@ -11,7 +11,6 @@
  * Layer: domain (may import legacy; THREE-free and DOM-free).
  */
 
-import { orDefault } from '../legacy/LegacyCompat.js';
 import { clamp, deepFreeze, finiteOr, quarterExactTrig, STAGE_POSITION_LIMIT_M, wrapDeg } from './rules.js';
 
 /**
@@ -73,7 +72,8 @@ export class CineCamera {
 
   /**
    * Lens and pose input rules. writeBack mirrors whether legacy assigned `this.value` afterwards (posX has none).
-   * posY: B-L9 via orDefault, so '0' gives 1.5.
+   * Since 08 P2-8b (B-L9 fixed) every fallback is finiteOr: 0 is kept and then clamped (posY '0' gives 0, a 0 focal length
+   * the minimum 8); only a non-numeric entry takes the default.
    * posZ takes the FieldContext (03 4.1): since 08 P2-11c (Q13, step F; B-L10's Z half) it has no minimum: any finite
    * value is kept (0 and negative values included: curved, turned and box walls have stage space at any Z, and the
    * coverage reports a camera at or behind the wall as 'Not aimed at wall'), and a non-numeric entry gives
@@ -82,18 +82,18 @@ export class CineCamera {
    * @type {Readonly<Record<string, Readonly<FieldRule>>>}
    */
   static FIELD_RULES = Object.freeze({
-    filmbackWidth: Object.freeze({ parse: (r) => Math.max(1, Math.min(100, orDefault(parseFloat(r), 36))), writeBack: true }),
-    filmbackHeight: Object.freeze({ parse: (r) => Math.max(1, Math.min(100, orDefault(parseFloat(r), 24))), writeBack: true }),
-    focalLength: Object.freeze({ parse: (r) => Math.max(8, Math.min(800, orDefault(parseFloat(r), 35))), writeBack: true }),
-    posX: Object.freeze({ parse: (r) => orDefault(parseFloat(r), 0), writeBack: false }),
-    posY: Object.freeze({ parse: (r) => Math.max(0, orDefault(parseFloat(r), 1.5)), writeBack: true }),
+    filmbackWidth: Object.freeze({ parse: (r) => Math.max(1, Math.min(100, finiteOr(parseFloat(r), 36))), writeBack: true }),
+    filmbackHeight: Object.freeze({ parse: (r) => Math.max(1, Math.min(100, finiteOr(parseFloat(r), 24))), writeBack: true }),
+    focalLength: Object.freeze({ parse: (r) => Math.max(8, Math.min(800, finiteOr(parseFloat(r), 35))), writeBack: true }),
+    posX: Object.freeze({ parse: (r) => finiteOr(parseFloat(r), 0), writeBack: false }),
+    posY: Object.freeze({ parse: (r) => Math.max(0, finiteOr(parseFloat(r), 1.5)), writeBack: true }),
     posZ: Object.freeze({
       parse: (r, ctx = WALL_PLANE_AT_ORIGIN) => finiteOr(parseFloat(r), r3(ctx.frontZ ?? ctx.wallZ + 5)),
       writeBack: true,
     }),
-    rotX: Object.freeze({ parse: (r) => Math.max(-90, Math.min(90, orDefault(parseFloat(r), 0))), writeBack: true }),
-    rotY: Object.freeze({ parse: (r) => Math.max(-180, Math.min(360, orDefault(parseFloat(r), 0))), writeBack: true }),
-    rotZ: Object.freeze({ parse: (r) => Math.max(-180, Math.min(180, orDefault(parseFloat(r), 0))), writeBack: true }),
+    rotX: Object.freeze({ parse: (r) => Math.max(-90, Math.min(90, finiteOr(parseFloat(r), 0))), writeBack: true }),
+    rotY: Object.freeze({ parse: (r) => Math.max(-180, Math.min(360, finiteOr(parseFloat(r), 0))), writeBack: true }),
+    rotZ: Object.freeze({ parse: (r) => Math.max(-180, Math.min(180, finiteOr(parseFloat(r), 0))), writeBack: true }),
   });
 
   /** How far in front of the wall Reset puts the camera (metres; the legacy 5; 08 P2-11c). */
@@ -287,47 +287,50 @@ export class CineCamera {
    */
   translateBy(dx, dy, dz) {
     this.posX += dx;
-    // The gizmo clamps posY at the floor and never Z, like the input rules since 08 P2-11c (B-L10's Z half; the pilot's
-    // 0.1 floor is the other half, 08 P2-8c).
+    // The gizmo clamps posY at the floor and never Z, like the input rules since 08 P2-11c and the pilot since 08 P2-8c
+    // (B-L10 fixed).
     this.posY = Math.max(0, this.posY + dy);
     this.posZ += dz;
   }
 
   /**
    * Gizmo rotate on the camera. deltaDeg already carries Strategies.gizmoRotateSign, so `rotX + (-a)` is
-   * bit-identical to legacy `rotX - a`.
+   * bit-identical to legacy `rotX - a`. Since 08 P2-8c (B-L10 fixed) the pan and the roll are wrapped into (-180, 180]
+   * (wrapDeg; legacy left the pan unbounded and clamped the roll at +-180); the tilt is clamped to [-90, 90] as before.
    * Ports: index.html@cd3fd3f lines 3376-3384.
    * Side effects: writes rotX, rotY or rotZ.
    * @param {'x'|'y'|'z'} axis  any value other than 'x' and 'y' acts on Z, like the legacy else branch
    * @param {number} deltaDeg   signed degrees
    */
   rotateBy(axis, deltaDeg) {
-    // LEGACY(B-L28): world-space rings write the Euler channels directly (x clamped to [-90, 90],
-    // z to [-180, 180], y unbounded).
+    // LEGACY(B-L28): world-space rings write the Euler channels directly (x clamped to [-90, 90]; y and z wrapped
+    // into (-180, 180] since 08 P2-8c).
     if (axis === 'x') {
       this.rotX = Math.max(-90, Math.min(90, this.rotX + deltaDeg));
     } else if (axis === 'y') {
-      this.rotY += deltaDeg;
+      this.rotY = wrapDeg(this.rotY + deltaDeg);
     } else {
-      this.rotZ = Math.max(-180, Math.min(180, this.rotZ + deltaDeg));
+      this.rotZ = wrapDeg(this.rotZ + deltaDeg);
     }
   }
 
   /**
-   * Pilot mouse-look.
+   * Pilot mouse-look. Since 08 P2-8c (B-L10 fixed) the pan is wrapped into (-180, 180] (wrapDeg); legacy left it
+   * unbounded.
    * Ports: index.html@cd3fd3f lines 3551-3552.
    * Side effects: writes rotY, rotX.
    * @param {number} deltaX  pixels
    * @param {number} deltaY  pixels
    */
   pilotLook(deltaX, deltaY) {
-    this.rotY -= deltaX * 0.3;
+    this.rotY = wrapDeg(this.rotY - deltaX * 0.3);
     this.rotX = Math.max(-90, Math.min(90, this.rotX - deltaY * 0.3));
   }
 
   /**
    * Pilot keyboard movement for one frame: per pressed key, in legacy order, the legacy += / -= statements;
-   * then ALWAYS the posY floor clamp.
+   * then ALWAYS the posY floor clamp: 0 since 08 P2-8c (B-L10 fixed: the floor of the input and the gizmo; legacy 0.1).
+   * Z is never clamped.
    * Ports: index.html@cd3fd3f lines 3578-3611.
    * Side effects: writes posX, posY, posZ (posY every call).
    * @param {{forward: boolean, back: boolean, left: boolean, right: boolean, down: boolean, up: boolean}} keys
@@ -371,8 +374,8 @@ export class CineCamera {
       moved = true;
     }
 
-    // LEGACY(B-L10): silent per-frame clamp at 0.1, applied even when nothing moved.
-    this.posY = Math.max(0.1, this.posY);
+    // The stage floor (08 P2-8c), applied every call like the legacy clamp; a no-op unless a key moved the camera below it.
+    this.posY = Math.max(0, this.posY);
 
     return moved;
   }

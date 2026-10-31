@@ -1897,6 +1897,7 @@ Each card lists, per commit: the switch or site, the `LEGACY_SITES` rows removed
 | P2-8d B-L13 | `setMeshMode` no-op guard | `WallController.js#setMeshMode`, `WallDisplayPanel.js#bind` | empty |
 
 - **Unblocks:** P2-13e (exact round trip of zero values); F3's pivot offset inputs may use `finiteOr`/`clamp` (03 does not depend on it).
+- **Status (2026-10-31): landed** as one commit. `finiteOr` and `wrapDeg` already existed (08 P2-11c delivered them); P2-8c also wraps the gizmo roll (it was clamped at ±180°) and the prop gizmo rotation. Re-baselined together with P2-13a and P2-13e in one full harness run (the owner's lean process: no per-commit gate manifest).
 
 ### P2-9 · Interaction: B-M14, B-L11 | B-M12, B-L22, B-L23, B-L28 | B-M13, B-L27, B-L25, B-L26 (L, 4 d · risk Med · depends on: P2-8c, owner Q6)
 

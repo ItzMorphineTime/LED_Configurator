@@ -8,7 +8,7 @@
  * Layer: domain (may import legacy; THREE-free and DOM-free).
  */
 
-import { orDefault } from '../legacy/LegacyCompat.js';
+import { finiteOr } from './rules.js';
 import { Wall, WallPivot, alignNormalAzimuthDeg } from './Wall.js';
 import { WallSection } from './WallSection.js';
 import { LogoLibrary } from './LogoLibrary.js';
@@ -111,14 +111,15 @@ export class PanelIdStyle {
   sectionLabelColor = '#888888';
 
   /**
-   * Numeric style input rules (parseInt WITHOUT radix, as legacy; B-L9 via orDefault).
+   * Numeric style input rules (parseInt WITHOUT radix, as legacy; since 08 P2-8b (B-L9 fixed) finiteOr: 0 is kept, then
+   * clamped, so a 0 border gives the minimum 1 instead of the default 8).
    * Ports: index.html@cd3fd3f lines 4201, 4206, 4220.
    * @type {Readonly<Record<string, (raw: string) => number>>}
    */
   static RULES = Object.freeze({
-    borderThickness: (raw) => Math.max(1, Math.min(32, orDefault(parseInt(raw), 8))),
-    fontSize: (raw) => Math.max(0, Math.min(200, orDefault(parseInt(raw), 0))),
-    sectionLabelFontSize: (raw) => Math.max(0, Math.min(400, orDefault(parseInt(raw), 0))),
+    borderThickness: (raw) => Math.max(1, Math.min(32, finiteOr(parseInt(raw), 8))),
+    fontSize: (raw) => Math.max(0, Math.min(200, finiteOr(parseInt(raw), 0))),
+    sectionLabelFontSize: (raw) => Math.max(0, Math.min(400, finiteOr(parseInt(raw), 0))),
   });
 
   /**

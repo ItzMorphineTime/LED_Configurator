@@ -123,9 +123,10 @@ export class WallDisplayPanel {
   bind() {
     const wallController = this.#wallController;
 
-    // LEGACY(B-L13): the listener stays on the .mesh-mode-option LABEL 'click'; each label wraps a hidden radio
-    // whose synthetic click bubbles back to the label, so the handler (and the wall rebuild) runs twice per click.
-    // WARNING: never move this to the radio 'change' event. An import updates the label classes but leaves the
+    // The listener stays on the .mesh-mode-option LABEL 'click'; each label wraps a hidden radio whose synthetic click
+    // bubbles back to the label, so the handler runs twice per click; since 08 P2-8d (B-L13 fixed) the second
+    // setMeshMode is a no-op (mode unchanged), so the wall rebuilds once. WARNING: never move this to the radio 'change'
+    // event. An import updates the label classes but leaves the
     // radio `checked` state stale, and a click on the stale-checked option must still switch modes (a radio
     // 'change' would not fire there; see the convex import scenario).
     this.#meshModeOptions().forEach(opt => {

@@ -261,7 +261,7 @@ export class PilotController {
 
   /**
    * Per-frame keyboard fly of the film camera (W/S along the look direction, A/D sideways, Q/E down/up).
-   * The film camera clamps posY at 0.1 on every call, even without a key (B-L10, tagged at CineCamera.pilotFly).
+   * The film camera clamps posY at the stage floor 0 on every call, even without a key (08 P2-8c, B-L10 fixed).
    * Ports: index.html@cd3fd3f lines 3564-3620 (the movement statements 3578-3611 are CineCamera.pilotFly).
    * Side effects: writes cine.posX/posY/posZ; iff moved: emits CAMERA_POSE_CHANGED {source: 'pilot-move'},
    * then hub.refresh() iff the preview is on.

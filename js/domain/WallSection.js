@@ -11,8 +11,7 @@
  * Layer: domain (may import legacy; THREE-free and DOM-free).
  */
 
-import { orDefault } from '../legacy/LegacyCompat.js';
-import { clamp, deepFreeze, roundInt, sanitizeText } from './rules.js';
+import { clamp, deepFreeze, finiteOr, roundInt, sanitizeText } from './rules.js';
 import { UvTransform } from './UvSettings.js';
 
 /**
@@ -164,24 +163,22 @@ export class WallSection {
 
   /**
    * Card number-input rules, applied to v = parseFloat(raw); fields without a rule keep v.
-   * B-L9 via orDefault (tagged in LegacyCompat): 0 and NaN fall back to the card fallback (until 08 P2-8b).
+   * 08 P2-8b (B-L9 fixed): a non-numeric entry (NaN) takes the card fallback; 0 is kept, then clamped (finiteOr).
    * 08 P2-8a (B-L15 fixed, 08 4.4): the integer fields (columns, rows, LEDs) are rounded with roundInt, and every
-   * field is clamped to its LIMITS range: `clamp(roundInt(orDefault(v, fallback)), min, max)` for the integer fields,
-   * `clamp(orDefault(v, fallback), min, max)` for the others. Panel width and the angle offset keep their legacy
-   * results (clamp equals the legacy Math.max/Math.min pair for every number orDefault returns); panel height, the
-   * LED counts and the curve gain their caps.
+   * field is clamped to its LIMITS range: `clamp(roundInt(finiteOr(v, fallback)), min, max)` for the integer fields,
+   * `clamp(finiteOr(v, fallback), min, max)` for the others (so a 0 panel width gives the minimum 50).
    * Ports: index.html@cd3fd3f lines 4030-4036.
    * @type {Readonly<Record<string, (v: number) => number>>}
    */
   static FIELD_RULES = Object.freeze({
-    panelCols: (v) => cardRule('panelCols', orDefault(v, 1)),
-    panelRows: (v) => cardRule('panelRows', orDefault(v, 1)),
-    panelWidth: (v) => cardRule('panelWidth', orDefault(v, 500)),
-    panelHeight: (v) => cardRule('panelHeight', orDefault(v, 500)),
-    ledX: (v) => cardRule('ledX', orDefault(v, 32)),
-    ledY: (v) => cardRule('ledY', orDefault(v, 32)),
-    curveIntensity: (v) => cardRule('curveIntensity', orDefault(v, 0)),
-    angleOffset: (v) => cardRule('angleOffset', orDefault(v, 0)),
+    panelCols: (v) => cardRule('panelCols', finiteOr(v, 1)),
+    panelRows: (v) => cardRule('panelRows', finiteOr(v, 1)),
+    panelWidth: (v) => cardRule('panelWidth', finiteOr(v, 500)),
+    panelHeight: (v) => cardRule('panelHeight', finiteOr(v, 500)),
+    ledX: (v) => cardRule('ledX', finiteOr(v, 32)),
+    ledY: (v) => cardRule('ledY', finiteOr(v, 32)),
+    curveIntensity: (v) => cardRule('curveIntensity', finiteOr(v, 0)),
+    angleOffset: (v) => cardRule('angleOffset', finiteOr(v, 0)),
   });
 
   /**

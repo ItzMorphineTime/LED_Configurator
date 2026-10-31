@@ -8,8 +8,7 @@
  * Layer: domain (may import legacy; THREE-free and DOM-free).
  */
 
-import { orDefault } from '../legacy/LegacyCompat.js';
-import { clamp, deepFreeze, quarterExactTrig, STAGE_POSITION_LIMIT_M, wrapDeg } from './rules.js';
+import { clamp, deepFreeze, finiteOr, quarterExactTrig, STAGE_POSITION_LIMIT_M, wrapDeg } from './rules.js';
 
 /**
  * A reference prop (person or car): pose, scale and visibility, written only through its methods
@@ -54,10 +53,10 @@ export class Prop {
    * @type {Readonly<Record<string, Readonly<{parse: (raw: string) => number, writeBack: boolean}>>>}
    */
   static FIELD_RULES = Object.freeze({
-    posX: Object.freeze({ parse: (r) => orDefault(parseFloat(r), 0), writeBack: false }),
-    posZ: Object.freeze({ parse: (r) => orDefault(parseFloat(r), 0), writeBack: false }),
-    rotY: Object.freeze({ parse: (r) => Math.max(-180, Math.min(180, orDefault(parseFloat(r), 0))), writeBack: true }),
-    scale: Object.freeze({ parse: (r) => Math.max(0.5, Math.min(2, orDefault(parseFloat(r), 1))), writeBack: true }),
+    posX: Object.freeze({ parse: (r) => finiteOr(parseFloat(r), 0), writeBack: false }),
+    posZ: Object.freeze({ parse: (r) => finiteOr(parseFloat(r), 0), writeBack: false }),
+    rotY: Object.freeze({ parse: (r) => Math.max(-180, Math.min(180, finiteOr(parseFloat(r), 0))), writeBack: true }),
+    scale: Object.freeze({ parse: (r) => Math.max(0.5, Math.min(2, finiteOr(parseFloat(r), 1))), writeBack: true }),
   });
 
   /**
@@ -151,7 +150,8 @@ export class Prop {
   }
 
   /**
-   * Gizmo rotate on the prop.
+   * Gizmo rotate on the prop. Since 08 P2-8c (B-L10 fixed) the rotation is wrapped into (-180, 180] (wrapDeg; legacy
+   * left it unbounded).
    * Ports: index.html@cd3fd3f lines 3389-3392 (car 3395-3398).
    * Side effects: writes rotY when axis is 'y'.
    * @param {'x'|'y'|'z'} axis
@@ -161,7 +161,7 @@ export class Prop {
   rotateBy(axis, deltaDeg) {
     // LEGACY(B-L22): the X and Z rings are inert on props.
     if (axis === 'y') {
-      this.rotY += deltaDeg;
+      this.rotY = wrapDeg(this.rotY + deltaDeg);
       return true;
     }
     return false;

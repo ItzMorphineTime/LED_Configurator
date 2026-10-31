@@ -21,7 +21,7 @@
  * | 5  | 4074   | number `change`                  | setSectionField, commitSectionEdit   | always, stats first                     | write-back, card patch, WALL_STATS_CHANGED twice        |
  * | 6  | 4118   | #add-section-btn                 | addSection                           | always, unless 200 sections (M-SEC-1)   | WALL_SECTIONS_CHANGED{add}                              |
  * | 7  | 4145   | .section-delete                  | deleteSection                        | always unless count <= 1 (then nothing) | logo entry removed, WALL_SECTIONS_CHANGED{delete}       |
- * | 8  | 4161   | mesh-mode label click (x2)       | setMeshMode x2                       | always, twice per click (B-L13)         | label classes, WALL_MESH_MODE_CHANGED                   |
+ * | 8  | 4161   | mesh-mode label click (x2)       | setMeshMode x2                       | once per click, iff the mode changed (the second call is a no-op, 08 P2-8d) | label classes, WALL_MESH_MODE_CHANGED |
  * | 9  | 4165   | #toggle-wireframe                | setWireframe                         | always                                  | toggle class                                            |
  * | 10 | 4166   | #toggle-frame                    | setShowFrame                         | always                                  | toggle class                                            |
  * | 11 | 4178   | #toggle-led-sim                  | setLedSim                            | always, after ledTiles.clearCache()     | DISPLAY_CONTENT_CHANGED{ledSim}                         |
@@ -48,7 +48,7 @@
  * No other path calls rebuild() (row F6-1, the font gate of 06 5.6, calls rebuildIfPanelIds at most once after the
  * web fonts settled), except commitPivot (03 5.6, rows F3-1 to F3-4 through app/PivotController's P-PIVOT, 03 T4:
  * rebuild({cause: 'pivot'}) iff the stage origin moved, else the pivot cache only). WALL_REBUILT carries the cause:
- * 'init' (row 1), 'import' (row 24), 'pivot' (commitPivot) and 'edit' (every other row). Never de-duplicate or debounce: row 8 rebuilds twice per click and rows 3, 16 and 19 rebuild
+ * 'init' (row 1), 'import' (row 24), 'pivot' (commitPivot) and 'edit' (every other row). Never de-duplicate or debounce (row 8 is the one guarded row since 08 P2-8d: an unchanged mode is a no-op): rows 3, 16 and 19 rebuild
  * on every `input` event, exactly like legacy.
  */
 import { Events } from '../core/EventBus.js';
@@ -352,14 +352,16 @@ export class WallController {
   }
 
   /**
-   * Mesh-mode label click: model, label mirror, rebuild.
+   * Mesh-mode label click: model, label mirror, rebuild. Since 08 P2-8d (B-L13 fixed) an unchanged mode is a no-op:
+   * the label click still calls it twice (the hidden radio's synthetic click bubbles back to the label), and only the
+   * first call, which changes the mode, rebuilds.
    * Ports: index.html@cd3fd3f lines 4160-4161.
-   * Side effects: writes project.meshMode; emits WALL_MESH_MODE_CHANGED {mode}; rebuild().
+   * Side effects: none when mode === project.meshMode; otherwise writes project.meshMode; emits WALL_MESH_MODE_CHANGED
+   *   {mode}; rebuild().
    * @param {*} mode  the label's data-mode ('combined' | 'section' | 'panel')
    */
   setMeshMode(mode) {
-    // LEGACY(B-L13): called twice per label click (the hidden radio's synthetic click bubbles back to the label),
-    // so the wall rebuilds twice. Never de-duplicate here and never add a "mode unchanged" guard in Phase 1.
+    if (mode === this.#project.meshMode) return;
     this.#project.meshMode = mode;
     this.#bus.emit(Events.WALL_MESH_MODE_CHANGED, { mode });
     this.rebuild();

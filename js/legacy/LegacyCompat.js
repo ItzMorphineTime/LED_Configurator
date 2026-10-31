@@ -3,13 +3,13 @@
  * The single home of every output-affecting legacy switch and helper of Phase 1:
  * - `Strategies`: deep-frozen switches, each read at exactly one site (ARCHITECTURE.md 8.1);
  * - `LegacyProfiles`: the exact Phase-1 mesh profiles, read only by the oracle tests (ARCHITECTURE.md 3.3);
- * - legacy helpers that reproduce a preserved quirk (`orDefault`; `legacyHtml` was deleted by 08 P2-3a, B-M4);
+ * - legacy helpers that reproduce a preserved quirk (none left: `legacyHtml` was deleted by 08 P2-3a, B-M4, and
+ *   `orDefault` by 08 P2-8b, B-L9);
  * - `unsupportedStrategy`, thrown by every switch-and-throw reader for a non-legacy value (ARCHITECTURE.md 1.5);
  * - `LEGACY_SITES`, the machine-readable register of every tagged legacy site.
  * The human-readable register is docs/ARCHITECTURE.md section 8 (8.1 switches, 8.2 quirks, 8.3 tag sites).
  * A later fix flips one value (plus its new code branch) or edits one tagged site, updates LEGACY_SITES and
  * re-baselines only the affected golden-master outputs.
- * Legacy source: index.html@cd3fd3f, every `|| default` input rule.
  * Layer: legacy (imports no other directory of js/).
  */
 
@@ -105,17 +105,6 @@ export function unsupportedStrategy(key, value) {
 }
 
 /**
- * The legacy `value || default` idiom used by every input rule table and import default.
- * LEGACY(B-L9): `v || d` (0, '', NaN fall back to the default). Every input rule table uses it.
- * Side effects: none.
- * @template V, D
- * @param {V} v
- * @param {D} d
- * @returns {V|D} v when truthy, otherwise d
- */
-export const orDefault = (v, d) => v || d;
-
-/**
  * Quirk register (ARCHITECTURE.md 8.2): bug id -> [preserved behaviour, how the fix lands]. Module-private.
  * A fixed quirk keeps its row (its fix text starts with 'Landed') but has no TAG_SITES pair, so LEGACY_SITES
  * no longer lists it.
@@ -181,15 +170,15 @@ const QUIRKS = deepFreeze({
   'B-L8': ['No import validation; unknown mode renders as panels; raw coercion',
     'Landed in 08 P2-3b (`ProjectSerializer.read`: `detectVersion`, `migrateV1toV2` and `validateProject` of `io/ProjectMigrations.js`, `io/ProjectValidator.js`, `io/ProjectSchema.js`; `Strategies.importValidation` retired; `Wall.MAX_SECTIONS` with M-SEC-1; the size limit and the read error; the three-mode dispatch; `WallSection.setName`; no tag site)'],
   'B-L9': ['`|| default` turns 0 into the default (D-7, J-5, V-3)',
-    'change `orDefault` or per rule'],
+    'Landed in 08 P2-8b (`domain/rules.js finiteOr` replaces `orDefault` in every input rule table: `WallSection.FIELD_RULES`, `CineCamera.FIELD_RULES`, `Prop.FIELD_RULES`, `PanelIdStyle.RULES` and `LogoLibrary.parseScalePercent`; a typed 0 is kept and then clamped, only a non-numeric entry takes the default; `orDefault` deleted; no tag site)'],
   'B-L10': ['Gizmo posY >= 0 vs pilot >= 0.1 per frame; Z unclamped',
-    'validated setter; the Z half landed in 08 P2-11c (no Z minimum in the input rule either, so input, gizmo and pilot agree on Z; `CineCamera.translateBy` untagged); the pilot floor stays for 08 P2-8c'],
+    'Landed in 08 P2-8c (`CineCamera.pilotFly` floors posY at 0, the floor of the input and the gizmo, and never clamps Z; the gizmo and pilot rotation writes wrap the pan (and the gizmo roll) into (-180, 180] with `wrapDeg`, the tilt stays clamped to [-90, 90]; the Z half in 08 P2-11c; no tag site)'],
   'B-L11': ['Shortcuts ignore SELECT focus, modifiers, repeat (W-1)',
     'Landed in 08 P2-9b (`core/typingTarget.js isTypingTarget` with the 07 3.8 truth table, re-exported by `InputState` as `isShortcutIgnoredTarget`; `ViewportInput.attachShortcuts` also ignores Ctrl, Meta, Alt and auto-repeat; no tag site)'],
   'B-L12': ['Gizmo resources leak (memory only)',
     'Landed in Phase 1C H2 (`dispose.gizmo = true`; the key retired by 08 P2-12a: the replaced or removed gizmo group is always disposed; no tag site)'],
   'B-L13': ['Mesh-mode handler fires twice (C-4)',
-    '"mode unchanged -> no-op" guard, never radio `change`'],
+    'Landed in 08 P2-8d (`WallController.setMeshMode` is a no-op when the mode is unchanged, so a label click rebuilds once; the listener stays on the label `click`, never the radio `change`; no tag site)'],
   'B-L14': ['Colliding ZIP texture names (U-3)',
     'Landed in 08 P2-6b (`PanelNaming.textureFileNames`: the legacy names made unique case-insensitively with `_2`, `_3` suffixes, the one list of the ZIP texture entries and the JSON `texture_file`; `zipTextureFileName` deleted; `Strategies.zipTextureNaming` retired; no tag site)'],
   'B-L15': ['Fractional integer fields (D-8); declared vertex advance',
@@ -244,11 +233,9 @@ const QUIRKS = deepFreeze({
  * @type {ReadonlyArray<readonly [string, readonly string[]]>}
  */
 const TAG_SITES = deepFreeze([
-  ['js/legacy/LegacyCompat.js#orDefault', ['B-L9']],
   ['js/domain/WallSection.js#exceeds4K', ['B-L17']],
   ['js/domain/CineCamera.js#presetShortName', ['B-L34']],
   ['js/domain/CineCamera.js#rotateBy', ['B-L28']],
-  ['js/domain/CineCamera.js#pilotFly', ['B-L10']],
   ['js/domain/Prop.js#translateBy', ['B-L22']],
   ['js/domain/Prop.js#rotateBy', ['B-L22']],
   ['js/geometry/WallLayout.js#computeWallLayout', ['B-L1']],
@@ -266,10 +253,8 @@ const TAG_SITES = deepFreeze([
   ['js/interaction/PilotController.js#toggle', ['B-L26']],
   ['js/interaction/PilotController.js#tickKeyboard', ['B-M13', 'B-L27']],
   ['js/interaction/ViewportInput.js#attachPointer', ['B-M14']],
-  ['js/app/WallController.js#setMeshMode', ['B-L13']],
   ['js/app/CameraController.js#CameraHub.refresh', ['B-L30']],
   ['js/ui/SectionLogosPanel.js#onUpload', ['B-L35']],
-  ['js/ui/WallDisplayPanel.js#bind', ['B-L13']],
   ['index.html', ['B-L36']],                   // markup, untagged; documentation-only
 ]);
 

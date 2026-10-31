@@ -9,7 +9,7 @@
  * Layer: domain (may import legacy; THREE-free and DOM-free).
  */
 
-import { orDefault } from '../legacy/LegacyCompat.js';
+import { finiteOr } from './rules.js';
 
 /**
  * @typedef {object} LogoEntry
@@ -130,13 +130,13 @@ export class LogoLibrary {
   }
 
   /**
-   * The scale input rule (parseInt without radix, as legacy; B-L9 via orDefault).
+   * The scale input rule (parseInt without radix, as legacy; since 08 P2-8b (B-L9 fixed) finiteOr, so 0 gives the minimum).
    * Ports: index.html@cd3fd3f line 2298.
    * Side effects: none.
    * @param {string} raw  the input's value
-   * @returns {number} percent in [5, 100] (30 for '', 0, NaN)
+   * @returns {number} percent in [5, 100] (30 for '' and NaN; 5 for 0)
    */
   static parseScalePercent(raw) {
-    return Math.max(5, Math.min(100, orDefault(parseInt(raw), 30)));
+    return Math.max(5, Math.min(100, finiteOr(parseInt(raw), 30)));
   }
 }

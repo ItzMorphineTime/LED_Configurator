@@ -362,7 +362,7 @@ describe('CameraController lens/pose inputs and safe-distance toggle', () => {
     const s = setup({ enabled: false, spyHub: true });
     assert.equal(s.controller.setCameraField('focalLength', '2000'), 800);
     assert.equal(s.cine.focalLength, 800);
-    assert.equal(s.controller.setCameraField('posY', '0'), 1.5, 'B-L9 via orDefault');
+    assert.ok(Object.is(s.controller.setCameraField('posY', '0'), 0), '08 P2-8b (B-L9 fixed): a typed 0 is kept');
     assert.equal(s.controller.setCameraField('posX', 'abc'), 0);
     s.controller.commitCameraField();
     assert.deepEqual(s.calls(), ['frameBounds', 'frameBounds', 'frameBounds'], 'only the context read (03 T3), no refresh');
@@ -387,7 +387,7 @@ describe('CameraController lens/pose inputs and safe-distance toggle', () => {
     assert.ok(Object.is(s.controller.setCameraField('posZ', '0'), 0), 'a stage origin off the wall plane: 0 is valid');
     assert.equal(s.controller.setCameraField('posZ', '-5'), -5, '08 P2-11c: no minimum');
     assert.equal(s.controller.setCameraField('posZ', 'abc'), 3, 'r3(wallZ + 5)');
-    assert.equal(s.controller.setCameraField('posY', '0'), 1.5, 'the other rules ignore the context');
+    assert.equal(s.controller.setCameraField('posY', ''), 1.5, 'the other rules ignore the context');
   });
 
   test('translateStage: the clamped model write, then the pose mirror; no hub refresh (03 5.6)', () => {
@@ -489,7 +489,7 @@ describe("CameraController as the Selectable 'camera'", () => {
       { source: 'gizmo-rotate', axis: 'x' }, { source: 'gizmo-rotate', axis: 'y' }, { source: 'gizmo-rotate', axis: 'z' },
     ]);
     assert.equal(events[0].pose.rotX, -90, 'x clamped to [-90, 90] before the emit');
-    assert.equal(events[1].pose.rotY, 400, 'y unbounded');
+    assert.equal(events[1].pose.rotY, 40, 'y wrapped into (-180, 180] (08 P2-8c, B-L10 fixed; legacy unbounded)');
     assert.equal(events[2].pose.rotZ, 15.5);
 
     const off = setup({ enabled: false, spyHub: true });

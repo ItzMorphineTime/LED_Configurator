@@ -409,17 +409,20 @@ describe('rebuild policy (ARCHITECTURE.md 6.2): run counts and tile-cache clears
     assert.deepEqual(r.project.wall.sections.map((s) => s.id), ['4']);
   });
 
-  test('row 8 setMeshMode x2 (one label click): 2 rebuilds and 2 WALL_MESH_MODE_CHANGED, model written before the emit', () => {
+  test('row 8 setMeshMode x2 (one label click): 1 rebuild and 1 WALL_MESH_MODE_CHANGED (08 P2-8d, B-L13 fixed), model written before the emit', () => {
     const r = makeRig();
     const seen = [];
     r.bus.on(Events.WALL_MESH_MODE_CHANGED, ({ mode }) => seen.push([mode, r.project.meshMode]));
+    assert.notEqual(r.project.meshMode, 'section');
     r.wc.setMeshMode('section');
     r.wc.setMeshMode('section');
-    assert.equal(r.rebuilds(), 2);
-    assert.deepEqual(r.emitted('WALL_MESH_MODE_CHANGED'), [{ mode: 'section' }, { mode: 'section' }]);
-    assert.deepEqual(seen, [['section', 'section'], ['section', 'section']]);
-    assert.deepEqual(r.trace, ['WALL_MESH_MODE_CHANGED', ...P1, 'WALL_MESH_MODE_CHANGED', ...P1]);
-    assert.equal(r.view.calls[1].meshMode, 'section');
+    assert.equal(r.rebuilds(), 1, 'the second call (mode unchanged) is a no-op');
+    assert.deepEqual(r.emitted('WALL_MESH_MODE_CHANGED'), [{ mode: 'section' }]);
+    assert.deepEqual(seen, [['section', 'section']]);
+    assert.deepEqual(r.trace, ['WALL_MESH_MODE_CHANGED', ...P1]);
+    assert.equal(r.view.calls[0].meshMode, 'section');
+    r.wc.setMeshMode('section');
+    assert.equal(r.rebuilds(), 1, 'a click on the active mode does nothing');
   });
 
   test('rows 9-10 setWireframe / setShowFrame: model then one rebuild each, no cache clear', () => {
@@ -492,7 +495,7 @@ describe('rebuild policy (ARCHITECTURE.md 6.2): run counts and tile-cache clears
   test('rows 14-19 setPanelIdStyle: model only, numeric keys parsed with PanelIdStyle.RULES', () => {
     const r = makeRig();
     assert.equal(r.wc.setPanelIdStyle('borderThickness', '40'), 32);
-    assert.equal(r.wc.setPanelIdStyle('borderThickness', '0'), 8, 'B-L9: 0 falls back to the default');
+    assert.equal(r.wc.setPanelIdStyle('borderThickness', '0'), 1, '08 P2-8b (B-L9 fixed): 0 is kept, then clamped to the minimum');
     assert.equal(r.wc.setPanelIdStyle('fontSize', '12.9px'), 12);
     assert.equal(r.wc.setPanelIdStyle('sectionLabelFontSize', '999'), 400);
     assert.equal(r.wc.setPanelIdStyle('fontColor', '#ff0000'), '#ff0000');
@@ -859,11 +862,15 @@ const TEMPLATE_EDITS = Object.freeze([
   ['data-field="ledX" value="${section.ledX}" min="8">', 'data-field="ledX" value="${section.ledX}" min="8" max="65536" step="1">', 1],
   ['data-field="ledY" value="${section.ledY}" min="8">', 'data-field="ledY" value="${section.ledY}" min="8" max="65536" step="1">', 1],
   ['data-field="curveIntensity" value="${section.curveIntensity}" step="0.1">', 'data-field="curveIntensity" value="${section.curveIntensity}" min="-180" max="180" step="0.1">', 1],
-  ["if (field === 'panelCols') value = Math.max(1, Math.min(50, value || 1));", "if (field === 'panelCols') value = Math.min(50, Math.max(1, Math.round(value || 1)));", 1],
-  ["else if (field === 'panelRows') value = Math.max(1, Math.min(20, value || 1));", "else if (field === 'panelRows') value = Math.min(20, Math.max(1, Math.round(value || 1)));", 1],
-  ["else if (field === 'panelHeight') value = Math.max(50, value || 500);", "else if (field === 'panelHeight') value = Math.min(100000, Math.max(50, value || 500));", 1],
-  ["else if (field === 'ledX' || field === 'ledY') value = Math.max(8, value || 32);", "else if (field === 'ledX' || field === 'ledY') value = Math.min(65536, Math.max(8, Math.round(value || 32)));", 1],
-  ["else if (field === 'curveIntensity') value = value || 0;", "else if (field === 'curveIntensity') value = Math.min(180, Math.max(-180, value || 0));", 1],
+  // 08 P2-8a (B-L15) rounding and caps; 08 P2-8b (B-L9 fixed): the finiteOr fallback, so a typed 0 is kept, then clamped
+  ["if (field === 'panelCols') value = Math.max(1, Math.min(50, value || 1));", "if (field === 'panelCols') value = Math.min(50, Math.max(1, Math.round(Number.isFinite(value) ? value : 1)));", 1],
+  ["else if (field === 'panelRows') value = Math.max(1, Math.min(20, value || 1));", "else if (field === 'panelRows') value = Math.min(20, Math.max(1, Math.round(Number.isFinite(value) ? value : 1)));", 1],
+  ["else if (field === 'panelWidth') value = Math.max(50, Math.min(5000, value || 500));", "else if (field === 'panelWidth') value = Math.max(50, Math.min(5000, Number.isFinite(value) ? value : 500));", 1],
+  ["else if (field === 'panelHeight') value = Math.max(50, value || 500);", "else if (field === 'panelHeight') value = Math.min(100000, Math.max(50, Number.isFinite(value) ? value : 500));", 1],
+  ["else if (field === 'ledX' || field === 'ledY') value = Math.max(8, value || 32);", "else if (field === 'ledX' || field === 'ledY') value = Math.min(65536, Math.max(8, Math.round(Number.isFinite(value) ? value : 32)));", 1],
+  ["else if (field === 'curveIntensity') value = value || 0;", "else if (field === 'curveIntensity') value = Math.min(180, Math.max(-180, Number.isFinite(value) ? value : 0));", 1],
+  ["else if (field === 'angleOffset') value = Math.max(-180, Math.min(180, value || 0));", "else if (field === 'angleOffset') value = Math.max(-180, Math.min(180, Number.isFinite(value) ? value : 0));", 1],
+  ['const scalePercent = Math.max(5, Math.min(100, parseInt(e.target.value) || 30));', 'const scalePercent = Math.max(5, Math.min(100, Number.isFinite(parseInt(e.target.value)) ? parseInt(e.target.value) : 30));', 1],
   [">${section.name || 'Wall ' + (index + 1)}</div>", ">${escapeHtml(section.name || 'Wall ' + (index + 1))}</div>", 1],
   ['data-section-id="${section.id}"', 'data-section-id="${escapeHtml(section.id)}"', 7],
   ['style="background: ${section.color}"></div>', 'style="background: ${escapeHtml(section.color)}"></div>', 1],
@@ -931,6 +938,20 @@ const IMPORT_EDITS = Object.freeze([
     "if (firstSection) firstSection.classList.remove('collapsed');\n                        if (panelIdsEnabled) renderSectionLogosUI();\n                        createLEDWall();", 1],
 ]);
 
+/**
+ * The declared edits of the legacy display handlers (index.html@cd3fd3f 4149-4227). 08 P2-8d (B-L13 fixed): an
+ * unchanged mesh mode is a no-op, so the second (synthetic) click of one label click no longer rebuilds. 08 P2-8b
+ * (B-L9 fixed): the style inputs keep a typed 0 (finiteOr), then clamp.
+ */
+const fin = (expr, d) => `(Number.isFinite(${expr}) ? ${expr} : ${d})`;
+const MESH_MODE_EDITS = Object.freeze([
+  ['meshMode = opt.dataset.mode;\n                    createLEDWall();',
+    'if (opt.dataset.mode === meshMode) return;\n                    meshMode = opt.dataset.mode;\n                    createLEDWall();', 1],
+  ['Math.max(1, Math.min(32, parseInt(this.value) || 8))', `Math.max(1, Math.min(32, ${fin('parseInt(this.value)', 8)}))`, 1],
+  ['Math.max(0, Math.min(200, parseInt(this.value) || 0))', `Math.max(0, Math.min(200, ${fin('parseInt(this.value)', 0)}))`, 1],
+  ['Math.max(0, Math.min(400, parseInt(this.value) || 0))', `Math.max(0, Math.min(400, ${fin('parseInt(this.value)', 0)}))`, 1],
+]);
+
 function buildLegacy(doc, initialSections) {
   const expectStart = (n, text) => {
     if (!LEGACY_LINES[n - 1].trimStart().startsWith(text)) throw new Error(`index.html line ${n} is not "${text}"`);
@@ -957,7 +978,7 @@ function buildLegacy(doc, initialSections) {
 ${withTemplateEdits(`${lines(2189, 2318)}
 ${lines(3892, 4146)}`)}
     function setupUIWall() {
-${lines(4149, 4227)}
+${withTemplateEdits(lines(4149, 4227), MESH_MODE_EDITS)}
     }
     function importTail(data) {
 ${withTemplateEdits(lines(4975, 5003), IMPORT_EDITS)}
@@ -1140,9 +1161,9 @@ describe('legacy parity: panels + WallController vs index.html@cd3fd3f', { skip:
       input.fire('input');
     });
 
-    // ---- mesh mode (label click fires twice: B-L13), wireframe, frames
+    // ---- mesh mode (label click fires twice; since 08 P2-8d the second call is a no-op: B-L13 fixed), wireframe, frames
     log = step('mesh mode "section" (double fire)', (doc) => { label(doc, 'section').fire('click'); label(doc, 'section').fire('click'); });
-    assert.equal(rebuilds(log), 2);
+    assert.equal(rebuilds(log), 1);
     step('mesh mode "panel"', (doc) => label(doc, 'panel').fire('click'));
     step('wireframe on, frames on, wireframe off', (doc) => { click(doc, 'toggle-wireframe'); click(doc, 'toggle-frame'); click(doc, 'toggle-wireframe'); });
 
@@ -1160,7 +1181,7 @@ describe('legacy parity: panels + WallController vs index.html@cd3fd3f', { skip:
     log = step('panel IDs on: LED sim forced off, logo list rendered', (doc) => click(doc, 'toggle-panel-ids'));
     assert.ok(entries(log).some((e) => e[1] === 'innerHTML' && String(e[2]).includes('section-logo-upload')));
     step('border 40 -> 32', (doc) => change(doc, 'panel-border-thickness', '40'));
-    step('border 0 -> 8', (doc) => change(doc, 'panel-border-thickness', '0'));
+    step('border 0 -> 1 (08 P2-8b; legacy 8)', (doc) => change(doc, 'panel-border-thickness', '0'));
     step('font size abc -> 0, 12.7 -> 12', (doc) => { change(doc, 'panel-font-size', 'abc'); change(doc, 'panel-font-size', '12.7'); });
     step('font colour input', (doc) => change(doc, 'panel-font-color', '#ff0000', 'input'));
     step('section labels off', (doc) => click(doc, 'toggle-section-labels'));

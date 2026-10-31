@@ -7,7 +7,10 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { MM_TO_M, SECTION_FIELDS, WallSection } from '../../js/domain/WallSection.js';
-import { clamp, roundInt, deepFreeze, STAGE_POSITION_LIMIT_M } from '../../js/domain/rules.js';
+import { clamp, roundInt, deepFreeze, STAGE_POSITION_LIMIT_M, wrapDeg } from '../../js/domain/rules.js';
+
+/** The 08 P2-8b fallback (B-L9 fixed): the legacy `v || d` keeps a typed 0 (finiteOr). */
+const fin = (v, d) => (Number.isFinite(v) ? v : d);
 import { PivotMode, PIVOT_MODES, PIVOT_OFFSET_LIMIT_M, WallPivot, Wall } from '../../js/domain/Wall.js';
 import { ContentMode, DisplaySettings, PanelIdStyle, Project } from '../../js/domain/Project.js';
 import { LogoLibrary } from '../../js/domain/LogoLibrary.js';
@@ -93,49 +96,50 @@ function legacySectionField(field, raw) {
 
 /**
  * 08 P2-8a (B-L15 fixed, 08 4.4): the legacy handler with the rounding of the integer fields and the caps of
- * WallSection.LIMITS, written out as plain expressions (the independent copy the rule table is compared with).
+ * WallSection.LIMITS, and since 08 P2-8b (B-L9 fixed) the finiteOr fallback, written out as plain expressions (the
+ * independent copy the rule table is compared with).
  */
 function p28aSectionField(field, raw) {
   let value = parseFloat(raw);
-  if (field === 'panelCols') value = Math.min(50, Math.max(1, Math.round(value || 1)));
-  else if (field === 'panelRows') value = Math.min(20, Math.max(1, Math.round(value || 1)));
-  else if (field === 'panelWidth') value = Math.max(50, Math.min(5000, value || 500));
-  else if (field === 'panelHeight') value = Math.min(100000, Math.max(50, value || 500));
-  else if (field === 'ledX' || field === 'ledY') value = Math.min(65536, Math.max(8, Math.round(value || 32)));
-  else if (field === 'curveIntensity') value = Math.min(180, Math.max(-180, value || 0));
-  else if (field === 'angleOffset') value = Math.max(-180, Math.min(180, value || 0));
+  if (field === 'panelCols') value = Math.min(50, Math.max(1, Math.round(fin(value, 1))));
+  else if (field === 'panelRows') value = Math.min(20, Math.max(1, Math.round(fin(value, 1))));
+  else if (field === 'panelWidth') value = Math.max(50, Math.min(5000, fin(value, 500)));
+  else if (field === 'panelHeight') value = Math.min(100000, Math.max(50, fin(value, 500)));
+  else if (field === 'ledX' || field === 'ledY') value = Math.min(65536, Math.max(8, Math.round(fin(value, 32))));
+  else if (field === 'curveIntensity') value = Math.min(180, Math.max(-180, fin(value, 0)));
+  else if (field === 'angleOffset') value = Math.max(-180, Math.min(180, fin(value, 0)));
   return value;
 }
 
-/** 4201, 4206, 4220 (parseInt without radix). */
+/** 4201, 4206, 4220 (parseInt without radix), with the 08 P2-8b fallback (fin: a typed 0 is kept, B-L9 fixed). */
 const LEGACY_PANEL_ID_RULES = {
-  borderThickness: (v) => Math.max(1, Math.min(32, parseInt(v) || 8)),
-  fontSize: (v) => Math.max(0, Math.min(200, parseInt(v) || 0)),
-  sectionLabelFontSize: (v) => Math.max(0, Math.min(400, parseInt(v) || 0)),
+  borderThickness: (v) => Math.max(1, Math.min(32, fin(parseInt(v), 8))),
+  fontSize: (v) => Math.max(0, Math.min(200, fin(parseInt(v), 0))),
+  sectionLabelFontSize: (v) => Math.max(0, Math.min(400, fin(parseInt(v), 0))),
 };
 
-/** 2298. */
-const legacyScalePercent = (v) => Math.max(5, Math.min(100, parseInt(v) || 30));
+/** 2298, with the 08 P2-8b fallback. */
+const legacyScalePercent = (v) => Math.max(5, Math.min(100, fin(parseInt(v), 30)));
 
-/** 4267-4314: [expression, writes this.value back]. */
+/** 4267-4314, with the 08 P2-8b fallback: [expression, writes this.value back]. */
 const LEGACY_CAMERA_RULES = {
-  filmbackWidth: [(v) => Math.max(1, Math.min(100, parseFloat(v) || 36)), true],
-  filmbackHeight: [(v) => Math.max(1, Math.min(100, parseFloat(v) || 24)), true],
-  focalLength: [(v) => Math.max(8, Math.min(800, parseFloat(v) || 35)), true],
-  posX: [(v) => parseFloat(v) || 0, false],
-  posY: [(v) => Math.max(0, parseFloat(v) || 1.5), true],
-  posZ: [(v) => Math.max(0.1, parseFloat(v) || 5), true],
-  rotX: [(v) => Math.max(-90, Math.min(90, parseFloat(v) || 0)), true],
-  rotY: [(v) => Math.max(-180, Math.min(360, parseFloat(v) || 0)), true],
-  rotZ: [(v) => Math.max(-180, Math.min(180, parseFloat(v) || 0)), true],
+  filmbackWidth: [(v) => Math.max(1, Math.min(100, fin(parseFloat(v), 36))), true],
+  filmbackHeight: [(v) => Math.max(1, Math.min(100, fin(parseFloat(v), 24))), true],
+  focalLength: [(v) => Math.max(8, Math.min(800, fin(parseFloat(v), 35))), true],
+  posX: [(v) => fin(parseFloat(v), 0), false],
+  posY: [(v) => Math.max(0, fin(parseFloat(v), 1.5)), true],
+  posZ: [(v) => Math.max(0.1, fin(parseFloat(v), 5)), true],
+  rotX: [(v) => Math.max(-90, Math.min(90, fin(parseFloat(v), 0))), true],
+  rotY: [(v) => Math.max(-180, Math.min(360, fin(parseFloat(v), 0))), true],
+  rotZ: [(v) => Math.max(-180, Math.min(180, fin(parseFloat(v), 0))), true],
 };
 
-/** 4345-4358 (person) == 4376-4389 (car). */
+/** 4345-4358 (person) == 4376-4389 (car), with the 08 P2-8b fallback. */
 const LEGACY_PROP_RULES = {
-  posX: [(v) => parseFloat(v) || 0, false],
-  posZ: [(v) => parseFloat(v) || 0, false],
-  rotY: [(v) => Math.max(-180, Math.min(180, parseFloat(v) || 0)), true],
-  scale: [(v) => Math.max(0.5, Math.min(2, parseFloat(v) || 1)), true],
+  posX: [(v) => fin(parseFloat(v), 0), false],
+  posZ: [(v) => fin(parseFloat(v), 0), false],
+  rotY: [(v) => Math.max(-180, Math.min(180, fin(parseFloat(v), 0))), true],
+  scale: [(v) => Math.max(0.5, Math.min(2, fin(parseFloat(v), 1))), true],
 };
 
 /** updateStats 2308-2313, returning what 2314-2317 display. */
@@ -263,7 +267,7 @@ function legacyPilotFly(cameraSettings, keys, forward, right, pilotMoveSpeed) {
     cameraSettings.posY += pilotMoveSpeed;
     moved = true;
   }
-  cameraSettings.posY = Math.max(0.1, cameraSettings.posY);
+  cameraSettings.posY = Math.max(0, cameraSettings.posY);   // 08 P2-8c (B-L10 fixed): the stage floor; legacy 0.1
   return moved;
 }
 
@@ -370,20 +374,21 @@ describe('WallSection', () => {
     }
   });
 
-  test('08 P2-8a differs from the legacy handler only by the rounding of the integer fields and the new caps', () => {
+  test('08 P2-8a/b differ from the legacy handler only by the rounding of the integer fields, the new caps and a typed 0', () => {
     for (const field of Object.keys(WallSection.FIELD_RULES)) {
       const { min, max, int } = WallSection.LIMITS[field];
       for (const raw of ALL_INPUTS) {
         const legacy = legacySectionField(field, raw);
         const now = WallSection.parseField(field, raw);
         if (Object.is(now, legacy)) continue;
+        if (parseFloat(raw) === 0 || !Number.isFinite(parseFloat(raw))) continue;   // 08 P2-8b (finiteOr): a typed 0 is kept and ±Infinity takes the fallback
         assert.ok((int && !Number.isInteger(legacy)) || legacy > max || legacy < min,
           `${field}(${JSON.stringify(raw)}): ${now} differs from the legacy ${legacy} for no documented reason`);
       }
     }
     // panelWidth and angleOffset already had both clamps: identical over the grid
     for (const field of ['panelWidth', 'angleOffset']) {
-      for (const raw of ALL_INPUTS) same(WallSection.parseField(field, raw), legacySectionField(field, raw), `${field}(${raw})`);
+      for (const raw of ALL_INPUTS.filter((r) => parseFloat(r) !== 0 && Number.isFinite(parseFloat(r)))) same(WallSection.parseField(field, raw), legacySectionField(field, raw), `${field}(${raw})`);
     }
   });
 
@@ -904,7 +909,7 @@ describe('PanelIdStyle', () => {
     });
   });
 
-  test('RULES and set() equal the legacy parseInt expressions over the input grid (Object.is)', () => {
+  test('RULES and set() equal the legacy parseInt expressions with the 08 P2-8b fallback over the input grid (Object.is)', () => {
     assert.deepEqual(Object.keys(PanelIdStyle.RULES), Object.keys(LEGACY_PANEL_ID_RULES));
     assert.ok(Object.isFrozen(PanelIdStyle.RULES));
     for (const [key, legacy] of Object.entries(LEGACY_PANEL_ID_RULES)) {
@@ -978,7 +983,7 @@ describe('LogoLibrary', () => {
     assert.equal(lib.get('3'), lib.get(3), 'plain-object key semantics, as every other method');
   });
 
-  test('parseScalePercent equals the legacy expression over the input grid (Object.is)', () => {
+  test('parseScalePercent equals the legacy expression with the 08 P2-8b fallback over the input grid (Object.is)', () => {
     for (const raw of ALL_INPUTS) {
       same(LogoLibrary.parseScalePercent(raw), legacyScalePercent(raw), `parseScalePercent(${JSON.stringify(raw)})`);
     }
@@ -1083,7 +1088,8 @@ describe('CineCamera', () => {
         same(cam[field], expected, `setField(${field}) stored`);
       }
     }
-    assert.equal(new CineCamera().setField('posY', '0'), 1.5, "B-L9: '0' gives 1.5");
+    assert.ok(Object.is(new CineCamera().setField('posY', '0'), 0), "'0' gives 0 (08 P2-8b, B-L9 fixed; legacy 1.5)");
+    assert.equal(new CineCamera().setField('focalLength', '0'), 8, 'a 0 focal length gives the minimum (legacy: the default 35)');
   });
 
   // 03 T1 (4.1; 8.1 "domain.test.mjs")
@@ -1252,18 +1258,18 @@ describe('CineCamera', () => {
       const angle = [(rand() - 0.5) * 400, 0, -0, 1e-12, -180, 90][Math.floor(rand() * 6)];
       cam.rotateBy(axis, -1 * angle);   // Strategies.gizmoRotateSign * angle
       if (axis === 'x') legacy.rotX = Math.max(-90, Math.min(90, legacy.rotX - angle));
-      else if (axis === 'y') legacy.rotY -= angle;
-      else legacy.rotZ = Math.max(-180, Math.min(180, legacy.rotZ - angle));
+      else if (axis === 'y') legacy.rotY = wrapDeg(legacy.rotY - angle);   // 08 P2-8c (B-L10): wrapped, legacy unbounded
+      else legacy.rotZ = wrapDeg(legacy.rotZ - angle);                    // 08 P2-8c: wrapped, legacy clamped at +-180
       for (const k of POSE_KEYS) same(cam[k], legacy[k], `${axis} ${k}`);
     }
     const cam = new CineCamera();
     cam.rotateBy('x', 500);
     cam.rotateBy('z', -500);
     cam.rotateBy('y', 1000);
-    assert.deepEqual([cam.rotX, cam.rotY, cam.rotZ], [90, 1000, -180]);
+    assert.deepEqual([cam.rotX, cam.rotY, cam.rotZ], [90, -80, -140], 'tilt clamped; pan and roll wrapped into (-180, 180]');
   });
 
-  test('pilotLook equals 3551-3552 (fuzzed, Object.is)', () => {
+  test('pilotLook equals 3551-3552 with the pan wrapped (08 P2-8c; fuzzed, Object.is)', () => {
     const rand = rng(41);
     for (let i = 0; i < 500; i++) {
       const cam = fuzzCamera(rand);
@@ -1271,13 +1277,13 @@ describe('CineCamera', () => {
       const deltaX = Math.round((rand() - 0.5) * 400);
       const deltaY = Math.round((rand() - 0.5) * 400);
       cam.pilotLook(deltaX, deltaY);
-      legacy.rotY -= deltaX * 0.3;
+      legacy.rotY = wrapDeg(legacy.rotY - deltaX * 0.3);
       legacy.rotX = Math.max(-90, Math.min(90, legacy.rotX - deltaY * 0.3));
       for (const k of POSE_KEYS) same(cam[k], legacy[k], k);
     }
   });
 
-  test('pilotFly equals 3578-3611 for every key combination (fuzzed, Object.is)', () => {
+  test('pilotFly equals 3578-3611 with the 08 P2-8c floor 0 for every key combination (fuzzed, Object.is)', () => {
     const rand = rng(43);
     const names = ['forward', 'back', 'left', 'right', 'down', 'up'];
     for (let i = 0; i < 2000; i++) {
@@ -1296,21 +1302,21 @@ describe('CineCamera', () => {
     }
   });
 
-  test('pilotFly clamps posY at 0.1 even when nothing moves (B-L10)', () => {
+  test('pilotFly floors posY at 0 (the input and gizmo floor; 08 P2-8c, B-L10 fixed) even when nothing moves', () => {
     const cam = new CineCamera();
     cam.posY = 0.05;
     const none = { forward: false, back: false, left: false, right: false, down: false, up: false };
     assert.equal(cam.pilotFly(none, { x: 0, y: 0, z: -1 }, { x: 1, y: 0, z: 0 }, 0.05), false);
-    assert.equal(cam.posY, 0.1);
+    assert.equal(cam.posY, 0.05, 'above the floor nothing changes (legacy lifted it to 0.1)');
     cam.posY = -3;
     cam.pilotFly(none, { x: 0, y: 0, z: -1 }, { x: 1, y: 0, z: 0 }, 0.05);
-    assert.equal(cam.posY, 0.1);
-    cam.posY = 2;
-    cam.pilotFly(none, { x: 0, y: 0, z: -1 }, { x: 1, y: 0, z: 0 }, 0.05);
-    assert.equal(cam.posY, 2, 'above the floor nothing changes');
-    cam.posY = 0.12;
+    assert.equal(cam.posY, 0);
+    cam.posY = 0.02;
     assert.equal(cam.pilotFly({ ...none, down: true }, { x: 0, y: 0, z: -1 }, { x: 1, y: 0, z: 0 }, 0.05), true);
-    assert.equal(cam.posY, 0.1);
+    assert.equal(cam.posY, 0);
+    cam.posZ = -0.5;
+    cam.pilotFly({ ...none, forward: true }, { x: 0, y: 0, z: -1 }, { x: 1, y: 0, z: 0 }, 0.05);
+    assert.equal(cam.posZ, -0.55, 'Z is never clamped');
   });
 });
 
@@ -1385,7 +1391,8 @@ describe('Prop', () => {
     assert.equal(prop.rotateBy('y', -1 * 12.5), true);
     same(prop.rotY, 0 - 12.5, 'rotY -= angle');
     assert.equal(prop.rotateBy('y', 400), true);
-    same(prop.rotY, -12.5 + 400, 'unclamped, like legacy');
+    same(prop.rotY, wrapDeg(-12.5 + 400), 'wrapped into (-180, 180] since 08 P2-8c (legacy unbounded)');
+    assert.equal(prop.rotY, 27.5);
   });
 });
 

@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { Events, EventBus } from '../../js/core/EventBus.js';
 import { RENDER_ORDER } from '../../js/core/renderOrder.js';
 import {
-  Strategies, unsupportedStrategy, orDefault, LEGACY_SITES,
+  Strategies, unsupportedStrategy, LEGACY_SITES,
 } from '../../js/legacy/LegacyCompat.js';
 import * as LegacyCompat from '../../js/legacy/LegacyCompat.js';
 import { SceneTheme, CanvasTheme, UiColors, Palette, Brand, Theme } from '../../js/theme/Theme.js';
@@ -244,24 +244,8 @@ describe('unsupportedStrategy', () => {
   });
 });
 
-describe('orDefault', () => {
-  test('equals the legacy `v || d` for every falsy and truthy kind', () => {
-    const marker = { default: true };
-    const obj = {};
-    const table = [0, -0, '', NaN, null, undefined, false, 0n, 1, -1, 0.5, Infinity, -Infinity, '0', ' ', 'abc', true, obj, []];
-    for (const v of table) {
-      assert.ok(Object.is(orDefault(v, marker), v || marker), `orDefault(${String(v)})`);
-    }
-  });
-
-  test('spot values (B-L9: 0, empty and NaN fall back to the default)', () => {
-    assert.equal(orDefault(0, 1.5), 1.5);
-    assert.equal(orDefault(-0, 7), 7);
-    assert.equal(orDefault(NaN, 36), 36);
-    assert.equal(orDefault('', 'Wall 1'), 'Wall 1');
-    assert.equal(orDefault('0', 5), '0');
-    assert.equal(orDefault(2.5, 1), 2.5);
-  });
+test('orDefault is gone (08 P2-8b, B-L9 fixed: the rule tables use domain/rules.js finiteOr)', () => {
+  assert.equal('orDefault' in LegacyCompat, false);
 });
 
 describe('retired legacy helpers', () => {
@@ -349,7 +333,7 @@ describe('LEGACY_SITES', () => {
   const PHASE2_LANDED = { 'B-M1': 'P2-5a', 'B-H3': 'P2-1a', 'B-L5': 'P2-1b', 'B-L4': 'P2-1c', 'B-H1': 'P2-2a', 'B-L3': 'P2-2b', 'B-H2': 'P2-2c',
     'B-L11': 'P2-9b', 'B-L15': 'P2-8a', 'B-M4': 'P2-3a', 'B-L8': 'P2-3b', 'B-L16': 'P2-3c', 'B-L21': 'P2-3d', 'B-H4': 'P2-4a', 'B-M8': 'P2-4b',
     'B-M15': 'P2-5b', 'B-L29': 'P2-5b', 'B-M3': 'P2-6a', 'B-L14': 'P2-6b', 'B-L7': 'P2-6c', 'B-M2': 'P2-6d', 'B-M16': 'P2-12d', 'B-M5': 'P2-7a', 'B-M6': 'P2-7b', 'B-M7': 'P2-7c', 'B-L6': 'P2-7d', 'B-L18': 'P2-7e',
-    'B-M11': 'P2-10a', 'B-L33': 'P2-11b', 'B-M10': 'P2-11a', 'B-L2': 'P2-11c' };
+    'B-M11': 'P2-10a', 'B-L33': 'P2-11b', 'B-M10': 'P2-11a', 'B-L2': 'P2-11c', 'B-L9': 'P2-8b', 'B-L10': 'P2-8c', 'B-L13': 'P2-8d' };
   // The Phase 1C clean-ups (memory only; their Strategies.dispose.* switches were retired by 08 P2-12a), with the step
   // their 8.2 fix cell names.
   const PHASE1C_LANDED = { 'B-H5': 'Phase 1C H1', 'B-L12': 'Phase 1C H2' };

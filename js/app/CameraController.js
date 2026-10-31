@@ -406,7 +406,7 @@ export class CameraController {
   /**
    * Gizmo translate drag step on the camera.
    * Ports: index.html@cd3fd3f lines 3337-3346.
-   * Side effects: writes posX/posY/posZ (posY clamped at 0: B-L10, tagged at CineCamera.translateBy); emits
+   * Side effects: writes posX/posY/posZ (posY clamped at 0, the floor of every writer since 08 P2-8c); emits
    *   CAMERA_POSE_CHANGED {source: 'gizmo-translate'} (pos inputs); hub.refresh() iff the preview is on.
    * @param {import('three').Vector3} movement  world-space movement along the active axis
    * @returns {void}
