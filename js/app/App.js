@@ -48,7 +48,7 @@ import { PilotCameraDriver, PilotController } from '../interaction/PilotControll
 import { ViewportInput } from '../interaction/ViewportInput.js';
 import { WallHoverProbe } from '../interaction/WallHoverProbe.js';
 import { ProjectSerializer } from '../io/ProjectSerializer.js';
-import { sectionsFromProject } from '../io/ProjectSchema.js';
+import { sectionsFromProject, stateFromProject } from '../io/ProjectSchema.js';
 import { ObjExporter } from '../io/ObjExporter.js';
 import { GltfExporter } from '../io/GltfExporter.js';
 import { WallController } from './WallController.js';
@@ -235,6 +235,16 @@ export class App {
       brand,
       win,
       sectionsFromProject,
+      // 08 P2-13e (6.17): the v2 restore's collaborators
+      stateFromProject,
+      cameraController,
+      personController,
+      carController,
+      pilot,
+      selection,
+      logoLoader,
+      sceneManager,
+      bus,
     });
     // ViewportInput is constructed here (it stores its collaborators only) so the UV hover probe can read
     // handlesDoubleClick; its U command reaches the UV controller lazily (04 3.6 path B).
@@ -278,7 +288,7 @@ export class App {
     // Panels: WALL_SECTIONS_CHANGED runs SectionListPanel then SectionLogosPanel, and DISPLAY_CONTENT_CHANGED runs
     // WallDisplayPanel then SectionLogosPanel (construction order = subscription order, ARCHITECTURE.md 5.2).
     const sectionList = new SectionListPanel({ doc, project, wallController, bus, palette: theme.palette, uvController });
-    const displayPanel = new WallDisplayPanel({ doc, wallController, bus, uvController });
+    const displayPanel = new WallDisplayPanel({ doc, wallController, bus, uvController, project });
     // 03 T6 (5.8): the Wall Pivot panel, after the display panel (the sidebar order)
     const pivotPanel = new PivotPanel({ doc, project, pivotController, bus });
     const logosPanel = new SectionLogosPanel({ doc, project, wallController, bus, logoLoader, dialogs });

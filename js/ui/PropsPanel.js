@@ -55,6 +55,19 @@ export class PropControls {
 
     bus.on(Events.PROP_VISIBILITY_CHANGED, (payload) => this.#mirrorVisibility(payload));
     bus.on(Events.PROP_POSE_CHANGED, (payload) => this.#mirrorPose(payload));
+    bus.on(Events.PROJECT_REPLACED, () => this.syncFromModel());
+  }
+
+  /**
+   * PROJECT_REPLACED mirror (08 P2-13e): this prop's toggle, options block and inputs from the model after a v2 import.
+   * Side effects: writes the toggle class, the options block's display and the four inputs.
+   * @returns {void}
+   */
+  syncFromModel() {
+    const prop = this.#prop;
+    this.#toggle.classList.toggle('active', prop.visible);
+    setDisplay(this.#options, prop.visible);
+    this.#mirrorPose({ id: this.#prefix, source: 'import' });
   }
 
   /**
@@ -110,12 +123,18 @@ export class PropControls {
    * moved the stage origin ('pivot': pos-x, pos-z toFixed(2), as the translate write-back; rot-y toFixed(1) when an
    * orientation edit turned the prop).
    * Ports: index.html@cd3fd3f lines 3351-3352 / 3358-3359 (translate), 3391 / 3397 (rotate).
-   * @param {{id: string, source: 'gizmo-translate'|'gizmo-rotate'|'pivot'}} payload
+   * 'import' (08 P2-13e, a v2 import): pos-x, pos-z toFixed(2), rot-y toFixed(1) and the scale as stored.
+   * @param {{id: string, source: 'gizmo-translate'|'gizmo-rotate'|'pivot'|'import'}} payload
    */
   #mirrorPose({ id, source }) {
     if (id !== this.#prefix) return;
     const prop = this.#prop;
-    if (source === 'gizmo-translate' || source === 'pivot') {
+    if (source === 'import') {
+      this.#posX.value = prop.posX.toFixed(2);
+      this.#posZ.value = prop.posZ.toFixed(2);
+      this.#rotY.value = prop.rotY.toFixed(1);
+      this.#scale.value = prop.scale;
+    } else if (source === 'gizmo-translate' || source === 'pivot') {
       this.#posX.value = prop.posX.toFixed(2);
       this.#posZ.value = prop.posZ.toFixed(2);
       // An orientation edit re-expresses the pose with a turn (03 §12): mirror the rotation too, but only when it

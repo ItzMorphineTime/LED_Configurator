@@ -1,5 +1,6 @@
 {
-  "version": "1.0",
+  "version": "2.0",
+  "format": "morph-led-project",
   "sections": [
     {
       "name": "Wall 1",
@@ -20,7 +21,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 2",
@@ -41,7 +44,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 3",
@@ -62,7 +67,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 4",
@@ -83,7 +90,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 5",
@@ -104,7 +113,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 6",
@@ -125,7 +136,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 7",
@@ -146,7 +159,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 8",
@@ -167,7 +182,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 9",
@@ -188,7 +205,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 10",
@@ -209,7 +228,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 11",
@@ -230,7 +251,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 12",
@@ -251,7 +274,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 13",
@@ -272,7 +297,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 14",
@@ -293,7 +320,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 15",
@@ -314,7 +343,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 16",
@@ -335,7 +366,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 17",
@@ -356,7 +389,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 18",
@@ -377,7 +412,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 19",
@@ -398,7 +435,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 20",
@@ -419,7 +458,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 21",
@@ -440,7 +481,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 22",
@@ -461,7 +504,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 23",
@@ -482,7 +527,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 24",
@@ -503,7 +550,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 25",
@@ -524,7 +573,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 26",
@@ -545,7 +596,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 27",
@@ -566,7 +619,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 28",
@@ -587,7 +642,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 29",
@@ -608,7 +665,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 30",
@@ -629,7 +688,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 31",
@@ -650,7 +711,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 32",
@@ -671,7 +734,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 33",
@@ -692,7 +757,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 34",
@@ -713,7 +780,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 35",
@@ -734,7 +803,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 36",
@@ -755,7 +826,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 37",
@@ -776,7 +849,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 38",
@@ -797,7 +872,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 39",
@@ -818,7 +895,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 40",
@@ -839,7 +918,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 41",
@@ -860,7 +941,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 42",
@@ -881,7 +964,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 43",
@@ -902,7 +987,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 44",
@@ -923,7 +1010,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 45",
@@ -944,7 +1033,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 46",
@@ -965,7 +1056,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 47",
@@ -986,7 +1079,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 48",
@@ -1007,7 +1102,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 49",
@@ -1028,7 +1125,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 50",
@@ -1049,7 +1148,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 51",
@@ -1070,7 +1171,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 52",
@@ -1091,7 +1194,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 53",
@@ -1112,7 +1217,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 54",
@@ -1133,7 +1240,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 55",
@@ -1154,7 +1263,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 56",
@@ -1175,7 +1286,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 57",
@@ -1196,7 +1309,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 58",
@@ -1217,7 +1332,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 59",
@@ -1238,7 +1355,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 60",
@@ -1259,7 +1378,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 61",
@@ -1280,7 +1401,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 62",
@@ -1301,7 +1424,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 63",
@@ -1322,7 +1447,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 64",
@@ -1343,7 +1470,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 65",
@@ -1364,7 +1493,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 66",
@@ -1385,7 +1516,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 67",
@@ -1406,7 +1539,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 68",
@@ -1427,7 +1562,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 69",
@@ -1448,7 +1585,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 70",
@@ -1469,7 +1608,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 71",
@@ -1490,7 +1631,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 72",
@@ -1511,7 +1654,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 73",
@@ -1532,7 +1677,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 74",
@@ -1553,7 +1700,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 75",
@@ -1574,7 +1723,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 76",
@@ -1595,7 +1746,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 77",
@@ -1616,7 +1769,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 78",
@@ -1637,7 +1792,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 79",
@@ -1658,7 +1815,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 80",
@@ -1679,7 +1838,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 81",
@@ -1700,7 +1861,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 82",
@@ -1721,7 +1884,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 83",
@@ -1742,7 +1907,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 84",
@@ -1763,7 +1930,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 85",
@@ -1784,7 +1953,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 86",
@@ -1805,7 +1976,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 87",
@@ -1826,7 +1999,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 88",
@@ -1847,7 +2022,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 89",
@@ -1868,7 +2045,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 90",
@@ -1889,7 +2068,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 91",
@@ -1910,7 +2091,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 92",
@@ -1931,7 +2114,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 93",
@@ -1952,7 +2137,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 94",
@@ -1973,7 +2160,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 95",
@@ -1994,7 +2183,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 96",
@@ -2015,7 +2206,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 97",
@@ -2036,7 +2229,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 98",
@@ -2057,7 +2252,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 99",
@@ -2078,7 +2275,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 100",
@@ -2099,7 +2298,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 101",
@@ -2120,7 +2321,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 102",
@@ -2141,7 +2344,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 103",
@@ -2162,7 +2367,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 104",
@@ -2183,7 +2390,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 105",
@@ -2204,7 +2413,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 106",
@@ -2225,7 +2436,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 107",
@@ -2246,7 +2459,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 108",
@@ -2267,7 +2482,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 109",
@@ -2288,7 +2505,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 110",
@@ -2309,7 +2528,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 111",
@@ -2330,7 +2551,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 112",
@@ -2351,7 +2574,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 113",
@@ -2372,7 +2597,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 114",
@@ -2393,7 +2620,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 115",
@@ -2414,7 +2643,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 116",
@@ -2435,7 +2666,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 117",
@@ -2456,7 +2689,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 118",
@@ -2477,7 +2712,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 119",
@@ -2498,7 +2735,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 120",
@@ -2519,7 +2758,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 121",
@@ -2540,7 +2781,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 122",
@@ -2561,7 +2804,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 123",
@@ -2582,7 +2827,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 124",
@@ -2603,7 +2850,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 125",
@@ -2624,7 +2873,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 126",
@@ -2645,7 +2896,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 127",
@@ -2666,7 +2919,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 128",
@@ -2687,7 +2942,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 129",
@@ -2708,7 +2965,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 130",
@@ -2729,7 +2988,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 131",
@@ -2750,7 +3011,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 132",
@@ -2771,7 +3034,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 133",
@@ -2792,7 +3057,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 134",
@@ -2813,7 +3080,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 135",
@@ -2834,7 +3103,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 136",
@@ -2855,7 +3126,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 137",
@@ -2876,7 +3149,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 138",
@@ -2897,7 +3172,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 139",
@@ -2918,7 +3195,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 140",
@@ -2939,7 +3218,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 141",
@@ -2960,7 +3241,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 142",
@@ -2981,7 +3264,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 143",
@@ -3002,7 +3287,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 144",
@@ -3023,7 +3310,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 145",
@@ -3044,7 +3333,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 146",
@@ -3065,7 +3356,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 147",
@@ -3086,7 +3379,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 148",
@@ -3107,7 +3402,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 149",
@@ -3128,7 +3425,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 150",
@@ -3149,7 +3448,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 151",
@@ -3170,7 +3471,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 152",
@@ -3191,7 +3494,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 153",
@@ -3212,7 +3517,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 154",
@@ -3233,7 +3540,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 155",
@@ -3254,7 +3563,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 156",
@@ -3275,7 +3586,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 157",
@@ -3296,7 +3609,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 158",
@@ -3317,7 +3632,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 159",
@@ -3338,7 +3655,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 160",
@@ -3359,7 +3678,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 161",
@@ -3380,7 +3701,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 162",
@@ -3401,7 +3724,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 163",
@@ -3422,7 +3747,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 164",
@@ -3443,7 +3770,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 165",
@@ -3464,7 +3793,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 166",
@@ -3485,7 +3816,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 167",
@@ -3506,7 +3839,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 168",
@@ -3527,7 +3862,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 169",
@@ -3548,7 +3885,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 170",
@@ -3569,7 +3908,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 171",
@@ -3590,7 +3931,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 172",
@@ -3611,7 +3954,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 173",
@@ -3632,7 +3977,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 174",
@@ -3653,7 +4000,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 175",
@@ -3674,7 +4023,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 176",
@@ -3695,7 +4046,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 177",
@@ -3716,7 +4069,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 178",
@@ -3737,7 +4092,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 179",
@@ -3758,7 +4115,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 180",
@@ -3779,7 +4138,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 181",
@@ -3800,7 +4161,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 182",
@@ -3821,7 +4184,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 183",
@@ -3842,7 +4207,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 184",
@@ -3863,7 +4230,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 185",
@@ -3884,7 +4253,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 186",
@@ -3905,7 +4276,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 187",
@@ -3926,7 +4299,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 188",
@@ -3947,7 +4322,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 189",
@@ -3968,7 +4345,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 190",
@@ -3989,7 +4368,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 191",
@@ -4010,7 +4391,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 192",
@@ -4031,7 +4414,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 193",
@@ -4052,7 +4437,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00f0ff"
+      "color": "#00f0ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 194",
@@ -4073,7 +4460,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff00aa"
+      "color": "#ff00aa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 195",
@@ -4094,7 +4483,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#00ff66"
+      "color": "#00ff66",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 196",
@@ -4115,7 +4506,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6b35"
+      "color": "#ff6b35",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 197",
@@ -4136,7 +4529,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ffdd00"
+      "color": "#ffdd00",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 198",
@@ -4157,7 +4552,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#aa66ff"
+      "color": "#aa66ff",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 199",
@@ -4178,7 +4575,9 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#66ffaa"
+      "color": "#66ffaa",
+      "logo": null,
+      "extensions": {}
     },
     {
       "name": "Wall 200",
@@ -4199,13 +4598,70 @@
         "angle_degrees": 0,
         "angle_offset_degrees": 0
       },
-      "color": "#ff6666"
+      "color": "#ff6666",
+      "logo": null,
+      "extensions": {}
     }
   ],
   "mesh_mode": "combined",
+  "display": {
+    "content": "color",
+    "led_layout": "single-dot",
+    "wireframe": false,
+    "show_frame": false,
+    "show_grid": true,
+    "show_safe_distance": false
+  },
+  "panel_id_style": {
+    "border_thickness": 8,
+    "font_size": 0,
+    "font_color": "#ffffff",
+    "section_label_enabled": true,
+    "section_label_font_size": 0,
+    "section_label_color": "#888888"
+  },
+  "camera": {
+    "enabled": false,
+    "filmback": "full-frame",
+    "filmback_width_mm": 36,
+    "filmback_height_mm": 24,
+    "focal_length_mm": 35,
+    "position_m": {
+      "x": 0,
+      "y": 1.5,
+      "z": 5
+    },
+    "rotation_deg": {
+      "x": 0,
+      "y": 0,
+      "z": 0
+    }
+  },
+  "props": {
+    "person": {
+      "visible": false,
+      "position_m": {
+        "x": 2,
+        "z": 2
+      },
+      "rotation_y_deg": 0,
+      "scale": 1
+    },
+    "car": {
+      "visible": false,
+      "position_m": {
+        "x": 4,
+        "z": 3
+      },
+      "rotation_y_deg": 0,
+      "scale": 1
+    }
+  },
+  "assets": [],
   "totals": {
     "sections": 200,
     "total_panels": 200000,
     "total_pixels": 204800000
-  }
+  },
+  "extensions": {}
 }

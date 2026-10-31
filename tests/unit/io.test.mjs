@@ -35,7 +35,7 @@ import { checkObjText, checkGltfOrientation } from '../../tools/check-orientatio
 import { computeAtlas } from '../../js/geometry/TextureAtlas.js';
 import { textureFileNames, atlasTexturePath } from '../../js/geometry/PanelNaming.js';
 import { ProjectSerializer } from '../../js/io/ProjectSerializer.js';
-import { sectionsFromProject } from '../../js/io/ProjectSchema.js';
+import { sectionsFromProject, stateFromProject } from '../../js/io/ProjectSchema.js';
 import { validateProject } from '../../js/io/ProjectValidator.js';
 import { ObjExporter } from '../../js/io/ObjExporter.js';
 import { GltfExporter, chunkedBase64 } from '../../js/io/GltfExporter.js';
@@ -262,11 +262,12 @@ function compareAll(project, label, tally) {
       tally.threw++;
     }
   }
-  r('json:file', run(() => serializer.write(project, { variant: 'file' })), run(() => L.exportJSONData(sections, meshMode)), json2);
+  // 08 P2-13e (B-L31 fixed): the file is v2, a superset of v1 (07 C1): its v1 keys (v1View) equal the legacy document.
+  r('json:file', run(() => v1View(serializer.write(project, { variant: 'file' }))), run(() => L.exportJSONData(sections, meshMode)), json2);
   // B-M3 fixed in 08 P2-6a: the 'zip' document is the legacy 'file' document plus a texture_file per section; B-L14 fixed
   // in 08 P2-6b: that file name is the unique textureFileNames entry (an explicit expected value; legacy's own ZIP copy
   // dropped the offsets and repeated colliding names). A numeric name throws the same TypeError in both.
-  r('json:zip', run(() => serializer.write(project, { variant: 'zip', textureNames: textureFileNames(sections) })), run(() => {
+  r('json:zip', run(() => v1View(serializer.write(project, { variant: 'zip', textureNames: textureFileNames(sections) }))), run(() => {
     const names = textureFileNames(sections);
     const file = L.exportJSONData(sections, meshMode);
     file.sections.forEach((s, i) => { s.texture_file = `textures/${names[i]}`; });
@@ -333,6 +334,45 @@ function fuzzProjects(seed, count) {
     projects.push(projectOf(sections, MESH_MODES[Math.floor(rand() * MESH_MODES.length)]));
   }
   return projects;
+}
+
+/**
+ * What a v1 reader sees of a v2 document (07 C1: every v1 key keeps its name, nesting and section-level order): the v1
+ * keys in the v1 key order, with the v1 version string.
+ */
+function v1View(doc) {
+  return {
+    version: '1.0',
+    sections: doc.sections.map((s) => {
+      const out = { name: s.name, id: s.id, panel: s.panel, led_resolution: s.led_resolution, curvature: s.curvature, color: s.color };
+      if (Object.hasOwn(s, 'texture_file')) out.texture_file = s.texture_file;
+      return out;
+    }),
+    mesh_mode: doc.mesh_mode,
+    totals: doc.totals,
+  };
+}
+
+/**
+ * The model half of a v2 import (08 6.17 without the views and mirrors): a fresh project (Project.createNew, as the
+ * harness page) with the validated state of `read` (sections, mesh mode, display, style, camera, props, extensions;
+ * logos are not restored here).
+ */
+function projectFromV2(read) {
+  const st = stateFromProject(read.project);
+  const p = Project.createNew();
+  p.wall.replaceAll(st.sections);
+  p.meshMode = st.meshMode;
+  Object.assign(p.display, st.display);
+  for (const [k, v] of Object.entries(st.panelIdStyle)) p.panelIdStyle.set(k, v);
+  p.camera.enabled = st.camera.enabled;
+  p.camera.assign(st.camera);
+  for (const kind of ['person', 'car']) {
+    p[kind].visible = st[kind].visible;
+    p[kind].assign(st[kind]);
+  }
+  p.setExtensions(st.extensions);
+  return p;
 }
 
 /**
@@ -730,6 +770,12 @@ const FILES = Brand.files;
  */
 const golden = (step, kind, key) => `${step}__export-${kind}__${FILES[key]}`;
 
+/** The panel-ID style each config scenario types before its final exports (tests/regression/scenarios.mjs). */
+const GOLDEN_PANEL_ID_STYLE = {
+  mixed: { borderThickness: '16', fontSize: '40', fontColor: '#ffcc00', sectionLabelFontSize: '120', sectionLabelColor: '#33ff99' },
+  box_corner: { sectionLabelEnabled: false, borderThickness: '4' },
+};
+
 const goldenAvailable = fs.existsSync(GOLDEN_DIR);
 const goldenSkip = goldenAvailable ? false
   : `GOLDEN_DIR ${GOLDEN_DIR} does not exist: capture the baseline (tests/regression/run.mjs; tests/regression/README.md) or set GOLDEN_DIR`;
@@ -787,8 +833,11 @@ describe('golden files (byte-identical to the legacy downloads)', { skip: golden
         }
       }
 
-      // Back in combined mode: Export JSON and the ZIP's JSON / OBJ / MTL / glTF entries.
+      // Back in combined mode with panel IDs on (and the scenario's panel-ID style, scenarios.mjs): Export JSON (project
+      // file v2 since 08 P2-13e, which saves the display and the style) and the ZIP's JSON / OBJ / MTL / glTF entries.
       project.meshMode = 'combined';
+      project.display.setPanelIds(true);
+      for (const [k, v] of Object.entries(GOLDEN_PANEL_ID_STYLE[scenario] ?? {})) project.panelIdStyle.set(k, v);
       same(json2(serializer.write(project, { variant: 'file' })), golden('final', 'json', 'json'));
       const entries = `${golden('final', 'zip', 'zip')}.entries`;
       const layout = layoutProject(project);
@@ -805,14 +854,11 @@ describe('golden files (byte-identical to the legacy downloads)', { skip: golden
       const expectedNames = [...textureFileNames(sections), FILES.panelIdsPng].sort();
       assert.deepEqual(fs.readdirSync(textureDir).sort(), expectedNames);
 
-      // Round trip: re-import the golden Export JSON and export again.
+      // Round trip: re-import the golden Export JSON (v2: the whole project, 08 6.17) and export again.
       const reimport = (name) => {
         const read = serializer.read(JSON.parse(fs.readFileSync(file(name), 'utf8')));
-        assert.deepEqual(read.issues.filter((i) => i.severity !== 'info'), [], `${name}: the app's own file imports with no correction (fidelity)`);
-        const p = Project.createDefault();
-        p.wall.replaceAll(sectionsFromProject(read.project));
-        if (read.project.mesh_mode) p.meshMode = read.project.mesh_mode;
-        return p;
+        assert.deepEqual(read.issues, [], `${name}: the app's own file imports with no issue (fidelity, 07 4.7)`);
+        return projectFromV2(read);
       };
       same(json2(serializer.write(reimport(golden('final', 'json', 'json')), { variant: 'file' })),
         golden('roundtrip', 'json', 'json'));
@@ -836,7 +882,7 @@ describe('ProjectSerializer', () => {
       const file = serializer.write(project, { variant: 'file' });
       const zip = serializer.write(project, { variant: 'zip', textureNames: textureFileNames(project.wall.sections) });
       assert.deepEqual(Object.keys(zip), Object.keys(file), key);
-      assert.ok(zip.sections.every((s) => typeof s.texture_file === 'string' && Object.keys(s).at(-1) === 'texture_file'), key);
+      assert.ok(zip.sections.every((s) => typeof s.texture_file === 'string' && Object.keys(s).at(-2) === 'texture_file'), key);
       const stripped = { ...zip, sections: zip.sections.map(({ texture_file: _t, ...rest }) => rest) };
       assert.equal(json2(stripped), json2(file), `${key}: the same document apart from texture_file`);
     }
@@ -860,7 +906,10 @@ describe('ProjectSerializer', () => {
     refused({ format: 'x', sections: [{}] }, 'unsupported-format', notProject, 'format');
     refused({ format: null, sections: [{}] }, 'unsupported-format', notProject, 'format');
     const newer = (v) => `Import failed: this project was saved by a newer version of the app (version ${v}).`;
-    for (const v of ['2.0', '2.1', '3.0', '10.4']) refused({ version: v, sections: [{}] }, 'newer-version', newer(v), 'version');
+    for (const v of ['3.0', '10.4']) refused({ version: v, sections: [{}] }, 'newer-version', newer(v), 'version');
+    // 08 P2-13e: "2.<m>" is the v2 path (a refused v2 document carries no migrated info)
+    refused({ version: '2.0', sections: [] }, 'no-sections', 'Import failed: the file contains no wall sections.', 'sections');
+    refused({ version: '2.3', format: 'morph-led-project', sections: 'x' }, 'no-sections', 'Import failed: the file does not contain a "sections" list.', 'sections');
     const noList = 'Import failed: the file does not contain a "sections" list.';
     for (const data of [{ foo: 1 }, { sections: 'abc' }, { sections: {} }, { sections: null }, { version: '1.0' }]) {
       refused(data, 'no-sections', noList, 'sections');
@@ -927,16 +976,19 @@ describe('ProjectSerializer', () => {
       [`Section 2 "B": Panel Colour "red;outline:3px solid lime" → "${Palette.legacySectionColors[1]}"`]);
   });
 
-  test('write: legacy key order; zip is the file document plus texture_file (B-M3 fixed in 08 P2-6a); numeric names throw in zip', () => {
+  test('write: the 07 4.2 key order of project file v2 (08 P2-13e); zip adds texture_file after logo (B-M3 fixed in 08 P2-6a); numeric names throw in zip', () => {
     const project = projectOf([new WallSection({ id: 4, name: 'A B', panelCols: 2, panelRows: 3, panelWidth: 500, panelHeight: 250,
       ledX: 64, ledY: 32, curveIntensity: -3, angleOffset: 15, color: '#ff00aa' })], 'section');
     const file = serializer.write(project);
-    assert.deepEqual(Object.keys(file), ['version', 'sections', 'mesh_mode', 'totals']);
-    assert.deepEqual(Object.keys(file.sections[0]), ['name', 'id', 'panel', 'led_resolution', 'curvature', 'color']);
+    assert.deepEqual(Object.keys(file), ['version', 'format', 'sections', 'mesh_mode', 'display', 'panel_id_style', 'camera',
+      'props', 'assets', 'totals', 'extensions']);
+    assert.equal(file.version, '2.0');
+    assert.equal(file.format, 'morph-led-project');
+    assert.deepEqual(Object.keys(file.sections[0]), ['name', 'id', 'panel', 'led_resolution', 'curvature', 'color', 'logo', 'extensions']);
     assert.deepEqual(file.sections[0].curvature, { type: 'convex', angle_degrees: -3, angle_offset_degrees: 15 });
     assert.deepEqual(file.totals, { sections: 1, total_panels: 6, total_pixels: 12288 });
     const zip = serializer.write(project, { variant: 'zip', textureNames: textureFileNames(project.wall.sections) });
-    assert.deepEqual(Object.keys(zip.sections[0]), ['name', 'id', 'panel', 'led_resolution', 'curvature', 'color', 'texture_file']);
+    assert.deepEqual(Object.keys(zip.sections[0]), ['name', 'id', 'panel', 'led_resolution', 'curvature', 'color', 'logo', 'texture_file', 'extensions']);
     assert.deepEqual(zip.sections[0].curvature, { type: 'convex', angle_degrees: -3, angle_offset_degrees: 15 });
     assert.equal(zip.sections[0].texture_file, 'textures/A_B_PanelIDs.png');
     project.wall.sections[0].name = 42;
@@ -1680,8 +1732,8 @@ describe('ProjectIO use cases', () => {
       assert.deepEqual(load('{"foo": 1}'), [['alert', 'Import failed: the file does not contain a "sections" list.']]);
       assert.deepEqual(load('null'), [['alert', 'Import failed: this is not an LED wall project file.']]);
       assert.deepEqual(load('{"sections": []}'), [['alert', 'Import failed: the file contains no wall sections.']]);
-      assert.deepEqual(load('{"version": "2.0", "sections": [{}]}'),
-        [['alert', 'Import failed: this project was saved by a newer version of the app (version 2.0).']]);
+      assert.deepEqual(load('{"version": "3.0", "sections": [{}]}'),
+        [['alert', 'Import failed: this project was saved by a newer version of the app (version 3.0).']]);
       const syntax = run(() => JSON.parse('{oops')).error.message;
       assert.deepEqual(load('{oops'), [['alert', 'Error parsing JSON file: ' + syntax]]);
       // A corrected import is applied first, then M-IMP-5 lists the corrections (at most 10 lines, then a count).

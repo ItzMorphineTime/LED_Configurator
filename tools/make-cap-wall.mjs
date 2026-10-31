@@ -2,7 +2,7 @@
 // The cap-timing fixture of the normals debug view (docs/improvements/01-normals.md 8.3, acceptance criterion 14b; 01 T1):
 // the largest wall an import accepts once 08 P2-3b lands (Wall.MAX_SECTIONS = 200, 07 C22): 200 flat sections of
 // 50 x 20 panels (500 x 500 mm, 32 x 32 LEDs), side by side, colours cycling through the theme palette, in combined
-// mode. It is written by the app's own JSON v1 writer (io/ProjectSerializer, the Export JSON document, with the
+// mode. It is written by the app's own project file writer (io/ProjectSerializer, the Export JSON document, v2 since 08 P2-13e, with the
 // app's JSON.stringify(document, null, 2) text), so it imports exactly like a file the app saved.
 // In combined mode it has 200 x 51 x 21 = 214,200 vertices and 200,000 quads: the vertex lines alone decimate with
 // stride 2 (107,100 drawn) and both kinds with stride 3 (138,067 drawn) under the 150,000-line cap (01 6.6, 6.7.3).

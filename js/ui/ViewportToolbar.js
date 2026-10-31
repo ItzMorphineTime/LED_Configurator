@@ -82,6 +82,8 @@ export class ViewportToolbar {
     bus.on(Events.GIZMO_MODE_CHANGED, (payload) => this.#mirrorMode(payload));
     bus.on(Events.GIZMO_SPACE_CHANGED, (payload) => this.#mirrorSpace(payload));
     bus.on(Events.PILOT_CHANGED, (payload) => this.#mirrorPilot(payload));
+    // 08 P2-13e: a v2 import restores the grid flag (view-only, 07 4.3); the button follows it
+    bus.on(Events.PROJECT_REPLACED, () => this.#toggleGrid.classList.toggle('active', this.#sceneManager.gridShown));
   }
 
   /**

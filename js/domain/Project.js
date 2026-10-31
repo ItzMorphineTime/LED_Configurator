@@ -8,7 +8,7 @@
  * Layer: domain (may import legacy; THREE-free and DOM-free).
  */
 
-import { finiteOr } from './rules.js';
+import { deepFreeze, finiteOr } from './rules.js';
 import { Wall, WallPivot, alignNormalAzimuthDeg } from './Wall.js';
 import { WallSection } from './WallSection.js';
 import { LogoLibrary } from './LogoLibrary.js';
@@ -174,6 +174,9 @@ export class Project {
   /** @type {UvSettings} the UV layout settings (04 4.1, UV-5a): injected by reference and never replaced; session-only
    *  until 04 UV-5c persists them */
   uv;
+  /** @type {Readonly<object>} the top-level `extensions` of the project file (07 4.4 rule 4; 08 P2-13e): validated,
+   *  frozen and kept verbatim for a round trip; replaced only through setExtensions */
+  extensions = Object.freeze({});
 
   /**
    * Side effects: none.
@@ -190,6 +193,16 @@ export class Project {
     this.person = person;
     this.car = car;
     this.uv = uv;
+  }
+
+  /**
+   * Replaces the file extensions (a v2 import, 08 P2-13e 6.17); anything but a plain object stores none.
+   * Side effects: writes extensions (frozen).
+   * @param {*} ext  the validated `extensions` of a v2 file
+   */
+  setExtensions(ext) {
+    const plain = ext !== null && typeof ext === 'object' && Object.getPrototypeOf(ext) === Object.prototype;
+    this.extensions = plain ? deepFreeze(ext) : Object.freeze({});
   }
 
   /**

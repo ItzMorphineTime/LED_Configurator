@@ -357,6 +357,35 @@ describe('CameraController.setFilmback (4251-4264)', () => {
   });
 });
 
+/** The six pose fields of a CineCamera. */
+const pose6 = (c) => ({ posX: c.posX, posY: c.posY, posZ: c.posZ, rotX: c.rotX, rotY: c.rotY, rotZ: c.rotZ });
+
+describe('CameraController.applyImportedPose (08 P2-13e, 6.17 step 8, Q19)', () => {
+  test('preview on: assign (far bounds only), the import mirror, then the hub', () => {
+    const s = setup({ enabled: true, spyHub: true });
+    s.controller.applyImportedPose({ posX: 2e5, posY: 1.2, posZ: 0.05, rotX: 5, rotY: 400, rotZ: 2 });
+    assert.deepEqual(s.calls(), ['emit CAMERA_POSE_CHANGED', 'hub.refresh']);
+    assert.deepEqual(s.log[0].payload, { source: 'import' });
+    assert.deepEqual(pose6(s.cine), { posX: 100000, posY: 1.2, posZ: 0.05, rotX: 5, rotY: 400, rotZ: 2 },
+      'a validated pose is kept as is: no input minimum, no wrap; only the ±100,000 m bound');
+  });
+
+  test('preview off: the pose is kept, and the next enable keeps it once instead of resetting it', () => {
+    const s = setup({ enabled: false, spyHub: true, previewInitialized: true });
+    s.controller.applyImportedPose({ posX: 2, posY: 1.2, posZ: 4, rotX: 5, rotY: -10, rotZ: 2 });
+    assert.deepEqual(s.calls(), ['emit CAMERA_POSE_CHANGED'], 'no hub while the preview is off');
+    s.log.length = 0;
+    s.controller.setPreviewEnabled(true);
+    assert.ok(!s.calls().includes('frameBounds'), 'no reset');
+    assert.ok(s.calls().includes('hub.refresh'));
+    assert.deepEqual(pose6(s.cine), { posX: 2, posY: 1.2, posZ: 4, rotX: 5, rotY: -10, rotZ: 2 });
+    s.controller.setPreviewEnabled(false);
+    s.log.length = 0;
+    s.controller.setPreviewEnabled(true);
+    assert.ok(s.calls().includes('frameBounds'), 'the flag is spent: the next enable resets again');
+  });
+});
+
 describe('CameraController lens/pose inputs and safe-distance toggle', () => {
   test('setCameraField stores and returns the rule value; commitCameraField refreshes iff enabled', () => {
     const s = setup({ enabled: false, spyHub: true });

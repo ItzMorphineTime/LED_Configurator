@@ -61,7 +61,8 @@ export class Prop {
 
   /**
    * The writer bounds of the floor position (spec 07 C22 and 4.3: x and z within +-100,000 m), shared with the
-   * validator ranges; since 03 T1 translateStage clamps through them (07 C45); 08 P2-13e makes the other writers clamp.
+   * validator ranges; since 03 T1 translateStage clamps through them (07 C45), and since 08 P2-13e every other position
+   * writer too (setField, translateBy, assign).
    * @type {Readonly<{posX: {min: number, max: number}, posZ: {min: number, max: number}}>}
    */
   static LIMITS = deepFreeze({
@@ -78,8 +79,26 @@ export class Prop {
    * @returns {number} the stored value
    */
   setField(field, raw) {
-    this[field] = Prop.FIELD_RULES[field].parse(raw);
+    const v = Prop.FIELD_RULES[field].parse(raw);
+    // 08 P2-13e: the far bounds of the position
+    const bound = Object.prototype.hasOwnProperty.call(Prop.LIMITS, field) ? Prop.LIMITS[field] : null;
+    this[field] = bound ? clamp(v, bound.min, bound.max) : v;
     return this[field];
+  }
+
+  /**
+   * The setter of validated values (07 4.1; 08 P2-13e, 6.17): the pose and scale of an imported v2 file, never
+   * `visible`. Only the far bounds of LIMITS apply; a field that is absent or not a finite number is left as it is.
+   * Side effects: writes the given fields.
+   * @param {{posX?: number, posZ?: number, rotY?: number, scale?: number}} fields
+   */
+  assign(fields) {
+    for (const key of ['posX', 'posZ', 'rotY', 'scale']) {
+      const v = fields[key];
+      if (!Number.isFinite(v)) continue;
+      const bound = Object.prototype.hasOwnProperty.call(Prop.LIMITS, key) ? Prop.LIMITS[key] : null;
+      this[key] = bound ? clamp(v, bound.min, bound.max) : v;
+    }
   }
 
   /**
@@ -91,9 +110,10 @@ export class Prop {
    * @param {number} dz
    */
   translateBy(dx, dy, dz) {
-    // LEGACY(B-L22): props move on the floor only; the Y arrow (dy) is inert.
-    this.posX += dx;
-    this.posZ += dz;
+    // LEGACY(B-L22): props move on the floor only; the Y arrow (dy) is inert. The far bounds since 08 P2-13e.
+    const { posX, posZ } = Prop.LIMITS;
+    this.posX = clamp(this.posX + dx, posX.min, posX.max);
+    this.posZ = clamp(this.posZ + dz, posZ.min, posZ.max);
   }
 
   /**

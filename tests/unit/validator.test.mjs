@@ -63,10 +63,13 @@ describe('detectVersion (07 4.6, the dispatch)', () => {
     assert.equal(err(null).message, ImportMessages.notAProject);
     assert.equal(err({ format: 'x', sections: [] }).code, 'unsupported-format');
     assert.equal(err({ format: 'x', sections: [] }).path, 'format');
-    for (const v of ['2.0', '2.1', '3.0']) {
+    for (const v of ['3.0', '10.1']) {
       const e = err({ version: v, sections: [] });
       assert.deepEqual(e, { path: 'version', code: 'newer-version', severity: 'error', message: `Import failed: this project was saved by a newer version of the app (version ${v}).` });
     }
+    // 08 P2-13e: major 2 is the v2 reader, with the minor as the revision (a newer one is the validator's warning)
+    assert.deepEqual(detectVersion({ version: '2.0', sections: [] }), { kind: 'v2', revision: 0 });
+    assert.deepEqual(detectVersion({ version: '2.7', format: 'morph-led-project' }), { kind: 'v2', revision: 7 });
     for (const version of [undefined, '1.0', 1, 2.5, '1', '1.0.0', 'abc', null]) {
       assert.deepEqual(detectVersion({ version, sections: [] }), { kind: 'v1' }, String(version));
     }

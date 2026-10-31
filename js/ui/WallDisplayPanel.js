@@ -53,6 +53,8 @@ export class WallDisplayPanel {
   #doc;
   /** @type {import('../app/WallController.js').WallController} */
   #wallController;
+  /** @type {import('../domain/Project.js').Project|null} read by syncFromModel (08 P2-13e) */
+  #project;
   /** @type {HTMLElement} */ #toggleWireframe;
   /** @type {HTMLElement} */ #toggleFrame;
   /** @type {HTMLElement} */ #toggleLedSim;
@@ -82,13 +84,16 @@ export class WallDisplayPanel {
    *  UV_SETTINGS_CHANGED (04 UV-14): the UV selects, the glTF option (enabled for the per-section layout only) and the
    *    atlas note.
    * Side effects: DOM lookups (no mutation); three bus subscriptions.
+   *  PROJECT_REPLACED (08 P2-13e): syncFromModel().
    * @param {{doc: Document, wallController: import('../app/WallController.js').WallController,
    *          bus: import('../core/EventBus.js').EventBus,
-   *          uvController?: import('../app/UvController.js').UvController|null}} deps
+   *          uvController?: import('../app/UvController.js').UvController|null,
+   *          project?: import('../domain/Project.js').Project|null}} deps  project: read by syncFromModel only
    */
-  constructor({ doc, wallController, bus, uvController = null }) {
+  constructor({ doc, wallController, bus, uvController = null, project = null }) {
     this.#doc = doc;
     this.#wallController = wallController;
+    this.#project = project;
     this.#uvController = uvController;
     this.#uvCombinedLayout = byId(doc, 'uv-combined-layout');
     this.#uvPanelMode = byId(doc, 'uv-panel-mode');
@@ -112,6 +117,35 @@ export class WallDisplayPanel {
     bus.on(Events.WALL_MESH_MODE_CHANGED, (payload) => this.#mirrorMeshMode(payload));
     bus.on(Events.DISPLAY_CONTENT_CHANGED, (payload) => this.#mirrorDisplayContent(payload));
     bus.on(Events.UV_SETTINGS_CHANGED, (payload) => this.#mirrorUvSettings(payload));
+    bus.on(Events.PROJECT_REPLACED, () => this.syncFromModel());
+  }
+
+  /**
+   * PROJECT_REPLACED mirror (08 P2-13e): every display control from the model after a v2 import: the mesh-mode labels,
+   * the wireframe, frame, LED-sim, panel-ID and section-label toggles with the option blocks, the LED layout select and
+   * the panel-ID style inputs. A no-op without a project.
+   * Side effects: writes the panel's classes, values and block displays.
+   * @returns {void}
+   */
+  syncFromModel() {
+    const project = this.#project;
+    if (!project) return;
+    const display = project.display;
+    const style = project.panelIdStyle;
+    this.#mirrorMeshMode({ mode: project.meshMode });
+    this.#toggleWireframe.classList.toggle('active', display.wireframe);
+    this.#toggleFrame.classList.toggle('active', display.showFrame);
+    this.#toggleLedSim.classList.toggle('active', display.ledSimEnabled);
+    setDisplay(this.#ledSimOptions, display.ledSimEnabled);
+    this.#togglePanelIds.classList.toggle('active', display.panelIdsEnabled);
+    setDisplay(this.#panelIdOptions, display.panelIdsEnabled);
+    this.#ledLayout.value = display.ledLayout;
+    this.#panelBorderThickness.value = style.borderThickness;
+    this.#panelFontSize.value = style.fontSize;
+    this.#panelFontColor.value = style.fontColor;
+    this.#toggleSectionLabels.classList.toggle('active', style.sectionLabelEnabled);
+    this.#sectionLabelSize.value = style.sectionLabelFontSize;
+    this.#sectionLabelColor.value = style.sectionLabelColor;
   }
 
   /**

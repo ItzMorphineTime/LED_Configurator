@@ -3,8 +3,8 @@
  * Version detection and the v1 migration of an imported document (spec 07 4.6 and 6.9; 08 P2-3b, the wall subset of
  * 07 D3): `detectVersion` is the only dispatch, and `migrateV1toV2` reproduces the legacy `||` defaults of the v1 import
  * exactly (so a valid v1 file gives the same wall as the legacy import, with no correction), producing the v2-shaped
- * wall keys that the validator then checks. Before 08 P2-13e the reader knows only v1, so every version 2.x and above
- * is refused as newer (M-IMP-4b).
+ * wall keys that the validator then checks. Since 08 P2-13e a "2.<m>" version dispatches to the v2 reader (any revision m;
+ * the validator reports a newer one) and only a major version above 2 is refused as newer (M-IMP-4b).
  * Legacy source: index.html@cd3fd3f 4975-4988 (the `data.sections` guard and the `||` mapping).
  * Layer: io (pure; may import domain, geometry, legacy).
  */
@@ -28,6 +28,8 @@ export const ImportMessages = Object.freeze({
   tooManySections: (n, max) => `Import failed: ${n} sections is more than the maximum of ${max}.`,
   /** the `migrated` info (not listed in M-IMP-5) */
   migrated: 'Converted from a version 1 project file.',
+  /** the `newer-revision` warning (07 4.4 rule 4; listed in M-IMP-5) */
+  newerRevision: 'Some settings were saved by a newer version and were ignored.',
 });
 
 /**
@@ -54,13 +56,13 @@ function issue(path, code, severity, message) {
 
 /**
  * Detects the schema of a parsed document, in the order of 07 4.6: not a plain object -> unsupported-format;
- * a `format` key other than "morph-led-project" -> unsupported-format; a `version` string "N.M" with N >= 2 ->
- * newer-version (before 08 P2-13e every major >= 2, the reader knows only v1); a `sections` array -> v1 (the version
- * may be "1.0", absent or anything else: legacy ignored it); otherwise no-sections (legacy ignored such a file
- * silently, V-6).
+ * a `format` key other than "morph-led-project" -> unsupported-format; a `version` string "N.M" with N > 2 ->
+ * newer-version, with N = 2 -> v2 with revision M (08 P2-13e); a `sections` array -> v1 (the version may be "1.0",
+ * absent or anything else: legacy ignored it); otherwise no-sections (legacy ignored such a file silently, V-6).
  * Side effects: none.
  * @param {*} data  the value of JSON.parse
- * @returns {{kind: 'v1'} | {error: {path: string, code: string, severity: 'error', message: string}}}
+ * @returns {{kind: 'v1'} | {kind: 'v2', revision: number} |
+ *           {error: {path: string, code: string, severity: 'error', message: string}}}
  */
 export function detectVersion(data) {
   if (!isPlainObject(data)) return { error: issue('', 'unsupported-format', 'error', ImportMessages.notAProject) };
@@ -70,7 +72,8 @@ export function detectVersion(data) {
   const version = data.version;
   if (typeof version === 'string') {
     const m = VERSION_RE.exec(version);
-    if (m && Number(m[1]) >= 2) return { error: issue('version', 'newer-version', 'error', ImportMessages.newerVersion(version)) };
+    if (m && Number(m[1]) > 2) return { error: issue('version', 'newer-version', 'error', ImportMessages.newerVersion(version)) };
+    if (m && Number(m[1]) === 2) return { kind: 'v2', revision: Number(m[2]) };
   }
   if (Array.isArray(data.sections)) return { kind: 'v1' };
   return { error: issue('sections', 'no-sections', 'error', ImportMessages.noSectionsList) };

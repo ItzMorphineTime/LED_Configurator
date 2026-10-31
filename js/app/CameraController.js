@@ -181,6 +181,12 @@ export class CameraController {
   #pilot;
   /** @type {import('../interaction/SelectionManager.js').SelectionManager} */
   #selection;
+  /**
+   * A pose restored by a v2 import while the preview was off (08 6.17, Q19): the next setPreviewEnabled(true) keeps it
+   * once instead of resetting it.
+   * @type {boolean}
+   */
+  #keepPoseOnNextEnable = false;
   /** @type {() => import('../geometry/WallLayout.js').Framing} */
   #frameBounds;
   /** @type {import('../core/EventBus.js').EventBus} */
@@ -212,7 +218,9 @@ export class CameraController {
   /**
    * P-PREVIEW (ARCHITECTURE.md 6.5), after CameraPanel flipped the toggle class. On: the preview window's resize
    * handle is registered on the first enable (07 R2: no second renderer; the main renderer's preview pass draws the
-   * image), then the pose is reset (which runs P2). Off: the rig and the safe-distance floor are
+   * image), then the pose is reset (which runs P2), except once after a v2 import restored a pose while the preview was
+   * off (08 6.17, Q19: applyImportedPose set the keep flag; the hub refreshes with the kept pose). Off: the rig and the
+   * safe-distance floor are
    * removed (the floor since 08 P2-4b, B-M8), pilot mode is left (cleanly since 08 P2-4a, B-H4: the pilot guard applies
    * only on entry) and the camera is deselected.
    * Ports: index.html@cd3fd3f lines 4232-4248.
@@ -230,7 +238,12 @@ export class CameraController {
     this.#preview.setVisible(on);
     if (on) {
       if (!this.#preview.initialized) this.#preview.init();
-      this.resetPose();
+      if (this.#keepPoseOnNextEnable) {
+        this.#keepPoseOnNextEnable = false;
+        this.#hub.refresh();
+      } else {
+        this.resetPose();
+      }
     } else {
       // The rig, then the safe-distance group (B-M8 fixed in 08 P2-4b: legacy removed only the rig, so the floor stayed
       // in the scene, stale, while its toggle was hidden with the preview options). syncSafeDistance removes it because
@@ -261,6 +274,24 @@ export class CameraController {
     cine.resetTo(this.#frameBounds());
     this.#bus.emit(Events.CAMERA_POSE_CHANGED, { source: 'reset' });
     this.#hub.refresh();
+  }
+
+  /**
+   * The camera pose of a v2 import (08 6.17 step 8; P2-13e): the validated pose through CineCamera.assign (the far
+   * bounds only, never the input minimums), the pose mirror ('import'), then the hub iff the preview is on; with the
+   * preview off the pose is kept for the next enable (Q19).
+   * Side effects: writes the pose; emits CAMERA_POSE_CHANGED {source: 'import'}; hub.refresh() iff enabled, else sets
+   *   the keep-pose flag.
+   * @param {{posX: number, posY: number, posZ: number, rotX: number, rotY: number, rotZ: number}} pose
+   * @returns {void}
+   */
+  applyImportedPose(pose) {
+    const cine = this.#project.camera;
+    const { posX, posY, posZ, rotX, rotY, rotZ } = pose;
+    cine.assign({ posX, posY, posZ, rotX, rotY, rotZ });
+    this.#bus.emit(Events.CAMERA_POSE_CHANGED, { source: 'import' });
+    if (cine.enabled) this.#hub.refresh();
+    else this.#keepPoseOnNextEnable = true;
   }
 
   /**

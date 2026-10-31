@@ -163,6 +163,11 @@ export class SceneManager {
     return this.#grid;
   }
 
+  /** Side effects: none. @returns {boolean} display.showGrid, the grid flag toggleGrid flips (08 P2-13e: the toolbar mirror) */
+  get gridShown() {
+    return this.#display.showGrid;
+  }
+
   /** Side effects: none. @returns {THREE.AxesHelper|null} the axes helper (null before init()) */
   get axes() {
     return this.#axes;

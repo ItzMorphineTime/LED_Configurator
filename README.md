@@ -275,10 +275,21 @@ Every download is named after the product: `morph-led-wall.json`, `morph-led-wal
 `morph-led-wall-panel-ids.png` and `morph-led-wall-safe-distance.obj`. OBJ, MTL and glTF files name "Morph LED Configurator" as their generator.
 
 ### JSON Configuration
-Export and import wall configurations. The JSON file (format version 1.0) contains:
-- All section parameters (name, panels, LED resolution, curvature, angle offset, color)
+Export and import whole projects. The JSON project file (`"format": "morph-led-project"`, `"version": "2.0"`) contains:
+- All section parameters (name, panels, LED resolution, curvature, angle offset, colour) and each section's logo
 - The mesh mode
+- The display settings (content: colour, LED simulation or panel IDs; LED layout; wireframe; panel frames; grid; safe
+  distance)
+- The panel ID styling (border, label font size and colour, section names and their size and colour)
+- The camera (preview on or off, filmback, focal length, position and rotation)
+- The person and car props (shown or hidden, position, rotation, scale)
+- The logo images, once per distinct image, stored in the file itself
 - Totals (sections, panels, pixels)
+
+Importing a version 2.0 file restores all of it, including a camera position saved while the preview was off (it is
+used when you next turn the preview on). Version 2.0 files keep every key of version 1.0 in the same place, so a tool
+that reads version 1.0 files still reads the same wall. Version 1.0 files still import as before: they replace the wall
+and the mesh mode only, keep the camera, props, display and styling as they are, and clear the section logos.
 
 Release note: a section name is always shown as plain text. A project file shared by someone else could hide HTML or
 script in a section name, which the page used to run on import; such a name is now displayed exactly as written.
@@ -291,7 +302,17 @@ wall stays as it was. A wall can have at most 200 sections; Add Section says so 
 clears the section logos (a version 1.0 file has none), so a logo can no longer reappear on an imported section that
 happens to reuse an old section id.
 
-Camera settings, scene props, panel ID styling, section logos and display toggles are not saved yet; they will come with the JSON v2 format.
+Release note: project files now save the camera, the props, the display settings, the panel ID styling and the section
+logos (format version 2.0). The pivot and orientation, the UV settings and UV edits are not saved yet; they will be added
+to the version 2 format by their own releases. Until the pivot is saved, the camera and prop positions in a file are
+measured from the pivot that was active when it was saved, so open the file with the same pivot and orientation (a new
+project's defaults, unless you changed them) to see them where you left them.
+
+Release note: logo uploads are checked. PNG, JPEG and WebP images are kept as they are; SVG logos are cleaned (scripts,
+embedded web content and links to other files are removed) and get a size when they have none; other image types (GIF,
+BMP, AVIF) are converted to PNG. A logo larger than 2 MB, an image that cannot be read, or a 65th different logo image in
+one project is refused with a message. Logos in an imported project file go through the same checks, and a logo that
+points to a web address or is not a valid image is left out with a message.
 
 Release note: the copy of the JSON inside the ZIP package used to leave out the section offsets, so importing it
 collapsed box and corner walls into a line. It is now the same document as Export JSON (plus each section's texture
@@ -445,7 +466,7 @@ distance along the camera's optical axis to the wall plane it is aimed at.
 ### Session only (for now)
 The pivot, its offset, the orientation and the "Keep stage layout" and marker switches last for the session: Export JSON
 and Export All (ZIP) do not save them yet, and importing a project file keeps the session's pivot and orientation. They
-will be saved with the JSON v2 project format.
+will be added to the JSON v2 project format by their own release (version 2.0 saves the camera, props, display and logos).
 
 ---
 
@@ -542,7 +563,7 @@ channel 1).
 ### Session only (for now)
 UV edits and the UV Mapping options last for the session: Export JSON and Export All (ZIP) do not save them yet, and
 importing a project file starts every section from the identity (and clears the UV undo history). They will be saved with
-the JSON v2 project format. The OBJ and glTF exports always carry the current UVs.
+the JSON v2 project format by their own release. The OBJ and glTF exports always carry the current UVs.
 
 ---
 

@@ -11,7 +11,10 @@
  * failure as the M-EXP-1 alert instead of an uncaught exception or an unhandled rejection; its try/catch and the legacy
  * one around the import parse are the only ones (R13 amendment).
  * Since 08 P2-3b (B-L8 fixed) the import is validated (io/ProjectValidator through the injected serializer) and every
- * refusal and correction is reported (08 3.3: M-IMP-1 to M-IMP-7).
+ * refusal and correction is reported (08 3.3: M-IMP-1 to M-IMP-7). Since 08 P2-13e (B-L31 fixed) Export JSON and the
+ * ZIP's JSON are project file v2, and a v2 import restores the whole project in the order of 08 6.17 (#applyV2: the
+ * logos through the injected LogoLoader, the wall, display and style, the camera lens, preview and pose, the safe
+ * distance, the props, then PROJECT_REPLACED); a v1 import stays wall-only.
  * Legacy source: index.html@cd3fd3f 2786-2827 (exportSafeDistanceOBJ), 4491-4554 (exportZIP), 4911-4924
  * (exportOBJ, exportGLTF), 4926-4940 (exportPanelIds), 4942-4965 (exportJSON), 4967-5010 (importJSON),
  * 5082-5091 (downloadFile).
@@ -22,6 +25,7 @@ import { computeAtlas, canvasFits, CANVAS_HARD_LIMITS } from '../geometry/Textur
 import { textureFileNames, atlasTexturePath } from '../geometry/PanelNaming.js';
 import { MAX_IMPORT_BYTES } from '../domain/rules.js';
 import { turnXZ, yawTrig } from '../geometry/WallOrientation.js';
+import { Events } from '../core/EventBus.js';
 
 /**
  * The dialogs facade (ui/dom.js createDialogs).
@@ -148,6 +152,11 @@ export class ProjectIO {
   #win;
   /** @type {(project: object) => import('../domain/WallSection.js').WallSection[]} io/ProjectSchema.sectionsFromProject */
   #sectionsFromProject;
+  /** @type {(project: object) => object} io/ProjectSchema.stateFromProject (08 P2-13e) */
+  #stateFromProject;
+  /** @type {{cameraController: object, personController: object, carController: object, pilot: object,
+   *          selection: object, logoLoader: object, sceneManager: object, bus: object}|null} the v2 restore's collaborators */
+  #restore;
 
   /**
    * Side effects: none.
@@ -159,11 +168,25 @@ export class ProjectIO {
    *          panelIds: import('../render/textures/PanelIdRenderer.js').PanelIdRenderer,
    *          safeDistance: import('../render/SafeDistanceView.js').SafeDistanceView,
    *          downloader: Downloader, JSZip: new () => object, dialogs: Dialogs, brand: IoBrand,
-   *          win: Window, sectionsFromProject: (project: object) => import('../domain/WallSection.js').WallSection[]}} deps
-   *   sectionsFromProject: io/ProjectSchema.sectionsFromProject, injected by App (app/ may not import io/; 08 P2-3b)
+   *          win: Window, sectionsFromProject: (project: object) => import('../domain/WallSection.js').WallSection[],
+   *          stateFromProject?: (project: object) => object,
+   *          cameraController?: import('./CameraController.js').CameraController,
+   *          personController?: import('./PropController.js').PropController,
+   *          carController?: import('./PropController.js').PropController,
+   *          pilot?: import('../interaction/PilotController.js').PilotController,
+   *          selection?: import('../interaction/SelectionManager.js').SelectionManager,
+   *          logoLoader?: import('../render/textures/LogoLoader.js').LogoLoader,
+   *          sceneManager?: import('../render/SceneManager.js').SceneManager,
+   *          bus?: import('../core/EventBus.js').EventBus}} deps
+   *   sectionsFromProject: io/ProjectSchema.sectionsFromProject, injected by App (app/ may not import io/; 08 P2-3b);
+   *   stateFromProject (io/ProjectSchema) and the controllers, pilot, selection, logo loader, scene manager (the grid)
+   *   and bus are the v2 restore's (08 P2-13e, 6.17); without them (unit tests of the exports) a v2 import alerts that it
+   *   cannot be restored and changes nothing
    */
   constructor({ project, wallController, serializer, objExporter, gltfExporter, panelIds, safeDistance, downloader,
-    JSZip, dialogs, brand, win, sectionsFromProject }) {
+    JSZip, dialogs, brand, win, sectionsFromProject, stateFromProject = null, cameraController = null,
+    personController = null, carController = null, pilot = null, selection = null, logoLoader = null, sceneManager = null,
+    bus = null }) {
     this.#project = project;
     this.#wallController = wallController;
     this.#serializer = serializer;
@@ -177,10 +200,15 @@ export class ProjectIO {
     this.#brand = brand;
     this.#win = win;
     this.#sectionsFromProject = sectionsFromProject;
+    this.#stateFromProject = stateFromProject;
+    this.#restore = stateFromProject && cameraController && personController && carController && pilot && selection
+      && logoLoader && sceneManager && bus
+      ? { cameraController, personController, carController, pilot, selection, logoLoader, sceneManager, bus }
+      : null;
   }
 
   /**
-   * Export JSON: the 'file' document, pretty-printed with 2 spaces.
+   * Export JSON: the 'file' document (project file v2 since 08 P2-13e), pretty-printed with 2 spaces.
    * Ports: index.html@cd3fd3f lines 4942-4965.
    * Side effects: one download (brand.files.json, application/json), or the M-EXP-1 alert (#runExport).
    */
@@ -554,9 +582,10 @@ export class ProjectIO {
    * (M-IMP-6); a read failure alerts M-IMP-7 (legacy had no handler, B-L8); on load the text is parsed (a parse error
    * keeps the legacy alert text, V-5) and read through the serializer (version detection, v1 migration, validation).
    * A document with an error issue is refused with that issue's message and changes nothing (atomic import, 07 4.7);
-   * otherwise the validated wall is applied (wall scope: sections, and the mesh mode when the file names one) and, if
-   * the validator corrected anything, M-IMP-5 lists the corrections. The parse, read and apply steps stay inside the
-   * legacy try/catch, so any other error still becomes the legacy alert. The input is reset synchronously so the same
+   * otherwise a v1 file's validated wall is applied (wall scope: sections, and the mesh mode when the file names one)
+   * and, if the validator corrected anything, M-IMP-5 lists the corrections; a v2 file (08 P2-13e) is restored whole by
+   * #applyV2 (asynchronous: its logos are loaded first; a failure there alerts like a parse error). The parse, read and
+   * apply steps stay inside the legacy try/catch, so any other error still becomes the legacy alert. The input is reset synchronously so the same
    * file can be chosen again. A v1 import resets the logos (no logo is in a v1 file; B-L21 fixed in 08 P2-3d) and the
    * logo list re-renders when panel IDs are on.
    * Ports: index.html@cd3fd3f lines 4967-5010.
@@ -583,6 +612,11 @@ export class ProjectIO {
           this.#dialogs.alert(result.issues.find((issue) => issue.severity === 'error').message);
           return;
         }
+        if (result.scope === 'full') {
+          // a rejection of the asynchronous restore (no new try/catch, R13) alerts like the legacy parse error
+          this.#applyV2(result).then(null, (err) => this.#dialogs.alert('Error parsing JSON file: ' + err.message));
+          return;
+        }
         this.#wallController.applyImport({
           sections: this.#sectionsFromProject(result.project), meshMode: result.project.mesh_mode, logos: null,
         });
@@ -597,5 +631,112 @@ export class ProjectIO {
     };
     reader.readAsText(file);
     e.target.value = ''; // Reset input
+  }
+
+  /**
+   * The v2 restore (08 6.17, P2-13e; until 07 D5 moves it into ProjectSession.apply). Every referenced logo asset is
+   * loaded first through the LogoLoader (an SVG is sanitised again, every image decode-checked and hashed): a failure
+   * drops that logo with a warning, an SVG the sanitiser changed or a raster whose SHA-256 differs from the file's is
+   * kept with a warning (07 4.5). Then, in order: (1) a clean pilot exit, (2) deselect, (4) the wall with the logos
+   * (WallController.applyImport installs them after its reset and before its rebuild) and the file extensions,
+   * (5) display and style, each setter only when the value differs (panel-ID style, LED layout, wireframe, frames,
+   * content, then rebuildIfPanelIds when only the style changed; the grid), (6) the camera lens, (7) the preview when
+   * it differs (enabling resets the pose), (8) the camera pose (CameraController.applyImportedPose; kept for the next
+   * enable when the preview is off, Q19), (9) the safe-distance floor, (10) each prop's pose, then its visibility,
+   * (11) PROJECT_REPLACED {reason: 'import', scope: 'full'} (the panels sync their controls), (12) M-IMP-5 when there
+   * are warnings.
+   * Side effects: the whole project, the scene and every mirror; at most one alert.
+   * @param {{project: object, issues: import('../io/ProjectValidator.js').Issue[]}} result  a successful v2 read
+   * @returns {Promise<void>}
+   */
+  async #applyV2(result) {
+    const r = this.#restore;
+    if (!r) throw new Error('this build cannot restore a version 2 project');
+    const state = this.#stateFromProject(result.project);
+    const issues = [...result.issues];
+    const warn = (path, message) => issues.push({ path, code: 'sanitized', severity: 'warning', message });
+
+    // 3. the logo entries, keyed by section id
+    const loaded = new Map();
+    for (const asset of state.assets) {
+      const res = await r.logoLoader.load({ dataUri: asset.data_uri, name: asset.name });
+      if (!res.ok) {
+        warn('assets', `Logo "${asset.name}": dropped (the image could not be loaded)`);
+        continue;
+      }
+      if (res.meta.dataUri !== asset.data_uri) warn('assets', `Logo "${asset.name}": unsafe or unsized SVG content was removed`);
+      else if (asset.sha256 && asset.sha256 !== res.meta.sha256) warn('assets', `Logo "${asset.name}": the image does not match its checksum`);
+      loaded.set(asset.id, res);
+    }
+    const logos = [];
+    for (const logo of state.logos) {
+      const res = loaded.get(logo.assetId);
+      if (res) logos.push([logo.sectionId, { position: logo.position, scale: logo.scale, image: res.image, ...res.meta }]);
+    }
+
+    // 1-2
+    if (r.pilot.active) r.pilot.toggle();
+    r.selection.deselect();
+    // 4. the wall (logos installed after the reset, before the rebuild) and the file extensions
+    const wc = this.#wallController;
+    wc.applyImport({ sections: state.sections, meshMode: state.meshMode, logos });
+    this.#project.setExtensions(state.extensions);
+
+    // 5. display and style
+    const display = this.#project.display;
+    const style = this.#project.panelIdStyle;
+    let styleChanged = false;
+    for (const [key, value] of Object.entries(state.panelIdStyle)) {
+      if (style[key] === value) continue;
+      wc.setPanelIdStyle(key, typeof value === 'number' ? String(value) : value);
+      styleChanged = true;
+    }
+    let rebuilt = false;
+    const want = state.display;
+    if (display.ledLayout !== want.ledLayout) {
+      rebuilt = display.ledSimEnabled;
+      wc.setLedLayout(want.ledLayout);
+    }
+    if (display.wireframe !== want.wireframe) {
+      wc.setWireframe(want.wireframe);
+      rebuilt = true;
+    }
+    if (display.showFrame !== want.showFrame) {
+      wc.setShowFrame(want.showFrame);
+      rebuilt = true;
+    }
+    if (display.content !== want.content) {
+      if (want.content === 'ledSim') wc.setLedSim(true);
+      else if (want.content === 'panelIds') wc.setPanelIds(true);
+      else if (display.content === 'ledSim') wc.setLedSim(false);
+      else wc.setPanelIds(false);
+      rebuilt = true;
+    }
+    if (styleChanged && !rebuilt) wc.rebuildIfPanelIds();
+    if (display.showGrid !== want.showGrid) r.sceneManager.toggleGrid();
+
+    // 6-8. the camera: lens, preview, pose
+    const cc = r.cameraController;
+    const cam = state.camera;
+    cc.setFilmback(cam.filmback);
+    if (cam.filmback === 'custom') {
+      cc.setCameraField('filmbackWidth', String(cam.filmbackWidth));
+      cc.setCameraField('filmbackHeight', String(cam.filmbackHeight));
+    }
+    cc.setCameraField('focalLength', String(cam.focalLength));
+    if (this.#project.camera.enabled !== cam.enabled) cc.setPreviewEnabled(cam.enabled);
+    cc.applyImportedPose(cam);
+    // 9. the safe-distance floor
+    if (display.showSafeDistance !== want.showSafeDistance) cc.setSafeDistanceEnabled(want.showSafeDistance);
+    // 10. the props
+    for (const [controller, prop, values] of [[r.personController, this.#project.person, state.person],
+      [r.carController, this.#project.car, state.car]]) {
+      controller.applyImportedPose(values);
+      if (prop.visible !== values.visible) controller.setVisible(values.visible);
+    }
+    // 11-12
+    r.bus.emit(Events.PROJECT_REPLACED, { reason: 'import', scope: 'full' });
+    const corrections = issues.filter((issue) => issue.severity === 'warning');
+    if (corrections.length) this.#dialogs.alert(ImportAlerts.corrections(corrections));
   }
 }

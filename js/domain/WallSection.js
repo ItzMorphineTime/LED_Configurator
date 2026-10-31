@@ -51,18 +51,39 @@ export class WallSection {
   #uvVertexEdits = null;
 
   /**
+   * The section's `extensions` of the project file (07 4.4 rule 4; 08 P2-13e): namespaced, validated JSON kept
+   * verbatim for a round trip and never interpreted. Like the UV transform it is not a SECTION_FIELDS key, so a copied
+   * or new section starts without any.
+   * @type {Readonly<object>}
+   */
+  #extensions = Object.freeze({});
+
+  /**
    * Assigns exactly the SECTION_FIELDS keys from `fields`, in SECTION_FIELDS order, as own enumerable
    * properties, and the UV transform: fields.uvTransform when it is a UvTransform (stored as given), else the identity
    * (04 4.1; a new section never inherits a transform, Q8). Ids are never written after construction.
    * Side effects: none.
    * @param {{id: *, name: *, panelCols: *, panelRows: *, panelWidth: *, panelHeight: *, ledX: *, ledY: *,
-   *          curveIntensity: *, angleOffset: *, color: *, uvTransform?: UvTransform}} fields
+   *          curveIntensity: *, angleOffset: *, color: *, uvTransform?: UvTransform, extensions?: object}} fields
+   *   extensions: the validated `sections[i].extensions` of a v2 file (08 P2-13e), stored frozen; anything but a plain
+   *   object stores none
    */
   constructor(fields) {
     // No coercion here (R12). Since 08 P2-3b (B-L8 fixed) an import reaches the constructor only through the validator
     // (io/ProjectSchema.sectionsFromProject), and the card rules and setName normalise every typed value.
     for (const key of SECTION_FIELDS) this[key] = fields[key];
     this.#uvTransform = fields.uvTransform instanceof UvTransform ? fields.uvTransform : UvTransform.identity();
+    const ext = fields.extensions;
+    if (ext !== null && typeof ext === 'object' && Object.getPrototypeOf(ext) === Object.prototype) this.#extensions = deepFreeze(ext);
+  }
+
+  /**
+   * The section's file extensions (08 P2-13e): a frozen plain object, {} for none.
+   * Side effects: none.
+   * @returns {Readonly<object>}
+   */
+  get extensions() {
+    return this.#extensions;
   }
 
   /**

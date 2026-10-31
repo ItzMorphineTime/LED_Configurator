@@ -124,6 +124,29 @@ export class CameraPanel {
     bus.on(Events.CAMERA_COVERAGE_CHANGED, (payload) => this.#mirrorCoverage(payload));
     bus.on(Events.CAMERA_POSE_CHANGED, (payload) => this.#mirrorPose(payload));
     bus.on(Events.CAMERA_SAFE_DISTANCE_TOGGLED, (payload) => this.#mirrorSafeDistanceToggle(payload));
+    bus.on(Events.PROJECT_REPLACED, () => this.syncFromModel());
+  }
+
+  /**
+   * PROJECT_REPLACED mirror (08 P2-13e): every camera control from the model after a v2 import: the preview and
+   * safe-distance toggles with their blocks, the filmback select and its custom block, the lens inputs and the pose
+   * inputs (positions toFixed(2), rotations toFixed(1), as the 'import' pose mirror).
+   * Side effects: writes the camera section's toggles, select, inputs and block displays.
+   * @returns {void}
+   */
+  syncFromModel() {
+    const cine = this.#project.camera;
+    const display = this.#project.display;
+    this.#togglePreview.classList.toggle('active', cine.enabled);
+    setDisplay(this.#previewOptions, cine.enabled);
+    this.#filmback.value = cine.filmback;
+    setDisplay(this.#customFilmback, cine.filmback === 'custom');
+    this.#filmbackWidth.value = cine.filmbackWidth;
+    this.#filmbackHeight.value = cine.filmbackHeight;
+    this.#focalLength.value = cine.focalLength;
+    this.#mirrorPose({ source: 'import' });
+    this.#toggleSafeDistance.classList.toggle('active', display.showSafeDistance);
+    setDisplay(this.#exportSafeDistance, display.showSafeDistance);
   }
 
   /**
@@ -264,7 +287,8 @@ export class CameraPanel {
    * "5" and "0" are unchanged and a Reset facing a curved or turned wall shows no float noise; the model keeps the exact
    * pose.
    * 'pivot' (03 T4, 5.5: the re-expression after a pivot edit moved the stage origin): pos-x, pos-z toFixed(2), the
-   * two components translateStage writes.
+   * two components translateStage writes. 'import' (08 P2-13e, a v2 import): the three positions toFixed(2) and the
+   * three rotations toFixed(1).
    * @param {{source: 'reset'|'gizmo-translate'|'gizmo-rotate'|'pilot-look'|'pilot-move'|'pivot', axis?: 'x'|'y'|'z'}} payload
    */
   #mirrorPose({ source, axis }) {
@@ -300,6 +324,14 @@ export class CameraPanel {
       case 'pilot-look':
         this.#rotX.value = cine.rotX.toFixed(1);
         this.#rotY.value = cine.rotY.toFixed(1);
+        break;
+      case 'import':
+        this.#posX.value = cine.posX.toFixed(2);
+        this.#posY.value = cine.posY.toFixed(2);
+        this.#posZ.value = cine.posZ.toFixed(2);
+        this.#rotX.value = cine.rotX.toFixed(1);
+        this.#rotY.value = cine.rotY.toFixed(1);
+        this.#rotZ.value = cine.rotZ.toFixed(1);
         break;
       default:
         break;

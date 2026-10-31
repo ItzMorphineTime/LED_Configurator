@@ -104,8 +104,9 @@ export class CineCamera {
 
   /**
    * The writer bounds of the pose (spec 07 C22 and 4.3: x and z within +-100,000 m, y in [0, 100,000]), shared with the
-   * validator ranges; since 03 T1 translateStage clamps through them (07 C45). They are not the input rules (the posZ
-   * rule has no minimum since 08 P2-11c); 08 P2-13e makes every other writer clamp too.
+   * validator ranges; since 03 T1 translateStage clamps through them (07 C45), and since 08 P2-13e every other position
+   * writer too (setField, translateBy, pilotFly, assign), so the v2 validator never alters a pose the app wrote. They
+   * are not the input rules (the posZ rule has no minimum since 08 P2-11c).
    * @type {Readonly<{posX: {min: number, max: number}, posY: {min: number, max: number},
    *                  posZ: {min: number, max: number}}>}
    */
@@ -126,8 +127,31 @@ export class CineCamera {
    * @returns {number} the stored value
    */
   setField(field, raw, ctx = WALL_PLANE_AT_ORIGIN) {
-    this[field] = CineCamera.FIELD_RULES[field].parse(raw, ctx);
+    const v = CineCamera.FIELD_RULES[field].parse(raw, ctx);
+    // 08 P2-13e: the far bounds of the position (no harness value comes near them)
+    const bound = Object.prototype.hasOwnProperty.call(CineCamera.LIMITS, field) ? CineCamera.LIMITS[field] : null;
+    this[field] = bound ? clamp(v, bound.min, bound.max) : v;
     return this[field];
+  }
+
+  /**
+   * The setter of validated values (07 4.1; 08 P2-13e, 6.17): the lens and the pose of an imported v2 file, never
+   * `enabled`. Only the far bounds of LIMITS apply (never the input rules' minimums); a field that is absent or not a
+   * finite number (a string for filmback) is left as it is.
+   * Side effects: writes the given fields.
+   * @param {{filmback?: string, filmbackWidth?: number, filmbackHeight?: number, focalLength?: number, posX?: number,
+   *          posY?: number, posZ?: number, rotX?: number, rotY?: number, rotZ?: number}} fields
+   */
+  assign(fields) {
+    if (typeof fields.filmback === 'string' && Object.prototype.hasOwnProperty.call(FILMBACK_PRESETS, fields.filmback)) {
+      this.filmback = fields.filmback;
+    }
+    for (const key of ['filmbackWidth', 'filmbackHeight', 'focalLength', 'posX', 'posY', 'posZ', 'rotX', 'rotY', 'rotZ']) {
+      const v = fields[key];
+      if (!Number.isFinite(v)) continue;
+      const bound = Object.prototype.hasOwnProperty.call(CineCamera.LIMITS, key) ? CineCamera.LIMITS[key] : null;
+      this[key] = bound ? clamp(v, bound.min, bound.max) : v;
+    }
   }
 
   /**
@@ -286,11 +310,12 @@ export class CineCamera {
    * @param {number} dz
    */
   translateBy(dx, dy, dz) {
-    this.posX += dx;
-    // The gizmo clamps posY at the floor and never Z, like the input rules since 08 P2-11c and the pilot since 08 P2-8c
-    // (B-L10 fixed).
-    this.posY = Math.max(0, this.posY + dy);
-    this.posZ += dz;
+    const { posX, posY, posZ } = CineCamera.LIMITS;
+    // The gizmo clamps posY at the floor and never Z below the far bound, like the input rules since 08 P2-11c and the
+    // pilot since 08 P2-8c (B-L10 fixed); the ±100,000 m far bounds since 08 P2-13e.
+    this.posX = clamp(this.posX + dx, posX.min, posX.max);
+    this.posY = clamp(this.posY + dy, posY.min, posY.max);
+    this.posZ = clamp(this.posZ + dz, posZ.min, posZ.max);
   }
 
   /**
@@ -374,8 +399,12 @@ export class CineCamera {
       moved = true;
     }
 
-    // The stage floor (08 P2-8c), applied every call like the legacy clamp; a no-op unless a key moved the camera below it.
-    this.posY = Math.max(0, this.posY);
+    // The stage floor (08 P2-8c), applied every call like the legacy clamp; a no-op unless a key moved the camera below it;
+    // and the far bounds of LIMITS (08 P2-13e).
+    const { posX, posY, posZ } = CineCamera.LIMITS;
+    this.posX = clamp(this.posX, posX.min, posX.max);
+    this.posY = clamp(this.posY, posY.min, posY.max);
+    this.posZ = clamp(this.posZ, posZ.min, posZ.max);
 
     return moved;
   }

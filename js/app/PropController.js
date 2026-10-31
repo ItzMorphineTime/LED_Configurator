@@ -102,6 +102,20 @@ export class PropController {
   }
 
   /**
+   * The pose and scale of a v2 import (08 6.17 step 10; P2-13e): the validated values through Prop.assign (the far
+   * bounds only), the input mirror ('import') and the transform (a no-op while the prop is hidden).
+   * Side effects: writes the prop's pose and scale; emits PROP_POSE_CHANGED {id, source: 'import'}; applyTransform().
+   * @param {{posX: number, posZ: number, rotY: number, scale: number}} pose
+   * @returns {void}
+   */
+  applyImportedPose(pose) {
+    const { posX, posZ, rotY, scale } = pose;
+    this.#prop.assign({ posX, posZ, rotY, scale });
+    this.#bus.emit(Events.PROP_POSE_CHANGED, { id: this.id, source: 'import' });
+    this.applyTransform();
+  }
+
+  /**
    * StageAnchored participant (03 5.3, 6.5): re-expresses the prop after an explicit pivot edit moved the stage origin
    * by -(dx, dz), clamped through Prop.LIMITS (07 C45), mirrors its inputs and applies the transform (a no-op while the
    * prop is hidden; the pose is re-expressed anyway).

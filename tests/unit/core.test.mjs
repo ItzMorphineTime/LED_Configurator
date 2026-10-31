@@ -60,8 +60,9 @@ describe('Events catalogue', () => {
       UV_TRANSFORM_CHANGED:         'uv:transformChanged', // 04 UV-12 (visual)
       UV_HOVER_CHANGED:             'uv:hoverChanged',     // 04 UV-12 (visual)
       UV_SETTINGS_CHANGED:          'uv:settingsChanged',  // 04 UV-14 (visual)
+      PROJECT_REPLACED:             'project:replaced',    // 08 P2-13e (non-visual)
     });
-    assert.equal(Object.keys(Events).length, 26);
+    assert.equal(Object.keys(Events).length, 27);
     assert.ok(Object.isFrozen(Events));
   });
 
@@ -334,7 +335,7 @@ describe('LEGACY_SITES', () => {
     'B-L11': 'P2-9b', 'B-L15': 'P2-8a', 'B-M4': 'P2-3a', 'B-L8': 'P2-3b', 'B-L16': 'P2-3c', 'B-L21': 'P2-3d', 'B-H4': 'P2-4a', 'B-M8': 'P2-4b',
     'B-M15': 'P2-5b', 'B-L29': 'P2-5b', 'B-M3': 'P2-6a', 'B-L14': 'P2-6b', 'B-L7': 'P2-6c', 'B-M2': 'P2-6d', 'B-M16': 'P2-12d', 'B-M5': 'P2-7a', 'B-M6': 'P2-7b', 'B-M7': 'P2-7c', 'B-L6': 'P2-7d', 'B-L18': 'P2-7e',
     'B-M11': 'P2-10a', 'B-L33': 'P2-11b', 'B-M10': 'P2-11a', 'B-L2': 'P2-11c', 'B-L9': 'P2-8b', 'B-L10': 'P2-8c', 'B-L13': 'P2-8d',
-    'B-L35': 'P2-13a' };
+    'B-L35': 'P2-13a', 'B-L31': 'P2-13e' };
   // The Phase 1C clean-ups (memory only; their Strategies.dispose.* switches were retired by 08 P2-12a), with the step
   // their 8.2 fix cell names.
   const PHASE1C_LANDED = { 'B-H5': 'Phase 1C H1', 'B-L12': 'Phase 1C H2' };

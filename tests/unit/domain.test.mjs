@@ -11,6 +11,9 @@ import { clamp, roundInt, deepFreeze, STAGE_POSITION_LIMIT_M, wrapDeg } from '..
 
 /** The 08 P2-8b fallback (B-L9 fixed): the legacy `v || d` keeps a typed 0 (finiteOr). */
 const fin = (v, d) => (Number.isFinite(v) ? v : d);
+
+/** 08 P2-13e: setField also applies the ±100,000 m far bounds of a position field (LIMITS), never the rule itself. */
+const bounded = (limits, field, v) => (Object.hasOwn(limits, field) ? clamp(v, limits[field].min, limits[field].max) : v);
 import { PivotMode, PIVOT_MODES, PIVOT_OFFSET_LIMIT_M, WallPivot, Wall } from '../../js/domain/Wall.js';
 import { ContentMode, DisplaySettings, PanelIdStyle, Project } from '../../js/domain/Project.js';
 import { LogoLibrary } from '../../js/domain/LogoLibrary.js';
@@ -1084,8 +1087,8 @@ describe('CineCamera', () => {
         const expected = legacy(raw);
         same(CineCamera.FIELD_RULES[field].parse(raw), expected, `${field}.parse(${JSON.stringify(raw)})`);
         const cam = new CineCamera();
-        same(cam.setField(field, raw), expected, `setField(${field}) return`);
-        same(cam[field], expected, `setField(${field}) stored`);
+        same(cam.setField(field, raw), bounded(CineCamera.LIMITS, field, expected), `setField(${field}) return`);
+        same(cam[field], bounded(CineCamera.LIMITS, field, expected), `setField(${field}) stored`);
       }
     }
     assert.ok(Object.is(new CineCamera().setField('posY', '0'), 0), "'0' gives 0 (08 P2-8b, B-L9 fixed; legacy 1.5)");
@@ -1098,14 +1101,14 @@ describe('CineCamera', () => {
     for (const wallZ of [0, -0, -2.3397, 2]) {
       for (const raw of ALL_INPUTS) {
         same(CineCamera.FIELD_RULES.posZ.parse(raw, { wallZ }), want(raw, wallZ), `posZ(${JSON.stringify(raw)}) at ${wallZ}`);
-        same(new CineCamera().setField('posZ', raw, { wallZ }), want(raw, wallZ), 'setField with ctx');
+        same(new CineCamera().setField('posZ', raw, { wallZ }), bounded(CineCamera.LIMITS, 'posZ', want(raw, wallZ)), 'setField with ctx');
       }
     }
-    for (const raw of ALL_INPUTS) same(new CineCamera().setField('posZ', raw), want(raw, 0), 'no context: wallZ 0');
+    for (const raw of ALL_INPUTS) same(new CineCamera().setField('posZ', raw), bounded(CineCamera.LIMITS, 'posZ', want(raw, 0)), 'no context: wallZ 0');
     assert.ok(Object.is(new CineCamera().setField('posZ', '0'), 0), "'0' gives 0 (it gave 5, B-L9, floored at 0.1)");
     for (const [field, [legacy]] of Object.entries(LEGACY_CAMERA_RULES)) {
       if (field === 'posZ') continue;
-      for (const raw of ALL_INPUTS) same(new CineCamera().setField(field, raw, { wallZ: -2.3397 }), legacy(raw), `${field} ignores ctx`);
+      for (const raw of ALL_INPUTS) same(new CineCamera().setField(field, raw, { wallZ: -2.3397 }), bounded(CineCamera.LIMITS, field, legacy(raw)), `${field} ignores ctx`);
     }
   });
 
@@ -1348,8 +1351,8 @@ describe('Prop', () => {
         const expected = legacy(raw);
         same(Prop.FIELD_RULES[field].parse(raw), expected, `${field}.parse(${JSON.stringify(raw)})`);
         for (const prop of [new PersonProp(), new CarProp()]) {
-          same(prop.setField(field, raw), expected, `${prop.kind}.setField(${field}) return`);
-          same(prop[field], expected, `${prop.kind}.setField(${field}) stored`);
+          same(prop.setField(field, raw), bounded(Prop.LIMITS, field, expected), `${prop.kind}.setField(${field}) return`);
+          same(prop[field], bounded(Prop.LIMITS, field, expected), `${prop.kind}.setField(${field}) stored`);
         }
       }
     }
