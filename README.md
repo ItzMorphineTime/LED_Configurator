@@ -492,6 +492,17 @@ The island (the outlined quad) is the part of the source image that lands on the
 | Copy to all | This section's UV transform on every section (a Fit is re-fitted per section) |
 | Undo / Redo (↶ ↷, Ctrl/⌘+Z, Ctrl/⌘+Shift+Z, Ctrl+Y on the canvas) | UV edits only: one step per committed field, button, key or drag |
 
+**Vertices** (the **Edit: Island | Vertices** switch) edits single panel corners: every grid vertex of the section is a
+handle. Click selects a vertex, Shift+click toggles one, a drag on empty canvas selects a box (Shift adds), Ctrl/⌘+A
+selects all, Escape clears the selection. Dragging a selected vertex moves the whole selection (snaps to whole source
+pixels; **Alt** free; **Shift** fine, a tenth of the pointer's travel; Escape cancels); the arrow keys move it one source
+pixel (Shift: ten); Vertex U / V set one vertex's position or move several by their centre. **Reset selected** and
+**Reset all vertex edits** remove edits; every edit is one undo step. Vertex edits sit under the island transform, so
+moving, scaling, rotating or flipping the island, and Reset, Fit 0–1 and Pixel-accurate, keep them. They reach the
+viewport, every mesh mode (in Individual Panels a vertex moves the matching corner of every panel sharing it), the OBJ
+and glTF exports and the glTF second UV channel, except with **Per panel 0–1** panel UVs. Changing a section's columns
+or rows clears its vertex edits (the viewer says so).
+
 Typing in a field previews live; Enter, leaving the field or a spinner click commits it (one undo step); Escape in a
 field restores the value it had. Escape during a drag cancels it. Keys typed while the viewer has focus stay in the
 viewer (WASD, G, R and the other viewport keys do nothing there); U still closes it, except while typing in a field.

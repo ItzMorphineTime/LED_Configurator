@@ -11,7 +11,9 @@
 
 /**
  * @typedef {{id: *, t: import('../domain/UvSettings.js').UvTransform}} TransformState  one section's transform
+ * @typedef {{id: *, edits: import('../domain/UvSettings.js').UvVertexEdits|null}} VertexState  one section's vertex edits
  * @typedef {{kind: 'transforms', before: TransformState[], after: TransformState[]}
+ *          | {kind: 'vertices', before: VertexState[], after: VertexState[]}
  *          | {kind: 'settings', key: string, before: *, after: *}} UvHistoryEntry
  */
 
@@ -108,20 +110,21 @@ export class UvFallbackHistory {
   }
 
   /**
-   * Drops the section states of sections that no longer exist (a delete, 04 5.2); a transform entry left without any
-   * state is removed (a Copy to all entry keeps its other sections). Settings entries are kept.
+   * Drops the section states that `keep` refuses: those of sections that no longer exist (a delete, 04 5.2), and the
+   * vertex states of a section whose grid size changed (UvController). A section entry ('transforms', 'vertices') left
+   * without any state is removed (a Copy to all entry keeps its other sections). Settings entries are kept.
    * Side effects: writes the stacks.
-   * @param {(id: *) => boolean} exists
+   * @param {(id: *, entry: UvHistoryEntry) => boolean} keep  whether the entry keeps the states of section `id`
    */
-  prune(exists) {
-    const keep = (e) => {
-      if (e.kind !== 'transforms') return true;
-      e.before = e.before.filter((s) => exists(s.id));
-      e.after = e.after.filter((s) => exists(s.id));
+  prune(keep) {
+    const keepEntry = (e) => {
+      if (!Array.isArray(e.before)) return true;
+      e.before = e.before.filter((s) => keep(s.id, e));
+      e.after = e.after.filter((s) => keep(s.id, e));
       return e.before.length > 0 || e.after.length > 0;
     };
-    this.#undo = this.#undo.filter(keep);
-    this.#redo = this.#redo.filter(keep);
+    this.#undo = this.#undo.filter(keepEntry);
+    this.#redo = this.#redo.filter(keepEntry);
   }
 
   /** Empties both stacks (an import replaces every section). Side effects: writes the stacks. */

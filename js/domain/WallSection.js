@@ -48,6 +48,9 @@ export class WallSection {
    */
   #uvTransform;
 
+  /** @type {import('./UvSettings.js').UvVertexEdits|null} the per-vertex UV edits (session-only), null for none */
+  #uvVertexEdits = null;
+
   /**
    * Assigns exactly the SECTION_FIELDS keys from `fields`, in SECTION_FIELDS order, as own enumerable
    * properties, and the UV transform: fields.uvTransform when it is a UvTransform (stored as given), else the identity
@@ -79,6 +82,26 @@ export class WallSection {
    */
   setUvTransform(t) {
     this.#uvTransform = t.clone();
+  }
+
+  /**
+   * The section's per-vertex UV edits (UvSettings.UvVertexEdits, base-space deltas under the transform), or null for
+   * none. Like the transform: never mutate it in place, write through setUvVertexEdits; not a SECTION_FIELDS key, so a
+   * copied or new section starts without edits.
+   * Side effects: none.
+   * @returns {import('./UvSettings.js').UvVertexEdits|null}
+   */
+  get uvVertexEdits() {
+    return this.#uvVertexEdits;
+  }
+
+  /**
+   * Replaces the vertex edits with a copy of `e`; null or an empty map stores null.
+   * Side effects: writes the section's vertex edits.
+   * @param {import('./UvSettings.js').UvVertexEdits|null} e
+   */
+  setUvVertexEdits(e) {
+    this.#uvVertexEdits = e && !e.isEmpty ? e.clone() : null;
   }
 
   /**

@@ -1,8 +1,9 @@
 /**
  * @module domain/UvSettings
  * The UV state of a project (docs/improvements/04-uvs-uv-editor.md 4.1, UV-5a): the per-section UV transform
- * (`WallSection.uvTransform`) and the project-wide UV settings (`Project.uv`). Pure values with their field rules; the
- * maths that applies a transform lives in geometry/UvMapper.js.
+ * (`WallSection.uvTransform`), the per-section vertex edits (`WallSection.uvVertexEdits`, UvVertexEdits) and the
+ * project-wide UV settings (`Project.uv`). Pure values with their field rules; the maths that applies them lives in
+ * geometry/UvMapper.js.
  * Persistence (04 UV-5c, the v2 keys `sections[].uv_transform` and `uv`) has not landed: the state is session-only, and
  * toJSON / fromJSON only fix the key shapes of 04 4.2 for it.
  * Legacy source: none (Feature 4).
@@ -229,6 +230,126 @@ export class UvTransform {
       offsetU: v.offset_u, offsetV: v.offset_v, scaleU: v.scale_u, scaleV: v.scale_v, rotation: v.rotation_degrees,
       flipU: v.flip_u, flipV: v.flip_v, sourceRotated: v.source_rotated,
     });
+  }
+}
+
+/** A vertex delta rule: finite, else 0; |d| < 1e-12 is 0 (a drag back to the start leaves no edit); clamp [-8, 8]. */
+const deltaRule = (raw) => {
+  const v = num(raw);
+  return Number.isFinite(v) && Math.abs(v) >= 1e-12 ? clamp(v, -8, 8) : 0;
+};
+
+/**
+ * The per-vertex UV edits of one section (the owner's request of 2026-10-31): a sparse map from a vertex of the
+ * section's (panelCols + 1) x (panelRows + 1) panel-corner grid (key = row * (cols + 1) + col, row 0 at the bottom) to
+ * a delta [du, dv] in the island's BASE space, before the section's UvTransform: the vertex's UV is T(base + delta), so
+ * moving, scaling or rotating the island keeps the edits. Bound to the grid size it was made for (matches(); a section
+ * whose panelCols or panelRows changes drops its edits, UvController). Session-only like the transform. A section stores
+ * its own copy (WallSection.setUvVertexEdits); a stored delta is a frozen pair and is never mutated.
+ */
+export class UvVertexEdits {
+  /** @type {number} */
+  #cols;
+  /** @type {number} */
+  #rows;
+  /** @type {Map<number, readonly number[]>} key -> frozen [du, dv], never [0, 0] */
+  #map = new Map();
+
+  /**
+   * Side effects: none.
+   * @param {number} cols  the section's panelCols
+   * @param {number} rows  the section's panelRows
+   */
+  constructor(cols, rows) {
+    this.#cols = cols;
+    this.#rows = rows;
+  }
+
+  /** Side effects: none. @returns {number} */
+  get cols() { return this.#cols; }
+  /** Side effects: none. @returns {number} */
+  get rows() { return this.#rows; }
+  /** Side effects: none. @returns {number} the number of edited vertices */
+  get size() { return this.#map.size; }
+  /** Side effects: none. @returns {boolean} */
+  get isEmpty() { return this.#map.size === 0; }
+
+  /** Side effects: none. @param {number} col @param {number} row @returns {number} the vertex key */
+  key(col, row) {
+    return row * (this.#cols + 1) + col;
+  }
+
+  /** Side effects: none. @param {number} key @returns {number[]} [col, row] */
+  colRow(key) {
+    const n = this.#cols + 1;
+    const col = key % n;
+    return [col, (key - col) / n];
+  }
+
+  /** Side effects: none. @param {number} key @returns {readonly number[]|undefined} the frozen [du, dv] */
+  get(key) {
+    return this.#map.get(key);
+  }
+
+  /**
+   * Stores a vertex's delta through the delta rule; a zero delta removes the vertex.
+   * Side effects: writes the map.
+   * @param {number} key
+   * @param {*} du
+   * @param {*} dv
+   * @throws {RangeError} for a key outside the grid
+   */
+  set(key, du, dv) {
+    if (!Number.isInteger(key) || key < 0 || key >= (this.#cols + 1) * (this.#rows + 1)) {
+      throw new RangeError(`Vertex ${key} is outside the ${this.#cols} x ${this.#rows} grid`);
+    }
+    const u = deltaRule(du);
+    const v = deltaRule(dv);
+    if (u === 0 && v === 0) this.#map.delete(key);
+    else this.#map.set(key, Object.freeze([u, v]));
+  }
+
+  /** Adds to a vertex's delta (set of the sums). Side effects: writes the map. @param {number} key @param {number} du @param {number} dv */
+  add(key, du, dv) {
+    const d = this.#map.get(key);
+    this.set(key, (d ? d[0] : 0) + du, (d ? d[1] : 0) + dv);
+  }
+
+  /** Side effects: writes the map. @param {number} key */
+  delete(key) {
+    this.#map.delete(key);
+  }
+
+  /** Side effects: none. @returns {number[]} the edited vertices' keys, ascending */
+  keys() {
+    return [...this.#map.keys()].sort((a, b) => a - b);
+  }
+
+  /** Side effects: none. @param {number} cols @param {number} rows @returns {boolean} made for this grid size */
+  matches(cols, rows) {
+    return this.#cols === cols && this.#rows === rows;
+  }
+
+  /** Side effects: none. @returns {UvVertexEdits} a copy (the frozen pairs are shared) */
+  clone() {
+    const c = new UvVertexEdits(this.#cols, this.#rows);
+    for (const [k, d] of this.#map) c.#map.set(k, d);
+    return c;
+  }
+
+  /**
+   * Side effects: none.
+   * @param {UvVertexEdits|null|undefined} o
+   * @returns {boolean} the same grid and the same deltas (null and undefined equal an empty map)
+   */
+  equals(o) {
+    if (!o) return this.isEmpty;
+    if (!o.matches(this.#cols, this.#rows) || o.size !== this.size) return false;
+    for (const [k, d] of this.#map) {
+      const e = o.get(k);
+      if (!e || e[0] !== d[0] || e[1] !== d[1]) return false;
+    }
+    return true;
   }
 }
 

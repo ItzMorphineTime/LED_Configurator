@@ -12,7 +12,7 @@
 import { panelLabel } from './PanelNaming.js';
 import { sectionPxPerLed } from './TextureAtlas.js';
 import { transformPoint } from './WallLayout.js';
-import { applyUv, sectionUv } from './UvMapper.js';
+import { applyUv, sectionUv, warpBaseUv } from './UvMapper.js';
 
 /**
  * Side effects: none.
@@ -153,8 +153,10 @@ export function describeHit({ sl, startCol, atlas, entry, plan, baseU, baseV }) 
   const { W, H } = sectionCanvasSize(s);
   const pix = baseUvToPixel(s, baseU, baseV);
   const { gx, gy } = atlasLedPixel(atlas, entry, s, pix.px, pix.pyTop);
-  const [finalU, finalV] = plan ? sectionUv(plan, baseU, baseV) : [baseU, baseV];
-  const T = plan && plan.transform ? applyUv(plan.transform, W, H, baseU, baseV) : [baseU, baseV];
+  // the plan's vertex edits, interpolated over the hovered triangle (UvMapper.vertexDeltaAt), before the transform
+  const [eu, ev] = warpBaseUv(plan ? plan.deltas ?? null : null, baseU, baseV);
+  const [finalU, finalV] = plan ? sectionUv(plan, eu, ev) : [baseU, baseV];
+  const T = plan && plan.transform ? applyUv(plan.transform, W, H, eu, ev) : [eu, ev];
   const Ws = plan ? plan.sourceW : W;
   const Hs = plan ? plan.sourceH : H;
   const inside = T[0] >= 0 && T[0] < 1 && T[1] >= 0 && T[1] < 1;

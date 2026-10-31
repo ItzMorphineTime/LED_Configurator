@@ -112,6 +112,30 @@
     flex-wrap: wrap;
 }
 
+/* The Island and Vertices rows share one grid cell: the inactive pane is hidden, not removed, so switching modes keeps
+   the controls' height (and the canvas size) unchanged. */
+.uv-swap {
+    display: grid;
+}
+
+.uv-swap__pane {
+    grid-area: 1 / 1;
+    min-width: 0;
+}
+
+.uv-swap__pane[data-inactive] {
+    visibility: hidden;
+}
+
+.uv-row__note {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: right;
+}
+
 .uv-row__label {
     width: 44px;
     flex-shrink: 0;
@@ -196,6 +220,10 @@
     color: var(--color-on-control-active);
 }
 
+.uv-btn--push {
+    margin-left: auto;
+}
+
 .uv-btn--icon {
     display: inline-flex;
     align-items: center;
@@ -264,10 +292,17 @@
     cursor: pointer;
 }
 
+/* The hint line reserves three 14 px lines in both edit modes (clamped with an ellipsis, the full text as the title). */
 .uv-hint {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    height: 42px;
+    overflow: hidden;
     margin: 0 0 6px;
     font-size: 10px;
-    line-height: 1.4;
+    line-height: 14px;
     color: var(--color-text-secondary);
 }
 

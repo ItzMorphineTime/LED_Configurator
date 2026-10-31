@@ -13,7 +13,7 @@
  */
 
 import { unsupportedStrategy } from '../legacy/LegacyCompat.js';
-import { planSectionUvs, sectionUv } from './UvMapper.js';
+import { planSectionUvs, sectionGridUv } from './UvMapper.js';
 
 /**
  * The 6 indices of one grid quad (two triangles).
@@ -160,10 +160,10 @@ function pushAveragedNormal(normals, section, edgePositions, col) {
  *   {offsetU, widthU, heightV} -> (offsetU + (col / panelCols) * widthU, (row / panelRows) * heightV)
  *                                 (08 P2-7a, 08 6.7: the pixel-accurate atlas rect; heightV = 1 reproduces row / panelRows
  *                                 bit for bit)
- *   SectionUvPlan (04 UV-6)    -> UvMapper.sectionUv(plan, col / panelCols, row / panelRows): the plan's transform
- *                                 (iff plan.transform), then its atlas rect (iff plan.rect); a plan with neither is
- *                                 the 'unit' writer itself, so identity plans are bit-identical to 'unit' and to the
- *                                 atlas rect (04 R5)
+ *   SectionUvPlan (04 UV-6)    -> UvMapper.sectionGridUv(plan, col, row, panelCols, panelRows): the vertex's edit
+ *                                 (iff plan.deltas holds one), the plan's transform (iff plan.transform), then its
+ *                                 atlas rect (iff plan.rect); a plan with none of them is the 'unit' writer itself, so
+ *                                 identity plans are bit-identical to 'unit' and to the atlas rect (04 R5)
  *   null / undefined           -> null
  * Module-private.
  * @param {'unit'|{offsetU: number, widthU: number, heightV?: number}|import('./UvMapper.js').SectionUvPlan|null|undefined} uv
@@ -172,7 +172,7 @@ function pushAveragedNormal(normals, section, edgePositions, col) {
  */
 function uvWriter(uv) {
   if (uv === null || uv === undefined) return null;
-  if (uv === 'unit' || (isUvPlan(uv) && uv.transform === null && uv.rect === null)) {
+  if (uv === 'unit' || (isUvPlan(uv) && uv.transform === null && uv.rect === null && !uv.deltas)) {
     return (uvs, section, row, col) => {
       uvs.push(col / section.panelCols, row / section.panelRows);
     };
@@ -180,7 +180,7 @@ function uvWriter(uv) {
   if (isUvPlan(uv)) {
     const pair = [0, 0];
     return (uvs, section, row, col) => {
-      sectionUv(uv, col / section.panelCols, row / section.panelRows, pair);
+      sectionGridUv(uv, col, row, section.panelCols, section.panelRows, pair);
       uvs.push(pair[0], pair[1]);
     };
   }
@@ -296,7 +296,7 @@ export class WallMeshBuilder {
    *     1607-1625; 'none' -> nothing pushed;
    *   uvs: 'unit' -> (col / panelCols, row / panelRows); {offsetU, widthU} -> (offsetU + (col / panelCols) * widthU,
    *     row / panelRows); {offsetU, widthU, heightV} (08 P2-7a) -> the same u and (row / panelRows) * heightV;
-   *     a SectionUvPlan (04 UV-6) -> UvMapper.sectionUv(plan, col / panelCols, row / panelRows); null -> nothing pushed.
+   *     a SectionUvPlan (04 UV-6) -> UvMapper.sectionGridUv(plan, col, row, panelCols, panelRows); null -> nothing pushed.
    * Indices: vertsPerRow = section.panelCols + 1 (raw); for row < panelRows, col < panelCols:
    *   bl = indexBase + row * vertsPerRow + col; br = bl + 1; tl = indexBase + (row + 1) * vertsPerRow + col;
    *   tr = tl + 1; indices.push(...quadIndices(bl, br, tl, tr, this.profile.winding)).
@@ -541,10 +541,11 @@ export class WallMeshBuilder {
   /**
    * The UVs of a panel-mode quad, in the panelCorners order BL, BR, TR, TL (08 P2-12d, 08 6.15; 04 5.3, UV-9):
    *   no plan, or a plan with panelUvs 'section' -> section space: for each corner (lu, lv) of PANEL_UVS, the base UV
-   *     ((panel.col + lu) / panelCols, (panel.row + lv) / panelRows), then UvMapper.sectionUv(plan, ...) (the section's
-   *     UV transform; an identity plan returns the base UV untouched). A corner shared with the neighbouring panel equals
-   *     the section-mode strip UV (col / panelCols, row / panelRows) bit for bit, as (c + 1) + 0 and c + 1 are the same
-   *     integer;
+   *     ((panel.col + lu) / panelCols, (panel.row + lv) / panelRows), through UvMapper.sectionGridUv(plan, panel.col + lu,
+   *     panel.row + lv, ...) (the grid vertex's edit, then the section's UV transform; an identity plan returns the base
+   *     UV untouched). A corner shared with the neighbouring panel equals the section-mode strip UV of that grid vertex
+   *     bit for bit, as (c + 1) + 0 and c + 1 are the same integer, so a vertex edit moves the matching corner of every
+   *     panel sharing it;
    *   a plan with panelUvs 'panel' (04's legacy option) -> the per-panel [0, 0], [1, 0], [1, 1], [0, 1].
    * Reads no profile key.
    * Side effects: none.
@@ -562,9 +563,9 @@ export class WallMeshBuilder {
     }
     const { panelCols, panelRows } = sl.section;
     for (let k = 0; k < 4; k++) {
-      const u = (panel.col + local[2 * k]) / panelCols;
-      const v = (panel.row + local[2 * k + 1]) / panelRows;
-      uvs.push(plan !== null ? sectionUv(plan, u, v) : [u, v]);
+      const col = panel.col + local[2 * k];
+      const row = panel.row + local[2 * k + 1];
+      uvs.push(plan !== null ? sectionGridUv(plan, col, row, panelCols, panelRows) : [col / panelCols, row / panelRows]);
     }
     return uvs;
   }

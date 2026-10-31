@@ -3,7 +3,8 @@
  * The UV viewer's 2D canvas (docs/improvements/04-uvs-uv-editor.md 3.4, 6.11; UV-12, UV-13): the view transform (zoom
  * about a point, pan, framing of the 0-1 rect with an 8 % margin, Texture / Square / Auto aspect), the drawing (background
  * in the 0-1 rect, the dimmed outside, the source-pixel grid, the panel wireframe, the island with its handles and rotate
- * knob, the hover crosshair and panel, the drag tooltip) and the hit-testing of the handles on a general quadrilateral.
+ * knob or, in the Vertices mode, the grid vertex handles and the selection box, the hover crosshair and panel, the drag
+ * tooltip) and the hit-testing of the handles on a general quadrilateral and of the grid vertices.
  * It draws a precomputed SectionUvData (UvViewModel) and maps between screen and UV only: every transform computation
  * stays in the controller. The island's screen corners (BL, BR, TR, TL; CSS px relative to the canvas) are written to
  * the canvas's data-island attribute after every draw, for the harness.
@@ -26,6 +27,49 @@ const CORNERS = Object.freeze(['bl', 'br', 'tr', 'tl']);
 const EDGES = Object.freeze([['l', 0, 3], ['r', 1, 2], ['b', 0, 1], ['t', 3, 2]]);
 /** Resize cursors by the handle's screen angle from the centroid, in 45° buckets (y down). */
 const RESIZE_CURSORS = Object.freeze(['ew-resize', 'nwse-resize', 'ns-resize', 'nesw-resize']);
+
+/**
+ * The index of the screen point nearest to (x, y) within `radius` (the vertex hit-test), or -1.
+ * Side effects: none.
+ * @param {number[][]} pts  screen points
+ * @param {number} x
+ * @param {number} y
+ * @param {number} radius
+ * @returns {number}
+ */
+export function nearestPoint(pts, x, y, radius) {
+  let best = -1;
+  let bestD = radius;
+  pts.forEach((p, k) => {
+    const d = Math.hypot(p[0] - x, p[1] - y);
+    if (d <= bestD) {
+      best = k;
+      bestD = d;
+    }
+  });
+  return best;
+}
+
+/**
+ * The indices of the screen points inside the box spanned by two corners (in any order, edges included): the box
+ * selection.
+ * Side effects: none.
+ * @param {number[][]} pts
+ * @param {number} x0
+ * @param {number} y0
+ * @param {number} x1
+ * @param {number} y1
+ * @returns {number[]}
+ */
+export function pointsInBox(pts, x0, y0, x1, y1) {
+  const [l, r] = x0 <= x1 ? [x0, x1] : [x1, x0];
+  const [t, b] = y0 <= y1 ? [y0, y1] : [y1, y0];
+  const out = [];
+  pts.forEach((p, k) => {
+    if (p[0] >= l && p[0] <= r && p[1] >= t && p[1] <= b) out.push(k);
+  });
+  return out;
+}
 
 const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -81,6 +125,8 @@ export class UVCanvas {
   #tooltip = null;
   /** @type {string|null} the handle being dragged */
   #active = null;
+  /** @type {number[]|null} the selection box [x0, y0, x1, y1] in canvas CSS px */
+  #box = null;
   /** @type {{ledZoom: boolean, thin: boolean}} what the last draw found (the viewer's view chips) */
   #drawState = { ledZoom: false, thin: false };
 
@@ -133,6 +179,62 @@ export class UVCanvas {
   /** Side effects: view state. @param {string|null} handle */
   setActiveHandle(handle) {
     this.#active = handle;
+  }
+
+  /**
+   * The selection box between two client points, or none.
+   * Side effects: view state.
+   * @param {number[]|null} box  [clientX0, clientY0, clientX1, clientY1]
+   */
+  setBox(box) {
+    if (!box) {
+      this.#box = null;
+      return;
+    }
+    const [x0, y0] = this.#local(box[0], box[1]);
+    const [x1, y1] = this.#local(box[2], box[3]);
+    this.#box = [x0, y0, x1, y1];
+  }
+
+  /** Whether the grid vertices are the handles (data present, no message, Section space, the Vertices mode). */
+  #vertexMode() {
+    const d = this.#data;
+    return !!d && !d.message && !d.atlasView && d.editMode === 'vertices';
+  }
+
+  /** @returns {number[][]} the grid vertices' screen points (canvas CSS px), in key order */
+  #vertexPoints() {
+    const d = this.#data;
+    const pts = [];
+    for (let k = 0; k < d.uvs.length; k += 2) pts.push(this.screen(d.uvs[k], d.uvs[k + 1]));
+    return pts;
+  }
+
+  /**
+   * The grid vertex under a client point (within the handle radius, the nearest one), in the Vertices mode.
+   * Side effects: none.
+   * @param {number} clientX
+   * @param {number} clientY
+   * @returns {{key: number|null, uv: number[]}}
+   */
+  hitVertex(clientX, clientY) {
+    const [x, y] = this.#local(clientX, clientY);
+    const uv = this.#uvAt(x, y);
+    if (!this.#vertexMode()) return { key: null, uv };
+    const k = nearestPoint(this.#vertexPoints(), x, y, HANDLE_RADIUS);
+    return { key: k >= 0 ? k : null, uv };
+  }
+
+  /**
+   * The grid vertices inside the box between two client points (the box selection), in the Vertices mode.
+   * Side effects: none.
+   * @returns {number[]} keys
+   */
+  verticesInBox(clientX0, clientY0, clientX1, clientY1) {
+    if (!this.#vertexMode()) return [];
+    const [x0, y0] = this.#local(clientX0, clientY0);
+    const [x1, y1] = this.#local(clientX1, clientY1);
+    return pointsInBox(this.#vertexPoints(), x0, y0, x1, y1);
   }
 
   /** The resolved aspect: 'auto' is 'texture' unless the source is longer than 8:1 (04 3.3). */
@@ -276,10 +378,10 @@ export class UVCanvas {
     return { pts, edges, c, m, knob: [m[0] + nx * KNOB_OFFSET, m[1] + ny * KNOB_OFFSET], thin };
   }
 
-  /** Whether the island can be edited here (data present, no message, Section space). */
+  /** Whether the island can be edited here (data present, no message, Section space, the Island mode). */
   #editable() {
     const d = this.#data;
-    return !!d && !d.message && !d.atlasView;
+    return !!d && !d.message && !d.atlasView && d.editMode !== 'vertices';
   }
 
   /**
@@ -315,7 +417,7 @@ export class UVCanvas {
    */
   cursorFor(handle, dragging = false) {
     if (!handle) return 'default';
-    if (handle === 'island') return 'move';
+    if (handle === 'island' || handle === 'vertex') return 'move';
     if (handle === 'rotate') return dragging ? 'grabbing' : 'grab';
     if (!this.#editable()) return 'default';
     const g = this.#geometry();
@@ -374,8 +476,10 @@ export class UVCanvas {
     // 6. island, handles, knob
     const g = this.#geometry();
     this.#drawState.thin = g.thin;
-    this.#strokePath(ctx, g.pts, true, th.island, 1.5);
+    this.#strokePath(ctx, g.pts, true, th.island, this.#vertexMode() ? 1 : 1.5);
     if (this.#editable()) this.#drawHandles(ctx, g);
+    if (this.#vertexMode()) this.#drawVertices(ctx, d);
+    if (this.#box) this.#drawBox(ctx);
     // 7. hover crosshair and panel
     if (this.#hover && !d.atlasView) this.#drawHover(ctx, d);
     // 8. drag tooltip
@@ -455,7 +559,7 @@ export class UVCanvas {
     ctx.stroke();
   }
 
-  /** 6.11 step 5: column and row lines through the grid UVs (straight: the transform is affine). */
+  /** 6.11 step 5: column and row polylines through the grid UVs (vertex edits bend them). */
   #drawWireframe(ctx, d) {
     const th = this.#theme;
     const uvs = d.atlasView ? d.atlasView.uvs : d.uvs;
@@ -464,20 +568,18 @@ export class UVCanvas {
       const k = (row * (cols + 1) + col) * 2;
       return this.screen(uvs[k], uvs[k + 1]);
     };
+    const line = (n, at) => {
+      const a = at(0);
+      ctx.moveTo(a[0], a[1]);
+      for (let j = 1; j <= n; j++) {
+        const b = at(j);
+        ctx.lineTo(b[0], b[1]);
+      }
+    };
     const path = () => {
       ctx.beginPath();
-      for (let col = 0; col <= cols; col++) {
-        const a = P(0, col);
-        const b = P(rows, col);
-        ctx.moveTo(a[0], a[1]);
-        ctx.lineTo(b[0], b[1]);
-      }
-      for (let row = 0; row <= rows; row++) {
-        const a = P(row, 0);
-        const b = P(row, cols);
-        ctx.moveTo(a[0], a[1]);
-        ctx.lineTo(b[0], b[1]);
-      }
+      for (let col = 0; col <= cols; col++) line(rows, (row) => P(row, col));
+      for (let row = 0; row <= rows; row++) line(cols, (col) => P(row, col));
     };
     path();
     ctx.strokeStyle = th.halo;
@@ -531,6 +633,34 @@ export class UVCanvas {
     ctx.arc(g.knob[0], g.knob[1], 4.5, 0, Math.PI * 2);
     ctx.fillStyle = this.#active === 'rotate' ? th.handleActive : th.handle;
     ctx.fill();
+  }
+
+  /**
+   * The Vertices mode's handles: a small square per grid vertex (the edited ones in the island colour), the selected
+   * ones larger in the active colour.
+   */
+  #drawVertices(ctx, d) {
+    const th = this.#theme;
+    const selected = new Set(d.vertices ? d.vertices.selection : []);
+    const edited = new Set(d.vertices ? d.vertices.edited : []);
+    this.#vertexPoints().forEach((p, k) => {
+      const on = selected.has(k);
+      const r = on ? 4 : 3;
+      ctx.fillStyle = th.halo;
+      ctx.fillRect(p[0] - r - 1, p[1] - r - 1, 2 * r + 2, 2 * r + 2);
+      ctx.fillStyle = on ? th.handleActive : edited.has(k) ? th.island : th.handle;
+      ctx.fillRect(p[0] - r, p[1] - r, 2 * r, 2 * r);
+    });
+  }
+
+  /** The selection box: a dashed two-tone rectangle. */
+  #drawBox(ctx) {
+    const [x0, y0, x1, y1] = this.#box;
+    const pts = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+    ctx.save();
+    ctx.setLineDash([4, 3]);
+    this.#strokePath(ctx, pts, true, this.#theme.crosshair, 1);
+    ctx.restore();
   }
 
   /** 6.11 step 7: the hovered panel's quad (from the grid UVs) and a crosshair at the hovered UV. */

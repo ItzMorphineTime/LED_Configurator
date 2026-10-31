@@ -2,14 +2,18 @@
  * @module app/UvController
  * The UV use cases of spec 04 (docs/improvements/04-uvs-uv-editor.md 3.3-3.7, 5.3, 6.6, 6.8, 6.12; UV-11 to UV-15):
  * the viewer commands, the transform edits (field preview / commit / cancel, flips, feed turns, Source, presets, nudges,
- * Copy to all, handle drags), their undo history, the project UV settings and the hover readout.
+ * Copy to all, handle drags), the per-vertex edits of the Vertices mode (selection, vertex drags, the vertex fields,
+ * nudges and resets; base-space deltas under the transform, UvVertexEdits), their undo history, the project UV settings
+ * and the hover readout.
  * Live path (6.12, without events in the pipeline): every edit writes the section's transform, re-plans that one section
  * against the layout and atlas cached from the last rebuild (UV edits change neither) and rewrites its UVs in place
  * (LEDWallView.updateSectionUvs: no rebuild, no texture); the viewer's data refresh is coalesced to one per animation
  * frame. It is a SelectionManager observer (it follows a selected wall section unless pinned; only spec 02's section
  * Selectables produce one) and a WallController rebuild observer (cache, viewed section, atlas note, viewer refresh).
  * History (path B, the owner's decision): UvFallbackHistory, a UV-only stack; one entry per committed edit (a field
- * commit, coalesced per field within 750 ms; a drag at its end; each button), none for previews or cancelled drags.
+ * commit, coalesced per field within 750 ms; a drag at its end; each button), none for previews, cancelled drags or
+ * selection changes. A section whose grid size (panelCols x panelRows) changes loses its vertex edits and their history
+ * states at the next rebuild, with a notice in the viewer.
  * UV state is session-only until project file v2 (04 UV-5c): an import starts every section from the identity and
  * clears the UV history.
  * Legacy source: none (Feature 4).
@@ -17,10 +21,10 @@
  */
 
 import { Events } from '../core/EventBus.js';
-import { UvTransform, UvSettings } from '../domain/UvSettings.js';
+import { UvTransform, UvSettings, UvVertexEdits } from '../domain/UvSettings.js';
 import {
   planSectionUv, isLedMaskContent, presetFit, isFitResult, presetPixelAccurate, quarterTurn, dragTranslate, dragScale,
-  dragRotate, sourceSize, applyUv, invertUv,
+  dragRotate, sourceSize, applyUv, invertUv, warpBaseUv, unwarpBaseUv, uvDeltaToBase,
 } from '../geometry/UvMapper.js';
 import { describeHit } from '../geometry/PixelMap.js';
 import { canvasFits } from '../geometry/TextureAtlas.js';
@@ -44,6 +48,52 @@ const dims = (s) => ({ W: s.panelCols * s.ledX, H: s.panelRows * s.ledY });
 const validCounts = (s) => [s.panelCols, s.panelRows, s.ledX, s.ledY].every((n) => Number.isInteger(n) && n >= 1);
 /** A signed fixed-point number with a typographic minus. */
 const signed = (x, digits) => `${x < 0 ? '−' : '+'}${Math.abs(x).toFixed(digits)}`;
+/** A section's vertex edits when they fit its grid (stale ones are dropped at the next rebuild), else null. */
+const editsOf = (s) => {
+  const e = s.uvVertexEdits ?? null;
+  return e && e.matches(s.panelCols, s.panelRows) ? e : null;
+};
+/** Two vertex edit states are equal (null and an empty map are the same: no edits). */
+const sameEdits = (a, b) => (a ? a.equals(b) : !b || b.isEmpty);
+/** The precision factor of a vertex drag with Shift (the vertices follow a tenth of the pointer's travel). */
+const PRECISION = 0.1;
+
+/**
+ * The section-UV position of grid vertex `key`: T(base + delta), the point the viewer draws.
+ * Side effects: none.
+ * @param {import('../domain/WallSection.js').WallSection} s
+ * @param {UvVertexEdits|null} edits  the section's edits that fit its grid (or null)
+ * @param {number} key  row * (panelCols + 1) + col
+ * @returns {number[]}
+ */
+export function vertexUv(s, edits, key) {
+  const cols = s.panelCols;
+  const col = key % (cols + 1);
+  const row = (key - col) / (cols + 1);
+  const d = edits ? edits.get(key) : undefined;
+  const { W, H } = dims(s);
+  return applyUv(s.uvTransform, W, H, col / cols + (d ? d[0] : 0), row / s.panelRows + (d ? d[1] : 0));
+}
+
+/**
+ * The value the vertex U / V fields show: the one vertex's UV, or the centroid of several (null for none).
+ * Side effects: none.
+ * @param {import('../domain/WallSection.js').WallSection} s
+ * @param {number[]} keys
+ * @returns {number[]|null}
+ */
+export function selectionUv(s, keys) {
+  if (!keys.length) return null;
+  const edits = editsOf(s);
+  let u = 0;
+  let v = 0;
+  for (const k of keys) {
+    const p = vertexUv(s, edits, k);
+    u += p[0];
+    v += p[1];
+  }
+  return [u / keys.length, v / keys.length];
+}
 
 /**
  * A copy of `base` with one field set through UvTransform's rules ('scale' sets both scales). Always derived from the
@@ -107,6 +157,12 @@ export class UvController {
   #field = null;
   /** @type {{sectionId: *, handle: string, t0: UvTransform, uv0: number[]}|null} the active handle drag */
   #drag = null;
+  /**
+   * @type {{sectionId: *, keys: number[], before: UvVertexEdits|null, grab0: number[], last: number[], acc: number[]}|null}
+   *   the active vertex drag: the moved keys, the edits at its start, the grabbed vertex's UV at its start, the last
+   *   pointer UV and the accumulated pointer travel (Shift scales each move)
+   */
+  #vdrag = null;
   #refreshPending = false;
   /** @type {string} the last published hover (repeated identical readouts are not re-published) */
   #hoverKey = '';
@@ -207,9 +263,9 @@ export class UvController {
     this.#viewModel.setPinned(on);
   }
 
-  /** Side effects: none. @returns {boolean} a handle drag is active */
+  /** Side effects: none. @returns {boolean} a handle or vertex drag is active */
   get dragging() {
-    return this.#drag !== null;
+    return this.#drag !== null || this.#vdrag !== null;
   }
 
   // ---- observers ------------------------------------------------------------------------------------------------
@@ -237,16 +293,35 @@ export class UvController {
   onWallRebuilt({ layout, atlas, plans, sectionScale = null, cause = 'edit' }) {
     this.#cache = { layout, atlas, plans: plans.slice(), sectionScale };
     const live = new Set(layout.sections.map((sl) => sl.sectionId));
+    const vm = this.#viewModel;
+    // a section whose grid size changed drops its vertex edits (the plans above already ignored them), with a notice
+    const bySection = new Map(layout.sections.map((sl) => [sl.sectionId, sl.section]));
+    for (const s of bySection.values()) {
+      const e = s.uvVertexEdits;
+      if (!e || e.matches(s.panelCols, s.panelRows)) continue;
+      s.setUvVertexEdits(null);
+      vm.noteSection(s.id, `ⓘ Vertex edits cleared: the grid changed from ${e.cols}×${e.rows} to ${s.panelCols}×${s.panelRows} panels`);
+    }
     if (cause === 'import') {
       this.#history.clear();
+      vm.noteSection(null, null);
       this.#field = null;
       this.#drag = null;
+      this.#vdrag = null;
     } else {
-      this.#history.prune((id) => live.has(id));
+      // vertex states made for another grid size can never be applied again
+      const fits = (id, e) => {
+        const s = bySection.get(id);
+        if (!s) return false;
+        if (e.kind !== 'vertices') return true;
+        return [...e.before, ...e.after].every((st) => !Object.is(st.id, id) || !st.edits
+          || st.edits.matches(s.panelCols, s.panelRows));
+      };
+      this.#history.prune(fits);
       if (this.#field && !live.has(this.#field.sectionId)) this.#field = null;
       if (this.#drag && !live.has(this.#drag.sectionId)) this.#drag = null;
+      if (this.#vdrag && !live.has(this.#vdrag.sectionId)) this.#vdrag = null;
     }
-    const vm = this.#viewModel;
     if (vm.sectionId !== null && !live.has(vm.sectionId)) {
       const n = layout.sections.length;
       vm.setSection(n ? layout.sections[Math.min(vm.viewedIndex, n - 1)].sectionId : null);
@@ -465,6 +540,219 @@ export class UvController {
     return true;
   }
 
+  // ---- vertex editing (the Vertices mode) ---------------------------------------------------------------------------
+
+  /**
+   * The viewer's edit mode: 'island' (the transform handles) or 'vertices' (grid vertex handles); open sessions end.
+   * Side effects: viewer state and refresh.
+   * @param {'island'|'vertices'} mode
+   */
+  setEditMode(mode) {
+    this.#endSessions(false);
+    this.#viewModel.setEditMode(mode);
+    this.#refresh(false);
+  }
+
+  /**
+   * Changes the vertex selection of the viewed section (no history entry): 'replace', 'add', 'toggle' or 'remove'.
+   * Side effects: viewer state and refresh.
+   * @param {number[]} keys  grid vertex keys (row * (panelCols + 1) + col)
+   * @param {'replace'|'add'|'toggle'|'remove'} [mode]
+   */
+  selectVertices(keys, mode = 'replace') {
+    this.#viewModel.select(keys, mode);
+    this.#refresh(false);
+  }
+
+  /** Ctrl/⌘+A in the viewer: every grid vertex of the viewed section. Side effects: as selectVertices. */
+  selectAllVertices() {
+    const s = this.#section(this.#viewModel.sectionId);
+    if (!s || !validCounts(s)) return;
+    const n = (s.panelCols + 1) * (s.panelRows + 1);
+    this.selectVertices(Array.from({ length: n }, (_, k) => k), 'replace');
+  }
+
+  /** Side effects: as selectVertices. @returns {boolean} whether anything was selected */
+  clearVertexSelection() {
+    if (!this.#viewModel.selection.length) return false;
+    this.selectVertices([], 'replace');
+    return true;
+  }
+
+  /**
+   * Starts a drag of the selected vertices by the grabbed vertex `key` (selected alone first when it is not selected);
+   * `uv` is the pointer in the section's UV space.
+   * Side effects: ends the open sessions; may change the selection.
+   * @param {*} sectionId
+   * @param {number} key
+   * @param {number[]} uv
+   * @returns {boolean} whether the drag started
+   */
+  beginVertexDrag(sectionId, key, uv) {
+    const section = this.#section(sectionId);
+    if (!section || !validCounts(section) || !Object.is(sectionId, this.#viewModel.sectionId)) return false;
+    this.#endSessions(false);
+    if (!this.#viewModel.selection.includes(key)) this.selectVertices([key], 'replace');
+    const edits = editsOf(section);
+    this.#vdrag = {
+      sectionId, keys: this.#viewModel.selection.slice(), before: edits ? edits.clone() : null,
+      grab0: vertexUv(section, edits, key), last: [uv[0], uv[1]], acc: [0, 0],
+    };
+    return true;
+  }
+
+  /**
+   * One pointer move of the vertex drag: the selection moves with the pointer, converted to base space through the
+   * inverse of the transform's linear part (UvMapper.uvDeltaToBase), so the island transform stays as it is. Like the
+   * island drag the grabbed vertex snaps to whole source pixels unless Alt; Shift is the precision modifier (a tenth of
+   * the pointer's travel, no snapping). No history entry until endVertexDrag.
+   * Side effects: domain write, live UVs, a coalesced refresh.
+   * @param {number[]} uv
+   * @param {{alt?: boolean, shift?: boolean}} [modifiers]
+   * @returns {{tooltip: string}|null}
+   */
+  updateVertexDrag(uv, { alt = false, shift = false } = {}) {
+    const d = this.#vdrag;
+    const section = d ? this.#section(d.sectionId) : null;
+    if (!section) return null;
+    const scale = shift ? PRECISION : 1;
+    d.acc[0] += (uv[0] - d.last[0]) * scale;
+    d.acc[1] += (uv[1] - d.last[1]) * scale;
+    d.last = [uv[0], uv[1]];
+    const { W, H } = dims(section);
+    const [Ws, Hs] = sourceSize(section.uvTransform, W, H);
+    let [du, dv] = d.acc;
+    if (!alt && !shift) {
+      du = Math.round((d.grab0[0] + du) * Ws) / Ws - d.grab0[0];
+      dv = Math.round((d.grab0[1] + dv) * Hs) / Hs - d.grab0[1];
+    }
+    this.#applyEditsLive(section, this.#moved(section, d.before, d.keys, du, dv));
+    return { tooltip: `Δu ${signed(du, 4)} (${Math.round(du * Ws)} px) · Δv ${signed(dv, 4)} (${Math.round(dv * Hs)} px)` };
+  }
+
+  /** Ends the vertex drag: one history entry 'UV vertex drag (<name>)' iff the edits changed. Side effects: a history entry. */
+  endVertexDrag() {
+    const d = this.#vdrag;
+    this.#vdrag = null;
+    const section = d ? this.#section(d.sectionId) : null;
+    if (!section || sameEdits(editsOf(section), d.before)) return;
+    this.#recordVertices(`UV vertex drag (${section.name})`, section, d.before);
+  }
+
+  /**
+   * Escape during a vertex drag: restores the edits of its start; no entry.
+   * Side effects: domain write, live UVs.
+   * @returns {boolean} whether a drag was cancelled
+   */
+  cancelVertexDrag() {
+    const d = this.#vdrag;
+    this.#vdrag = null;
+    if (!d) return false;
+    const section = this.#section(d.sectionId);
+    if (section) this.#applyEditsLive(section, d.before);
+    return true;
+  }
+
+  /**
+   * The vertex U or V field (section UV units): one selected vertex moves to the value, several move by the difference
+   * between the value and their centroid. One entry, coalesced per field within 750 ms.
+   * Side effects: domain write, live UVs, a history entry iff the edits changed.
+   * @param {*} sectionId
+   * @param {'u'|'v'} axis
+   * @param {*} raw
+   */
+  setVertexUv(sectionId, axis, raw) {
+    const section = this.#section(sectionId);
+    const value = num(raw);
+    const keys = this.#viewModel.selection;
+    if (!section || !validCounts(section) || !Number.isFinite(value) || !keys.length) return;
+    this.#endSessions(false);
+    const c = selectionUv(section, keys);
+    const du = axis === 'u' ? value - c[0] : 0;
+    const dv = axis === 'v' ? value - c[1] : 0;
+    this.#commitVertices(section, `UV vertex ${axis.toUpperCase()} (${section.name})`,
+      (before) => this.#moved(section, before, keys, du, dv), { coalesceKey: `uv:${section.id}:vertex-${axis}` });
+  }
+
+  /**
+   * Arrow keys in the Vertices mode: the selection moves by du, dv source pixels (ten with Shift); repeated nudges within
+   * 750 ms make one entry.
+   * Side effects: as setVertexUv.
+   * @param {*} sectionId
+   * @param {number} du  -1, 0 or 1
+   * @param {number} dv  -1, 0 or 1
+   * @param {boolean} [big]
+   */
+  nudgeVertices(sectionId, du, dv, big = false) {
+    const section = this.#section(sectionId);
+    const keys = this.#viewModel.selection;
+    if (!section || !validCounts(section) || !keys.length) return;
+    this.#endSessions(false);
+    const { W, H } = dims(section);
+    const [Ws, Hs] = sourceSize(section.uvTransform, W, H);
+    const px = big ? 10 : 1;
+    this.#commitVertices(section, `UV vertex nudge (${section.name})`,
+      (before) => this.#moved(section, before, keys, (du * px) / Ws, (dv * px) / Hs),
+      { coalesceKey: `uv:${section.id}:vertex-nudge` });
+  }
+
+  /** "Reset selected": the selected vertices lose their edits; one entry. Side effects: as setVertexUv. @param {*} sectionId */
+  resetSelectedVertices(sectionId) {
+    const section = this.#section(sectionId);
+    const keys = this.#viewModel.selection;
+    if (!section || !keys.length) return;
+    this.#endSessions(false);
+    this.#commitVertices(section, `UV reset selected vertices (${section.name})`, (before) => {
+      if (before) for (const k of keys) before.delete(k);
+      return before;
+    });
+  }
+
+  /**
+   * "Reset all vertex edits": the section loses every vertex edit (the island transform stays); one entry.
+   * Side effects: as setVertexUv.
+   * @param {*} sectionId
+   */
+  resetAllVertexEdits(sectionId) {
+    const section = this.#section(sectionId);
+    if (!section) return;
+    this.#endSessions(false);
+    this.#commitVertices(section, `UV reset vertex edits (${section.name})`, () => null);
+  }
+
+  /** `before` (or no edits) with (du, dv) of section UV, as a base delta, added to every key: a new UvVertexEdits. */
+  #moved(section, before, keys, du, dv) {
+    const { W, H } = dims(section);
+    const [bu, bv] = uvDeltaToBase(section.uvTransform, W, H, du, dv);
+    const e = before ? before.clone() : new UvVertexEdits(section.panelCols, section.panelRows);
+    for (const k of keys) e.add(k, bu, bv);
+    return e;
+  }
+
+  /**
+   * One vertex edit: fn derives the new edits from a copy of the current ones (or null); written live and recorded as
+   * one entry iff they changed.
+   */
+  #commitVertices(section, label, fn, options = {}) {
+    const before = editsOf(section);
+    const next = fn(before ? before.clone() : null);
+    if (sameEdits(next, before)) return;
+    this.#applyEditsLive(section, next);
+    this.#recordVertices(label, section, before, options);
+  }
+
+  /** Records one vertex entry (the given before-state, the current after-state) and drops the section's notice. */
+  #recordVertices(label, section, before, options = {}) {
+    const after = section.uvVertexEdits;
+    this.#history.record(label, {
+      kind: 'vertices',
+      before: [{ id: section.id, edits: before ? before.clone() : null }],
+      after: [{ id: section.id, edits: after ? after.clone() : null }],
+    }, options);
+    this.#viewModel.noteSection(section.id, null);
+    this.#scheduleRefresh();
+  }
+
   // ---- history ----------------------------------------------------------------------------------------------------
 
   /** Cancels an open drag or field session, then undoes one entry. Side effects: domain writes, live UVs or a rebuild. */
@@ -553,7 +841,9 @@ export class UvController {
       return;
     }
     const { W, H } = dims(s);
-    const [bu, bv] = invertUv(s.uvTransform, W, H, u, v);
+    // the inverse transform, then (with vertex edits) the edited grid triangle that holds the point
+    const [eu, ev] = invertUv(s.uvTransform, W, H, u, v);
+    const [bu, bv] = unwarpBaseUv(editsOf(s), eu, ev) ?? [NaN, NaN];
     if (!(bu >= 0 && bu <= 1 && bv >= 0 && bv <= 1)) {
       this.#publishHover('uv-canvas', null, null);
       return;
@@ -583,6 +873,7 @@ export class UvController {
    */
   #endSessions(cancel) {
     if (this.#drag) this.cancelDrag();
+    if (this.#vdrag) this.cancelVertexDrag();
     if (this.#field) {
       if (cancel) this.cancelField(this.#field.sectionId);
       else this.#finishField();
@@ -626,6 +917,23 @@ export class UvController {
    */
   #applyLive(section, t, source, live) {
     section.setUvTransform(t);
+    this.#replan(section);
+    this.#emitTransform(section, source, live);
+    this.#scheduleRefresh();
+  }
+
+  /**
+   * The live path for vertex edits: domain write, re-plan, in-place UVs, a coalesced viewer refresh (no event: only the
+   * viewer shows vertex edits). Never rebuilds.
+   */
+  #applyEditsLive(section, edits) {
+    section.setUvVertexEdits(edits);
+    this.#replan(section);
+    this.#scheduleRefresh();
+  }
+
+  /** One plan against the cached layout and atlas, written in place (a no-op for LED-mask content). */
+  #replan(section) {
     const cache = this.#cache;
     const i = cache ? cache.layout.sections.findIndex((sl) => sl.section === section) : -1;
     if (i >= 0) {
@@ -637,8 +945,6 @@ export class UvController {
       cache.plans[i] = plan;
       this.#view.updateSectionUvs(section.id, plan);
     }
-    this.#emitTransform(section, source, live);
-    this.#scheduleRefresh();
   }
 
   /** Emits UV_TRANSFORM_CHANGED for a section's current transform. */
@@ -662,6 +968,13 @@ export class UvController {
   #applyEntry(e, side) {
     if (e.kind === 'settings') {
       this.#applySetting(e.key, e[side]);
+      return;
+    }
+    if (e.kind === 'vertices') {
+      for (const { id, edits } of e[side]) {
+        const section = this.#section(id);
+        if (section) this.#applyEditsLive(section, edits);
+      }
       return;
     }
     for (const { id, t } of e[side]) {
@@ -729,7 +1042,9 @@ export class UvController {
     const entry = atlas.entries[i];
     const d = describeHit({ sl, startCol: entry.startCol, atlas, entry, plan, baseU, baseV });
     const t = sl.section.uvTransform;
-    const [viewU, viewV] = applyUv(t, d.W, d.H, baseU, baseV);
+    // the viewer's crosshair: the section's own vertex edits (shown even where the export ignores them)
+    const [wu, wv] = warpBaseUv(editsOf(sl.section), baseU, baseV);
+    const [viewU, viewV] = applyUv(t, d.W, d.H, wu, wv);
     return { ...d, ledX: sl.section.ledX, ledY: sl.section.ledY, viewU, viewV };
   }
 

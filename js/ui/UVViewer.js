@@ -1,15 +1,20 @@
 /**
  * @module ui/UVViewer
  * The UV viewer and editor panel (docs/improvements/04-uvs-uv-editor.md 3.2-3.8, 5.3; UV-12, UV-13): a FloatingPanel
- * (#uv-viewer) with the section, background, space and view selects, the UV canvas (UVCanvas), the numeric fields with
- * their commit semantics (input previews, change commits, Escape cancels), Turn feed, Source, Flip, the presets, Copy to
- * all, undo / redo, the status chips, the hint line and the hover readout; and the #toggle-uv-viewer toolbar button.
+ * (#uv-viewer) with the section, background, space and view selects, the UV canvas (UVCanvas), the edit mode switch
+ * (Island | Vertices), the numeric fields with their commit semantics (input previews, change commits, Escape cancels),
+ * Turn feed, Source, Flip, the presets, Copy to all, the vertex fields and resets of the Vertices mode, undo / redo, the
+ * status chips, the hint line and the hover readout; and the #toggle-uv-viewer toolbar button. The two modes' rows share
+ * one grid cell (the inactive one is hidden, not removed), the chips and the readout reserve fixed heights: the canvas
+ * keeps its size until the panel is resized.
  * Commands go down to UvController; the panel mirrors UV_VIEWER_CHANGED, UV_DATA_CHANGED, UV_TRANSFORM_CHANGED and
  * UV_HOVER_CHANGED (R3: DOM and its own canvas only).
  * Keys (04 3.6, path B, the owner's decision: spec 07's keymap does not exist yet): U is ViewportInput's global key. One
  * bubbling keydown listener on #uv-viewer scopes the panel: the viewer keys (arrows nudge, Shift+arrows by a panel, H / V
  * flip, [ / ] turn the feed, F fit, 0 reset, Home frame, Space+drag pan, Ctrl/⌘+Z undo, Ctrl/⌘+Shift+Z and Ctrl+Y redo,
- * Escape cancels a drag) act only on the focused canvas; every other unmodified key pressed inside the panel stops there
+ * Escape cancels a drag; in the Vertices mode the arrows nudge the selected vertices) act only on the focused canvas;
+ * in the Vertices mode Ctrl/⌘+A selects every vertex and Escape cancels a vertex drag or a box, else clears the selection,
+ * wherever the focus is in the panel except a field; every other unmodified key pressed inside the panel stops there
  * (so G R L P O N, WASD / QE / arrows and the rest never reach the viewport), except U (it toggles the viewer unless
  * typed into a field) and Escape without a drag; modified chords pass through; keyup is never stopped.
  * Owns #toggle-uv-viewer, #uv-viewer and every #uv-* / #uv-viewer-* id inside it.
@@ -46,17 +51,41 @@ const BODY_HTML = `
 </div>
 <div class="uv-viewer__controls">
   <div class="uv-row">
-    <span class="uv-row__label">Offset</span>
-    <label class="uv-num">U <input type="number" id="uv-offset-u" step="0.0001" min="-8" max="8"></label>
-    <label class="uv-num">V <input type="number" id="uv-offset-v" step="0.0001" min="-8" max="8"></label>
-    <select id="uv-units" class="ui-select uv-viewer__select uv-units" aria-label="Offset units" title="Offset units: UV, or source pixels"><option value="uv">UV</option><option value="px">px</option></select>
+    <span class="uv-row__label">Edit</span>
+    <div class="uv-seg" role="group" aria-label="Edit mode">
+      <button type="button" id="uv-mode-island" class="uv-seg__btn" aria-pressed="true" title="Move, scale and rotate the whole island">Island</button>
+      <button type="button" id="uv-mode-vertices" class="uv-seg__btn" aria-pressed="false" title="Move single grid vertices (panel corners); the island transform keeps them">Vertices</button>
+    </div>
+    <span id="uv-vertex-count" class="uv-row__note"></span>
   </div>
-  <div class="uv-row">
-    <span class="uv-row__label">Scale</span>
-    <label class="uv-num">U <input type="number" id="uv-scale-u" step="0.1" min="1" max="1600"></label>
-    <label class="uv-num">V <input type="number" id="uv-scale-v" step="0.1" min="1" max="1600"></label>
-    <span class="uv-unit">%</span>
-    <button type="button" id="uv-scale-lock" class="uv-btn uv-btn--icon" aria-pressed="true" aria-label="Lock scales" title="Lock: editing one scale sets both"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></button>
+  <div class="uv-swap">
+    <div class="uv-swap__pane" id="uv-pane-island">
+      <div class="uv-row">
+        <span class="uv-row__label">Offset</span>
+        <label class="uv-num">U <input type="number" id="uv-offset-u" step="0.0001" min="-8" max="8"></label>
+        <label class="uv-num">V <input type="number" id="uv-offset-v" step="0.0001" min="-8" max="8"></label>
+        <select id="uv-units" class="ui-select uv-viewer__select uv-units" aria-label="Offset units" title="Offset units: UV, or source pixels"><option value="uv">UV</option><option value="px">px</option></select>
+      </div>
+      <div class="uv-row">
+        <span class="uv-row__label">Scale</span>
+        <label class="uv-num">U <input type="number" id="uv-scale-u" step="0.1" min="1" max="1600"></label>
+        <label class="uv-num">V <input type="number" id="uv-scale-v" step="0.1" min="1" max="1600"></label>
+        <span class="uv-unit">%</span>
+        <button type="button" id="uv-scale-lock" class="uv-btn uv-btn--icon" aria-pressed="true" aria-label="Lock scales" title="Lock: editing one scale sets both"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></button>
+      </div>
+    </div>
+    <div class="uv-swap__pane" id="uv-pane-vertices" data-inactive>
+      <div class="uv-row">
+        <span class="uv-row__label">Vertex</span>
+        <label class="uv-num">U <input type="number" id="uv-vertex-u" step="0.0001" title="One vertex: its U; several: their centre (moves them all)"></label>
+        <label class="uv-num">V <input type="number" id="uv-vertex-v" step="0.0001" title="One vertex: its V; several: their centre (moves them all)"></label>
+        <select id="uv-vertex-units" class="ui-select uv-viewer__select uv-units" aria-label="Vertex units" title="Vertex units: UV, or source pixels"><option value="uv">UV</option><option value="px">px</option></select>
+      </div>
+      <div class="uv-row">
+        <button type="button" id="uv-vertex-reset" class="uv-btn" title="The selected vertices lose their edits">Reset selected</button>
+        <button type="button" id="uv-vertex-reset-all" class="uv-btn" title="Every vertex of this section loses its edits (the island transform stays)">Reset all vertex edits</button>
+      </div>
+    </div>
   </div>
   <div class="uv-row">
     <span class="uv-row__label">Rotate</span>
@@ -81,19 +110,28 @@ const BODY_HTML = `
     <button type="button" id="uv-preset-fit" class="uv-btn" title="The largest undistorted island inside 0–1, centred (F)">Fit 0–1</button>
     <button type="button" id="uv-preset-pixel" class="uv-btn" title="Scale 100 %, rotation snapped to 90°, offsets on whole source pixels">Pixel-accurate</button>
     <button type="button" id="uv-copy-all" class="uv-btn" title="Apply this section's UV transform to every section (a Fit is re-fitted per section)">Copy to all</button>
-  </div>
-  <div class="uv-row uv-row--wrap">
-    <button type="button" id="uv-undo" class="uv-btn uv-btn--icon" disabled aria-label="Undo" title="Nothing to undo">↶</button>
+    <button type="button" id="uv-undo" class="uv-btn uv-btn--icon uv-btn--push" disabled aria-label="Undo" title="Nothing to undo">↶</button>
     <button type="button" id="uv-redo" class="uv-btn uv-btn--icon" disabled aria-label="Redo" title="Nothing to redo">↷</button>
+  </div>
+  <div class="uv-row">
     <div id="uv-status" class="uv-status" aria-live="polite"></div>
   </div>
-  <p class="uv-hint">Moving the island right shows content from further right of the source (the image slides left on the wall). UV edits are session-only: they are not saved in project files yet.</p>
+  <p id="uv-hint" class="uv-hint"></p>
 </div>
 <div id="uv-readout" class="uv-readout">Hover the front of the wall or the UV canvas</div>
 `;
 
 /** The header slot markup: the colour dot, the section name and the pin. */
 const HEADER_HTML = `<span id="uv-viewer-dot" class="uv-viewer__dot" aria-hidden="true"></span><span id="uv-viewer-name" class="uv-viewer__name"></span><button type="button" id="uv-viewer-pin" class="uv-btn uv-btn--icon" aria-pressed="false" aria-label="Pin" title="Pin: ignore selection changes"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 17v5"/><path d="M9 3h6l-1 7 4 4H6l4-4z"/></svg></button>`;
+
+/**
+ * The hint line of each edit mode (three lines reserved, css: clamped with an ellipsis, the full text as the tooltip).
+ * The presets act on the island transform only: vertex edits stay until Reset all vertex edits.
+ */
+const HINTS = Object.freeze({
+  island: 'Moving the island right shows more of the source’s right side (the image slides left on the wall). Reset, Fit 0–1 and Pixel-accurate change the island only and keep vertex edits. UV edits are not saved in project files yet.',
+  vertices: 'Click, Shift+click, a box or Ctrl+A selects vertices; drag moves them (Alt free, Shift fine), arrows nudge. Reset, Fit 0–1 and Pixel-accurate change the island only and keep vertex edits; Reset all vertex edits clears them.',
+});
 
 /** The readout placeholder (04 3.3). */
 const READOUT_EMPTY = 'Hover the front of the wall or the UV canvas';
@@ -149,6 +187,11 @@ export class UVViewer {
   #lock = true;
   /** @type {{pointerId: number, handle: string, x0: number, y0: number, axisLock: 'u'|'v'|null}|null} */
   #drag = null;
+  /**
+   * @type {{kind: 'vertex'|'box', pointerId: number, x0: number, y0: number, key?: number, uv0?: number[],
+   *         shift?: boolean, started: boolean}|null} the Vertices mode's pointer gesture (a vertex drag or a box)
+   */
+  #vgesture = null;
   /** @type {{pointerId: number, x: number, y: number}|null} */
   #pan = null;
   #spaceHeld = false;
@@ -185,10 +228,11 @@ export class UVViewer {
     const ctl = this.#uvController;
     this.#toggleBtn?.addEventListener('click', () => ctl.toggleViewer());
     // 04 3.1's 380 x 440 left the canvas at its 120 px minimum under the controls, so the default is taller (re-clamped
-    // to 90 % of the viewport, and shrunk above the camera preview window while at its default place).
+    // to 90 % of the viewport, and shrunk above the camera preview window while at its default place); 660 since the
+    // Edit row and the fixed chip and hint lines.
     const panel = new FloatingPanel({
       doc: this.#doc, win: this.#win, host: this.#host, id: 'uv-viewer', title: 'UV Viewer',
-      defaults: { top: 20, right: 72, width: 380, height: 600 }, avoidElement: this.#avoidElement,
+      defaults: { top: 20, right: 72, width: 380, height: 660 }, avoidElement: this.#avoidElement,
     });
     panel.mount();
     this.#panel = panel;
@@ -207,6 +251,10 @@ export class UVViewer {
       sourceWh: q('uv-source-wh'), sourceHw: q('uv-source-hw'), flipU: q('uv-flip-u'), flipV: q('uv-flip-v'),
       reset: q('uv-preset-reset'), fit: q('uv-preset-fit'), pixel: q('uv-preset-pixel'), copyAll: q('uv-copy-all'),
       undo: q('uv-undo'), redo: q('uv-redo'), status: q('uv-status'), readout: q('uv-readout'),
+      modeIsland: q('uv-mode-island'), modeVertices: q('uv-mode-vertices'), vertexCount: q('uv-vertex-count'),
+      paneIsland: q('uv-pane-island'), paneVertices: q('uv-pane-vertices'), vertexU: q('uv-vertex-u'),
+      vertexV: q('uv-vertex-v'), vertexUnits: q('uv-vertex-units'), vertexReset: q('uv-vertex-reset'),
+      vertexResetAll: q('uv-vertex-reset-all'), hint: q('uv-hint'),
     };
     this.#els = els;
     this.#view = new UVCanvas({ canvas: els.canvas, win: this.#win, theme: this.#theme });
@@ -241,17 +289,22 @@ export class UVViewer {
         if (e.key === 'Escape' && id !== null) ctl.cancelField(id);
       });
     }
-    els.units.addEventListener('change', () => {
-      this.#units = els.units.value === 'px' ? 'px' : 'uv';
+    // one units preference for the offsets and the vertex fields (both selects show it)
+    const setUnits = (value) => {
+      this.#units = value === 'px' ? 'px' : 'uv';
+      els.units.value = this.#units;
+      els.vertexUnits.value = this.#units;
       const step = this.#units === 'px' ? '1' : '0.0001';
-      els.offsetU.step = step;
-      els.offsetV.step = step;
-      els.offsetU.removeAttribute('min');
-      els.offsetU.removeAttribute('max');
-      els.offsetV.removeAttribute('min');
-      els.offsetV.removeAttribute('max');
+      for (const el of [els.offsetU, els.offsetV, els.vertexU, els.vertexV]) {
+        el.step = step;
+        el.removeAttribute('min');
+        el.removeAttribute('max');
+      }
       if (this.#data?.transform) this.#writeFields(this.#data.transform, false);
-    });
+      this.#writeVertexFields(false);
+    };
+    els.units.addEventListener('change', () => setUnits(els.units.value));
+    els.vertexUnits.addEventListener('change', () => setUnits(els.vertexUnits.value));
     els.lock.addEventListener('click', () => {
       this.#lock = !this.#lock;
       els.lock.setAttribute('aria-pressed', String(this.#lock));
@@ -272,6 +325,19 @@ export class UVViewer {
     act(els.fit, (id) => ctl.applyPreset(id, 'fit'));
     act(els.pixel, (id) => ctl.applyPreset(id, 'pixel'));
     act(els.copyAll, (id) => ctl.copyToAll(id));
+    els.modeIsland.addEventListener('click', () => ctl.setEditMode('island'));
+    els.modeVertices.addEventListener('click', () => ctl.setEditMode('vertices'));
+    act(els.vertexReset, (id) => ctl.resetSelectedVertices(id));
+    act(els.vertexResetAll, (id) => ctl.resetAllVertexEdits(id));
+    for (const [el, axis] of [[els.vertexU, 'u'], [els.vertexV, 'v']]) {
+      el.addEventListener('change', () => {
+        const id = this.#sectionId();
+        if (id !== null) ctl.setVertexUv(id, axis, this.#vertexToModel(axis, el.value));
+      });
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') this.#writeVertexFields(false);
+      });
+    }
     els.undo.addEventListener('click', () => ctl.undo());
     els.redo.addEventListener('click', () => ctl.redo());
     els.status.addEventListener('click', (e) => {
@@ -301,6 +367,10 @@ export class UVViewer {
       if (e.button !== 0) return;
       const d = this.#data;
       if (!d || d.message || d.atlasView) return;
+      if (d.editMode === 'vertices') {
+        this.#vertexDown(e, canvas);
+        return;
+      }
       const hit = view.hitTest(e.clientX, e.clientY);
       if (!hit.handle || !ctl.beginDrag(d.sectionId, hit.handle, hit.uv)) return;
       this.#drag = { pointerId: e.pointerId, handle: hit.handle, x0: e.clientX, y0: e.clientY, axisLock: null };
@@ -316,6 +386,10 @@ export class UVViewer {
         this.#pan.x = e.clientX;
         this.#pan.y = e.clientY;
         this.#redraw();
+        return;
+      }
+      if (this.#vgesture && e.pointerId === this.#vgesture.pointerId) {
+        this.#vertexMove(e, canvas);
         return;
       }
       const g = this.#drag;
@@ -337,11 +411,13 @@ export class UVViewer {
       }
       const d = this.#data;
       const hit = view.hitTest(e.clientX, e.clientY);
-      canvas.style.cursor = view.cursorFor(hit.handle);
+      const overVertex = d && d.editMode === 'vertices' && view.hitVertex(e.clientX, e.clientY).key !== null;
+      canvas.style.cursor = view.cursorFor(overVertex ? 'vertex' : hit.handle);
       if (d && !d.message && !d.atlasView) ctl.probeUv(d.sectionId, hit.uv[0], hit.uv[1]);
     });
     const end = (e) => {
       if (this.#pan && e.pointerId === this.#pan.pointerId) this.#pan = null;
+      if (this.#vgesture && e.pointerId === this.#vgesture.pointerId) this.#vertexUp(e);
       if (this.#drag && e.pointerId === this.#drag.pointerId) {
         this.#drag = null;
         ctl.endDrag();
@@ -351,7 +427,7 @@ export class UVViewer {
     canvas.addEventListener('pointerup', end);
     canvas.addEventListener('pointercancel', end);
     canvas.addEventListener('pointerleave', () => {
-      if (!this.#drag && !this.#pan) ctl.probeUv(null);
+      if (!this.#drag && !this.#pan && !this.#vgesture) ctl.probeUv(null);
     });
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
@@ -369,6 +445,91 @@ export class UVViewer {
     canvas.addEventListener('blur', () => { this.#spaceHeld = false; });
   }
 
+  /**
+   * Vertices mode pointerdown: on a vertex, Shift toggles it (no drag), else a press that becomes a drag after 3 px (a
+   * click selects that vertex alone); on empty canvas, a box after 3 px (Shift adds to the selection; a click without
+   * Shift clears it).
+   */
+  #vertexDown(e, canvas) {
+    const hit = this.#view.hitVertex(e.clientX, e.clientY);
+    if (hit.key !== null && e.shiftKey) {
+      this.#uvController.selectVertices([hit.key], 'toggle');
+      return;
+    }
+    canvas.setPointerCapture(e.pointerId);
+    this.#vgesture = hit.key !== null
+      ? { kind: 'vertex', pointerId: e.pointerId, x0: e.clientX, y0: e.clientY, key: hit.key, uv0: hit.uv, started: false }
+      : { kind: 'box', pointerId: e.pointerId, x0: e.clientX, y0: e.clientY, shift: e.shiftKey, started: false };
+  }
+
+  /** Vertices mode pointermove of the gesture: the vertex drag (with its tooltip) or the box. */
+  #vertexMove(e, canvas) {
+    const g = this.#vgesture;
+    const view = this.#view;
+    const ctl = this.#uvController;
+    const moved = Math.hypot(e.clientX - g.x0, e.clientY - g.y0) >= 3;
+    if (g.kind === 'vertex') {
+      if (!g.started && moved) {
+        g.started = ctl.beginVertexDrag(this.#data.sectionId, g.key, g.uv0);
+        if (g.started) canvas.style.cursor = 'move';
+      }
+      if (!g.started) return;
+      const r = ctl.updateVertexDrag(view.toUv(e.clientX, e.clientY), { alt: e.altKey, shift: e.shiftKey });
+      const box = canvas.getBoundingClientRect();
+      view.setTooltip(r ? r.tooltip : null, e.clientX - box.left, e.clientY - box.top);
+    } else {
+      if (!g.started && !moved) return;
+      g.started = true;
+      view.setBox([g.x0, g.y0, e.clientX, e.clientY]);
+    }
+    this.#redraw();
+  }
+
+  /** Vertices mode pointerup: ends the drag (one undo step), applies the box, or the click's selection. */
+  #vertexUp(e) {
+    const g = this.#vgesture;
+    const ctl = this.#uvController;
+    this.#vgesture = null;
+    if (g.kind === 'vertex') {
+      if (g.started) ctl.endVertexDrag();
+      else ctl.selectVertices([g.key], 'replace');
+    } else if (g.started) {
+      ctl.selectVertices(this.#view.verticesInBox(g.x0, g.y0, e.clientX, e.clientY), g.shift ? 'add' : 'replace');
+    } else if (!g.shift) {
+      ctl.clearVertexSelection();
+    }
+    this.#view.setBox(null);
+    this.#endDragUi();
+  }
+
+  /**
+   * The Vertices mode keys wherever the focus is in the panel except a field: Ctrl/⌘+A selects every vertex; Escape
+   * cancels a vertex drag or a box, else clears the selection (unhandled with nothing selected: the global chain).
+   * @param {KeyboardEvent} e
+   * @returns {boolean} whether the key was handled
+   */
+  #vertexKey(e) {
+    const d = this.#data;
+    const t = e.target;
+    const typing = t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA');
+    if (typing || !d || d.message || d.atlasView || d.editMode !== 'vertices') return false;
+    const ctl = this.#uvController;
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'a') {
+      ctl.selectAllVertices();
+      return true;
+    }
+    if (e.key !== 'Escape') return false;
+    const g = this.#vgesture;
+    if (g) {
+      this.#vgesture = null;
+      if (g.kind === 'vertex' && g.started) ctl.cancelVertexDrag();
+      this.#view.setBox(null);
+      this.#endDragUi();
+      return true;
+    }
+    return ctl.clearVertexSelection();
+  }
+
   /** Clears the drag's view state (tooltip, active handle, cursor). */
   #endDragUi() {
     const view = this.#view;
@@ -383,7 +544,7 @@ export class UVViewer {
   /** The panel's bubbling keydown listener: the focus scoping rule of 04 3.6. */
   #bindKeyScope(root, canvas) {
     root.addEventListener('keydown', (e) => {
-      if (e.target === canvas && this.#canvasKey(e)) {
+      if (this.#vertexKey(e) || (e.target === canvas && this.#canvasKey(e))) {
         e.preventDefault();
         e.stopPropagation();
         return;
@@ -438,7 +599,8 @@ export class UVViewer {
     const id = d.sectionId;
     const nudges = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] };
     if (nudges[e.key]) {
-      ctl.nudge(id, nudges[e.key][0], nudges[e.key][1], e.shiftKey);
+      if (d.editMode === 'vertices') ctl.nudgeVertices(id, nudges[e.key][0], nudges[e.key][1], e.shiftKey);
+      else ctl.nudge(id, nudges[e.key][0], nudges[e.key][1], e.shiftKey);
       return true;
     }
     const once = (fn) => {
@@ -474,12 +636,21 @@ export class UVViewer {
     els.spaceSection.setAttribute('aria-pressed', String(state.space === 'section'));
     els.spaceAtlas.setAttribute('aria-pressed', String(state.space === 'atlas'));
     els.pin.setAttribute('aria-pressed', String(state.pinned));
+    const vertices = state.editMode === 'vertices';
+    els.modeIsland.setAttribute('aria-pressed', String(!vertices));
+    els.modeVertices.setAttribute('aria-pressed', String(vertices));
+    // the two panes share one grid cell: the inactive one is hidden, not removed, so the canvas keeps its size
+    els.paneIsland.toggleAttribute('data-inactive', vertices);
+    els.paneVertices.toggleAttribute('data-inactive', !vertices);
+    els.hint.textContent = HINTS[vertices ? 'vertices' : 'island'];
+    els.hint.title = els.hint.textContent;
     this.#view.setAspect(state.aspect);
     if (state.open) {
       panel.show();
       this.#redraw();
     } else {
       this.#drag = null;
+      this.#vgesture = null;
       this.#pan = null;
       panel.hide(this.#toggleBtn);
     }
@@ -499,9 +670,17 @@ export class UVViewer {
     els.canvas.hidden = !!message;
     const editable = !message && !data.atlasView;
     const controls = [els.offsetU, els.offsetV, els.scaleU, els.scaleV, els.rotation, els.rotCcw, els.rotCw, els.sourceWh,
-      els.sourceHw, els.flipU, els.flipV, els.reset, els.fit, els.pixel, els.copyAll];
+      els.sourceHw, els.flipU, els.flipV, els.reset, els.fit, els.pixel, els.copyAll, els.modeIsland, els.modeVertices];
     for (const el of controls) el.disabled = !editable;
     els.copyAll.disabled = !editable || data.sections.length < 2;
+    const vx = editable && data.vertices ? data.vertices : null;
+    const selected = vx ? vx.selection.length : 0;
+    els.vertexU.disabled = !selected;
+    els.vertexV.disabled = !selected;
+    els.vertexReset.disabled = !vx || !vx.selection.some((k) => vx.edited.includes(k));
+    els.vertexResetAll.disabled = !vx || !vx.edited.length;
+    els.vertexCount.textContent = vx ? `${selected} selected · ${vx.edited.length} edited${data.perPanel ? ' · not applied (per-panel UVs)' : ''}` : '';
+    this.#writeVertexFields(true);
     els.spaceAtlas.disabled = !data.atlasAvailable;
     els.spaceSection.setAttribute('aria-pressed', String(!data.atlasView));
     els.spaceAtlas.setAttribute('aria-pressed', String(!!data.atlasView));
@@ -634,6 +813,49 @@ export class UVViewer {
       }
       els.status.appendChild(chip);
     }
+  }
+
+  /**
+   * The vertex U / V fields: the selected vertex's UV or the selection's centre (UV units, or source pixels), empty
+   * without a selection (skipFocused: a refresh during typing keeps the typed text).
+   */
+  #writeVertexFields(skipFocused) {
+    const d = this.#data;
+    const els = this.#els;
+    if (!els.vertexU) return;
+    const c = d && !d.message && d.vertices ? d.vertices.selectionUv : null;
+    const active = this.#doc.activeElement;
+    const set = (el, value) => {
+      if (!(skipFocused && el === active)) el.value = value;
+    };
+    if (!c) {
+      set(els.vertexU, '');
+      set(els.vertexV, '');
+      return;
+    }
+    const [Ws, Hs] = this.#sourceSize();
+    if (this.#units === 'px') {
+      set(els.vertexU, fmt(c[0] * Ws, 2));
+      set(els.vertexV, fmt(c[1] * Hs, 2));
+    } else {
+      set(els.vertexU, fmt(c[0], 4));
+      set(els.vertexV, fmt(c[1], 4));
+    }
+  }
+
+  /** A vertex field's text in section UV units (px / source size in px units). */
+  #vertexToModel(axis, value) {
+    const x = parseFloat(value);
+    if (this.#units !== 'px') return x;
+    const [Ws, Hs] = this.#sourceSize();
+    return x / (axis === 'u' ? Ws : Hs);
+  }
+
+  /** @returns {number[]} the viewed section's source size [Ws, Hs] (1 x 1 without data) */
+  #sourceSize() {
+    const d = this.#data;
+    if (!d || d.message || !d.transform) return [1, 1];
+    return d.transform.sourceRotated && d.W !== d.H ? [d.H, d.W] : [d.W, d.H];
   }
 
   /** @returns {*} the viewed section's id, or null */

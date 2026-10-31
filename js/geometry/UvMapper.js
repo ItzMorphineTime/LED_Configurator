@@ -25,10 +25,17 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
  * @typedef {{a: number, b: number, cc: number, d: number}} UvLinear  the 2x2 part of 6.3
  * @typedef {{offsetU: number, widthU: number, heightV: number}} AtlasRect
  * @typedef {{sectionId: *, sectionIndex: number, transform: UvTransform|null, linear: UvLinear|null, W: number, H: number,
- *            sourceW: number, sourceH: number, rect: AtlasRect|null, panelUvs: 'section'|'panel', valid: boolean}} SectionUvPlan
+ *            sourceW: number, sourceH: number, rect: AtlasRect|null, panelUvs: 'section'|'panel', valid: boolean,
+ *            deltas?: import('../domain/UvSettings.js').UvVertexEdits|null}} SectionUvPlan
  *   transform / linear null: untransformed base UVs (identity for this W x H, LED-mask content, invalid counts, or the
- *   legacy per-panel UVs); rect: the atlas placement (Combined + atlas layout only); valid false: non-integer counts.
+ *   legacy per-panel UVs); rect: the atlas placement (Combined + atlas layout only); valid false: non-integer counts;
+ *   deltas: the section's vertex edits, added to the grid vertices' base UVs before the transform (null or absent: none;
+ *   null in exactly the cases where transform is null for any reason but the identity, and for edits made for another
+ *   grid size).
  */
+
+/** The zero delta of a vertex without an edit. */
+const ZERO = Object.freeze([0, 0]);
 
 /**
  * Content that shows physical pixels and therefore ignores UV transforms (04 D4, 6.5): LED simulation and spec 05's
@@ -210,6 +217,149 @@ export function sectionUv(plan, u, v, out = [0, 0]) {
 }
 
 /**
+ * The final UV of grid vertex (col, row) of a cols x rows section under a plan: the base UV (col / cols, row / rows),
+ * plus the vertex's delta when plan.deltas holds one, then sectionUv. Without a delta the base UV is exactly the legacy
+ * expression, so plans without edits stay bit-identical. Every consumer of the panel-corner grid writes its UVs here
+ * (WallMeshBuilder's grid writer and panelUvs, the viewer's grid).
+ * Side effects: writes `out`.
+ * @param {SectionUvPlan} plan
+ * @param {number} col  0..cols
+ * @param {number} row  0..rows (0 = bottom)
+ * @param {number} cols
+ * @param {number} rows
+ * @param {number[]} [out]
+ * @returns {number[]} out
+ */
+export function sectionGridUv(plan, col, row, cols, rows, out = [0, 0]) {
+  const e = plan.deltas;
+  if (e) {
+    const d = e.get(row * (cols + 1) + col);
+    if (d !== undefined) return sectionUv(plan, col / cols + d[0], row / rows + d[1], out);
+  }
+  return sectionUv(plan, col / cols, row / rows, out);
+}
+
+/**
+ * The vertex delta at a base UV inside the grid (the hover readout of a section with vertex edits): the deltas of the
+ * cell's corners interpolated over the cell's triangle, split along the BL-TR diagonal like every strip mesh
+ * (WallMeshBuilder.quadIndices), so a strip mode's rendered UV is reproduced exactly. Outside 0..1 the edge cells extend.
+ * Side effects: writes `out`.
+ * @param {import('../domain/UvSettings.js').UvVertexEdits} edits
+ * @param {number} u  base u
+ * @param {number} v  base v
+ * @param {number[]} [out]
+ * @returns {number[]} out = [du, dv]
+ */
+export function vertexDeltaAt(edits, u, v, out = [0, 0]) {
+  const cols = edits.cols;
+  const rows = edits.rows;
+  const cf = u * cols;
+  const rf = v * rows;
+  const c = clamp(Math.floor(cf), 0, cols - 1);
+  const r = clamp(Math.floor(rf), 0, rows - 1);
+  const fu = cf - c;
+  const fv = rf - r;
+  const at = (cc, rr) => edits.get(rr * (cols + 1) + cc) ?? ZERO;
+  const bl = at(c, r);
+  const br = at(c + 1, r);
+  const tl = at(c, r + 1);
+  const tr = at(c + 1, r + 1);
+  // the BL-BR-TR triangle (below the diagonal, fu >= fv) or BL-TR-TL
+  const [wbl, wbr, wtr, wtl] = fu >= fv ? [1 - fu, fu - fv, fv, 0] : [1 - fv, 0, fu, fv - fu];
+  out[0] = wbl * bl[0] + wbr * br[0] + wtr * tr[0] + wtl * tl[0];
+  out[1] = wbl * bl[1] + wbr * br[1] + wtr * tr[1] + wtl * tl[1];
+  return out;
+}
+
+/**
+ * The edited base UV of a base UV: (u, v) plus vertexDeltaAt; (u, v) untouched for null edits.
+ * Side effects: writes `out`.
+ * @param {import('../domain/UvSettings.js').UvVertexEdits|null} edits
+ * @param {number} u
+ * @param {number} v
+ * @param {number[]} [out]
+ * @returns {number[]} out
+ */
+export function warpBaseUv(edits, u, v, out = [0, 0]) {
+  if (!edits) {
+    out[0] = u;
+    out[1] = v;
+    return out;
+  }
+  vertexDeltaAt(edits, u, v, out);
+  out[0] += u;
+  out[1] += v;
+  return out;
+}
+
+/**
+ * The inverse of warpBaseUv (the canvas hover readout): the base UV whose edited base UV is (u, v), by a search of the
+ * edited grid's triangles (BL-BR-TR, BL-TR-TL per cell); the first triangle that holds the point wins where edits fold
+ * the grid over itself. (u, v) untouched for null edits.
+ * Side effects: none.
+ * @param {import('../domain/UvSettings.js').UvVertexEdits|null} edits
+ * @param {number} u  an edited base u
+ * @param {number} v
+ * @returns {number[]|null} [baseU, baseV], or null when no triangle holds the point
+ */
+export function unwarpBaseUv(edits, u, v) {
+  if (!edits) return [u, v];
+  const cols = edits.cols;
+  const rows = edits.rows;
+  const P = (col, row) => {
+    const d = edits.get(row * (cols + 1) + col) ?? ZERO;
+    return [col / cols + d[0], row / rows + d[1], col / cols, row / rows];
+  };
+  const eps = 1e-9;
+  const inTriangle = (a, b, c) => {
+    const det = (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]);
+    if (det === 0) return null;
+    const wb = ((u - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (v - a[1])) / det;
+    const wc = ((b[0] - a[0]) * (v - a[1]) - (u - a[0]) * (b[1] - a[1])) / det;
+    const wa = 1 - wb - wc;
+    if (wa < -eps || wb < -eps || wc < -eps) return null;
+    return [wa * a[2] + wb * b[2] + wc * c[2], wa * a[3] + wb * b[3] + wc * c[3]];
+  };
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const bl = P(col, row);
+      const br = P(col + 1, row);
+      const tl = P(col, row + 1);
+      const tr = P(col + 1, row + 1);
+      const hit = inTriangle(bl, br, tr) ?? inTriangle(bl, tr, tl);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+/**
+ * A displacement in the section's UV space (the viewer canvas) as a base-space displacement: the inverse of the
+ * transform's linear part (6.3; the offset cancels in a difference), so a vertex dragged by (du, dv) on the canvas gets
+ * the base delta that moves its UV by exactly (du, dv). The identity (or t null) returns (du, dv) untouched.
+ * Side effects: writes `out`.
+ * @param {UvTransform|null} t
+ * @param {number} W
+ * @param {number} H
+ * @param {number} du
+ * @param {number} dv
+ * @param {number[]} [out]
+ * @returns {number[]} out
+ */
+export function uvDeltaToBase(t, W, H, du, dv, out = [0, 0]) {
+  const L = uvLinear(t, W, H);
+  if (L === null) {
+    out[0] = du;
+    out[1] = dv;
+    return out;
+  }
+  const det = L.a * L.d - L.b * L.cc;
+  out[0] = (L.d * du - L.b * dv) / det;
+  out[1] = (L.a * dv - L.cc * du) / det;
+  return out;
+}
+
+/**
  * The combined canvas of the glTF second UV channel (TEXCOORD_1; the owner's request of 2026-10-31, after the reference
  * LED_Wall_Gen.blend's "UVMap_Combined"): every section side by side in wall order along the bottom of one square
  * canvas of side W = sum of w_j pixels, with w_i = panelCols·ledX and h_i = panelRows·ledY, so the pixels stay square;
@@ -279,7 +429,8 @@ export function islandBounds(t, W, H) {
 /**
  * The plan of one layout section (6.4). The transform applies when applyTransforms is set (false for LED-mask content),
  * the counts are valid integers, the mesh is not in the legacy per-panel UV space, and the transform is not the
- * identity of the section's size; the atlas rect applies in the Combined + atlas layout only.
+ * identity of the section's size; the vertex edits (deltas) under the same conditions, identity or not, when they were
+ * made for the section's grid size; the atlas rect applies in the Combined + atlas layout only.
  * Side effects: none.
  * @param {import('./WallLayout.js').SectionLayout} sl
  * @param {number} sectionIndex  the index in the layout
@@ -299,6 +450,10 @@ export function planSectionUv(sl, sectionIndex, { atlas = null, settings = null,
   const panelUvs = settings?.panelUvs ?? 'section';
   const perPanel = meshMode === 'panel' && panelUvs === 'panel';
   const transform = applyTransforms && valid && !perPanel && t !== null && !t.isIdentityFor(W, H) ? t : null;
+  // the vertex edits follow the transform's rules (not for LED-mask content, invalid counts or per-panel UVs) and apply
+  // only to the grid size they were made for (a rebuild plans before UvController drops stale edits)
+  const e = s.uvVertexEdits ?? null;
+  const deltas = applyTransforms && valid && !perPanel && e !== null && !e.isEmpty && e.matches(cols, rows) ? e : null;
   const [sourceW, sourceH] = sourceSize(t, W, H);
   let rect = null;
   if (meshMode === 'combined' && (settings?.combinedLayout ?? 'per-section') === 'atlas') {
@@ -307,7 +462,7 @@ export function planSectionUv(sl, sectionIndex, { atlas = null, settings = null,
   }
   return {
     sectionId: sl.sectionId, sectionIndex, transform, linear: uvLinear(transform, W, H), W, H, sourceW, sourceH, rect,
-    panelUvs, valid,
+    panelUvs, valid, deltas,
   };
 }
 

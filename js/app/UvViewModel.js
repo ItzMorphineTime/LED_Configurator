@@ -1,9 +1,10 @@
 /**
  * @module app/UvViewModel
  * The UV viewer's state and data (docs/improvements/04-uvs-uv-editor.md 5.2-5.4, 6.11; UV-11, UV-12): the viewer state
- * (open, viewed section, pin, background, space, aspect; in memory for the session, the owner's path-B decision: no
- * app/Prefs.js), the SectionUvData of the viewed section (its display plan with the transform applied, so the viewer
- * shows the transform even while the wall shows LED-mask content), the status chips and the background canvases
+ * (open, viewed section, pin, background, space, aspect, edit mode; in memory for the session, the owner's path-B
+ * decision: no app/Prefs.js), the vertex selection of the viewed section, the SectionUvData of the viewed section (its
+ * display plan with the transform and the vertex edits applied, so the viewer shows them even while the wall shows
+ * LED-mask content or per-panel UVs), the status chips and the background canvases
  * (panel IDs within the 4 MP preview budget, the LED tile, the read-only atlas), cached per section and kind until the
  * next rebuild or rename. It emits the viewer events; UvController drives it and UVViewer mirrors it.
  * Legacy source: none (Feature 4).
@@ -12,7 +13,7 @@
 
 import { Events } from '../core/EventBus.js';
 import {
-  planSectionUv, sectionUv, sourceSize, islandCorners, islandBounds, pixelAccuracy, placeInRect,
+  planSectionUv, sectionGridUv, sourceSize, islandCorners, islandBounds, pixelAccuracy, placeInRect,
 } from '../geometry/UvMapper.js';
 import { canvasFits } from '../geometry/TextureAtlas.js';
 
@@ -22,6 +23,27 @@ export const UV_BACKGROUNDS = Object.freeze(['panelIds', 'ledSim', 'checker', 'n
 export const UV_SPACES = Object.freeze(['section', 'atlas']);
 /** The viewer aspects: auto = texture unless the source is longer than 8:1, then square (04 3.3). */
 export const UV_ASPECTS = Object.freeze(['auto', 'texture', 'square']);
+/** The edit modes: the island (transform handles) or the grid vertices (per-vertex edits). */
+export const UV_EDIT_MODES = Object.freeze(['island', 'vertices']);
+
+/**
+ * A vertex selection after a selection gesture: 'replace' (click, box), 'add' (Shift+box), 'toggle' (Shift+click) or
+ * 'remove'. Keys are integers; the result is sorted and unique.
+ * Side effects: none.
+ * @param {number[]} current
+ * @param {number[]} keys
+ * @param {'replace'|'add'|'toggle'|'remove'} mode
+ * @returns {number[]}
+ */
+export function mergeSelection(current, keys, mode) {
+  const set = new Set(mode === 'replace' ? [] : current);
+  for (const k of keys) {
+    if (!Number.isInteger(k) || k < 0) continue;
+    if (mode === 'remove' || (mode === 'toggle' && set.has(k))) set.delete(k);
+    else set.add(k);
+  }
+  return [...set].sort((a, b) => a - b);
+}
 /** The background preview budget of 04 6.11 (pixels). */
 const PREVIEW_BUDGET_PX = 4e6;
 
@@ -42,19 +64,46 @@ export function backgroundScale(W, H) {
 /** Whether every count of a section is a positive integer (the viewer's error state otherwise, 04 3.8). */
 const validCounts = (s) => [s.panelCols, s.panelRows, s.ledX, s.ledY].every((n) => Number.isInteger(n) && n >= 1);
 
-/** The UV grid of a plan: (cols+1)·(rows+1) (u, v) pairs, row-major from row 0 = bottom. */
+/** The UV grid of a plan: (cols+1)·(rows+1) (u, v) pairs, row-major from row 0 = bottom (vertex edits included). */
 function gridUvs(plan, cols, rows) {
   const uvs = new Float64Array((cols + 1) * (rows + 1) * 2);
   const out = [0, 0];
   let k = 0;
   for (let row = 0; row <= rows; row++) {
     for (let col = 0; col <= cols; col++) {
-      sectionUv(plan, col / cols, row / rows, out);
+      sectionGridUv(plan, col, row, cols, rows, out);
       uvs[k++] = out[0];
       uvs[k++] = out[1];
     }
   }
   return uvs;
+}
+
+/** The UV bounding box of a grid's (u, v) pairs. */
+function gridBounds(uvs) {
+  let minU = Infinity;
+  let minV = Infinity;
+  let maxU = -Infinity;
+  let maxV = -Infinity;
+  for (let k = 0; k < uvs.length; k += 2) {
+    minU = Math.min(minU, uvs[k]);
+    maxU = Math.max(maxU, uvs[k]);
+    minV = Math.min(minV, uvs[k + 1]);
+    maxV = Math.max(maxV, uvs[k + 1]);
+  }
+  return { minU, minV, maxU, maxV };
+}
+
+/** The centroid of the selected grid vertices' UVs (the vertex fields), null for none. */
+function selectionCentroid(uvs, keys) {
+  if (!keys.length) return null;
+  let u = 0;
+  let v = 0;
+  for (const k of keys) {
+    u += uvs[2 * k];
+    v += uvs[2 * k + 1];
+  }
+  return [u / keys.length, v / keys.length];
 }
 
 /** The UV viewer's view model. */
@@ -74,6 +123,13 @@ export class UvViewModel {
   #background = 'panelIds';
   #space = 'section';
   #aspect = 'auto';
+  #editMode = 'island';
+  /** @type {number[]} the selected grid vertices of the viewed section (sorted keys) */
+  #selection = [];
+  /** @type {{cols: number, rows: number}|null} the grid the selection was made on */
+  #selectionGrid = null;
+  /** @type {Map<*, string>} one-off notices per section id (vertex edits cleared by a grid change) */
+  #notes = new Map();
   /** @type {number} the viewed section's index at the last refresh (the "nearest section" after a delete) */
   #viewedIndex = 0;
   /** @type {Map<string, {canvas: HTMLCanvasElement|null, downscaled: boolean}>} panel-ID backgrounds per section */
@@ -110,15 +166,20 @@ export class UvViewModel {
   get aspect() { return this.#aspect; }
   /** Side effects: none. @returns {number} the viewed section's index at the last refresh */
   get viewedIndex() { return this.#viewedIndex; }
+  /** Side effects: none. @returns {string} 'island' | 'vertices' */
+  get editMode() { return this.#editMode; }
+  /** Side effects: none. @returns {number[]} the selected vertex keys (a copy) */
+  get selection() { return this.#selection.slice(); }
 
   /**
    * Side effects: none.
-   * @returns {{open: boolean, sectionId: *, pinned: boolean, background: string, space: string, aspect: string}}
+   * @returns {{open: boolean, sectionId: *, pinned: boolean, background: string, space: string, aspect: string,
+   *            editMode: string}}
    */
   get state() {
     return {
       open: this.#open, sectionId: this.#sectionId, pinned: this.#pinned, background: this.#background,
-      space: this.#space, aspect: this.#aspect,
+      space: this.#space, aspect: this.#aspect, editMode: this.#editMode,
     };
   }
 
@@ -133,7 +194,37 @@ export class UvViewModel {
   setSection(id) {
     if (Object.is(this.#sectionId, id)) return;
     this.#sectionId = id;
+    this.#selection = [];
     this.#emitViewer();
+  }
+
+  /** Side effects: emits UV_VIEWER_CHANGED iff the value changed. @param {string} mode  one of UV_EDIT_MODES */
+  setEditMode(mode) {
+    if (!UV_EDIT_MODES.includes(mode) || this.#editMode === mode) return;
+    this.#editMode = mode;
+    this.#emitViewer();
+  }
+
+  /**
+   * Changes the vertex selection of the viewed section (mergeSelection); the next refresh shows it.
+   * Side effects: state only.
+   * @param {number[]} keys
+   * @param {'replace'|'add'|'toggle'|'remove'} mode
+   */
+  select(keys, mode) {
+    this.#selection = mergeSelection(this.#selection, keys, mode);
+  }
+
+  /**
+   * Sets (text) or drops (null) a section's one-off notice; noteSection(null, null) drops every notice.
+   * Side effects: state only (the next refresh shows it).
+   * @param {*} id
+   * @param {string|null} text
+   */
+  noteSection(id, text) {
+    if (id === null && text === null) this.#notes.clear();
+    else if (text === null) this.#notes.delete(id);
+    else this.#notes.set(id, text);
   }
 
   /** Side effects: emits UV_VIEWER_CHANGED iff the value changed. @param {boolean} on */
@@ -227,18 +318,28 @@ export class UvViewModel {
     const H = rows * s.ledY;
     const t = s.uvTransform;
     const [sourceW, sourceH] = sourceSize(t, W, H);
-    // The display plan: section space (no atlas rect), the transform applied whatever the content (5.3).
+    // a grid size change invalidates the selected keys
+    const g = this.#selectionGrid;
+    if (g && (g.cols !== cols || g.rows !== rows)) this.#selection = [];
+    this.#selectionGrid = { cols, rows };
+    // The display plan: section space (no atlas rect), the transform and vertex edits applied whatever the content (5.3).
     const plan = planSectionUv(sl, i, { atlas, settings: uv, meshMode: 'section', applyTransforms: true });
     const entry = atlas.entries[i];
-    const bounds = islandBounds(t, W, H);
+    const uvs = gridUvs(plan, cols, rows);
+    const edited = plan.deltas ? plan.deltas.keys() : [];
+    const bounds = edited.length ? gridBounds(uvs) : islandBounds(t, W, H);
     const accuracy = pixelAccuracy(t, W, H);
-    const notices = this.#notices(t, sourceW, sourceH, bounds, accuracy);
+    const perPanel = project.meshMode === 'panel' && uv.panelUvs === 'panel';
+    const notices = this.#notices(t, sourceW, sourceH, bounds, accuracy, edited.length);
+    const note = this.#notes.get(s.id);
+    if (note) notices.push({ kind: 'info', text: note });
+    const selection = this.#selection.filter((k) => k < (cols + 1) * (rows + 1));
     const data = {
       ...head, cols, rows, ledX: s.ledX, ledY: s.ledY, W, H, sourceW, sourceH, startCol: entry.startCol,
-      transform: { ...t }, summary: t.summaryFor(W, H), uvs: gridUvs(plan, cols, rows),
-      perPanel: project.meshMode === 'panel' && uv.panelUvs === 'panel', island: islandCorners(t, W, H), bounds,
+      transform: { ...t }, summary: t.summaryFor(W, H), uvs, perPanel, island: islandCorners(t, W, H), bounds,
       atlasRect: { offsetU: entry.uvOffsetX, widthU: entry.uvWidth, heightV: entry.uvHeight }, accuracy, notices,
-      background: null, atlasView: null,
+      background: null, atlasView: null, editMode: this.#editMode,
+      vertices: { edited, selection, selectionUv: selectionCentroid(uvs, selection) },
     };
     if (this.#space === 'atlas' && base.atlasAvailable) {
       data.atlasView = this.#atlasView(layout, atlas, i, t, W, H);
@@ -252,10 +353,12 @@ export class UvViewModel {
    * The status chips of 04 3.7 that depend on the data (the zoom-dependent LED chip is the viewer's).
    * @returns {{kind: 'ok'|'warn'|'info', text: string, action?: string, actionLabel?: string}[]}
    */
-  #notices(t, sourceW, sourceH, bounds, accuracy) {
+  #notices(t, sourceW, sourceH, bounds, accuracy, editedCount) {
     const project = this.#project;
     const out = [];
-    if (accuracy.kind === 'exact') {
+    if (accuracy.kind === 'exact' && editedCount > 0) {
+      out.push({ kind: 'warn', text: `▲ Resampled · ${editedCount} edited ${editedCount === 1 ? 'vertex' : 'vertices'}` });
+    } else if (accuracy.kind === 'exact') {
       out.push({ kind: 'ok', text: `● Pixel-accurate · source ${sourceW}×${sourceH}` });
     } else if (accuracy.rotatedGrid) {
       out.push({ kind: 'warn', text: `▲ Resampled · rotated pixel grid (${Number(t.rotation.toFixed(1))}°)` });
@@ -274,10 +377,10 @@ export class UvViewModel {
     if (content === 'color') {
       out.push({ kind: 'info', text: 'ⓘ Wall shows colours: UV edits are not visible on the wall', action: 'showPanelIds', actionLabel: 'Show Panel IDs' });
     } else if (content === 'ledSim') {
-      out.push({ kind: 'info', text: 'ⓘ LED simulation shows physical pixels; UV transform not applied' });
+      out.push({ kind: 'info', text: 'ⓘ LED simulation shows physical pixels; UV edits not applied' });
     }
     if (project.meshMode === 'panel' && project.uv.panelUvs === 'panel') {
-      out.push({ kind: 'info', text: 'ⓘ Per-panel UVs: transform not applied in Panel mode' });
+      out.push({ kind: 'info', text: 'ⓘ Per-panel UVs: transform and vertex edits not applied in Panel mode' });
     }
     return out;
   }
