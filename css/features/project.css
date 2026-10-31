@@ -7,7 +7,7 @@
 
 .project-name-head {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
     gap: 8px;
     margin-bottom: 4px;
