@@ -106,7 +106,7 @@ Direction of communication:
 
 - Texture content (spec 04's UVs, spec 05's bake, panel IDs) does not depend on the frame. The trap this table prevents: spec 05's bake must read the **stage** layout, because the projection point is stored in the stage frame; the export layout would sample every texel P.y too low.
 - **There is never a wall root transform** (07 C32). Each frame is baked into the vertex positions by `layoutProject`, and the identity transform of the wall group is an invariant (Feature 3 adds its unit test, 03 §5.1). The pipeline is: the raw walk (every `postTransform` `null`), `resolvePivot` on it from generative quantities only, `translated(t)` with `t` = −O (stage), −P (export) or 0 (layout), then (F3-O2) `rotated(ψ)` when the wall yaw ψ of the stage or export frame is not 0, then spec 02's `applySectionOffsets(out)`, which builds each section matrix from the translated (and turned) layout (section 9, Feature 3 row).
-- **Orientation (03 §12, the owner's request of 2026-10-17; steps F3-O1 to F3-O7).** The stage and export frames gain the wall yaw ψ, a turn about +Y through the pivot (the sign of three.js `rotation.y`): x_S = R_y(ψ)(x_L − O) and x_E = R_y(ψ)(x_L − P) = x_S − (0, P.y, 0), with R_y(ψ)(x, y, z) = (x·cos ψ + z·sin ψ, y, −x·sin ψ + z·cos ψ). ψ = wrapDeg(ψa + yawOffsetDeg), where ψa, the alignment of `WallPivot.orientation.align = 'center-neg-x'` ("Centre on −X"), turns the LED normal at the wall's centre point (the arc-length midpoint of the bottom edge chain) to +X, and is 0 with `'none'`. `layoutProject` turns the translated raw walk (`WallLayout.rotated`) before spec 02's `applySectionOffsets`, so every consumer of the table above follows without orientation code and there is still no wall root transform. ψ = 0 (`'none'` with a zero offset, the class default and the legacy aggregate `Project.createDefault`) keeps the frames above bit for bit; new projects (`Project.createNew`, App) start with `wall-center`, Centre on −X and section meshes (03 12.11). The consumers (F3-O3..O6): Keep stage layout re-expresses rigidly (`stageChange`, `reexpressStage`), the aligned Reset and the view presets read the `framingBounds` fields `centre`, `aligned`, `viewYawDeg` and the posZ fallback its `frontZ`, the exports carry the orientation metadata. Landed in F3-O2 (`geometry/WallOrientation.js`, 3.6); the yaw's cosine and sine are exact at multiples of 90° (`yawTrig`), so the default flat wall turned by 90° lies exactly on x = 0 with LED normals exactly +X.
+- **Orientation (03 §12, the owner's request of 2026-10-17; steps F3-O1 to F3-O7).** The stage and export frames gain the wall yaw ψ, a turn about +Y through the pivot (the sign of three.js `rotation.y`): x_S = R_y(ψ)(x_L − O) and x_E = R_y(ψ)(x_L − P) = x_S − (0, P.y, 0), with R_y(ψ)(x, y, z) = (x·cos ψ + z·sin ψ, y, −x·sin ψ + z·cos ψ). ψ = wrapDeg(ψa + yawOffsetDeg), where ψa, the alignment of `WallPivot.orientation.align`, turns the LED normal at the wall's centre point (the arc-length midpoint of the bottom edge chain) to −X with `'center-pos-x'` ("Centre on +X (LED faces −X)", 03 12.16, the owner's reference `LED_Wall_Gen.blend`) or to +X with `'center-neg-x'` ("Centre on −X (LED faces +X)"), and is 0 with `'none'` (target azimuths `Wall.ALIGN_NORMAL_AZIMUTH_DEG`). `layoutProject` turns the translated raw walk (`WallLayout.rotated`) before spec 02's `applySectionOffsets`, so every consumer of the table above follows without orientation code and there is still no wall root transform. ψ = 0 (`'none'` with a zero offset, the class default and the legacy aggregate `Project.createDefault`) keeps the frames above bit for bit; new projects (`Project.createNew`, App) start with `wall-center`, Centre on +X (since 2026-10-31; Centre on −X before) and section meshes (03 12.11, 12.16), with the person and car placed in front of the LED face (`Prop.placeInFront`, `Project.NEW_PROJECT_PROPS`). The consumers (F3-O3..O6): Keep stage layout re-expresses rigidly (`stageChange`, `reexpressStage`), the aligned Reset and the view presets read the `framingBounds` fields `centre`, `aligned`, `viewYawDeg` and the posZ fallback its `frontZ`, the exports carry the orientation metadata. Landed in F3-O2 (`geometry/WallOrientation.js`, 3.6); the yaw's cosine and sine are exact at multiples of 90° (`yawTrig`), so the default flat wall turned by 90° lies exactly on x = 0 with LED normals exactly +X.
 
 ### 1.5 Code conventions
 
@@ -1053,8 +1053,9 @@ export const PivotMode = Object.freeze({ BOTTOM_LEFT: 'bottom-left', MESH_CENTER
 
 export const PIVOT_MODES = Object.freeze(['bottom-left', 'mesh-center', 'wall-center']);   // 03 T1: radio order; the validator's enum
 export const PIVOT_OFFSET_LIMIT_M = 1000;                                                      // 03 T1 (4.1, Q11)
-export const OrientationAlign = Object.freeze({ CENTER_NEG_X: 'center-neg-x', NONE: 'none' });  // 03 12.1 (F3-O1)
-export const ORIENTATION_ALIGNS = Object.freeze(['center-neg-x', 'none']);                      // F3-O1: the #pivot-align order
+export const OrientationAlign = Object.freeze({ CENTER_POS_X: 'center-pos-x', CENTER_NEG_X: 'center-neg-x', NONE: 'none' });  // 03 12.1, 12.16
+export const ORIENTATION_ALIGNS = Object.freeze(['center-pos-x', 'center-neg-x', 'none']);                     // the #pivot-align order
+export const ALIGN_NORMAL_AZIMUTH_DEG = Object.freeze({ 'center-pos-x': -90, 'center-neg-x': 90 });            // 03 12.16; alignNormalAzimuthDeg(align)
 export const YAW_OFFSET_LIMIT_DEG = 180;                                                        // F3-O1 (03 12.4)
 
 export class WallPivot {            // Feature 3 (03 T1, 4.1); session-only until project file v2 (03 header, owner 2026-10-17)
@@ -1195,8 +1196,9 @@ export class Project {
   static NEW_PROJECT_MESH_MODE = 'section';
   static createNew({ defaultSectionColor } = {})
       // 03 12.11 (the owner's defaults of 2026-10-17; App's bootstrap): createDefault, then meshMode = 'section' and
-      // wall.pivot = WallPivot.createForNewProject() ('wall-center', Centre on -X). index.html's initial radio, select
-      // and readout states mirror it.
+      // wall.pivot = WallPivot.createForNewProject() ('wall-center', Centre on +X since 03 12.16), then the person and
+      // car placeInFront of the LED face (NEW_PROJECT_PROPS). index.html's initial radio, select, readout and prop
+      // input states mirror it.
 }
 ```
 
@@ -1315,6 +1317,7 @@ export class Prop {
   translateStage(dx, dz)
   /** axis === 'y' ? (rotY += deltaDeg, true) : false. LEGACY(B-L22) (3389-3399) */
   rotateBy(axis, deltaDeg)
+  placeInFront(point, azDeg, distance, side)   // 03 12.16: distance out along the LED normal, side to the right, rotY = az
 }
 export class PersonProp extends Prop { constructor() { super({ kind: 'person', label: 'Person', posX: 2, posZ: 2, gizmoAnchorY: 0.9 }); } }
 export class CarProp    extends Prop { constructor() { super({ kind: 'car',    label: 'Car',    posX: 4, posZ: 3, gizmoAnchorY: 0.5 }); } }
@@ -1361,7 +1364,8 @@ export function computeWallLayout(sections, { postTransforms = null } = {})
  *  P = a + pivot.offset; P not finite -> null (a non-finite layout: the identity fallback);
  *  else {mode, offset: {...offset}, anchor: a, point: P, stageOrigin: {x: P.x, y: 0, z: P.z}} (layout frame),
  *  plus (F3-O2, 03 12.4) the orientation: align and yawOffsetDeg (pivot.orientation, or 'none' / 0 for an object
- *  without one), alignYawDeg = align === 'center-neg-x' ? alignmentYawDeg(layoutL) : 0, yawDeg = wrapDeg(alignYawDeg +
+ *  without one), alignYawDeg = alignmentYawDeg(layoutL, alignNormalAzimuthDeg(align)) for 'center-pos-x' (-90) and
+ *  'center-neg-x' (90), else 0, yawDeg = wrapDeg(alignYawDeg +
  *  yawOffsetDeg) (+0 at the identity). Generative quantities only: a section offset never moves the pivot (03 5.10 #1);
  *  the alignment depends on the sections only. */
 export function resolvePivot(layoutL, pivot)          // PivotResolution | null
@@ -1491,9 +1495,10 @@ export function azimuthDeg(v)
  *  adjacent normals; y = sections[0].baseY; zero-length columns skipped; null for an empty wall, no positive length or a
  *  non-finite length. Equivariant under translation and turn. */
 export function wallCentre(layout)            // {point, normal} | null
-/** wrapDeg(90 - azimuthDeg(wallCentre(layout).normal)): the yaw that turns the centre normal to +X ('center-neg-x');
- *  exactly 90 for a flat wall along +X; 0 without a centre */
-export function alignmentYawDeg(layout)
+/** wrapDeg(targetDeg - azimuthDeg(wallCentre(layout).normal)): the yaw that turns the centre normal to the azimuth
+ *  targetDeg (90: +X, 'center-neg-x', the default; -90: -X, 'center-pos-x', 03 12.16); exactly 90 / -90 for a flat
+ *  wall along +X; 0 without a centre */
+export function alignmentYawDeg(layout, targetDeg = 90)
 ```
 
 #### `js/geometry/FrustumCoverage.js`: the coverage analyser (08 P2-11a, B-M10; 08 6.10)

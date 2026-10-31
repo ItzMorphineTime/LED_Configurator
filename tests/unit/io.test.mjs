@@ -743,8 +743,8 @@ describe('golden files (byte-identical to the legacy downloads)', { skip: golden
 
     test(`${scenario}: JSON, OBJ, MTL and glTF in all mesh modes, ZIP entries and round trips`, { skip: missing }, (t) => withChromeMath(() => {
       const file = (name) => path.join(dir, name);
-      // The harness page starts as a new project (03 12.11: section meshes, wall-center, Centre on -X); a v1 import keeps
-      // that pivot and orientation and applies the file's mesh mode.
+      // The harness page starts as a new project (03 12.11, 12.16: section meshes, wall-center, Centre on +X); a v1
+      // import keeps that pivot and orientation and applies the file's mesh mode.
       const project = scenario === 'default' ? Project.createNew() : projectFromConfig(CONFIGS[scenario], Project.createNew());
       const sections = project.wall.sections;
       let files = 0;

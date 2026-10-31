@@ -9,7 +9,7 @@
  */
 
 import { orDefault } from '../legacy/LegacyCompat.js';
-import { Wall, WallPivot } from './Wall.js';
+import { Wall, WallPivot, alignNormalAzimuthDeg } from './Wall.js';
 import { WallSection } from './WallSection.js';
 import { LogoLibrary } from './LogoLibrary.js';
 import { CineCamera } from './CineCamera.js';
@@ -141,6 +141,18 @@ export class Project {
   /** The mesh mode of a NEW project: 'section' ("Individual Section Meshes"), the owner's default of 2026-10-17. */
   static NEW_PROJECT_MESH_MODE = 'section';
 
+  /**
+   * Where a NEW project's props stand (03 12.16, the owner's request of 2026-10-31): metres out along the LED normal at
+   * the wall's centre point and metres to the right along the wall (Prop.placeInFront), so they are in front of the LED
+   * face whatever the alignment and off the default camera's axis. The person keeps the legacy (2, 2)'s place relative
+   * to the default wall (0.75 m right of the centre, 2 m out); the car stands 3.5 m out, 2.75 m to the right.
+   * @type {Readonly<{person: Readonly<{distance: number, side: number}>, car: Readonly<{distance: number, side: number}>}>}
+   */
+  static NEW_PROJECT_PROPS = Object.freeze({
+    person: Object.freeze({ distance: 2, side: 0.75 }),
+    car: Object.freeze({ distance: 3.5, side: 2.75 }),
+  });
+
   /** @type {Wall} */
   wall;
   /** @type {'combined'|'section'|'panel'} the mesh mode (since 08 P2-3b an import can only set one of the three; legacy kept
@@ -192,9 +204,12 @@ export class Project {
   }
 
   /**
-   * A NEW project as the app starts it (the owner's defaults of 2026-10-17, 03 12.11): createDefault with the mesh mode
-   * NEW_PROJECT_MESH_MODE ('section') and WallPivot.createForNewProject() ('wall-center', Centre on −X). index.html's
-   * initial radio, select and readout states mirror these.
+   * A NEW project as the app starts it (the owner's defaults of 2026-10-17, 03 12.11, and of 2026-10-31, 03 12.16):
+   * createDefault with the mesh mode NEW_PROJECT_MESH_MODE ('section'), WallPivot.createForNewProject() ('wall-center',
+   * Centre on +X: the LED face looks along −X) and the props placed by NEW_PROJECT_PROPS in front of the LED face. The
+   * default wall is one flat section, so with 'wall-center' its centre point is the pivot, the stage origin, and the
+   * alignment turns its centre normal to alignNormalAzimuthDeg(NEW_PROJECT_ALIGN) (+Z, azimuth 0, with 'none').
+   * index.html's initial radio, select, readout and prop input states mirror these.
    * Side effects: none.
    * @param {{defaultSectionColor?: string}} [options]
    * @returns {Project}
@@ -203,6 +218,12 @@ export class Project {
     const project = Project.#create({ defaultSectionColor });
     project.meshMode = Project.NEW_PROJECT_MESH_MODE;
     project.wall.pivot = WallPivot.createForNewProject();
+    const az = alignNormalAzimuthDeg(project.wall.pivot.orientation.align) ?? 0;
+    const origin = { x: 0, z: 0 };
+    for (const kind of ['person', 'car']) {
+      const { distance, side } = Project.NEW_PROJECT_PROPS[kind];
+      project[kind].placeInFront(origin, az, distance, side);
+    }
     return project;
   }
 

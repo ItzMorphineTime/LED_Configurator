@@ -49,6 +49,23 @@ export const finiteOr = (v, d) => (Number.isFinite(v) ? v : d);
 export const wrapDeg = (v) => 180 - ((((180 - v) % 360) + 360) % 360);
 
 /**
+ * The (cos, sin) of an angle in degrees, exact at multiples of 90 (geometry/WallOrientation's yawTrig; the domain may
+ * not import geometry): CineCamera's aligned Reset and Prop.placeInFront read it (03 12.7, 12.16).
+ * Side effects: none.
+ * @param {number} deg
+ * @returns {{cos: number, sin: number}}
+ */
+export function quarterExactTrig(deg) {
+  const q = deg / 90;
+  if (Number.isInteger(q)) {
+    const k = ((q % 4) + 4) % 4;
+    return { cos: [1, 0, -1, 0][k], sin: [0, 1, 0, -1][k] };
+  }
+  const r = deg * Math.PI / 180;
+  return { cos: Math.cos(r), sin: Math.sin(r) };
+}
+
+/**
  * The characters `sanitizeText` strips (spec 07 C28 and 4.7): the C0 controls U+0000-U+001F, DEL and the C1 controls
  * U+007F-U+009F, and the bidi embedding / override / isolate controls U+202A-U+202E and U+2066-U+2069.
  */

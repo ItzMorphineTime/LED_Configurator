@@ -25,14 +25,33 @@ export const PIVOT_OFFSET_LIMIT_M = 1000;
 const OFFSET_AXES = Object.freeze(['x', 'y', 'z']);
 
 /**
- * How the whole wall is turned about the pivot (03 section 12, the owner's request of 2026-10-17):
- * 'center-neg-x' ("Centre on −X") turns the LED normal at the wall's centre point to +X, so the wall's centre lies
- * toward −X from the pivot and the face looks at the stage on +X; 'none' applies the yaw offset alone.
+ * How the whole wall is turned about the pivot (03 section 12, the owner's requests of 2026-10-17 and 2026-10-31):
+ * 'center-pos-x' ("Centre on +X (LED faces −X)", 03 12.16, the new-project default like the owner's reference
+ * LED_Wall_Gen.blend) turns the LED normal at the wall's centre point to −X, so the wall's centre lies toward +X from
+ * the pivot and the face looks back along −X toward the origin; 'center-neg-x' ("Centre on −X (LED faces +X)") turns
+ * that normal to +X, so the centre lies toward −X and the face looks at the stage on +X; 'none' applies the yaw offset
+ * alone.
  */
-export const OrientationAlign = Object.freeze({ CENTER_NEG_X: 'center-neg-x', NONE: 'none' });
+export const OrientationAlign = Object.freeze({ CENTER_POS_X: 'center-pos-x', CENTER_NEG_X: 'center-neg-x', NONE: 'none' });
 
 /** The orientation alignments in display order: the #pivot-align options (03 12.9) and, with v2, the validator read it. */
-export const ORIENTATION_ALIGNS = Object.freeze([OrientationAlign.CENTER_NEG_X, OrientationAlign.NONE]);
+export const ORIENTATION_ALIGNS = Object.freeze([OrientationAlign.CENTER_POS_X, OrientationAlign.CENTER_NEG_X, OrientationAlign.NONE]);
+
+/**
+ * The azimuth (degrees, atan2(x, z): +Z is 0, +X is 90) each alignment turns the LED normal at the wall's centre point
+ * to (03 12.2, 12.16): 'center-pos-x' -90 (−X), 'center-neg-x' 90 (+X). Frozen; 'none' has no entry.
+ */
+export const ALIGN_NORMAL_AZIMUTH_DEG = Object.freeze({ [OrientationAlign.CENTER_POS_X]: -90, [OrientationAlign.CENTER_NEG_X]: 90 });
+
+/**
+ * The azimuth an alignment turns the centre normal to (ALIGN_NORMAL_AZIMUTH_DEG), or null for 'none' and anything else.
+ * Side effects: none.
+ * @param {*} align
+ * @returns {number|null} degrees
+ */
+export function alignNormalAzimuthDeg(align) {
+  return Object.prototype.hasOwnProperty.call(ALIGN_NORMAL_AZIMUTH_DEG, align) ? ALIGN_NORMAL_AZIMUTH_DEG[align] : null;
+}
 
 /** The largest yaw offset magnitude, in degrees (03 12.4). */
 export const YAW_OFFSET_LIMIT_DEG = 180;
@@ -41,26 +60,27 @@ export const YAW_OFFSET_LIMIT_DEG = 180;
  * The wall pivot (Feature 3, 03 4.1): P = anchor(mode) + offset (D2). The offset is in metres, in layout axes (X along
  * the wall start, Y up, Z toward the stage), and moves the pivot relative to the wall. keepStageLayout decides whether
  * an explicit pivot or orientation edit re-expresses the camera and props (D6, 03 12.6). The orientation (03 section 12)
- * turns the whole wall about the vertical axis through P: the alignment ('center-neg-x' or 'none') plus a yaw offset in
- * degrees. The default is the identity (bottom-left, zero offset, DEFAULT_ALIGN 'none' with a zero yaw offset): the
+ * turns the whole wall about the vertical axis through P: the alignment (an ORIENTATION_ALIGNS value) plus a yaw offset
+ * in degrees. The default is the identity (bottom-left, zero offset, DEFAULT_ALIGN 'none' with a zero yaw offset): the
  * implicit legacy pivot. Written only through these methods (ARCHITECTURE.md section 4); the pivot is session-only
  * until the project file v2 lands (03 header, "Sequencing", the owner's decision of 2026-10-17).
  */
 export class WallPivot {
   /**
-   * The alignment of a new pivot (03 12.11): 'none' until the owner's default (Centre on −X for new projects) lands in
-   * its own commit, so every output stays unchanged until the orientation is used.
+   * The alignment of a `new WallPivot()` (03 12.11, 12.15 A1): 'none', the identity that the legacy-parity oracles
+   * mean; new projects get NEW_PROJECT_ALIGN instead.
    * @type {string}
    */
   static DEFAULT_ALIGN = OrientationAlign.NONE;
 
   /**
-   * The pivot of a NEW project (the owner's defaults of 2026-10-17, 03 12.11): 'wall-center' ("Wall centre on floor")
-   * with Centre on −X. The class defaults stay the identity (the implicit legacy pivot, which the legacy-parity oracles
-   * and `new WallPivot()` mean); App's Project.createNew installs these.
+   * The pivot of a NEW project (the owner's defaults of 2026-10-17, 03 12.11; the alignment since 2026-10-31, 03 12.16):
+   * 'wall-center' ("Wall centre on floor") with Centre on +X (LED faces −X). The class defaults stay the identity (the
+   * implicit legacy pivot, which the legacy-parity oracles and `new WallPivot()` mean); App's Project.createNew installs
+   * these.
    */
   static NEW_PROJECT_MODE = PivotMode.WALL_CENTER;
-  static NEW_PROJECT_ALIGN = OrientationAlign.CENTER_NEG_X;
+  static NEW_PROJECT_ALIGN = OrientationAlign.CENTER_POS_X;
 
   /**
    * A pivot with the new-project defaults (NEW_PROJECT_MODE, NEW_PROJECT_ALIGN, zero offset and yaw offset, keep stage

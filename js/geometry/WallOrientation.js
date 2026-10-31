@@ -2,8 +2,9 @@
  * @module geometry/WallOrientation
  * The whole-wall orientation's geometry (docs/improvements/03-pivot.md section 12, the owner's request of 2026-10-17;
  * F3-O2): the exact yaw trigonometry, the turn of a point about the vertical axis, the wall's centre point (the
- * arc-length midpoint of the bottom edge chain) with its LED normal, and the alignment yaw of 'center-neg-x' that turns
- * that normal to +X. WallLayout's resolvePivot, rotated() and framing read them; so do the re-expression and the marker.
+ * arc-length midpoint of the bottom edge chain) with its LED normal, and the alignment yaw that turns that normal to +X
+ * ('center-neg-x') or −X ('center-pos-x', 03 12.16). WallLayout's resolvePivot, rotated() and framing read them; so do
+ * the re-expression and the marker.
  * Rotation convention (03 12.1): R_y(psi)(x, y, z) = (x cos psi + z sin psi, y, -x sin psi + z cos psi), the matrix of
  * three.js `rotation.y = psi` (positive = counter-clockwise seen from above; R_y(90 deg) maps +Z to +X).
  * Legacy source: none (new feature).
@@ -129,14 +130,17 @@ export function wallCentre(layout) {
 }
 
 /**
- * The alignment yaw of 'center-neg-x' (03 12.2): psi_a = wrapDeg(90 - azimuth(n_c)), so that R_y(psi_a) maps the
- * centre normal n_c to +X. A flat wall along +X (n_c = (-0, 0, 1)) gives exactly 90. 0 without a centre.
+ * The alignment yaw (03 12.2, 12.16): psi_a = wrapDeg(target - azimuth(n_c)), so that R_y(psi_a) maps the centre normal
+ * n_c to the azimuth `targetDeg` (Wall.ALIGN_NORMAL_AZIMUTH_DEG): 90 for 'center-neg-x' (n_c -> +X, the default
+ * argument), -90 for 'center-pos-x' (n_c -> -X). A flat wall along +X (n_c = (-0, 0, 1)) gives exactly 90 and -90.
+ * 0 without a centre.
  * Side effects: none.
  * @param {import('./WallLayout.js').WallLayout} layout  the raw walk (layout frame)
+ * @param {number} [targetDeg]  the azimuth the centre normal is turned to, degrees (default 90: +X)
  * @returns {number} degrees in (-180, 180]
  */
-export function alignmentYawDeg(layout) {
+export function alignmentYawDeg(layout, targetDeg = 90) {
   const c = wallCentre(layout);
   if (!c) return 0;
-  return wrapDeg(90 - azimuthDeg(c.normal));
+  return wrapDeg(targetDeg - azimuthDeg(c.normal));
 }

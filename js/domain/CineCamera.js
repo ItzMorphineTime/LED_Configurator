@@ -12,7 +12,7 @@
  */
 
 import { orDefault } from '../legacy/LegacyCompat.js';
-import { clamp, deepFreeze, finiteOr, STAGE_POSITION_LIMIT_M, wrapDeg } from './rules.js';
+import { clamp, deepFreeze, finiteOr, quarterExactTrig, STAGE_POSITION_LIMIT_M, wrapDeg } from './rules.js';
 
 /**
  * Filmback presets (width x height in mm), keyed by the #camera-filmback option values. Deep-frozen.
@@ -49,22 +49,6 @@ export const FILMBACK_PRESETS = Object.freeze({
 
 /** The context of the legacy rules: the wall plane at stage z = 0. */
 const WALL_PLANE_AT_ORIGIN = Object.freeze({ wallZ: 0 });
-
-/**
- * The (cos, sin) of an angle in degrees, exact at multiples of 90 (geometry/WallOrientation's yawTrig; the domain may
- * not import geometry). Side effects: none.
- * @param {number} deg
- * @returns {{cos: number, sin: number}}
- */
-function quarterExactTrig(deg) {
-  const q = deg / 90;
-  if (Number.isInteger(q)) {
-    const k = ((q % 4) + 4) % 4;
-    return { cos: [1, 0, -1, 0][k], sin: [0, 1, 0, -1][k] };
-  }
-  const r = deg * Math.PI / 180;
-  return { cos: Math.cos(r), sin: Math.sin(r) };
-}
 
 /** Rounds to 1 mm: the posZ fallback of a stage origin off the wall's start plane (03 4.1). */
 const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -258,8 +242,8 @@ export class CineCamera {
    */
   resetTo(framing) {
     if (framing.aligned && framing.centre) {
-      // 03 12.7: 'center-neg-x': 5 m along the turned centre normal from the wall centre, at eye height, looking at the
-      // wall's mid-height above the centre point
+      // 03 12.7, 12.16: an alignment ('center-pos-x' or 'center-neg-x'): 5 m along the turned centre normal from the
+      // wall centre, at eye height, looking at the wall's mid-height above the centre point
       const p = wrapDeg(framing.viewYawDeg);
       const n = quarterExactTrig(p);
       const C = framing.centre.point;

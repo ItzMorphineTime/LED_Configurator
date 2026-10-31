@@ -127,9 +127,10 @@ normal lines of the debug view stay visible in pilot mode.
 - Choose where the exported wall's origin (its pivot) sits: **Bottom-left corner** (how earlier versions exported),
   **Wall mesh centre on floor** (the centre of the wall's bounding box, at floor level) or **Wall centre on floor**
   (halfway between the first section's first edge and the last section's last edge, at floor level; the default)
-- **Orientation**: turn the whole wall about the pivot. **Centre on −X** (the default) turns it so the LED face at the
-  wall's centre looks along +X, toward the origin, and the wall's centre lies on the −X side; a **Yaw offset** (degrees,
-  −180 to 180) adds to it, or turns the wall on its own with **None**
+- **Orientation**: turn the whole wall about the pivot. **Centre on +X (LED faces −X)** (the default) turns it so the
+  wall's centre lies on the +X side and the LED face at the wall's centre looks along −X, back toward the origin;
+  **Centre on −X (LED faces +X)** is the mirror image; a **Yaw offset** (degrees, −180 to 180) adds to either, or turns
+  the wall on its own with **None**
 - Move the pivot further with a metre offset on X, Y and Z (1 mm steps, up to ±1000 m), by typing it or by dragging the
   pivot marker in the viewport (press **O** or "Select pivot (O)"; hold Ctrl or ⌘ to drag in steps of the "Ctrl-drag
   snap" size; Escape cancels a drag)
@@ -148,9 +149,10 @@ Release note: the floor grid now covers 100 m x 100 m with lines on whole metres
 pivot on the floor), where the red, green and blue axes cross; it used to be 50 m x 50 m, offset in front of the wall,
 with lines on half metres.
 
-Release note: new projects now start with the **Wall centre on floor** pivot, **Centre on −X** orientation and
-**Individual Section Meshes**; the **Mesh Options** and **Wall Pivot** cards start collapsed (click the title, or focus
-it and press Enter or Space, to open them).
+Release note: new projects now start with the **Wall centre on floor** pivot, **Centre on +X (LED faces −X)**
+orientation and **Individual Section Meshes**; the **Mesh Options** and **Wall Pivot** cards start collapsed (click the
+title, or focus it and press Enter or Space, to open them). The person and car props of a new project now stand in front
+of the LED face (2 m and 3.5 m out, to the right of the camera's axis).
 
 Release note: the pivot is new. It lasts for the session only: Export JSON does not save it (or the orientation) yet,
 and importing a project file keeps the session's pivot and orientation (a file's mesh mode still applies). The camera's "Z Distance from Wall" field is now "Z Position", because
@@ -395,14 +397,18 @@ re-centre by hand after each change.
 ### Orientation
 The **Orientation** block of the Wall Pivot panel turns the whole wall about the pivot's vertical axis (the floor stays
 level; nothing tilts):
-- **Alignment: Centre on −X** (the default) works out the turn on every change so that the LED face at the wall's centre
-  (the middle of the wall's bottom edge, measured along the wall) points along +X. The wall then stands on the −X side of
-  the stage origin, facing it: a flat wall lies across the X axis centred on it; a concave wall's middle sits behind the
-  origin on −X. **None** leaves the wall as it is laid out.
+- **Alignment: Centre on +X (LED faces −X)** (the default) works out the turn on every change so that the LED face at the
+  wall's centre (the middle of the wall's bottom edge, measured along the wall) points along −X. The wall then stands on
+  the +X side of the stage origin, facing back toward it, with its sections running left to right as seen from the
+  stage: a flat wall lies across the X axis centred on it; a concave wall's middle sits on +X, like a volume wrapped
+  around a stage at the origin (the layout of the reference Blender scene the exports are checked against). **Centre on
+  −X (LED faces +X)** is the mirror image (the wall's middle on −X, the face looking along +X). **None** leaves the wall
+  as it is laid out.
 - **Yaw offset** (degrees, −180 to 180, 0.1° steps) adds a turn on top (positive turns counter-clockwise seen from
   above). The read-out under it shows the resulting wall yaw.
-- With Centre on −X, **Reset Camera** (and the first camera preview) puts the camera 5 m in front of the LED face along
-  the centre's normal, 1.5 m high, looking at the wall centre; the Front, Side, Top and Reset views turn with the wall.
+- With either alignment, **Reset Camera** (and the first camera preview) puts the camera 5 m in front of the LED face
+  along the centre's normal, 1.5 m high, looking at the wall centre; the Front, Side, Top and Reset views turn with the
+  wall.
 - The offsets X / Y / Z stay in the wall's own axes; dragging the pivot marker moves it along the axes you see.
 - Exports are written turned: the OBJ header adds an `# Orientation:` line and the glTF `scenes[0].extras.pivot` an
   `orientation` object whenever the wall is turned.
@@ -593,7 +599,8 @@ The modules use modern JavaScript class syntax (private fields and methods), so 
    - Drag axes to move
 
 6. **Set the pivot and orientation** (optional, Wall Pivot card):
-   - The default exports the wall centred at the origin on the floor, LED face toward +X
+   - The default exports the wall with the file origin on the floor halfway between its two ends, the wall's centre on
+     the +X axis and the LED face toward −X (Centre on +X)
    - Choose another pivot mode, an offset or a yaw offset if your pipeline needs it
 
 7. **Export your design**:
@@ -625,6 +632,7 @@ Contributions are welcome! Feel free to:
 ## 📋 Changelog
 
 ### Latest Updates
+- ✅ "Centre on +X (LED faces −X)" alignment, now the default (the wall's centre on +X, facing the origin, like the reference Blender scene); new-project props stand in front of the LED face
 - ✅ Whole-wall orientation: "Centre on −X" alignment (the wall's centre on the −X axis, LED face toward +X) plus a yaw offset; camera and props follow the wall with Keep stage layout
 - ✅ New defaults for new projects: Individual Section Meshes, Wall centre on floor, Centre on −X; Mesh Options and Wall Pivot are collapsible and start collapsed
 - ✅ Camera preview drawn by the main renderer (one WebGL canvas, letterboxed to the filmback, no helpers in the preview); fixes a stale rectangle in the viewport when the preview was enlarged

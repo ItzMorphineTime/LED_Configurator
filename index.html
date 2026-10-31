@@ -180,14 +180,15 @@
                         <div class="pivot-subtitle" id="pivot-orientation-title">Orientation</div>
                         <div class="section-row pivot-orientation-row">
                             <div class="input-field"><label for="pivot-align">Alignment</label>
-                                <select id="pivot-align" class="ui-select pivot-align" title="Turn the wall about the pivot so the LED face's centre normal points along +X and the wall's centre lies toward −X.">
-                                    <option value="center-neg-x" selected>Centre on −X</option>
+                                <select id="pivot-align" class="ui-select pivot-align" title="Turn the wall about the pivot so its centre lies on the +X axis with the LED face looking along −X toward the origin (Centre on +X), or on the −X axis with the face looking along +X (Centre on −X).">
+                                    <option value="center-pos-x" selected>Centre on +X (LED faces −X)</option>
+                                    <option value="center-neg-x">Centre on −X (LED faces +X)</option>
                                     <option value="none">None</option>
                                 </select></div>
                             <div class="input-field"><label for="pivot-yaw-offset">Yaw offset (°)</label>
                                 <input type="number" id="pivot-yaw-offset" step="0.1" min="-180" max="180" value="0"></div>
                         </div>
-                        <div class="pivot-yaw-readout" id="pivot-yaw-readout" aria-live="polite">Wall yaw 90.0° = alignment 90.0° + offset 0.0°</div>
+                        <div class="pivot-yaw-readout" id="pivot-yaw-readout" aria-live="polite">Wall yaw -90.0° = alignment -90.0° + offset 0.0°</div>
                     </div>
                     <div class="toggle-container">
                         <span class="toggle-label" id="pivot-keep-stage-label">Keep stage layout on pivot change</span>
@@ -389,17 +390,17 @@
                     <div class="section-row mb-8">
                         <div class="input-field">
                             <label>X Position (m)</label>
-                            <input type="number" id="person-pos-x" value="2" step="0.1">
+                            <input type="number" id="person-pos-x" value="-2" step="0.1">
                         </div>
                         <div class="input-field">
                             <label>Z Position (m)</label>
-                            <input type="number" id="person-pos-z" value="2" step="0.1">
+                            <input type="number" id="person-pos-z" value="0.75" step="0.1">
                         </div>
                     </div>
                     <div class="section-row mb-8">
                         <div class="input-field">
                             <label>Rotation (°)</label>
-                            <input type="number" id="person-rot-y" value="0" min="-180" max="180" step="5">
+                            <input type="number" id="person-rot-y" value="-90" min="-180" max="180" step="5">
                         </div>
                         <div class="input-field">
                             <label>Scale</label>
@@ -416,17 +417,17 @@
                     <div class="section-row mb-8">
                         <div class="input-field">
                             <label>X Position (m)</label>
-                            <input type="number" id="car-pos-x" value="4" step="0.1">
+                            <input type="number" id="car-pos-x" value="-3.5" step="0.1">
                         </div>
                         <div class="input-field">
                             <label>Z Position (m)</label>
-                            <input type="number" id="car-pos-z" value="3" step="0.1">
+                            <input type="number" id="car-pos-z" value="2.75" step="0.1">
                         </div>
                     </div>
                     <div class="section-row mb-8">
                         <div class="input-field">
                             <label>Rotation (°)</label>
-                            <input type="number" id="car-rot-y" value="0" min="-180" max="180" step="5">
+                            <input type="number" id="car-rot-y" value="-90" min="-180" max="180" step="5">
                         </div>
                         <div class="input-field">
                             <label>Scale</label>

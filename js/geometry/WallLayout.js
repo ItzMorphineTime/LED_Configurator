@@ -18,7 +18,7 @@
  */
 
 import { MM_TO_M } from '../domain/WallSection.js';
-import { OrientationAlign, PivotMode } from '../domain/Wall.js';
+import { OrientationAlign, PivotMode, alignNormalAzimuthDeg } from '../domain/Wall.js';
 import { wrapDeg } from '../domain/rules.js';
 import { Strategies, unsupportedStrategy } from '../legacy/LegacyCompat.js';
 import { alignmentYawDeg, turnXZ, wallCentre, yawTrig } from './WallOrientation.js';
@@ -151,8 +151,8 @@ const FRAMES = Object.freeze(['stage', 'export', 'layout']);
  * The resolved pivot (03 6.2), layout frame: the mode and offset it was resolved from, the anchor of 6.1 (the layout
  * origin for an empty wall), the pivot point P = anchor + offset and the stage origin (P.x, 0, P.z). Since F3-O2 (03
  * 12.4) also the orientation: align and yawOffsetDeg (copied from the pivot), alignYawDeg (the alignment yaw psi_a of
- * 'center-neg-x', 0 with 'none' or without a centre) and yawDeg (the total yaw psi = wrapDeg(psi_a + yawOffsetDeg),
- * degrees about +Y through P, the three.js rotation.y sign).
+ * 'center-pos-x' or 'center-neg-x', 0 with 'none' or without a centre) and yawDeg (the total yaw
+ * psi = wrapDeg(psi_a + yawOffsetDeg), degrees about +Y through P, the three.js rotation.y sign).
  * @typedef {{mode: string, offset: {x: number, y: number, z: number}, anchor: {x: number, y: number, z: number},
  *            point: {x: number, y: number, z: number}, stageOrigin: {x: number, y: number, z: number},
  *            align: string, yawOffsetDeg: number, alignYawDeg: number, yawDeg: number}} PivotResolution
@@ -670,8 +670,9 @@ const NO_ORIENTATION = Object.freeze({ align: OrientationAlign.NONE, yawOffsetDe
 /**
  * Resolves the wall pivot on the raw walk (03 6.2): the anchor of the mode (the layout origin for an empty wall), plus
  * the offset. Generative quantities only (03 5.10 #1): a section offset never moves the pivot. F3-O2 (03 12.2, 12.4):
- * the orientation too: alignYawDeg = alignmentYawDeg(layoutL) for 'center-neg-x' (the yaw that turns the LED normal at
- * the wall's centre point to +X; it depends on the sections only, never on the pivot point), else 0; yawDeg =
+ * the orientation too: alignYawDeg = alignmentYawDeg(layoutL, alignNormalAzimuthDeg(align)) for 'center-pos-x' and
+ * 'center-neg-x' (the yaw that turns the LED normal at the wall's centre point to −X or +X, 03 12.16; it depends on the
+ * sections only, never on the pivot point), else 0; yawDeg =
  * wrapDeg(alignYawDeg + yawOffsetDeg) ('none': wrapDeg(yawOffsetDeg); +0 at the identity).
  * Side effects: none.
  * @param {WallLayout} layoutL  the raw walk (layout frame)
@@ -685,7 +686,8 @@ export function resolvePivot(layoutL, pivot) {
   const P = { x: a.x + o.x, y: a.y + o.y, z: a.z + o.z };
   if (!Number.isFinite(P.x) || !Number.isFinite(P.y) || !Number.isFinite(P.z)) return null;
   const { align, yawOffsetDeg } = pivot.orientation ?? NO_ORIENTATION;
-  const alignYawDeg = align === OrientationAlign.CENTER_NEG_X ? alignmentYawDeg(layoutL) : 0;
+  const target = alignNormalAzimuthDeg(align);
+  const alignYawDeg = target === null ? 0 : alignmentYawDeg(layoutL, target);
   const yawDeg = wrapDeg(alignYawDeg + yawOffsetDeg);
   return {
     mode: pivot.mode, offset: { ...o }, anchor: a, point: P, stageOrigin: { x: P.x, y: 0, z: P.z },
@@ -805,8 +807,9 @@ export function layoutProject(project, { frame = 'stage' } = {}) {
  * On every harness wall (no offsets, no detached or horizontal sections) the boxes coincide with the box of
  * worldVertices(). Nothing here assumes the wall runs along +X or faces +Z.
  * The orientation additions (03 12.7): centre = wallCentre(layout) in this frame (null without one); aligned = the
- *   resolution's align is 'center-neg-x' (stage or export frame); viewYawDeg = wrapDeg(90 + yawOffsetDeg) when aligned
- *   with a centre (the azimuth of the turned centre normal), else the layout's yaw (0 at the identity): the view presets
+ *   resolution's align is 'center-pos-x' or 'center-neg-x' (stage or export frame); viewYawDeg = wrapDeg(az_a +
+ *   yawOffsetDeg) when aligned with a centre, az_a = alignNormalAzimuthDeg(align) (-90 or 90, 03 12.16; the azimuth of
+ *   the turned centre normal), else the layout's yaw (0 at the identity): the view presets
  *   and the aligned Reset read it; frontZ = the posZ input's fallback for a non-numeric entry, 5 m in front of the LED
  *   face: wallZ + 5 at a zero yaw (the legacy rule), else the z of the Reset position.
  * @typedef {Readonly<{generativeBox: FramingBox, wallBox: FramingBox,
@@ -880,12 +883,14 @@ function layoutFraming(layout) {
   const wallBox = framingBox(layout.bounds());
   const facing = layout.chordFacing();
   const stageExtent = generativeBox && wallBox ? stageExtentOf(layout, facing) : null;
-  // 03 12.7: the orientation additions (the wall centre, whether 'center-neg-x' is on, the azimuth the views face from)
+  // 03 12.7, 12.16: the orientation additions (the wall centre, whether an alignment is on, the azimuth the views face
+  // from)
   const res = layout.pivot ? layout.pivot.resolution : null;
-  const aligned = !!res && layout.pivot.frame !== 'layout' && res.align === OrientationAlign.CENTER_NEG_X;
+  const target = res && layout.pivot.frame !== 'layout' ? alignNormalAzimuthDeg(res.align) : null;
+  const aligned = target !== null;
   const c = wallCentre(layout);
   const centre = c ? Object.freeze({ point: Object.freeze(c.point), normal: Object.freeze(c.normal) }) : null;
-  const viewYawDeg = aligned && centre ? wrapDeg(90 + res.yawOffsetDeg) : yawDeg;
+  const viewYawDeg = aligned && centre ? wrapDeg(target + res.yawOffsetDeg) : yawDeg;
   if (!generativeBox || !wallBox || !stageExtent) {
     const origin = { x: 0 + start.x, y: 0, z: wallZ };
     const box = framingBox({ min: origin, max: origin });

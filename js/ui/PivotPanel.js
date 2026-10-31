@@ -14,7 +14,7 @@
  */
 
 import { Events } from '../core/EventBus.js';
-import { OrientationAlign, PIVOT_MODES } from '../domain/Wall.js';
+import { PIVOT_MODES, alignNormalAzimuthDeg } from '../domain/Wall.js';
 import { byId } from './dom.js';
 
 /** A pivot more than this far from its anchor (metres) turns the readout into a warning (03 3.6). */
@@ -52,7 +52,7 @@ export function yawReadoutText(resolution) {
   if (!resolution) return 'Wall yaw unavailable · invalid section values';
   const yaw = resolution.yawDeg ?? 0;
   const offset = resolution.yawOffsetDeg ?? 0;
-  return resolution.align === OrientationAlign.CENTER_NEG_X
+  return alignNormalAzimuthDeg(resolution.align) !== null
     ? `Wall yaw ${deg1(yaw)}° = alignment ${deg1(resolution.alignYawDeg ?? 0)}° + offset ${deg1(offset)}°`
     : `Wall yaw ${deg1(yaw)}° (no alignment, offset ${deg1(offset)}°)`;
 }
@@ -118,7 +118,7 @@ export function rebuildStatusText({ cause, stageShift, yawShiftDeg = 0 }) {
   if (cause === 'edit') {
     const s = stageShift ?? { x: 0, z: 0 };
     const moved = s.x !== 0 || s.z !== 0;
-    // 03 12.9: a section edit under 'center-neg-x' may also turn the wall (the alignment follows the centre normal)
+    // 03 12.9: a section edit under an alignment may also turn the wall (the alignment follows the centre normal)
     const turned = yawShiftDeg !== 0;
     if (moved && turned) {
       return `Wall edit moved the stage origin by ${signed(s.x)}, ${signed(s.z)} m and turned the wall by `

@@ -41,9 +41,9 @@ function rng(seed) {
 
 describe('03 12.12 test 1: the orientation domain (12.4)', () => {
   test('OrientationAlign, ORIENTATION_ALIGNS (select order), YAW_OFFSET_LIMIT_DEG and the default (none, 0)', () => {
-    assert.deepEqual({ ...OrientationAlign }, { CENTER_NEG_X: 'center-neg-x', NONE: 'none' });
+    assert.deepEqual({ ...OrientationAlign }, { CENTER_POS_X: 'center-pos-x', CENTER_NEG_X: 'center-neg-x', NONE: 'none' });
     assert.ok(Object.isFrozen(OrientationAlign));
-    assert.deepEqual(ORIENTATION_ALIGNS, ['center-neg-x', 'none']);
+    assert.deepEqual(ORIENTATION_ALIGNS, ['center-pos-x', 'center-neg-x', 'none']);
     assert.ok(Object.isFrozen(ORIENTATION_ALIGNS));
     assert.equal(YAW_OFFSET_LIMIT_DEG, 180);
     assert.equal(WallPivot.DEFAULT_ALIGN, 'none', "this unit keeps 'none' (12.11)");
@@ -546,24 +546,116 @@ describe('03 12.12 test 8: the export metadata of a turned wall', () => {
   });
 });
 
-describe('03 12.11: the new-project defaults (the owner request of 2026-10-17)', () => {
-  test('Project.createNew: section meshes, wall-center, Centre on -X; createDefault stays the legacy aggregate', () => {
+describe('03 12.11, 12.16: the new-project defaults (the owner requests of 2026-10-17 and 2026-10-31)', () => {
+  test('Project.createNew: section meshes, wall-center, Centre on +X; createDefault stays the legacy aggregate', () => {
     const p = Project.createNew();
     assert.equal(p.meshMode, 'section');
     assert.equal(p.wall.pivot.mode, 'wall-center');
-    assert.deepEqual(p.wall.pivot.orientation, { align: 'center-neg-x', yawOffsetDeg: 0 });
+    assert.deepEqual(p.wall.pivot.orientation, { align: 'center-pos-x', yawOffsetDeg: 0 });
     assert.equal(p.wall.pivot.keepStageLayout, true);
     const legacy = Project.createDefault();
     assert.equal(legacy.meshMode, 'combined');
     assert.ok(legacy.wall.pivot.isIdentity);
+    assert.deepEqual([legacy.person.posX, legacy.person.posZ, legacy.person.rotY], [2, 2, 0], 'legacy person');
+    assert.deepEqual([legacy.car.posX, legacy.car.posZ, legacy.car.rotY], [4, 3, 0], 'legacy car');
   });
 
-  test('index.html starts with the same states: the section radio, the wall-center radio, Centre on -X selected', async () => {
+  test('the new project: the wall faces -X from its centre on the stage origin; Reset and the props stand in front of it', () => {
+    const p = Project.createNew();
+    const f = framingBounds(layoutProject(p));
+    assert.ok(f.centre.point.x === 0 && f.centre.point.y === 0 && f.centre.point.z === 0, 'the centre on the stage origin');
+    assert.ok(f.centre.normal.x === -1 && f.centre.normal.z === 0, 'the centre normal exactly -X');
+    assert.equal(f.aligned, true);
+    assert.equal(f.viewYawDeg, -90);
+    const cam = new CineCamera();
+    cam.resetTo(f);
+    assert.deepEqual([cam.posX, cam.posY, cam.posZ, cam.rotY], [-5, 1.5, 0, -90], 'Reset 5 m out on -X, panned to look along +X');
+    assert.deepEqual([p.person.posX, p.person.posZ, p.person.rotY], [-2, 0.75, -90]);
+    assert.deepEqual([p.car.posX, p.car.posZ, p.car.rotY], [-3.5, 2.75, -90]);
+    for (const prop of [p.person, p.car]) {
+      const out = (prop.posX - f.centre.point.x) * f.centre.normal.x + (prop.posZ - f.centre.point.z) * f.centre.normal.z;
+      assert.ok(out >= 2, `${prop.kind} in front of the LED face (${out} m)`);
+      assert.ok(Math.abs(prop.posZ - cam.posZ) >= 0.5, `${prop.kind} off the camera axis`);
+    }
+  });
+
+  test('Prop.placeInFront: the legacy pose relative to a wall facing +Z, carried round with the normal', () => {
+    const p = Project.createDefault().person;
+    p.placeInFront({ x: 1.25, z: 0 }, 0, 2, 0.75);
+    assert.deepEqual([p.posX, p.posZ, p.rotY], [2, 2, 0], 'the legacy (2, 2) in front of the default wall');
+    p.placeInFront({ x: 0, z: 0 }, 90, 2, 0.75);
+    assert.deepEqual([p.posX, p.posZ, p.rotY], [2, -0.75, 90], 'Centre on -X: in front on +X, right = -Z');
+  });
+
+  test('index.html starts with the same states: the section and wall-center radios, Centre on +X, the prop poses', async () => {
     const { readFileSync } = await import('node:fs');
     const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
     assert.match(html, /<label class="mesh-mode-option active" data-mode="section">\s*<input type="radio" name="mesh-mode" value="section" checked>/);
     assert.match(html, /<label class="pivot-mode-option active" data-pivot-mode="wall-center">\s*<input type="radio" name="pivot-mode" value="wall-center" checked>/);
-    assert.match(html, /<option value="center-neg-x" selected>/);
+    assert.match(html, /<option value="center-pos-x" selected>Centre on \+X \(LED faces −X\)<\/option>/);
+    assert.match(html, /<option value="center-neg-x">Centre on −X \(LED faces \+X\)<\/option>/);
     assert.doesNotMatch(html, /value="combined" checked|value="bottom-left" checked/);
+    const p = Project.createNew();
+    for (const kind of ['person', 'car']) {
+      for (const [field, id] of [['posX', 'pos-x'], ['posZ', 'pos-z'], ['rotY', 'rot-y']]) {
+        const m = html.match(new RegExp(`id="${kind}-${id}" value="([^"]*)"`));
+        assert.equal(Number(m[1]), p[kind][field], `#${kind}-${id}`);
+      }
+    }
+    const readout = html.match(/id="pivot-yaw-readout"[^>]*>([^<]*)</)[1];
+    assert.equal(readout, 'Wall yaw -90.0° = alignment -90.0° + offset 0.0°');
+  });
+});
+
+describe('03 12.16: Centre on +X (LED faces -X), the reference LED_Wall_Gen.blend', () => {
+  test('a flat wall along +X facing +Z needs exactly -90 (R_y(-90) maps +Z to -X); it lands on x = 0, normals exactly -X', () => {
+    assert.ok(Object.is(alignmentYawDeg(computeWallLayout(DEFAULT_WALL()), -90), -90));
+    const t = yawTrig(-90);
+    assert.deepEqual(turnXZ(0, 1, t), { x: -1, z: 0 }, '+Z -> -X');
+    const layout = layoutProject(projectOf(DEFAULT_WALL(), pivotOf('wall-center', undefined, 'center-pos-x')));
+    const r = layout.pivot.resolution;
+    assert.ok(Object.is(r.alignYawDeg, -90) && Object.is(r.yawDeg, -90));
+    const edges = layout.sections[0].edges;
+    assert.ok(edges.every((e) => e.x === 0), 'every edge exactly on x = 0');
+    assert.deepEqual(edges.map((e) => e.z), [-1.25, -0.75, -0.25, 0.25, 0.75, 1.25], 'the wall runs left to right (+Z) seen from the stage');
+    const grid = objBuilder.sectionGrid(layout.sections[0]);
+    for (let k = 0; k < grid.normals.length; k += 3) {
+      assert.ok(grid.normals[k] === -1 && grid.normals[k + 1] === 0 && grid.normals[k + 2] === 0, 'every LED normal exactly -X');
+    }
+    assert.equal(resolvePivot(computeWallLayout(DEFAULT_WALL()), pivotOf('bottom-left', undefined, 'center-pos-x', 30)).yawDeg, -60);
+  });
+
+  test("concave walls with wall-center: the middle lies on +X, the centre normal is -X; every config's normal turns to -X", () => {
+    for (const sections of [CONCAVE_ODD(), CONCAVE_EVEN()]) {
+      const layout = layoutProject(projectOf(sections, pivotOf('wall-center', undefined, 'center-pos-x')));
+      const c = wallCentre(layout);
+      near(c.point.z, 0, 1e-12, 'centre z');
+      assert.ok(c.point.x > 0.1, `centre x ${c.point.x} on +X`);
+      near(c.normal.x, -1, 1e-12, 'n.x');
+      near(c.normal.z, 0, 1e-12, 'n.z');
+    }
+    for (const key of ['concave_offsets', 'mixed', 'box_corner', 'convex', 'large_wall']) {
+      const layout = layoutProject(projectOf(importSections(CONFIGS[key]), pivotOf('mesh-center', { x: 0.3, y: 0, z: -0.2 }, 'center-pos-x')));
+      const n = wallCentre(layout).normal;
+      near(n.x, -1, 1e-12, `${key} n.x`);
+      near(n.z, 0, 1e-12, `${key} n.z`);
+    }
+  });
+
+  test('framing: Reset and the presets face the LED from -X; switching to Centre on -X turns the wall by 180', () => {
+    const sections = CONCAVE_EVEN();
+    const f = framingBounds(layoutProject(projectOf(sections, pivotOf('wall-center', undefined, 'center-pos-x', 10))));
+    assert.equal(f.aligned, true);
+    assert.equal(f.viewYawDeg, -80);
+    const cam = new CineCamera();
+    cam.resetTo(f);
+    const fwd = { x: -Math.sin(cam.rotY * Math.PI / 180), z: -Math.cos(cam.rotY * Math.PI / 180) };
+    const toCentre = { x: f.centre.point.x - cam.posX, z: f.centre.point.z - cam.posZ };
+    near(fwd.x * toCentre.z - fwd.z * toCentre.x, 0, 1e-9, 'the camera looks at the wall centre');
+    assert.ok(fwd.x * toCentre.x + fwd.z * toCentre.z > 4.9, 'from 5 m in front');
+    const raw = computeWallLayout(sections);
+    const pos = resolvePivot(raw, pivotOf('wall-center', undefined, 'center-pos-x'));
+    const neg = resolvePivot(raw, pivotOf('wall-center', undefined, 'center-neg-x'));
+    near(Math.abs(yawShift(pos, neg)), 180, 1e-9, 'the two alignments differ by a half turn');
   });
 });

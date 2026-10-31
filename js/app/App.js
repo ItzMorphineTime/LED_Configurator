@@ -116,7 +116,8 @@ export class App {
     const brand = theme.brand;
     const bus = new EventBus();
     const dialogs = createDialogs(win);
-    // 06 T7; the owner's new-project defaults (03 12.11): section meshes, 'wall-center', Centre on −X
+    // 06 T7; the owner's new-project defaults (03 12.11, 12.16): section meshes, 'wall-center', Centre on +X (LED faces
+    // −X), the props in front of the LED face
     const project = Project.createNew({ defaultSectionColor: theme.palette.defaultSectionColor });
     // 04 UV-14 retired the `?uv_layout=` / `?panel_uvs=` stopgap of UV-7 / UV-9: the UV settings are the sidebar's
     // UV Mapping options (session-only, like all UV state until project file v2, 04 UV-5c).

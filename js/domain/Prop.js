@@ -9,7 +9,7 @@
  */
 
 import { orDefault } from '../legacy/LegacyCompat.js';
-import { clamp, deepFreeze, STAGE_POSITION_LIMIT_M, wrapDeg } from './rules.js';
+import { clamp, deepFreeze, quarterExactTrig, STAGE_POSITION_LIMIT_M, wrapDeg } from './rules.js';
 
 /**
  * A reference prop (person or car): pose, scale and visibility, written only through its methods
@@ -128,6 +128,26 @@ export class Prop {
     this.posX = clamp(x, posX.min, posX.max);
     this.posZ = clamp(z, posZ.min, posZ.max);
     this.rotY = wrapDeg(this.rotY + yawDeg);
+  }
+
+  /**
+   * Stands the prop in front of a wall (03 12.16, the new-project placement): `distance` metres out along the LED normal
+   * n = (sin az, 0, cos az) from `point`, and `side` metres along the wall to the right as seen from the stage
+   * (r = (cos az, 0, -sin az), the wall's walk direction), turned with the wall: rotY = az, so the pose relative to the
+   * wall is the legacy one (a wall facing +Z has az = 0). Exact at multiples of 90 degrees; clamped through LIMITS;
+   * scale and visibility are untouched.
+   * Side effects: writes posX, posZ, rotY.
+   * @param {{x: number, z: number}} point  the wall's centre point (stage frame, metres)
+   * @param {number} azDeg  the azimuth of the LED normal there, atan2(n.x, n.z) in degrees
+   * @param {number} distance  metres out from the wall
+   * @param {number} side  metres to the right, as seen from the stage
+   */
+  placeInFront(point, azDeg, distance, side) {
+    const { cos, sin } = quarterExactTrig(azDeg);
+    const { posX, posZ } = Prop.LIMITS;
+    this.posX = clamp(point.x + distance * sin + side * cos, posX.min, posX.max);
+    this.posZ = clamp(point.z + distance * cos - side * sin, posZ.min, posZ.max);
+    this.rotY = wrapDeg(azDeg);
   }
 
   /**
