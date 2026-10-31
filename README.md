@@ -216,6 +216,7 @@ it used to show white LEDs on every section.
 | L | Toggle World/Local space |
 | P | Toggle Pilot camera mode |
 | O | Select / deselect the wall pivot (switches the gizmo to Translate) |
+| U | Open / close the UV viewer (see [UVs and the UV editor](#uvs-and-the-uv-editor)) |
 | Escape | Cancel a pivot drag / Exit pilot mode / Deselect object |
 
 ### Pilot Mode Controls
@@ -435,6 +436,75 @@ distance along the camera's optical axis to the wall plane it is aimed at.
 The pivot, its offset, the orientation and the "Keep stage layout" and marker switches last for the session: Export JSON
 and Export All (ZIP) do not save them yet, and importing a project file keeps the session's pivot and orientation. They
 will be saved with the JSON v2 project format.
+
+---
+
+## UVs and the UV editor
+
+Every section's texture coordinates fill the whole 0–1 UV square by default, in every mesh mode: in **Individual Section
+Meshes** each section mesh spans its own texture; in **Single Combined Mesh** each section is its own material slot whose
+UVs fill 0–1 (the islands overlap on purpose: every engine maps content per material slot); in **Individual Panels** each
+panel takes its part of its section's 0–1 space, so the panels of a section share one texture. Positions and normals
+are unchanged.
+
+### UV Mapping options (Mesh Options card)
+| Option | Choices | Use |
+|---|---|---|
+| Combined mesh UVs | **Per-section 0–1** (default, one material per section) / **Atlas, pixel-accurate** (one texture) | Atlas lays the sections side by side exactly like the Panel IDs PNG. For one feed per mesh (nDisplay mesh projection, a disguise screen object) use Atlas, or Individual Section Meshes. |
+| Panel UVs | **Section space** (default) / **Per panel 0–1** (legacy) | The legacy option gives every panel its own 0–1 square and its own panel-ID texture; UV edits do not apply to it. |
+| glTF: also write atlas UVs (TEXCOORD_1) | off / on | A second UV channel with the atlas UVs in the per-section layout (glTF only; OBJ has one UV set). |
+
+The note below the options gives the atlas size in LED pixels and the size of the Panel IDs PNG and ZIP atlas
+(`png px = LED px × px/LED`), with warnings when the wall is larger than 4K, beyond the GPU texture limit (the Atlas
+layout is downscaled in the viewport) or beyond the browser canvas limit (Export Panel IDs and the ZIP atlas are
+skipped), and when the viewport section textures were reduced by the 16 MP budget.
+
+### The UV viewer
+Open it with **U**, the **UV Viewer** button in the viewport toolbar, **Edit UVs…** on a section card, or a
+**double-click on the wall** (it opens on that section). It floats in the viewport: drag its header to move it, drag its
+bottom-left corner to resize it, × closes it. On narrow screens (900 px wide or less) it is a sheet along the bottom.
+
+- **Section** picks the section, **Show** the background (Panel IDs, LED pixels, a labelled UV checker, or none),
+  **Space** the section's own UV space or the read-only **Atlas** (Single Combined Mesh with the Atlas layout), **View**
+  the aspect (Texture: source pixels square; Square: raw UV space; Auto: Texture unless the section is longer than 8:1).
+- Wheel zooms about the cursor, middle-drag or Space + drag pans, a double-click on empty canvas (or Home) frames 0–1.
+- Hovering the front of the wall or the canvas shows the section, panel, LED, section pixel, atlas LED pixel and the UV
+  before and after the transform; the hovered panel is outlined on the wall and a crosshair marks it in the viewer.
+
+### Editing UVs
+The island (the outlined quad) is the part of the source image that lands on the section.
+
+| Edit | How |
+|---|---|
+| Move | Drag inside the island (snaps to whole source pixels; **Alt** free, **Shift** locks the axis), the arrow keys (one source pixel; **Shift**: one panel), or Offset U / V (UV units or source pixels) |
+| Scale | Drag a corner (uniform while the link is on; **Shift** inverts it) or an edge handle (one axis); 1 % steps, **Alt** free; or Scale U / V in % (100 % = 1 LED per source pixel) |
+| Rotate | Drag the round knob (15° steps, **Shift** 90°, **Alt** free) or type Rotate. The island turns counter-clockwise; the image on the wall turns the other way. |
+| Turn feed ⟲ 90 / ⟳ 90 (`[` / `]`) | For processor-rotated feeds: turns the image on the wall 90° and switches Source, so a full island stays full and pixel-exact |
+| Source | The pixel size of the feed: W×H or H×W (hidden on square sections) |
+| Flip U / Flip V (`H` / `V`) | Mirror the island |
+| Reset (`0`), Fit 0–1 (`F`), Pixel-accurate | Identity; the largest undistorted island inside 0–1, centred; 100 % scale, 90° steps and whole-pixel offsets |
+| Copy to all | This section's UV transform on every section (a Fit is re-fitted per section) |
+| Undo / Redo (↶ ↷, Ctrl/⌘+Z, Ctrl/⌘+Shift+Z, Ctrl+Y on the canvas) | UV edits only: one step per committed field, button, key or drag |
+
+Typing in a field previews live; Enter, leaving the field or a spinner click commits it (one undo step); Escape in a
+field restores the value it had. Escape during a drag cancels it. Keys typed while the viewer has focus stay in the
+viewer (WASD, G, R and the other viewport keys do nothing there); U still closes it, except while typing in a field.
+The status line tells whether the section is pixel-accurate or resampled, and when the island leaves 0–1 (edges clamp).
+
+UV edits show on the wall with **Panel IDs** (the status line offers **Show Panel IDs** when the wall shows colours).
+**LED Simulation** always shows the physical LED pixels, so it ignores UV edits.
+
+### UVs in the exports
+OBJ `vt` and glTF `TEXCOORD_0` carry exactly the UVs of the viewport, UV edits included, in every mesh mode; the panel-ID
+textures themselves are never transformed (the UVs pick the part of the source each section shows). In Blender, Maya,
+Unity or an Unreal static mesh each section is a material slot with its own 0–1 UVs. For nDisplay mesh projection or a
+disguise screen object use the Atlas layout or Individual Section Meshes, so one 0–1 canvas covers the mesh without the
+per-section islands repeating the feed.
+
+### Session only (for now)
+UV edits and the UV Mapping options last for the session: Export JSON and Export All (ZIP) do not save them yet, and
+importing a project file starts every section from the identity (and clears the UV undo history). They will be saved with
+the JSON v2 project format. The OBJ and glTF exports always carry the current UVs.
 
 ---
 

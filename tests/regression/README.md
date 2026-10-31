@@ -129,7 +129,8 @@ The eight scenarios after `ui_visual` live in [`scenarios-extra.mjs`](scenarios-
 spread into `SCENARIOS` after the original entries. The nine `p2_*` scenarios live in
 [`scenarios-phase2.mjs`](scenarios-phase2.mjs) and are spread in after them (see
 [The Phase 2 scenarios](#the-phase-2-scenarios)). The five `pivot_*` feature scenarios ([`scenarios-features.mjs`](scenarios-features.mjs))
-follow, and the two platform scenarios ([`scenarios-platform.mjs`](scenarios-platform.mjs)) are registered last.
+follow, then the two platform scenarios ([`scenarios-platform.mjs`](scenarios-platform.mjs)); the four `uv_*` scenarios
+([`scenarios-uv.mjs`](scenarios-uv.mjs), [The UV scenarios](#the-uv-scenarios-04)) are registered last.
 
 The six config scenarios follow the same steps:
 
@@ -478,6 +479,25 @@ canvas (`three-canvas`) after 07 R2 (07 AC 1).
 `window.__glCanvases()` comes from `lib/inject.mjs`: a hook on `HTMLCanvasElement.prototype.getContext` that remembers each
 canvas that received a `webgl`, `webgl2` or `experimental-webgl` context (`{id, type, connected}`, in creation order).
 It never changes the returned context, so every other output is unchanged.
+
+## The UV scenarios (04)
+
+[`scenarios-uv.mjs`](scenarios-uv.mjs) adds 04 8.2's scenarios for the per-section UVs and the UV viewer and editor
+(`docs/improvements/04-uvs-uv-editor.md`, UV-16), forward goldens of the feature build. Same DOM-only rules: the UV canvas
+publishes its island's screen corners in `data-island`, from which the handle drags are aimed; keys are real CDP keys
+(`AppPage.keyPress` knows `u`, `w`, `z`, `0`, `1` and `.` for them).
+
+| Scenario | Steps | Records |
+|---|---|---|
+| `uv_layouts` | `mixed`, panel IDs, Combined with `#uv-combined-layout` per-section then atlas (screenshot, OBJ, glTF, ZIP each), Section mode (screenshot), Panel mode with `#uv-panel-mode` section then panel (screenshot, OBJ, glTF, LED-sim screenshot each) | the sidebar per layout (`*_sidebar`: summaries, options, atlas note), `criterion4_pair` (per-section Combined vs Section mode) and `criterion19_panel_ledsim_pair` (LED sim with section vs per-panel UVs) |
+| `uv_transforms` | `flat3`, panel IDs; in the viewer Flip U on Left, ⟳ 90 on Center, Offset U 0.25 and Scale 50 % on Right; per mesh mode a screenshot, OBJ and glTF; LED sim with the transforms and after Reset on every section; Export JSON; a re-import | `transforms_viewer`, `transforms_sidebar`, `criterion19_ledsim_pair`, `session_only_json_check` (no UV keys: UV state is session-only until project file v2), `reimport_sidebar` (every section Identity) |
+| `uv_viewer` | default wall: OBJ; U; Offset U 0.1 (input + change), Flip U, a drag of the BR handle by (-40, 0) px; OBJ; three Ctrl+Z on the canvas; OBJ; Escape; `0`, `.`, `1` and `u` typed into Offset U, then blur; W held 400 ms on the canvas; viewer closed, preview on, P, U, P, preview off, U | `opened`, `edited` (+ sidebar and a panel screenshot), `undone`, `undo_postcheck` (the OBJ and MTL text equal the initial export), `typed`, `typed_committed`, `w_postcheck` (the 3D canvas unchanged), `pilot_u` (U ignored in pilot mode), `reopened` |
+| `uv_hover` | default wall, Reset view, U, the mouse at the canvas centre; `flat3`, Reset view, the viewer on Left, a double-click at the canvas centre | `centre_readout` (only the section and Panel C2: the centre lies on a pixel boundary, 04 6.9), `dblclick_viewer` (Center) |
+
+The screenshot pairs of 04's criteria 4 and 19 are judged inside the scenarios (`*_pair` states: at most 0.5 % of the
+pixels may differ by more than 8 levels, the pair-diff thresholds of 04 8.2), so no separate `tools/pair-diff.mjs` is
+needed. Without spec 02 there is no `uv_select`; without project file v2 (04 UV-5c) `uv_transforms` sets its transforms
+through the viewer instead of importing them.
 
 ## Output layout
 

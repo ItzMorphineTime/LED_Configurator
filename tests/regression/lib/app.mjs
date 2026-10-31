@@ -28,6 +28,12 @@ const KEYS = {
     ArrowDown: { code: 'ArrowDown', vk: 40 },         // 01 T8: moves the checked radio of a focused radio group
     o: { code: 'KeyO', vk: 79, text: 'o' },          // 03 T8: the pivot selection (O)
     Tab: { code: 'Tab', vk: 9 },                      // 03 T8: keyboard focus order
+    u: { code: 'KeyU', vk: 85, text: 'u' },          // 04 UV-16: the UV viewer (U)
+    w: { code: 'KeyW', vk: 87, text: 'w' },          // 04 UV-16: a movement key held on the UV canvas
+    z: { code: 'KeyZ', vk: 90, text: 'z' },          // 04 UV-16: Ctrl+Z on the UV canvas
+    0: { code: 'Digit0', vk: 48, text: '0' },        // 04 UV-16: typing into a UV field
+    1: { code: 'Digit1', vk: 49, text: '1' },
+    '.': { code: 'Period', vk: 190, text: '.' },
 };
 
 /** CDP Input.dispatchKeyEvent modifier bits. */
