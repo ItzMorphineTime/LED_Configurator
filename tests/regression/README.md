@@ -499,6 +499,13 @@ pixels may differ by more than 8 levels, the pair-diff thresholds of 04 8.2), so
 needed. Without spec 02 there is no `uv_select`; without project file v2 (04 UV-5c) `uv_transforms` sets its transforms
 through the viewer instead of importing them.
 
+[`scenarios-project.mjs`](scenarios-project.mjs) adds the project-file scenarios of spec 07 8.3 (task D2), kept small:
+
+| Scenario | Steps | Records |
+|---|---|---|
+| `import_v1_matrix` | the six `CONFIGS` imported in turn into one page (wall scope) | per config the import result, `<key>_state` (stats, mesh-mode radios, cards), the glTF in the mode the file set and the re-centred view |
+| `import_hostile` | one newer-revision (2.7) v2 file with a markup name, a quoted name, `__proto__` / `constructor` keys, `"columns": "10"`, 100000 columns, `"x": "1e400"`, duplicate, `"NaN"` and 2^31 - 1 ids; then six refused files (3.0, another format, invalid JSON, no `sections` key, an empty list, 201 sections) | `dialogs` (the correction and refusal texts), `01_hostile` / `02_after_refusals` (card titles as text, image count, no injected element, no prototype pollution), `01_hostile_cards` |
+
 ## Output layout
 
 ```
