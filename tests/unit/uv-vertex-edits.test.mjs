@@ -25,7 +25,8 @@ import { UvController } from '../../js/app/UvController.js';
 import { UvViewModel, mergeSelection, gridOutline } from '../../js/app/UvViewModel.js';
 import { GltfExporter } from '../../js/io/GltfExporter.js';
 import { Brand } from '../../js/theme/Theme.js';
-import { UvFallbackHistory } from '../../js/app/UvFallbackHistory.js';
+import { History } from '../../js/app/History.js';
+import { historySession } from './fixtures/session-history.mjs';
 import { nearestPoint, pointsInBox } from '../../js/ui/UVCanvas.js';
 import { readoutText } from '../../js/ui/UVViewer.js';
 
@@ -216,7 +217,7 @@ describe('selection helpers', () => {
   });
 });
 
-/** A one-section wall, the controller with the real view model and history, a fake view and wall controller. */
+/** A one-section wall, the controller with the real view model and the app's undo stack (07 H1), a fake view and wall controller. */
 function setup() {
   const project = Project.createDefault();
   project.wall.replaceAll([section(1, 'Main', 4, 2)]);
@@ -227,7 +228,7 @@ function setup() {
   const frames = [];
   const updates = [];
   const view = { updateSectionUvs: (id, plan) => { updates.push(plan); return true; }, resolveHit: (h) => h, panelCornersWorld: () => null };
-  const history = new UvFallbackHistory({ now: () => 0 });
+  const history = new History({ bus, clock: () => 0 });
   const viewModel = new UvViewModel({
     project, bus, panelIds: { sectionCanvas: () => null, atlasCanvas: () => null }, ledTiles: { tileCanvas: () => null },
   });
@@ -240,8 +241,9 @@ function setup() {
       applyTransforms: !isLedMaskContent(project.display.content) });
     uv.onWallRebuilt({ layout, atlas, plans, sectionScale: sectionTextureScale(sections), cause });
   };
-  const wallController = { rebuild: () => runRebuild(), setPanelIds: () => {} };
+  const wallController = { rebuild: ({ cause = 'edit' } = {}) => runRebuild(cause), setPanelIds: () => {} };
   uv = new UvController({ project, wallController, view, viewModel, history, bus, raf: (fn) => frames.push(fn), maxTextureSize: () => 16384 });
+  historySession({ project, wallController, bus, history, features: { uv } });
   runRebuild('init');
   uv.openViewer(1);
   uv.setEditMode('vertices');
@@ -274,9 +276,9 @@ describe('UvController: the Vertices mode', () => {
     assert.deepEqual(sec.uvVertexEdits.keys(), [6, 7]);
     s.uv.undo();
     s.uv.undo();
-    assert.equal(sec.uvVertexEdits, null);
+    assert.equal(s.main().uvVertexEdits, null, 'an undo applies a snapshot: fresh section objects');
     s.uv.redo();
-    assert.deepEqual(sec.uvVertexEdits.keys(), [6, 7]);
+    assert.deepEqual(s.main().uvVertexEdits.keys(), [6, 7]);
   });
 
   test('Shift drags a tenth of the pointer travel without snapping; Escape (cancelVertexDrag) restores; Alt is free', () => {
@@ -319,15 +321,16 @@ describe('UvController: the Vertices mode', () => {
     assert.ok(!s.uv.clearVertexSelection());
   });
 
-  test('a grid-size change clears the edits with a notice and drops their history states', () => {
+  test('a grid-size change clears the edits with a notice; undoing it brings them back', () => {
     const s = setup();
     s.uv.selectVertices([6], 'replace');
     s.uv.setVertexUv(1, 'u', 0.3);
     assert.ok(s.history.canUndo);
+    // a recorded grid edit, as WallController.setSectionField records it before its rebuild
     s.main().panelCols = 5;
+    s.history.record('Edit Columns (Main)');
     s.runRebuild();
     assert.equal(s.main().uvVertexEdits, null);
-    assert.equal(s.history.canUndo, false, 'the 4 x 2 vertex entry is gone');
     s.flush();
     assert.ok(s.last().notices.some((n) => n.text === 'ⓘ Vertex edits cleared: the grid changed from 4×2 to 5×2 panels'));
     assert.deepEqual(s.last().vertices.selection, []);
@@ -336,6 +339,12 @@ describe('UvController: the Vertices mode', () => {
     s.uv.setVertexUv(1, 'v', 0.1);
     s.flush();
     assert.ok(!s.last().notices.some((n) => n.text.startsWith('ⓘ Vertex edits cleared')));
+    s.uv.undo();
+    s.uv.undo();
+    assert.equal(s.main().panelCols, 4);
+    assert.deepEqual(s.main().uvVertexEdits.keys(), [6], 'the 4 x 2 edit is back with its grid');
+    s.uv.redo();
+    assert.deepEqual([s.main().panelCols, s.main().uvVertexEdits], [5, null]);
   });
 
   test('the canvas hover reads through the edited grid (probeUv inverts the edits)', () => {

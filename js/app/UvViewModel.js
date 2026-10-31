@@ -296,16 +296,15 @@ export class UvViewModel {
    * they never re-render a texture.
    * Side effects: may draw background canvases; emits UV_DATA_CHANGED iff open.
    * @param {{layout: import('../geometry/WallLayout.js').WallLayout, atlas: object}|null} cache  the last rebuild's
-   * @param {{backgroundDirty?: boolean, history?: {canUndo: boolean, canRedo: boolean, undoLabel: string|null,
-   *          redoLabel: string|null}|null}} [options]
+   * @param {{backgroundDirty?: boolean}} [options]
    */
-  refresh(cache, { backgroundDirty = true, history = null } = {}) {
+  refresh(cache, { backgroundDirty = true } = {}) {
     if (backgroundDirty) {
       this.#bgCache.clear();
       this.#atlasCanvas = undefined;
     }
     if (!this.#open || !cache) return;
-    this.#bus.emit(Events.UV_DATA_CHANGED, { sectionId: this.#sectionId, data: this.#compute(cache, history) });
+    this.#bus.emit(Events.UV_DATA_CHANGED, { sectionId: this.#sectionId, data: this.#compute(cache) });
   }
 
   /**
@@ -321,15 +320,14 @@ export class UvViewModel {
   /**
    * The SectionUvData of 04 5.4 for the viewed section (or a message for the empty and error states, 3.8).
    * @param {{layout: object, atlas: object}} cache
-   * @param {object|null} history
    * @returns {object}
    */
-  #compute({ layout, atlas }, history) {
+  #compute({ layout, atlas }) {
     const project = this.#project;
     const uv = project.uv;
     const base = {
       sectionId: this.#sectionId, sections: layout.sections.map((sl) => ({ id: sl.sectionId, name: sl.section.name })),
-      history, meshMode: project.meshMode, combinedLayout: uv.combinedLayout, panelUvs: uv.panelUvs,
+      meshMode: project.meshMode, combinedLayout: uv.combinedLayout, panelUvs: uv.panelUvs,
       content: project.display.content, atlasAvailable: project.meshMode === 'combined' && uv.combinedLayout === 'atlas',
       space: this.#space, message: null,
     };

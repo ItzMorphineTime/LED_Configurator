@@ -674,8 +674,9 @@ describe('WP7 module imports follow the layer table', () => {
   const importsOf = (rel) => [...readFileSync(join(ROOT, rel), 'utf8').matchAll(/^\s*import\s+[^'"]*from\s+['"]([^'"]+)['"]/gm)]
     .map((m) => m[1]);
   const cases = {
-    'js/app/CameraController.js': ['../core/EventBus.js', '../geometry/WallLayout.js', '../geometry/FrustumCoverage.js'],
-    'js/app/PropController.js': ['../core/EventBus.js'],
+    'js/app/CameraController.js': ['../core/EventBus.js', '../core/historyRecorder.js', '../geometry/WallLayout.js',
+      '../geometry/FrustumCoverage.js'],
+    'js/app/PropController.js': ['../core/EventBus.js', '../core/historyRecorder.js'],
     'js/ui/CameraPanel.js': ['../core/EventBus.js', '../domain/CineCamera.js', './dom.js'],
     'js/ui/PropsPanel.js': ['../core/EventBus.js', '../domain/Prop.js', './dom.js'],
     'js/render/CameraRigView.js': ['../vendor/three.js', '../core/EventBus.js', '../geometry/FrustumCoverage.js',

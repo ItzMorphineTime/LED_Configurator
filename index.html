@@ -39,6 +39,7 @@
     <link rel="stylesheet" href="css/features/sidebar.css">
     <link rel="stylesheet" href="css/features/section-selection.css">
     <link rel="stylesheet" href="css/features/project.css">
+    <link rel="stylesheet" href="css/features/history.css">
     <link rel="stylesheet" href="css/12-responsive.css">
     <link rel="stylesheet" href="css/99-utilities.css">
 </head>
@@ -51,6 +52,10 @@
                 <span class="brand-divider" aria-hidden="true"></span>
                 <span class="product-name">LED Configurator</span>
             </h1>
+            <div class="header-history" role="group" aria-label="Undo and redo">
+                <button type="button" id="history-undo" class="header-history__btn" disabled aria-label="Undo" aria-keyshortcuts="Control+Z Meta+Z" title="Nothing to undo">↶</button>
+                <button type="button" id="history-redo" class="header-history__btn" disabled aria-label="Redo" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y Meta+Y" title="Nothing to redo">↷</button>
+            </div>
             <div class="header-stats">
                 <div class="stat">
                     <div class="stat-value" id="total-pixels">0</div>

@@ -10,17 +10,20 @@
  * (LEDWallView.updateSectionUvs: no rebuild, no texture); the viewer's data refresh is coalesced to one per animation
  * frame. It is a SelectionManager observer (it follows a selected wall section unless pinned; only spec 02's section
  * Selectables produce one) and a WallController rebuild observer (cache, viewed section, atlas note, viewer refresh).
- * History (path B, the owner's decision): UvFallbackHistory, a UV-only stack; one entry per committed edit (a field
- * commit, coalesced per field within 750 ms; a drag at its end; each button), none for previews, cancelled drags or
- * selection changes. A section whose grid size (panelCols x panelRows) changes loses its vertex edits and their history
- * states at the next rebuild, with a notice in the viewer.
+ * History (07 H1, 04 UV-18's history part): the app's one undo stack (app/History, snapshot-based); one entry per
+ * committed edit (a field commit, coalesced per field within 750 ms; a drag at its end; each button; each setting), none
+ * for previews, cancelled drags or selection changes. undo / redo end the open sessions, then step the global stack
+ * (which may revert a non-UV edit, 07 C16); the restore comes back as an apply (rebuild cause 'import'). A section whose
+ * grid size (panelCols x panelRows) changes loses its vertex edits at the next rebuild, with a notice in the viewer
+ * (undoing the grid change brings them back).
  * UV state is saved in project file v2 since revision 1 (04 UV-5c, M7a): the sections' transforms and vertex edits come
- * with the sections, the settings through this controller's feature hook (hydrate); an import clears the UV history.
+ * with the sections, the settings through this controller's feature hook (hydrate).
  * Legacy source: none (Feature 4).
  * Layer: app (may import core, legacy, domain, geometry; collaborators are injected).
  */
 
 import { Events } from '../core/EventBus.js';
+import { NO_HISTORY } from '../core/historyRecorder.js';
 import { UvTransform, UvSettings, UvVertexEdits } from '../domain/UvSettings.js';
 import {
   planSectionUv, isLedMaskContent, presetFit, isFitResult, presetPixelAccurate, quarterTurn, dragTranslate, dragScale,
@@ -143,7 +146,7 @@ export class UvController {
   #viewModel;
   /** @type {{setEnabled(on: boolean): void}|null} the wall hover probe (enabled while the viewer is open) */
   #probe;
-  /** @type {import('./UvFallbackHistory.js').UvFallbackHistory} */
+  /** @type {import('../core/historyRecorder.js').HistoryRecorder} the app's undo stack (07 H1, app/History) */
   #history;
   /** @type {import('../core/EventBus.js').EventBus} */
   #bus;
@@ -177,7 +180,7 @@ export class UvController {
    *          view: import('../render/LEDWallView.js').LEDWallView,
    *          viewModel: import('./UvViewModel.js').UvViewModel,
    *          probe?: {setEnabled(on: boolean): void}|null,
-   *          history: import('./UvFallbackHistory.js').UvFallbackHistory,
+   *          history?: import('../core/historyRecorder.js').HistoryRecorder,
    *          bus: import('../core/EventBus.js').EventBus,
    *          maxTextureSize: () => number,
    *          raf: (fn: () => void) => *,
@@ -185,7 +188,7 @@ export class UvController {
    *   maxTextureSize: () => renderer.capabilities.maxTextureSize; raf: coalesces the viewer refresh to one per frame;
    *   onPanelIdsShown: called after the Show Panel IDs chip turned panel IDs on (App: opens the Panel IDs card)
    */
-  constructor({ project, wallController, view, viewModel, probe = null, history, bus, maxTextureSize, raf,
+  constructor({ project, wallController, view, viewModel, probe = null, history = NO_HISTORY, bus, maxTextureSize, raf,
     onPanelIdsShown = null }) {
     this.#project = project;
     this.#wallController = wallController;
@@ -290,8 +293,8 @@ export class UvController {
 
   /**
    * WallController rebuild observer (P1 step 8, the bootstrap rebuild included): caches the layout, atlas and plans of
-   * the live path; drops the history and sessions of vanished sections (all of them on an import, whose sections carry
-   * the file's UV state); moves the viewer to the nearest remaining section; emits
+   * the live path; drops the sessions of vanished sections (all of them on an import, an undo or a redo, whose sections
+   * carry the applied UV state); moves the viewer to the nearest remaining section; emits
    * UV_SETTINGS_CHANGED with the atlas note values (maxTextureSize read here); refreshes the viewer.
    * Side effects: as listed.
    * @param {{layout: object, atlas: object, plans: object[], sectionScale?: object|null, cause?: string}} info
@@ -309,21 +312,11 @@ export class UvController {
       vm.noteSection(s.id, `ⓘ Vertex edits cleared: the grid changed from ${e.cols}×${e.rows} to ${s.panelCols}×${s.panelRows} panels`);
     }
     if (cause === 'import') {
-      this.#history.clear();
       vm.noteSection(null, null);
       this.#field = null;
       this.#drag = null;
       this.#vdrag = null;
     } else {
-      // vertex states made for another grid size can never be applied again
-      const fits = (id, e) => {
-        const s = bySection.get(id);
-        if (!s) return false;
-        if (e.kind !== 'vertices') return true;
-        return [...e.before, ...e.after].every((st) => !Object.is(st.id, id) || !st.edits
-          || st.edits.matches(s.panelCols, s.panelRows));
-      };
-      this.#history.prune(fits);
       if (this.#field && !live.has(this.#field.sectionId)) this.#field = null;
       if (this.#drag && !live.has(this.#drag.sectionId)) this.#drag = null;
       if (this.#vdrag && !live.has(this.#vdrag.sectionId)) this.#vdrag = null;
@@ -384,8 +377,7 @@ export class UvController {
     const t = withField(before, field, raw);
     this.#applyLive(section, t, 'field', false);
     if (!t.equals(before)) {
-      this.#recordTransforms(`UV ${FIELD_LABELS[field]} (${section.name})`, [section], [before],
-        { coalesceKey: `uv:${section.id}:${field}` });
+      this.#record(`UV ${FIELD_LABELS[field]} (${section.name})`, { coalesceKey: `uv:${section.id}:${field}` });
     }
     return { ...section.uvTransform };
   }
@@ -464,18 +456,16 @@ export class UvController {
     const t = src.uvTransform;
     const { W, H } = dims(src);
     const fit = isFitResult(t, W, H);
-    const targets = [];
-    const befores = [];
+    let changed = 0;
     for (const s of this.#project.wall.sections) {
       if (s === src || !validCounts(s)) continue;
       const d = dims(s);
       const next = fit ? presetFit(t, d.W, d.H) : t.clone();
       if (next.equals(s.uvTransform)) continue;
-      targets.push(s);
-      befores.push(s.uvTransform.clone());
+      changed++;
       this.#applyLive(s, next, 'copy', false);
     }
-    if (targets.length) this.#recordTransforms('UV copy to all', targets, befores);
+    if (changed) this.#record('UV copy to all');
   }
 
   // ---- handle drags (04 3.4, 6.8) -----------------------------------------------------------------------------------
@@ -529,7 +519,7 @@ export class UvController {
     const section = d ? this.#section(d.sectionId) : null;
     if (!section || section.uvTransform.equals(d.t0)) return;
     this.#emitTransform(section, 'drag', false);
-    this.#recordTransforms(`UV drag (${section.name})`, [section], [d.t0]);
+    this.#record(`UV drag (${section.name})`);
   }
 
   /**
@@ -642,7 +632,7 @@ export class UvController {
     this.#vdrag = null;
     const section = d ? this.#section(d.sectionId) : null;
     if (!section || sameEdits(editsOf(section), d.before)) return;
-    this.#recordVertices(`UV vertex drag (${section.name})`, section, d.before);
+    this.#recordVertices(`UV vertex drag (${section.name})`, section);
   }
 
   /**
@@ -744,36 +734,33 @@ export class UvController {
     const next = fn(before ? before.clone() : null);
     if (sameEdits(next, before)) return;
     this.#applyEditsLive(section, next);
-    this.#recordVertices(label, section, before, options);
+    this.#recordVertices(label, section, options);
   }
 
-  /** Records one vertex entry (the given before-state, the current after-state) and drops the section's notice. */
-  #recordVertices(label, section, before, options = {}) {
-    const after = section.uvVertexEdits;
-    this.#history.record(label, {
-      kind: 'vertices',
-      before: [{ id: section.id, edits: before ? before.clone() : null }],
-      after: [{ id: section.id, edits: after ? after.clone() : null }],
-    }, options);
+  /** Records one vertex entry and drops the section's notice. */
+  #recordVertices(label, section, options = {}) {
+    this.#history.record(label, options);
     this.#viewModel.noteSection(section.id, null);
     this.#scheduleRefresh();
   }
 
   // ---- history ----------------------------------------------------------------------------------------------------
 
-  /** Cancels an open drag or field session, then undoes one entry. Side effects: domain writes, live UVs or a rebuild. */
+  /**
+   * The viewer's ↶ (07 C16: the one global stack): cancels an open drag or field session, then History.undo (a full
+   * apply, reason 'undo').
+   * Side effects: domain writes, a rebuild.
+   */
   undo() {
     this.#endSessions(true);
-    const e = this.#history.undo();
-    if (e) this.#applyEntry(e, 'before');
+    this.#history.undo();
     this.#scheduleRefresh();
   }
 
-  /** Cancels an open drag or field session, then redoes one entry. Side effects: as undo. */
+  /** The viewer's ↷: as undo, with History.redo. Side effects: as undo. */
   redo() {
     this.#endSessions(true);
-    const e = this.#history.redo();
-    if (e) this.#applyEntry(e, 'after');
+    this.#history.redo();
     this.#scheduleRefresh();
   }
 
@@ -911,8 +898,7 @@ export class UvController {
     const section = f ? this.#section(f.sectionId) : null;
     if (!section || section.uvTransform.equals(f.before)) return;
     this.#emitTransform(section, 'field', false);
-    this.#recordTransforms(`UV ${FIELD_LABELS[f.field]} (${section.name})`, [section], [f.before],
-      { coalesceKey: `uv:${section.id}:${f.field}` });
+    this.#record(`UV ${FIELD_LABELS[f.field]} (${section.name})`, { coalesceKey: `uv:${section.id}:${f.field}` });
   }
 
   /**
@@ -932,7 +918,7 @@ export class UvController {
     const t = fn(before.clone(), W, H, section);
     if (t.equals(before)) return;
     this.#applyLive(section, t, source, false);
-    this.#recordTransforms(`${label} (${section.name})`, [section], [before], options);
+    this.#record(`${label} (${section.name})`, options);
   }
 
   /**
@@ -978,43 +964,19 @@ export class UvController {
     this.#bus.emit(Events.UV_TRANSFORM_CHANGED, { sectionId: section.id, transform: { ...t }, summary: t.summaryFor(W, H), source, live });
   }
 
-  /** Records one transform entry (the sections' given before-states and current after-states). */
-  #recordTransforms(label, sections, befores, options = {}) {
-    this.#history.record(label, {
-      kind: 'transforms',
-      before: sections.map((s, k) => ({ id: s.id, t: befores[k].clone() })),
-      after: sections.map((s) => ({ id: s.id, t: s.uvTransform.clone() })),
-    }, options);
+  /** Records one entry of the global stack (the live project after the edit), then a coalesced viewer refresh. */
+  #record(label, options = {}) {
+    this.#history.record(label, options);
     this.#scheduleRefresh();
   }
 
-  /** Applies one side of a history entry. */
-  #applyEntry(e, side) {
-    if (e.kind === 'settings') {
-      this.#applySetting(e.key, e[side]);
-      return;
-    }
-    if (e.kind === 'vertices') {
-      for (const { id, edits } of e[side]) {
-        const section = this.#section(id);
-        if (section) this.#applyEditsLive(section, edits);
-      }
-      return;
-    }
-    for (const { id, t } of e[side]) {
-      const section = this.#section(id);
-      if (section) this.#applyLive(section, t, 'history', false);
-    }
-  }
-
-  /** A settings change: one entry, then the setting (04 5.3). */
+  /** A settings change: the setting, then one entry (04 5.3). */
   #changeSetting(key, value) {
     const before = this.#project.uv[key];
     if (before === value) return;
     this.#endSessions(false);
-    this.#history.record(`${SETTING_LABELS[key]}: ${value === true ? 'on' : value === false ? 'off' : value}`,
-      { kind: 'settings', key, before, after: value });
     this.#applySetting(key, value);
+    this.#history.record(`${SETTING_LABELS[key]}: ${value === true ? 'on' : value === false ? 'off' : value}`);
   }
 
   /**
@@ -1093,6 +1055,6 @@ export class UvController {
 
   /** Recomputes the viewer data now (no-op before the first rebuild or while closed). */
   #refresh(backgroundDirty) {
-    this.#viewModel.refresh(this.#cache, { backgroundDirty, history: this.#history.snapshot() });
+    this.#viewModel.refresh(this.#cache, { backgroundDirty });
   }
 }

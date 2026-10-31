@@ -6,6 +6,8 @@
  * validated v2 object (07 4.4 rule 7; it absorbs 08's ProjectIO.#applyV2 and WallController.applyImport). Features
  * register their own restore step in the `features` hook map (07 C41): each hook's `hydrate(v2, ctx)` runs in step 3.
  * The legacy try/catch around the import parse lives here (R13 amendment; legacy alert text kept, V-5).
+ * History (07 H1): App attaches the one undo stack (attachHistory). An open, a new project and a rename are one entry
+ * each ('Open "<file>"', 'New project', 'Rename project'); undo and redo come back here as apply(reason 'undo' / 'redo').
  * Legacy source: index.html@cd3fd3f 4967-5010 (importJSON), 4942-4965 (exportJSON).
  * Layer: app (may import core, legacy, domain, geometry; collaborators are injected, app/ may not import io/ or ui/).
  */
@@ -14,6 +16,7 @@ import { Events } from '../core/EventBus.js';
 import { sectionKeyOf } from '../core/sectionIds.js';
 import { MAX_IMPORT_BYTES } from '../domain/rules.js';
 import { ProjectMeta } from '../domain/Project.js';
+import { NO_HISTORY } from '../core/historyRecorder.js';
 
 /** The largest ZIP an import reads (07 4.7 too-large: 2 GiB, the practical ArrayBuffer limit). */
 export const MAX_ZIP_BYTES = 2 * 1024 * 1024 * 1024;
@@ -117,6 +120,8 @@ export class ProjectSession {
   /** @type {Map<string, FeatureHook>} the hook map (07 C41), in registration order */
   #features = new Map();
   /** @type {boolean} */ #applying = false;
+  /** @type {import('../core/historyRecorder.js').HistoryRecorder} the undo stack (07 H1), attached by App */
+  #history = NO_HISTORY;
   /** @type {string|null} capture('history') after the last open, save or new (07 5.5.2 dirty) */
   #cleanSnapshot = null;
   /** @type {string|null} capture('history') of the last new project; cleared by an open (07 5.5.2 isPristineNew) */
@@ -178,7 +183,18 @@ export class ProjectSession {
     return [...this.#features.keys()];
   }
 
-  /** Side effects: none. @returns {boolean} true while apply() runs (a later History ignores records then, 07 5.6.1) */
+  /**
+   * Late binding (07 5.5.2; History needs the session, the session records through History): this session's open, new
+   * and rename record on `history`, and `history` captures and applies through this session.
+   * Side effects: history.attach(this).
+   * @param {import('./History.js').History} history
+   */
+  attachHistory(history) {
+    this.#history = history;
+    history.attach(this);
+  }
+
+  /** Side effects: none. @returns {boolean} true while apply() runs (History ignores every record then, 07 5.6.1) */
   get applying() {
     return this.#applying;
   }
@@ -360,7 +376,8 @@ export class ProjectSession {
       this.#dialogs.alert(zip ? ImportAlerts.zipTooLarge() : ImportAlerts.tooLarge());
       return Promise.resolve(false);
     }
-    return this.#read(file, zip).then((content) => (zip ? this.#openZip(content) : this.#open(content, null)),
+    const label = `Open "${String(file.name ?? 'project')}"`;
+    return this.#read(file, zip).then((content) => (zip ? this.#openZip(content, label) : this.#open(content, null, label)),
       (error) => {
         this.#dialogs.alert(ImportAlerts.unreadable(error?.name ?? 'unknown error'));
         return false;
@@ -392,9 +409,10 @@ export class ProjectSession {
   /**
    * Opens an archive (07 D6): its project JSON entry, then #open with every file entry by path.
    * @param {ArrayBuffer} buffer
+   * @param {string} label  the history label
    * @returns {Promise<boolean>}
    */
-  async #openZip(buffer) {
+  async #openZip(buffer, label) {
     const archive = await this.#JSZip.loadAsync(buffer).then((a) => a, (err) => {
       this.#dialogs.alert(ImportAlerts.badZip(err?.message ?? String(err)));
       return null;
@@ -418,16 +436,18 @@ export class ProjectSession {
       this.#dialogs.alert(ImportAlerts.tooLarge());
       return false;
     }
-    return this.#open(text, entries);
+    return this.#open(text, entries, label);
   }
 
   /**
-   * Parse, read, load the assets, apply, report (openFile after the read).
+   * Parse, read, load the assets, apply, record one history entry (07 H1: undo brings the previous project back),
+   * report (openFile after the read).
    * @param {string} text
    * @param {Map<string, {async(type: string): Promise<*>}>|null} entries  the archive's file entries by path (a ZIP), or null
+   * @param {string} label  the history label, 'Open "<file name>"'
    * @returns {Promise<boolean>}
    */
-  async #open(text, entries) {
+  async #open(text, entries, label) {
     try {
       const result = this.#serializer.read(JSON.parse(text));
       if (!result.ok) {
@@ -443,6 +463,7 @@ export class ProjectSession {
         this.#newSnapshot = null;
       }
       this.markClean();
+      this.#history.record(label);
       const report = ImportAlerts.report(issues);
       if (report) this.#dialogs.alert(report);
       return true;
@@ -515,20 +536,21 @@ export class ProjectSession {
 
   /**
    * Renames the project (07 3.3, D8): ProjectMeta.setName (the validator's text rule: sanitizeText to 64 units, trimmed,
-   * empty gives the default). A rename is an edit: the project is dirty until it is saved. (No history entry until 07 H1.)
-   * Side effects: writes project.meta.name.
+   * empty gives the default). A rename is an edit: the project is dirty until it is saved; one history entry 'Rename
+   * project' (coalesced, 07 H1).
+   * Side effects: writes project.meta.name; a history entry.
    * @param {*} raw  the typed value
    * @returns {string} the stored name
    */
   setName(raw) {
-    return this.#project.meta.setName(raw);
+    return this.#history.run('Rename project', () => this.#project.meta.setName(raw), { coalesceKey: 'project:name' });
   }
 
   /**
    * A new project (07 5.5.2 newProject; the Project section's New, 07 D8): the 'file' document of createProject(), read
    * back through the serializer (valid by construction) and applied whole (reason 'new'); then the clean and new-project
-   * snapshots.
-   * Side effects: see apply.
+   * snapshots and one history entry 'New project' (07 H1: undo brings the previous project back).
+   * Side effects: see apply; a history entry.
    */
   newProject() {
     const doc = JSON.parse(JSON.stringify(this.#serializer.write(this.#createProject(), { variant: 'file' })));
@@ -536,5 +558,6 @@ export class ProjectSession {
     if (!result.ok) throw new Error('ProjectSession.newProject: the new project does not validate');
     this.apply(result.project, { reason: 'new', scope: 'full' });
     this.markClean({ pristineNew: true });
+    this.#history.record('New project');
   }
 }

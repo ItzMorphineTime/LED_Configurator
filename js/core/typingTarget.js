@@ -48,3 +48,22 @@ export function isTypingTarget(t) {
   if (t.isContentEditable === true) return true;
   return openDialogOf(t) !== null;
 }
+
+/** INPUT types without typed text, so no native text undo (07 H2). */
+const NO_TEXT_EDIT_INPUT_TYPES = new Set([...NON_TEXT_INPUT_TYPES, 'image', 'hidden']);
+
+/**
+ * The history shortcuts' guard (07 H2): whether `t` is a text-editing control, where Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z and
+ * Ctrl/Cmd+Y stay the browser's own text undo and redo: an INPUT of a text-like type (number included), a TEXTAREA or
+ * a contenteditable element. Unlike isTypingTarget, a SELECT, a button, a checkbox, a range and the rest of an open
+ * dialog are not (the app's undo runs there).
+ * Side effects: none.
+ * @param {EventTarget|null|undefined} t  the keydown event target
+ * @returns {boolean}
+ */
+export function isTextEditTarget(t) {
+  if (!t || typeof t !== 'object') return false;
+  const tag = typeof t.tagName === 'string' ? t.tagName.toUpperCase() : '';
+  if (tag === 'INPUT') return !NO_TEXT_EDIT_INPUT_TYPES.has(String(t.type || 'text').toLowerCase());
+  return tag === 'TEXTAREA' || t.isContentEditable === true;
+}

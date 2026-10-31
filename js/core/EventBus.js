@@ -44,6 +44,7 @@ export const Events = Object.freeze({
   UV_HOVER_CHANGED:             'uv:hoverChanged',     // visual (04 UV-12): UvViewModel.publishHover -> UVViewer, UvHighlightView (UV-15)
   UV_SETTINGS_CHANGED:          'uv:settingsChanged',  // visual (04 UV-14): UvController -> WallDisplayPanel
   PROJECT_REPLACED:             'project:replaced',    // non-visual (08 P2-13e, 07 5.10, D5): ProjectSession.apply -> SectionListPanel, WallDisplayPanel, SectionLogosPanel, CameraPanel, PropControls x2, ViewportToolbar
+  HISTORY_CHANGED:              'history:changed',     // non-visual (07 H1, H2): History -> HistoryControls, UVViewer
 });
 
 /** The set of valid wire names (never mutated). */

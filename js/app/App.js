@@ -62,7 +62,7 @@ import { AssetStore } from './AssetStore.js';
 import { DebugViewController } from './DebugViewController.js';
 import { UvViewModel } from './UvViewModel.js';
 import { UvController } from './UvController.js';
-import { UvFallbackHistory } from './UvFallbackHistory.js';
+import { History } from './History.js';
 import { SectionSelection } from './SectionSelection.js';
 import { runFontGate } from './fontGate.js';
 import { byId, createDialogs } from '../ui/dom.js';
@@ -76,6 +76,7 @@ import { PropControls } from '../ui/PropsPanel.js';
 import { ViewportToolbar } from '../ui/ViewportToolbar.js';
 import { ExportPanel } from '../ui/ExportPanel.js';
 import { ProjectPanel } from '../ui/ProjectPanel.js';
+import { HistoryControls } from '../ui/HistoryControls.js';
 import { DebugViewControls } from '../ui/DebugViewControls.js';
 import { UVViewer } from '../ui/UVViewer.js';
 import { bindCollapsibles, revealCollapsible } from '../ui/Collapsible.js';
@@ -125,6 +126,9 @@ export class App {
     const brand = theme.brand;
     const bus = new EventBus();
     const dialogs = createDialogs(win);
+    // 07 H1 (5.6.1, 6.10): the one undo stack, built first so every use case can record on it; the session is attached
+    // below (session.attachHistory) and the boot state taken last (history.reset). The coalescing clock is monotonic.
+    const history = new History({ bus, clock: () => win.performance.now() });
     // 06 T7; the owner's new-project defaults (03 12.11, 12.16): section meshes, 'wall-center', Centre on +X (LED faces
     // −X), the props in front of the LED face
     const project = Project.createNew({ defaultSectionColor: theme.palette.defaultSectionColor });
@@ -197,29 +201,29 @@ export class App {
     // Subscribed before the bootstrap rebuild, so the first WALL_STATS_CHANGED reaches the header.
     const headerStats = new HeaderStats({ doc, bus });
     const orbit = new OrbitController({ sceneManager, keyboard, interaction, frameBounds });
-    const gizmo = new TransformGizmo({ sceneManager, pointerRay, interaction, bus, theme });
+    const gizmo = new TransformGizmo({ sceneManager, pointerRay, interaction, bus, theme, history });
     const selection = new SelectionManager({ bus, gizmo, pointerRay, interaction });
     const pilotDriver = new PilotCameraDriver({ sceneManager, cine, rig, interaction });
     const hub = new CameraHub({ project, rig, preview: previewPass, safeDistance, pilotDriver, frameBounds, stageLayout, bus });
     const pilot = new PilotController({
       sceneManager, cine, driver: pilotDriver, orbit, keyboard, interaction, hub, bus, dialogs,
-      onPreviewRequired: () => revealCard('camera-frustum-section'),
+      onPreviewRequired: () => revealCard('camera-frustum-section'), history,
     });
-    const cameraController = new CameraController({ project, rig, preview, hub, pilot, selection, frameBounds, bus });
-    const personController = new PropController({ prop: person, view: personView, selection, bus });
-    const carController = new PropController({ prop: car, view: carView, selection, bus });
+    const cameraController = new CameraController({ project, rig, preview, hub, pilot, selection, frameBounds, bus, history });
+    const personController = new PropController({ prop: person, view: personView, selection, bus, history });
+    const carController = new PropController({ prop: car, view: carView, selection, bus, history });
     // Registration order is the raycast tie order of legacy handleViewportClick (3438-3461): camera, person, car.
     selection.register(cameraController);
     selection.register(personController);
     selection.register(carController);
     const wallController = new WallController({
-      project, view: wallView, ledTiles, orbit, hub, bus, palette: theme.palette, dialogs,
+      project, view: wallView, ledTiles, orbit, hub, bus, palette: theme.palette, dialogs, history,
     });
     // 03 T5 (5.8): the pivot use cases; the stage-anchored participants in re-expression order. Registered after the
     // camera, person and car, so the pivot is last in the raycast tie order (its pickPriority counts against walls only).
     const pivotController = new PivotController({
       project, wallController, markerView: pivotMarker, stageAnchored: [cameraController, personController, carController],
-      selection, gizmo, interaction, bus,
+      selection, gizmo, interaction, bus, history,
     });
     selection.register(pivotController);
     // 06 T8 (07 C10, C62): every project file names its writer, {name: Brand.jsonGenerator.name, version: APP_VERSION}
@@ -241,6 +245,7 @@ export class App {
       createProject: () => Project.createNew({ defaultSectionColor: theme.palette.defaultSectionColor }),
       features: { pivot: pivotController },
     });
+    session.attachHistory(history);
     const projectIO = new ProjectIO({
       project,
       wallController,
@@ -277,13 +282,13 @@ export class App {
       onHover: (hit) => uvController.onWallHover(hit), onDoubleClick: (hit) => uvController.onWallDoubleClick(hit),
       doubleClick: !viewportInput.handlesDoubleClick,
     });
-    // 04 UV-11 (5.3; path B, the owner's decision): the UV viewer's view model (its state in memory), the UV-only undo
-    // stack and the UV use cases, registered as a selection observer and a rebuild observer before the bootstrap
+    // 04 UV-11 (5.3; path B, the owner's decision): the UV viewer's view model (its state in memory) and the UV use cases
+    // (recording on the app's one undo stack since 07 H1), registered as a selection observer and a rebuild observer before the bootstrap
     // rebuild, so the first onWallRebuilt caches the layout and fills the sidebar atlas note. Nothing reads the renderer
     // here (maxTextureSize is a getter). UV state is saved in the project file (04 UV-5c, M7a): its hook is registered here.
     const uvViewModel = new UvViewModel({ project, panelIds, ledTiles, bus });
     const uvController = new UvController({
-      project, wallController, view: wallView, viewModel: uvViewModel, probe: uvProbe, history: new UvFallbackHistory(),
+      project, wallController, view: wallView, viewModel: uvViewModel, probe: uvProbe, history,
       bus, maxTextureSize: () => sceneManager.renderer.capabilities.maxTextureSize,
       raf: (fn) => win.requestAnimationFrame(fn),
       onPanelIdsShown: () => revealCard('panel-ids-section'),
@@ -312,6 +317,10 @@ export class App {
     // 07 D8: the Project section (name, unsaved-changes indicator and title, Save / Open / New, Ctrl/Cmd+S and O); its
     // bus subscriptions only schedule the dirty re-check and keep the name field on the opened project.
     const projectPanel = new ProjectPanel({ doc, win, session, projectIO, bus, dialogs, brand });
+    // 07 H2: the header's ↶ / ↷ (#history-undo, #history-redo) and the history chords; a drag blocks them.
+    const historyControls = new HistoryControls({
+      doc, win, history, bus, isBusy: () => interaction.isDraggingGizmo || uvController.dragging,
+    });
     // Subscribes DEBUG_VIEW_CHANGED (its only subscriber, 01 F1-2).
     const debugControls = new DebugViewControls({ doc, win, controller: debugController, bus, theme });
     // 04 UV-12 (5.3): the UV viewer panel (#uv-viewer, floating in the viewport, clear of the camera preview window) and
@@ -386,6 +395,8 @@ export class App {
     // 07 D8: the Project section's listeners (a window capture-phase keydown for the two chords, capture-phase document
     // edit signals), after every legacy listener.
     projectPanel.bind();
+    // 07 H2: the header's two buttons and the window capture-phase keydown of Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z and Ctrl/Cmd+Y.
+    historyControls.bind();
 
     // ---- legacy setView('reset') (5095) ----
     orbit.setView('reset');
@@ -402,6 +413,8 @@ export class App {
 
     // ---- 07 D5: the bootstrap project is clean and a pristine new project (session.dirty, session.isPristineNew) ----
     session.markClean({ pristineNew: true });
+    // 07 H1: the bootstrap project is the undo stack's first state (nothing to undo; HISTORY_CHANGED sets the buttons)
+    history.reset();
     // 07 D8: the indicator and the title of the clean bootstrap project ("Morph LED Configurator — Untitled stage")
     projectPanel.refresh();
   }

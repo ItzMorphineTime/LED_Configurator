@@ -214,6 +214,31 @@ once you have chosen a file); Cancel leaves everything as it was. View settings 
 two shortcuts also work while you type in a field: what you typed is kept first. Export JSON and Import JSON in the
 Export section work as before.
 
+## Undo and redo
+
+**↶** and **↷** in the header undo and redo every change to the project, one step at a time: the wall sections (every
+field, colour and name, add and delete), the mesh mode, the display and Panel ID options, logos, the camera (preview
+on/off, lens, position and rotation, reset, safe distance) and the props, the pivot and its orientation (with the camera
+and props it moved), the UV Mapping options, UV transforms and moved UV vertices, the project name, **New** and **Open**
+(undoing them brings the previous project back). Hover a button to see what it will undo or redo ("Undo Mesh mode:
+Individual Panels"); they are greyed out when there is nothing to undo or redo.
+
+- One drag is one step: a gizmo drag of the camera, a prop or the pivot, a pilot flight, a UV island, handle or vertex
+  drag. Quick repeats of the same field (typing a name, dragging a colour, spinner clicks) also make one step.
+- What you look at is not a change and is never undone: the selection, the orbit view, the grid, open or collapsed cards,
+  the side panel, the UV viewer itself, the debug view and the pivot marker switch.
+- The UV viewer's ↶ ↷ are the same history: an undo there may undo a change made elsewhere, and its title says which.
+- Undoing back to the last saved state clears **Unsaved changes**. The last 100 steps are kept, for this page only (the
+  history is not saved in the project file).
+
+| Key | Action |
+|-----|--------|
+| Ctrl+Z / ⌘Z | Undo |
+| Ctrl+Shift+Z / ⇧⌘Z, Ctrl+Y / ⌘Y | Redo |
+
+The keys work wherever the focus is, the UV canvas included, except while you type in a text or number field: there
+they undo your typing, as usual. They do nothing during a drag.
+
 ---
 
 ## 🎮 Controls
@@ -250,6 +275,8 @@ Export section work as before.
 |-----|--------|
 | Ctrl+S / ⌘S | Save the project file (see [Projects](#projects-save-open-new)); the browser's Save Page dialog does not open |
 | Ctrl+O / ⌘O | Open a project file or an Export All archive; the browser's Open File dialog does not open |
+| Ctrl+Z / ⌘Z | Undo the last change (see [Undo and redo](#undo-and-redo)); in a text or number field, undo the typing |
+| Ctrl+Shift+Z / ⇧⌘Z, Ctrl+Y / ⌘Y | Redo |
 
 ### Pilot Mode Controls
 | Control | Action |
@@ -567,7 +594,7 @@ The island (the outlined quad) is the part of the source image that lands on the
 | Flip U / Flip V (`H` / `V`) | Mirror the island |
 | Reset (`0`), Fit 0–1 (`F`), Pixel-accurate | Identity; the largest undistorted island inside 0–1, centred; 100 % scale, 90° steps and whole-pixel offsets |
 | Copy to all | This section's UV transform on every section (a Fit is re-fitted per section) |
-| Undo / Redo (↶ ↷, Ctrl/⌘+Z, Ctrl/⌘+Shift+Z, Ctrl+Y on the canvas) | UV edits only: one step per committed field, button, key or drag |
+| Undo / Redo (↶ ↷, Ctrl/⌘+Z, Ctrl/⌘+Shift+Z, Ctrl/⌘+Y) | The app's one history (see [Undo and redo](#undo-and-redo)): one step per committed field, button, key or drag; it may undo a change made outside the viewer |
 
 **Vertices** (the **Edit: Island | Vertices** switch) edits single panel corners: every grid vertex of the section is a
 handle. Click selects a vertex, Shift+click toggles one, a drag on empty canvas selects a box (Shift adds), Ctrl/⌘+A
@@ -608,7 +635,7 @@ channel 1).
 ### Saved in the project file
 Export JSON and Export All (ZIP) save the UV Mapping options (`uv`), each section's UV transform (`uv_transform`) and
 its moved vertices (`uv_vertex_edits`: one entry per moved vertex of the panel-corner grid, as an offset in the island's
-own space before the transform), and opening the file restores them (the UV undo history starts empty). A moved vertex
+own space before the transform), and opening the file restores them (undoing the Open brings the previous ones back). A moved vertex
 that lies outside its section's grid in a hand-edited file is left out with a message. A version 1.0 file keeps the
 current UV Mapping options and starts its sections from the identity. The OBJ and glTF exports always carry the current
 UVs.
@@ -733,6 +760,7 @@ Contributions are welcome! Feel free to:
 ## 📋 Changelog
 
 ### Latest Updates
+- ✅ Undo and redo for every project change: ↶ ↷ in the header (their titles name the step), Ctrl/⌘+Z, Ctrl/⌘+Shift+Z and Ctrl/⌘+Y; one step per drag; New and Open can be undone; the UV viewer uses the same history
 - ✅ Project card at the top of the side panel: the project name, Save (Ctrl/⌘+S, named after the project), Open… (Ctrl/⌘+O) and New, an "Unsaved changes" indicator and the name in the tab title; New and Open ask before discarding unsaved changes
 - ✅ Project files (format 2.1) save the pivot and orientation, the pivot marker switch, the UV Mapping options and every section's UV transform and moved UV vertices, and name the app that wrote them; opening a file restores them
 - ✅ Panel IDs and Camera Frustum Preview are collapsible cards too, collapsed at start like Mesh Options and Wall Pivot (click the title, or focus it and press Enter or Space)

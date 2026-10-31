@@ -174,7 +174,8 @@ export class SectionLogosPanel {
    * parseInt(id) with its stored-image fields, then the list re-renders and the wall rebuilds iff panel IDs (legacy
    * order); a refused one alerts its M-LOGO message (B-L35 fixed in 08 P2-13a: legacy failed silently).
    * Ports: index.html@cd3fd3f lines 2256-2278.
-   * Side effects: async: logos.setImage, render(), wallController.rebuildIfPanelIds(); or one alert.
+   * Side effects: async: logos.setImage, render(), wallController.commitLogoEdit (a rebuild iff panel IDs, one history
+   *   entry, 07 H1); or one alert.
    * @param {Event} e
    */
   #onUpload(e) {
@@ -190,14 +191,14 @@ export class SectionLogosPanel {
       this.#project.logos.setImage(sectionId, result.image, result.meta);
 
       this.render();
-      this.#wallController.rebuildIfPanelIds();
+      this.#wallController.commitLogoEdit(`Set logo (${this.#sectionName(sectionId)})`);
     });
   }
 
   /**
    * Clear button: delete the entry, re-render, rebuild iff panel IDs.
    * Ports: index.html@cd3fd3f lines 2280-2286.
-   * Side effects: logos.remove; render(); wallController.rebuildIfPanelIds().
+   * Side effects: logos.remove; render(); wallController.commitLogoEdit (rebuild iff panel IDs; one history entry).
    * @param {Event} e
    */
   #onClear(e) {
@@ -205,19 +206,20 @@ export class SectionLogosPanel {
     this.#project.logos.remove(sectionId);
 
     this.render();
-    this.#wallController.rebuildIfPanelIds();
+    this.#wallController.commitLogoEdit(`Clear logo (${this.#sectionName(sectionId)})`);
   }
 
   /**
    * Position select: only an existing entry is updated (and only then the wall rebuilds iff panel IDs).
    * Ports: index.html@cd3fd3f lines 2288-2294.
-   * Side effects: logos.setPosition; wallController.rebuildIfPanelIds() iff the entry exists.
+   * Side effects: logos.setPosition; iff the entry exists, wallController.commitLogoEdit (rebuild iff panel IDs; one
+   *   history entry).
    * @param {Event} e
    */
   #onPosition(e) {
     const sectionId = parseInt(e.target.dataset.sectionId);
     if (this.#project.logos.setPosition(sectionId, e.target.value)) {
-      this.#wallController.rebuildIfPanelIds();
+      this.#wallController.commitLogoEdit(`Logo position (${this.#sectionName(sectionId)})`);
     }
   }
 
@@ -225,7 +227,8 @@ export class SectionLogosPanel {
    * Scale input: parse and clamp the percentage, always write it back, then update an existing entry (and
    * rebuild iff panel IDs).
    * Ports: index.html@cd3fd3f lines 2296-2305.
-   * Side effects: writes the input value; logos.setScale; wallController.rebuildIfPanelIds() iff the entry exists.
+   * Side effects: writes the input value; logos.setScale; iff the entry exists, wallController.commitLogoEdit (rebuild
+   *   iff panel IDs; one history entry, coalesced per section).
    * @param {Event} e
    */
   #onScale(e) {
@@ -234,7 +237,12 @@ export class SectionLogosPanel {
     e.target.value = scalePercent;
 
     if (this.#project.logos.setScale(sectionId, scalePercent / 100)) {
-      this.#wallController.rebuildIfPanelIds();
+      this.#wallController.commitLogoEdit(`Logo scale (${this.#sectionName(sectionId)})`, { coalesceKey: `logo:${sectionId}:scale` });
     }
+  }
+
+  /** @param {number} sectionId @returns {string} that section's name (a history label) */
+  #sectionName(sectionId) {
+    return this.#project.wall.sections.find((s) => s.id === sectionId)?.name ?? '';
   }
 }

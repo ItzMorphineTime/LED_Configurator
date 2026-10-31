@@ -13,12 +13,22 @@
  * 2550-2575 (resetCameraPosition), 2778-2784 (updateSafeDistance), 3101-3137 (gizmo orientation and anchor for
  * the camera), 3337-3346 / 3375-3387 (gizmo drags on the camera), 3438-3444 (camera pick gating),
  * 4230-4327 (preview, filmback, lens, pose, reset and safe-distance handlers).
+ * History (07 H1, 5.6.1): preview on/off, pose reset, filmback, each lens / pose input (coalesced per field) and the
+ * safe-distance toggle are one entry each; preview on runs resetPose inside it (one entry). Gizmo drags are the gizmo's
+ * transactions; the import pose (applyImportedPose) runs only inside ProjectSession.apply and records nothing.
  * Layer: app (may import core, legacy, domain, geometry).
  */
 
 import { Events } from '../core/EventBus.js';
+import { NO_HISTORY } from '../core/historyRecorder.js';
 import { layoutProject } from '../geometry/WallLayout.js';
 import { analyzeCoverage } from '../geometry/FrustumCoverage.js';
+
+/** The history labels of the lens and pose inputs ('Camera <field>'). */
+const CAMERA_FIELD_LABELS = Object.freeze({
+  filmbackWidth: 'filmback width', filmbackHeight: 'filmback height', focalLength: 'focal length', posX: 'X', posY: 'Y',
+  posZ: 'Z', rotX: 'tilt', rotY: 'pan', rotZ: 'roll',
+});
 
 /**
  * Pipeline P2: keeps every view of the film camera in step with the model. Called after every lens or pose
@@ -191,6 +201,8 @@ export class CameraController {
   #frameBounds;
   /** @type {import('../core/EventBus.js').EventBus} */
   #bus;
+  /** @type {import('../core/historyRecorder.js').HistoryRecorder} the undo stack (07 H1) */
+  #history;
 
   /**
    * Stores the collaborators only.
@@ -202,9 +214,10 @@ export class CameraController {
    *          pilot: import('../interaction/PilotController.js').PilotController,
    *          selection: import('../interaction/SelectionManager.js').SelectionManager,
    *          frameBounds: () => import('../geometry/WallLayout.js').Framing,
-   *          bus: import('../core/EventBus.js').EventBus}} deps
+   *          bus: import('../core/EventBus.js').EventBus,
+   *          history?: import('../core/historyRecorder.js').HistoryRecorder}} deps
    */
-  constructor({ project, rig, preview, hub, pilot, selection, frameBounds, bus }) {
+  constructor({ project, rig, preview, hub, pilot, selection, frameBounds, bus, history = NO_HISTORY }) {
     this.#project = project;
     this.#rig = rig;
     this.#preview = preview;
@@ -213,6 +226,7 @@ export class CameraController {
     this.#selection = selection;
     this.#frameBounds = frameBounds;
     this.#bus = bus;
+    this.#history = history;
   }
 
   /**
@@ -232,6 +246,11 @@ export class CameraController {
    * @returns {void}
    */
   setPreviewEnabled(on) {
+    this.#history.run(`Camera preview ${on ? 'on' : 'off'}`, () => this.#setPreviewEnabled(on));
+  }
+
+  /** The body of setPreviewEnabled. @param {boolean} on */
+  #setPreviewEnabled(on) {
     const cine = this.#project.camera;
     cine.enabled = on;
     this.#bus.emit(Events.CAMERA_PREVIEW_CHANGED, { enabled: on });
@@ -270,10 +289,12 @@ export class CameraController {
    * @returns {void}
    */
   resetPose() {
-    const cine = this.#project.camera;
-    cine.resetTo(this.#frameBounds());
-    this.#bus.emit(Events.CAMERA_POSE_CHANGED, { source: 'reset' });
-    this.#hub.refresh();
+    this.#history.run('Reset camera', () => {
+      const cine = this.#project.camera;
+      cine.resetTo(this.#frameBounds());
+      this.#bus.emit(Events.CAMERA_POSE_CHANGED, { source: 'reset' });
+      this.#hub.refresh();
+    });
   }
 
   /**
@@ -303,10 +324,12 @@ export class CameraController {
    * @returns {void}
    */
   setFilmback(key) {
-    const cine = this.#project.camera;
-    cine.applyPreset(key);
-    this.#bus.emit(Events.CAMERA_FILMBACK_CHANGED, { key });
-    if (cine.enabled) this.#hub.refresh();
+    this.#history.run('Filmback', () => {
+      const cine = this.#project.camera;
+      cine.applyPreset(key);
+      this.#bus.emit(Events.CAMERA_FILMBACK_CHANGED, { key });
+      if (cine.enabled) this.#hub.refresh();
+    });
   }
 
   /**
@@ -321,7 +344,8 @@ export class CameraController {
    */
   setCameraField(field, raw) {
     const fb = this.#frameBounds();
-    return this.#project.camera.setField(field, raw, { wallZ: fb.wallZ, frontZ: fb.frontZ });
+    return this.#history.run(`Camera ${CAMERA_FIELD_LABELS[field] ?? field}`,
+      () => this.#project.camera.setField(field, raw, { wallZ: fb.wallZ, frontZ: fb.frontZ }), { coalesceKey: `camera:${field}` });
   }
 
   /**
@@ -368,10 +392,12 @@ export class CameraController {
    * @returns {void}
    */
   setSafeDistanceEnabled(on) {
-    const display = this.#project.display;
-    display.showSafeDistance = on;
-    this.#bus.emit(Events.CAMERA_SAFE_DISTANCE_TOGGLED, { enabled: on });
-    this.#hub.syncSafeDistance();
+    this.#history.run(`Safe distance ${on ? 'on' : 'off'}`, () => {
+      const display = this.#project.display;
+      display.showSafeDistance = on;
+      this.#bus.emit(Events.CAMERA_SAFE_DISTANCE_TOGGLED, { enabled: on });
+      this.#hub.syncSafeDistance();
+    });
   }
 
   // ---- Selectable 'camera' --------------------------------------------------------------------------------

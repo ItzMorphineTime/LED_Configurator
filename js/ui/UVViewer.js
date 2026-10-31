@@ -9,11 +9,14 @@
  * one grid cell (the inactive one is hidden, not removed), the chips and the readout reserve fixed heights: the canvas
  * keeps its size until the panel is resized.
  * Commands go down to UvController; the panel mirrors UV_VIEWER_CHANGED, UV_DATA_CHANGED, UV_TRANSFORM_CHANGED and
- * UV_HOVER_CHANGED (R3: DOM and its own canvas only).
+ * UV_HOVER_CHANGED (R3: DOM and its own canvas only). Undo / redo (07 H1, C16, 04 UV-18's history part): ↶ and ↷ step
+ * the app's one undo stack (UvController.undo / redo), so they may revert a non-UV edit; HISTORY_CHANGED gives their
+ * disabled state and their titles, "Undo <label>" / "Redo <label>" as in the header.
  * Keys (04 3.6, path B, the owner's decision: spec 07's keymap does not exist yet): U is ViewportInput's global key. One
  * bubbling keydown listener on #uv-viewer scopes the panel: the viewer keys (arrows nudge, Shift+arrows by a panel, H / V
- * flip, [ / ] turn the feed, F fit, 0 reset, Home frame, Space+drag pan, Ctrl/⌘+Z undo, Ctrl/⌘+Shift+Z and Ctrl+Y redo,
- * Escape cancels a drag; in the Vertices mode the arrows nudge the selected vertices) act only on the focused canvas;
+ * flip, [ / ] turn the feed, F fit, 0 reset, Home frame, Space+drag pan, Escape cancels a drag; in the Vertices mode the
+ * arrows nudge the selected vertices) act only on the focused canvas (Ctrl/⌘+Z, Ctrl/⌘+Shift+Z and Ctrl/⌘+Y are the
+ * global chords of ui/HistoryControls, whose capture-phase listener takes them first);
  * in the Vertices mode Ctrl/⌘+A selects every vertex and Escape cancels a vertex drag or a box, else clears the selection,
  * wherever the focus is in the panel except a field; every other unmodified key pressed inside the panel stops there
  * (so G R L P O N, WASD / QE / arrows and the rest never reach the viewport), except U (it toggles the viewer unless
@@ -27,6 +30,7 @@ import { Events } from '../core/EventBus.js';
 import { byId } from './dom.js';
 import { FloatingPanel } from './FloatingPanel.js';
 import { UVCanvas } from './UVCanvas.js';
+import { historyTitles } from './HistoryControls.js';
 
 /** The panel's body markup (static: no project value is interpolated; names go through textContent). */
 const BODY_HTML = `
@@ -199,10 +203,12 @@ export class UVViewer {
   #spaceHeld = false;
   /** @type {string} the section dropdown's current option signature */
   #sectionsKey = '';
+  /** @type {{canUndo: boolean, canRedo: boolean, undoLabel: string|null, redoLabel: string|null}|null} the last HISTORY_CHANGED */
+  #historyState = null;
 
   /**
-   * Looks up the toolbar button and subscribes the four viewer mirrors (R4: no DOM is created here).
-   * Side effects: one DOM lookup; four bus subscriptions.
+   * Looks up the toolbar button and subscribes the four viewer mirrors and HISTORY_CHANGED (R4: no DOM is created here).
+   * Side effects: one DOM lookup; five bus subscriptions.
    * @param {{doc: Document, win: Window, uvController: import('../app/UvController.js').UvController,
    *          bus: import('../core/EventBus.js').EventBus, theme: {uv: object}, host: HTMLElement,
    *          avoidElement?: () => (HTMLElement|null)}} deps
@@ -220,6 +226,10 @@ export class UVViewer {
     bus.on(Events.UV_DATA_CHANGED, (p) => this.#onData(p));
     bus.on(Events.UV_TRANSFORM_CHANGED, (p) => this.#onTransform(p));
     bus.on(Events.UV_HOVER_CHANGED, (p) => this.#onHover(p));
+    bus.on(Events.HISTORY_CHANGED, (state) => {
+      this.#historyState = state;
+      this.#writeHistory();
+    });
   }
 
   /**
@@ -259,6 +269,7 @@ export class UVViewer {
       vertexResetAll: q('uv-vertex-reset-all'), hint: q('uv-hint'),
     };
     this.#els = els;
+    this.#writeHistory();
     this.#view = new UVCanvas({ canvas: els.canvas, win: this.#win, theme: this.#theme });
 
     panel.onClose(() => ctl.closeViewer());
@@ -571,20 +582,7 @@ export class UVViewer {
       this.#endDragUi();
       return true;
     }
-    if (e.ctrlKey || e.metaKey) {
-      if (e.altKey) return false;
-      const k = e.key.toLowerCase();
-      if (k === 'z') {
-        if (e.shiftKey) ctl.redo();
-        else ctl.undo();
-        return true;
-      }
-      if (k === 'y' && e.ctrlKey) {
-        ctl.redo();
-        return true;
-      }
-      return false;
-    }
+    if (e.ctrlKey || e.metaKey) return false;   // the history chords are ui/HistoryControls' (global)
     if (e.altKey) return false;
     if (e.key === ' ') {
       this.#spaceHeld = true;
@@ -656,6 +654,18 @@ export class UVViewer {
     }
   }
 
+  /** HISTORY_CHANGED (and the mount): ↶ / ↷ disabled state and titles. */
+  #writeHistory() {
+    const els = this.#els;
+    if (!els.undo) return;
+    const h = this.#historyState;
+    const titles = historyTitles(h);
+    els.undo.disabled = !(h && h.canUndo);
+    els.redo.disabled = !(h && h.canRedo);
+    els.undo.title = titles.undo;
+    els.redo.title = titles.redo;
+  }
+
   /** UV_DATA_CHANGED: header, dropdown, message, fields (unless focused), buttons, chips, the canvas. */
   #onData({ data }) {
     this.#data = data;
@@ -683,11 +693,6 @@ export class UVViewer {
     this.#writeVertexFields(true);
     els.channel.querySelector('option[value="atlas"]').disabled = !data.atlasAvailable;
     els.channel.value = data.canvasView ? 'canvas' : data.atlasView ? 'atlas' : 'section';
-    const h = data.history;
-    els.undo.disabled = !(h && h.canUndo);
-    els.redo.disabled = !(h && h.canRedo);
-    els.undo.title = h && h.canUndo ? `Undo: ${h.undoLabel}` : 'Nothing to undo';
-    els.redo.title = h && h.canRedo ? `Redo: ${h.redoLabel}` : 'Nothing to redo';
     if (!message) {
       els.sourceWh.textContent = `${data.W}×${data.H}`;
       els.sourceHw.textContent = `${data.H}×${data.W}`;

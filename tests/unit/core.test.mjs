@@ -61,8 +61,9 @@ describe('Events catalogue', () => {
       UV_HOVER_CHANGED:             'uv:hoverChanged',     // 04 UV-12 (visual)
       UV_SETTINGS_CHANGED:          'uv:settingsChanged',  // 04 UV-14 (visual)
       PROJECT_REPLACED:             'project:replaced',    // 08 P2-13e (non-visual)
+      HISTORY_CHANGED:              'history:changed',     // 07 H1 (non-visual)
     });
-    assert.equal(Object.keys(Events).length, 27);
+    assert.equal(Object.keys(Events).length, 28);
     assert.ok(Object.isFrozen(Events));
   });
 

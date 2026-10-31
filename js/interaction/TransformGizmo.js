@@ -9,6 +9,9 @@
  * the gesture swallowing flag interaction.gestureCancelled, the detach cancel, allowedAxes(mode) (null: no handles at
  * all; false: no handle for that axis), setSnapIncrements (a merge) and the WALL_REBUILT re-anchor of a pivot target.
  * Legacy targets (camera, props) implement none of the optional hooks and behave exactly as before.
+ * History (07 H1, 6.10): every drag is one transaction of the undo stack: begin('Move <target>' / 'Rotate <target>') on
+ * the handle hit, commit() on the mouse-up that ends it (after the target's end hook; a drag that ends where it started
+ * records nothing), cancel({revert: false}) when Escape cancels it (the target restored itself).
  * Legacy source: index.html@cd3fd3f 1358-1367 (gizmo state), 2997-3099 (createGizmo), 3101-3137 (orientation
  * and position, generic parts), 3146-3152 (deselect part), 3169-3193 (mode, space), 3195-3230 (hover),
  * 3232-3425 (mouse down/move/up), 4426-4431 (Escape mode reset).
@@ -19,6 +22,7 @@ import { Events } from '../core/EventBus.js';
 import { Strategies } from '../legacy/LegacyCompat.js';
 import { disposeObject3D } from '../render/ResourceTracker.js';
 import { RENDER_ORDER } from '../core/renderOrder.js';
+import { NO_HISTORY } from '../core/historyRecorder.js';
 
 /** @typedef {import('./SelectionManager.js').Selectable} Selectable */
 
@@ -60,6 +64,8 @@ export class TransformGizmo {
   #dragStart = new THREE.Vector3();
   /** @type {THREE.Plane} legacy `dragPlane` */
   #dragPlane = new THREE.Plane();
+  /** @type {import('../core/historyRecorder.js').HistoryRecorder} the undo stack (07 H1): one transaction per drag */
+  #history;
 
   /**
    * Stores the collaborators and subscribes to SELECTABLE_MOVED: when the moved Selectable is the gizmo's
@@ -73,14 +79,16 @@ export class TransformGizmo {
    *          pointerRay: import('./InputState.js').PointerRay,
    *          interaction: import('./InputState.js').InteractionState,
    *          bus: import('../core/EventBus.js').EventBus,
-   *          theme: {scene: import('../theme/Theme.js').SceneTheme}}} deps
+   *          theme: {scene: import('../theme/Theme.js').SceneTheme},
+   *          history?: import('../core/historyRecorder.js').HistoryRecorder}} deps
    */
-  constructor({ sceneManager, pointerRay, interaction, bus, theme }) {
+  constructor({ sceneManager, pointerRay, interaction, bus, theme, history = NO_HISTORY }) {
     this.#sceneManager = sceneManager;
     this.#pointerRay = pointerRay;
     this.#interaction = interaction;
     this.#bus = bus;
     this.#colors = theme.scene.gizmo;
+    this.#history = history;
     bus.on(Events.SELECTABLE_MOVED, ({ id }) => {
       if (this.#target && this.#target.id === id) this.updatePosition();
     });
@@ -334,6 +342,8 @@ export class TransformGizmo {
       }
 
       raycaster.ray.intersectPlane(this.#dragPlane, this.#dragStart);
+      const name = String(this.#target.label ?? this.#target.id).toLowerCase();
+      this.#history.begin(`${this.#mode === 'rotate' ? 'Rotate' : 'Move'} ${name}`);
       this.#target.beginGizmoDrag?.();
       return true;
     }
@@ -414,6 +424,7 @@ export class TransformGizmo {
     }
     this.#interaction.gestureCancelled = false;
     if (wasDragging && this.#target) this.#target.endGizmoDrag?.({ cancel: false });
+    if (wasDragging) this.#history.commit();
   }
 
   /**
@@ -428,6 +439,7 @@ export class TransformGizmo {
   cancelDrag() {
     if (!this.#interaction.isDraggingGizmo || !this.#target?.endGizmoDrag) return false;
     this.#target.endGizmoDrag({ cancel: true });
+    this.#history.cancel({ revert: false });
     this.#interaction.isDraggingGizmo = false;
     this.#interaction.gestureCancelled = true;
     this.#activeAxis = null;

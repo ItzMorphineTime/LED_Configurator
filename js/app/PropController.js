@@ -7,10 +7,16 @@
  * Legacy source: index.html@cd3fd3f 2879-2892 / 2970-2983 (create tail, updatePersonTransform,
  * updateCarTransform), 3114-3117 / 3128-3131 (gizmo orientation and anchor), 3347-3360 / 3388-3399 (gizmo drags
  * on props), 3446-3461 (pick gating), 4332-4392 (prop toggles and inputs).
+ * History (07 H1, 5.6.1): show/hide and each field input (coalesced per field) are one entry each; gizmo drags are the
+ * gizmo's transactions; the import pose runs only inside ProjectSession.apply and records nothing.
  * Layer: app (may import core, legacy, domain, geometry).
  */
 
 import { Events } from '../core/EventBus.js';
+import { NO_HISTORY } from '../core/historyRecorder.js';
+
+/** The history labels of the prop inputs ('<Prop> <field>'). */
+const PROP_FIELD_LABELS = Object.freeze({ posX: 'X', posZ: 'Z', rotY: 'rotation', scale: 'scale' });
 
 /**
  * Use cases and Selectable of one prop. App registers the person after the camera and the car last (the legacy
@@ -26,19 +32,23 @@ export class PropController {
   #selection;
   /** @type {import('../core/EventBus.js').EventBus} */
   #bus;
+  /** @type {import('../core/historyRecorder.js').HistoryRecorder} the undo stack (07 H1) */
+  #history;
 
   /**
    * Stores the collaborators only.
    * Side effects: none.
    * @param {{prop: import('../domain/Prop.js').Prop, view: import('../render/PropViews.js').PropView,
    *          selection: import('../interaction/SelectionManager.js').SelectionManager,
-   *          bus: import('../core/EventBus.js').EventBus}} deps
+   *          bus: import('../core/EventBus.js').EventBus,
+   *          history?: import('../core/historyRecorder.js').HistoryRecorder}} deps
    */
-  constructor({ prop, view, selection, bus }) {
+  constructor({ prop, view, selection, bus, history = NO_HISTORY }) {
     this.#prop = prop;
     this.#view = view;
     this.#selection = selection;
     this.#bus = bus;
+    this.#history = history;
   }
 
   /** Side effects: none. @returns {string} the Selectable id: prop.kind ('person' | 'car') */
@@ -63,17 +73,19 @@ export class PropController {
    * @returns {void}
    */
   setVisible(on) {
-    const prop = this.#prop;
-    prop.visible = on;
-    this.#bus.emit(Events.PROP_VISIBILITY_CHANGED, { id: this.id, visible: on });
-    if (on) {
-      this.#view.create();
-      this.applyTransform();
-      this.#view.addToScene();
-    } else {
-      this.#view.remove();
-      if (this.#selection.isSelected(this.id)) this.#selection.deselect();
-    }
+    this.#history.run(`${on ? 'Show' : 'Hide'} ${String(this.label).toLowerCase()}`, () => {
+      const prop = this.#prop;
+      prop.visible = on;
+      this.#bus.emit(Events.PROP_VISIBILITY_CHANGED, { id: this.id, visible: on });
+      if (on) {
+        this.#view.create();
+        this.applyTransform();
+        this.#view.addToScene();
+      } else {
+        this.#view.remove();
+        if (this.#selection.isSelected(this.id)) this.#selection.deselect();
+      }
+    });
   }
 
   /**
@@ -86,7 +98,8 @@ export class PropController {
    * @returns {number} the stored value
    */
   setField(field, raw) {
-    return this.#prop.setField(field, raw);
+    return this.#history.run(`${this.label} ${PROP_FIELD_LABELS[field] ?? field}`, () => this.#prop.setField(field, raw),
+      { coalesceKey: `prop:${this.id}:${field}` });
   }
 
   /**

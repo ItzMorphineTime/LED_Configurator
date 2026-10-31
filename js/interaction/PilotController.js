@@ -10,6 +10,7 @@
 import THREE from '../vendor/three.js';
 import { Events } from '../core/EventBus.js';
 import { Strategies } from '../legacy/LegacyCompat.js';
+import { NO_HISTORY } from '../core/historyRecorder.js';
 
 /**
  * Drives the main camera from the CineCamera while pilot mode is on.
@@ -120,6 +121,12 @@ export class PilotController {
   #looking = false;
   /** legacy `pilotLastMouse` */
   #lastMouse = { x: 0, y: 0 };
+  /** @type {import('../core/historyRecorder.js').HistoryRecorder} the undo stack (07 H1, 6.10 Pilot) */
+  #history;
+  /** a keyboard flight moved the film camera since the last record */
+  #flying = false;
+  /** a mouse look turned the film camera since the last record */
+  #lookMoved = false;
 
   /**
    * Stores the collaborators.
@@ -133,10 +140,12 @@ export class PilotController {
    *          hub: import('../app/CameraController.js').CameraHub,
    *          bus: import('../core/EventBus.js').EventBus,
    *          dialogs: {alert(msg: string): void},
-   *          onPreviewRequired?: (() => void)|null}} deps  onPreviewRequired: called after the "Enable Camera Frustum
-   *          Preview first" alert (App: opens the side panel and the Camera Frustum Preview card)
+   *          onPreviewRequired?: (() => void)|null, history?: import('../core/historyRecorder.js').HistoryRecorder}} deps
+   *          onPreviewRequired: called after the "Enable Camera Frustum Preview first" alert (App: opens the side panel
+   *          and the Camera Frustum Preview card); history: the undo stack (07 H1)
    */
-  constructor({ sceneManager, cine, driver, orbit, keyboard, interaction, hub, bus, dialogs, onPreviewRequired = null }) {
+  constructor({ sceneManager, cine, driver, orbit, keyboard, interaction, hub, bus, dialogs, onPreviewRequired = null,
+    history = NO_HISTORY }) {
     this.#sceneManager = sceneManager;
     this.#cine = cine;
     this.#driver = driver;
@@ -147,6 +156,7 @@ export class PilotController {
     this.#bus = bus;
     this.#dialogs = dialogs;
     this.#onPreviewRequired = onPreviewRequired;
+    this.#history = history;
   }
 
   /** Side effects: none. @returns {boolean} whether pilot mode is on (interaction.pilotMode) */
@@ -196,7 +206,20 @@ export class PilotController {
         this.#orbit.updateCameraPosition();
       }
       this.#looking = false;
+      this.#recordMove();
     }
+  }
+
+  /**
+   * 07 6.10 Pilot: the flight and look since the last record become one history entry 'Pilot camera move' (coalesced
+   * within 2 s): when the movement keys are released, at the end of a mouse look and when pilot mode is left.
+   * Side effects: maybe one history record.
+   */
+  #recordMove() {
+    if (!this.#flying && !this.#lookMoved) return;
+    this.#flying = false;
+    this.#lookMoved = false;
+    this.#history.record('Pilot camera move', { coalesceKey: 'camera:pilot', coalesceMs: 2000 });
   }
 
   /**
@@ -227,6 +250,7 @@ export class PilotController {
     this.#lastMouse = { x: event.clientX, y: event.clientY };
 
     this.#cine.pilotLook(deltaX, deltaY);
+    this.#lookMoved = true;
 
     this.#bus.emit(Events.CAMERA_POSE_CHANGED, { source: 'pilot-look' });
 
@@ -240,6 +264,7 @@ export class PilotController {
    */
   onMouseUp() {
     this.#looking = false;
+    if (this.#lookMoved) this.#recordMove();
   }
 
   /**
@@ -297,9 +322,12 @@ export class PilotController {
     const moved = cine.pilotFly(keys, forward, right, this.moveSpeed);
 
     if (moved) {
+      this.#flying = true;
       this.#bus.emit(Events.CAMERA_POSE_CHANGED, { source: 'pilot-move' });
 
       if (cine.enabled) this.#hub.refresh();
+    } else if (this.#flying) {
+      this.#recordMove();
     }
   }
 }

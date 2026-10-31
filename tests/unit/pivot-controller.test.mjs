@@ -543,7 +543,8 @@ describe('PivotController module boundaries (ARCHITECTURE.md 1.3; 03 8.2)', () =
   test('imports only core, domain and geometry (no ui/, render/, interaction/, no THREE)', () => {
     const src = readFileSync(join(ROOT, 'js/app/PivotController.js'), 'utf8');
     const imports = [...src.matchAll(/^\s*import\s+[^'"]*from\s+['"]([^'"]+)['"]/gm)].map((m) => m[1]);
-    assert.deepEqual(imports, ['../core/EventBus.js', '../domain/Wall.js', '../geometry/WallLayout.js', '../geometry/WallOrientation.js']);
+    assert.deepEqual(imports, ['../core/EventBus.js', '../core/historyRecorder.js', '../domain/Wall.js', '../geometry/WallLayout.js',
+      '../geometry/WallOrientation.js']);
   });
 
   test('WallPivot fields are written only through WallPivot methods (no direct assignment in the controller)', () => {

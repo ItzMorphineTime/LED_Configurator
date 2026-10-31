@@ -7,11 +7,16 @@
  * orientation and marker flag, 03 T7 and T9, M7a).
  * Never imports or calls ui/: PivotPanel, PivotMarkerView and CameraPanel mirror WALL_PIVOT_CHANGED; the gizmo follows
  * SELECTABLE_MOVED. WallController stays the only module that decides wall rebuilds (commitPivot, ARCHITECTURE.md 6.2).
+ * History (07 H1, 5.6.1): each P-PIVOT commit is one entry with its re-expression of the camera and props ('Pivot
+ * mode', 'Pivot orientation', 'Pivot yaw offset' and 'Pivot offset X/Y/Z' coalesced per field, 'Reset pivot offset',
+ * 'Move pivot' inside the gizmo's transaction), and so is the keep-stage-layout toggle; the marker toggle and the snap
+ * step are view state (no entry).
  * Legacy source: none (new feature; the stage-anchored participants port no legacy code either).
  * Layer: app (may import core, legacy, domain, geometry; collaborators are injected).
  */
 
 import { Events } from '../core/EventBus.js';
+import { NO_HISTORY } from '../core/historyRecorder.js';
 import { WallPivot } from '../domain/Wall.js';
 import { stageChange, stageShift } from '../geometry/WallLayout.js';
 import { turnXZ, yawTrig } from '../geometry/WallOrientation.js';
@@ -97,6 +102,8 @@ export class PivotController {
   #interaction;
   /** @type {import('../core/EventBus.js').EventBus} */
   #bus;
+  /** @type {import('../core/historyRecorder.js').HistoryRecorder} the undo stack (07 H1) */
+  #history;
   /** @type {boolean} a gizmo drag of the pivot is in progress (between beginGizmoDrag and endGizmoDrag) */
   #dragging = false;
   /** @type {{x: number, y: number, z: number}} the accumulated, unsnapped drag movement (03 6.7) */
@@ -116,11 +123,12 @@ export class PivotController {
    *          selection: import('../interaction/SelectionManager.js').SelectionManager,
    *          gizmo: import('../interaction/TransformGizmo.js').TransformGizmo,
    *          interaction: import('../interaction/InputState.js').InteractionState,
-   *          bus: import('../core/EventBus.js').EventBus}} deps
+   *          bus: import('../core/EventBus.js').EventBus,
+   *          history?: import('../core/historyRecorder.js').HistoryRecorder}} deps
    *   stageAnchored: [cameraController, personController, carController] (spec 05's HDRI point, spec 09's measurements
    *   and 07 I4b's OrbitController append themselves later, 07 C45); each clamps through its own LIMITS
    */
-  constructor({ project, wallController, markerView, stageAnchored, selection, gizmo, interaction, bus }) {
+  constructor({ project, wallController, markerView, stageAnchored, selection, gizmo, interaction, bus, history = NO_HISTORY }) {
     this.#project = project;
     this.#wallController = wallController;
     this.#markerView = markerView;
@@ -129,6 +137,7 @@ export class PivotController {
     this.#gizmo = gizmo;
     this.#interaction = interaction;
     this.#bus = bus;
+    this.#history = history;
   }
 
   /** Side effects: none. @returns {import('../domain/Wall.js').WallPivot} project.wall.pivot (the live object) */
@@ -143,7 +152,7 @@ export class PivotController {
    * @throws {RangeError} for an unknown mode (WallPivot.setMode), before anything is written
    */
   setMode(mode) {
-    this.#commit((p) => p.setMode(mode), 'mode');
+    this.#commit((p) => p.setMode(mode), 'mode', 'Pivot mode');
   }
 
   /**
@@ -153,7 +162,7 @@ export class PivotController {
    * @throws {RangeError} for an unknown alignment (WallPivot.setAlign), before anything is written
    */
   setAlign(align) {
-    this.#commit((p) => p.setAlign(align), 'align');
+    this.#commit((p) => p.setAlign(align), 'align', 'Pivot orientation');
   }
 
   /**
@@ -163,7 +172,7 @@ export class PivotController {
    * @returns {number} the stored offset, for the input's write-back
    */
   setYawOffset(raw) {
-    this.#commit((p) => p.setYawOffset(raw), 'yaw-offset');
+    this.#commit((p) => p.setYawOffset(raw), 'yaw-offset', 'Pivot yaw offset', { coalesceKey: 'pivot:yaw-offset' });
     return this.pivot.orientation.yawOffsetDeg;
   }
 
@@ -175,7 +184,8 @@ export class PivotController {
    * @returns {number} the stored component, for the input's write-back
    */
   setOffsetAxis(axis, raw) {
-    this.#commit((p) => p.setOffsetAxis(axis, raw), 'offset');
+    this.#commit((p) => p.setOffsetAxis(axis, raw), 'offset', `Pivot offset ${String(axis).toUpperCase()}`,
+      { coalesceKey: `pivot:offset-${axis}` });
     return this.pivot.offset[axis];
   }
 
@@ -184,7 +194,7 @@ export class PivotController {
    * Side effects: P-PIVOT iff the offset was not already (0, 0, 0).
    */
   resetOffset() {
-    this.#commit((p) => p.resetOffset(), 'reset-offset');
+    this.#commit((p) => p.resetOffset(), 'reset-offset', 'Reset pivot offset');
   }
 
   /**
@@ -195,7 +205,9 @@ export class PivotController {
    * @throws {TypeError} when `on` is not a boolean (WallPivot.setKeepStageLayout)
    */
   setKeepStageLayout(on) {
-    if (this.pivot.setKeepStageLayout(on)) this.#emitToggle('keep-stage');
+    this.#history.run(`Keep stage layout ${on ? 'on' : 'off'}`, () => {
+      if (this.pivot.setKeepStageLayout(on)) this.#emitToggle('keep-stage');
+    });
   }
 
   /**
@@ -387,7 +399,7 @@ export class PivotController {
       this.#bus.emit(Events.SELECTABLE_MOVED, { id: this.id });
       return;
     }
-    this.#commit((p) => p.setOffset(target), 'gizmo');
+    this.#commit((p) => p.setOffset(target), 'gizmo', 'Move pivot');
   }
 
   // ---- P-PIVOT ---------------------------------------------------------------------------------------------------
@@ -400,10 +412,18 @@ export class PivotController {
    * selected pivot's gizmo follows (also for a height-only change).
    * Side effects: the pivot; maybe translateStage on each participant (their pose events); emits WALL_PIVOT_CHANGED;
    *   wallController.commitPivot(after); emits SELECTABLE_MOVED {id: 'pivot'}.
+   * The whole pipeline is one history entry (label, options).
    * @param {(pivot: import('../domain/Wall.js').WallPivot) => void} mutate
    * @param {'mode'|'offset'|'reset-offset'|'gizmo'|'align'|'yaw-offset'} source
+   * @param {string} label
+   * @param {{coalesceKey?: string}} [options]
    */
-  #commit(mutate, source) {
+  #commit(mutate, source, label, options) {
+    this.#history.run(label, () => this.#pipeline(mutate, source), options);
+  }
+
+  /** The body of #commit. */
+  #pipeline(mutate, source) {
     const pivot = this.pivot;
     const snapshot = pivot.clone();
     mutate(pivot);

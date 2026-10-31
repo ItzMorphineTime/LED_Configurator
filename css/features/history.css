@@ -1,0 +1,45 @@
+/* css/features/history.css: the header's undo / redo group (ui/HistoryControls; spec 07 H2) in the middle column of the
+   header grid (06 3.2, 07 C50), at its start edge. Two 32 px square icon buttons in the header's style: no fill, a
+   subtle border and the secondary text colour; the primary text colour and the strong border on hover; the focus ring
+   on keyboard focus; the disabled text colour while there is nothing to undo or redo.
+   Colours only through the role tokens of 02-tokens.css (06 R-B1). */
+
+.header-history {
+    grid-column: 2;
+    justify-self: start;
+    display: flex;
+    gap: 6px;
+}
+
+.header-history__btn {
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    background: transparent;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: 6px;
+    color: var(--color-text-secondary);
+    font-family: var(--font-ui);
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.header-history__btn:hover:not(:disabled) {
+    color: var(--color-text-primary);
+    border-color: var(--color-border-strong);
+    background: var(--color-surface-hover);
+}
+
+.header-history__btn:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 1px;
+}
+
+.header-history__btn:disabled {
+    color: var(--color-text-disabled);
+    cursor: default;
+}

@@ -50,12 +50,33 @@
  * rebuild({cause: 'pivot'}) iff the stage origin moved, else the pivot cache only). WALL_REBUILT carries the cause:
  * 'init' (row 1), 'import' (row 24, ProjectSession.apply), 'pivot' (commitPivot) and 'edit' (every other row). Never de-duplicate or debounce (row 8 is the one guarded row since 08 P2-8d: an unchanged mode is a no-op): rows 3, 16 and 19 rebuild
  * on every `input` event, exactly like legacy.
+ *
+ * History (07 H1, 5.6.1): every use case that writes the model runs inside history.run with its label (the section
+ * fields, colour, name and the panel-ID style coalesce per key; the logo rows record through commitLogoEdit). The tails
+ * (commitSectionEdit, commitRename, rebuildIfPanelIds) record nothing; a rebuild never changes what a snapshot holds
+ * (vertex edits made for another grid size are not written to it).
  */
 import { Events } from '../core/EventBus.js';
+import { NO_HISTORY } from '../core/historyRecorder.js';
 import { computeWallLayout, layoutProject, resolvePivot, stageShift, yawShift } from '../geometry/WallLayout.js';
 import { computeAtlas, sectionTextureScale } from '../geometry/TextureAtlas.js';
 import { planSectionUvs, isLedMaskContent } from '../geometry/UvMapper.js';
 import { Wall } from '../domain/Wall.js';
+
+/** The history labels of the section card's number fields (07 5.6.1 'Edit <Field> (<name>)'). */
+const SECTION_FIELD_LABELS = Object.freeze({
+  panelCols: 'Columns', panelRows: 'Rows', panelWidth: 'Width', panelHeight: 'Height', ledX: 'Pixels X', ledY: 'Pixels Y',
+  curveIntensity: 'Panel Angle', angleOffset: 'Section Offset',
+});
+/** The mesh modes as the Mesh Options card names them. */
+const MESH_MODE_LABELS = Object.freeze({ combined: 'Single Combined Mesh', section: 'Individual Section Meshes', panel: 'Individual Panels' });
+/** The history labels of the panel-ID style keys. */
+const PANEL_ID_STYLE_LABELS = Object.freeze({
+  borderThickness: 'Panel ID border', fontSize: 'Panel ID font size', fontColor: 'Panel ID colour',
+  sectionLabelEnabled: 'Section names', sectionLabelFontSize: 'Section label size', sectionLabelColor: 'Section label colour',
+});
+/** 'on' / 'off'. */
+const onOff = (on) => (on ? 'on' : 'off');
 
 /**
  * Wall use cases and the P1 rebuild pipeline.
@@ -77,6 +98,8 @@ export class WallController {
   #palette;
   /** @type {{alert(msg: string): void}} the dialogs facade (ui/dom.js createDialogs) */
   #dialogs;
+  /** @type {import('../core/historyRecorder.js').HistoryRecorder} the undo stack (07 H1) */
+  #history;
   /**
    * The pivot resolution of the last rebuild (step 1) or pivot commit (03 5.6): null before the first rebuild and for a
    * non-finite layout. Read through pivotResolution by the framing bounds, the gizmo anchor and the exports.
@@ -100,10 +123,10 @@ export class WallController {
    *          hub: import('./CameraController.js').CameraHub,
    *          bus: import('../core/EventBus.js').EventBus,
    *          palette: {sectionColors: ReadonlyArray<string>},
-   *          dialogs: {alert(msg: string): void}}} deps
-   *   dialogs: for M-SEC-1 (08 P2-3b)
+   *          dialogs: {alert(msg: string): void}, history?: import('../core/historyRecorder.js').HistoryRecorder}} deps
+   *   dialogs: for M-SEC-1 (08 P2-3b); history: the undo stack (07 H1; NO_HISTORY without one)
    */
-  constructor({ project, view, ledTiles, orbit, hub, bus, palette, dialogs }) {
+  constructor({ project, view, ledTiles, orbit, hub, bus, palette, dialogs, history = NO_HISTORY }) {
     this.#project = project;
     this.#view = view;
     this.#ledTiles = ledTiles;
@@ -112,6 +135,7 @@ export class WallController {
     this.#bus = bus;
     this.#palette = palette;
     this.#dialogs = dialogs;
+    this.#history = history;
   }
 
   /**
@@ -260,9 +284,11 @@ export class WallController {
       this.#dialogs.alert(Wall.CAP_MESSAGE);
       return;
     }
-    const newSection = this.#project.wall.appendLikeLast(this.#palette.sectionColors);
-    this.#bus.emit(Events.WALL_SECTIONS_CHANGED, { reason: 'add', addedId: newSection.id });
-    this.rebuild();
+    this.#history.run('Add section', () => {
+      const newSection = this.#project.wall.appendLikeLast(this.#palette.sectionColors);
+      this.#bus.emit(Events.WALL_SECTIONS_CHANGED, { reason: 'add', addedId: newSection.id });
+      this.rebuild();
+    });
   }
 
   /**
@@ -275,14 +301,16 @@ export class WallController {
   deleteSection(id) {
     const project = this.#project;
     if (project.wall.count <= 1) return;
+    const name = project.wall.sections.find((s) => s.id === id)?.name ?? '';
+    this.#history.run(`Delete section "${name}"`, () => {
+      // Clean up logo for deleted section
+      project.logos.remove(id);
 
-    // Clean up logo for deleted section
-    project.logos.remove(id);
+      project.wall.removeById(id);
+      this.#bus.emit(Events.WALL_SECTIONS_CHANGED, { reason: 'delete' });
 
-    project.wall.removeById(id);
-    this.#bus.emit(Events.WALL_SECTIONS_CHANGED, { reason: 'delete' });
-
-    this.rebuild();
+      this.rebuild();
+    });
   }
 
   /**
@@ -296,7 +324,8 @@ export class WallController {
    * @returns {number} the stored value
    */
   setSectionField(section, field, raw) {
-    return section.setField(field, raw);
+    return this.#history.run(`Edit ${SECTION_FIELD_LABELS[field] ?? field} (${section.name})`, () => section.setField(field, raw),
+      { coalesceKey: `section:${section.id}:${field}` });
   }
 
   /**
@@ -318,8 +347,10 @@ export class WallController {
    * @param {string} color
    */
   setSectionColor(section, color) {
-    section.setColor(color);
-    this.rebuild();
+    this.#history.run(`Change colour (${section.name})`, () => {
+      section.setColor(color);
+      this.rebuild();
+    }, { coalesceKey: `section:${section.id}:color` });
   }
 
   /**
@@ -333,7 +364,7 @@ export class WallController {
    * @returns {*} the stored name
    */
   renameSection(section, raw, index) {
-    return section.rename(raw, index);
+    return this.#history.run('Rename section', () => section.rename(raw, index), { coalesceKey: `section:${section.id}:name` });
   }
 
   /**
@@ -362,9 +393,11 @@ export class WallController {
    */
   setMeshMode(mode) {
     if (mode === this.#project.meshMode) return;
-    this.#project.meshMode = mode;
-    this.#bus.emit(Events.WALL_MESH_MODE_CHANGED, { mode });
-    this.rebuild();
+    this.#history.run(`Mesh mode: ${MESH_MODE_LABELS[mode] ?? mode}`, () => {
+      this.#project.meshMode = mode;
+      this.#bus.emit(Events.WALL_MESH_MODE_CHANGED, { mode });
+      this.rebuild();
+    });
   }
 
   /**
@@ -373,8 +406,10 @@ export class WallController {
    * @param {boolean} on  the toggle's new state
    */
   setWireframe(on) {
-    this.#project.display.wireframe = on;
-    this.rebuild();
+    this.#history.run(`Wireframe ${onOff(on)}`, () => {
+      this.#project.display.wireframe = on;
+      this.rebuild();
+    });
   }
 
   /**
@@ -383,8 +418,10 @@ export class WallController {
    * @param {boolean} on  the toggle's new state
    */
   setShowFrame(on) {
-    this.#project.display.showFrame = on;
-    this.rebuild();
+    this.#history.run(`Panel frames ${onOff(on)}`, () => {
+      this.#project.display.showFrame = on;
+      this.rebuild();
+    });
   }
 
   /**
@@ -396,10 +433,12 @@ export class WallController {
    * @param {boolean} on  the toggle's new state
    */
   setLedSim(on) {
-    const forcedOff = this.#project.display.setLedSim(on);
-    this.#bus.emit(Events.DISPLAY_CONTENT_CHANGED, { toggled: 'ledSim', on, forcedOff });
-    this.#ledTiles.clearCache();
-    this.rebuild();
+    this.#history.run(`LED pixels ${onOff(on)}`, () => {
+      const forcedOff = this.#project.display.setLedSim(on);
+      this.#bus.emit(Events.DISPLAY_CONTENT_CHANGED, { toggled: 'ledSim', on, forcedOff });
+      this.#ledTiles.clearCache();
+      this.rebuild();
+    });
   }
 
   /**
@@ -409,10 +448,12 @@ export class WallController {
    * @param {string} layout  the select's value
    */
   setLedLayout(layout) {
-    const display = this.#project.display;
-    display.ledLayout = layout;
-    this.#ledTiles.clearCache();
-    if (display.ledSimEnabled) this.rebuild();
+    this.#history.run('LED pixel layout', () => {
+      const display = this.#project.display;
+      display.ledLayout = layout;
+      this.#ledTiles.clearCache();
+      if (display.ledSimEnabled) this.rebuild();
+    });
   }
 
   /**
@@ -424,9 +465,11 @@ export class WallController {
    * @param {boolean} on  the toggle's new state
    */
   setPanelIds(on) {
-    const forcedOff = this.#project.display.setPanelIds(on);
-    this.#bus.emit(Events.DISPLAY_CONTENT_CHANGED, { toggled: 'panelIds', on, forcedOff });
-    this.rebuild();
+    this.#history.run(`Panel labels ${onOff(on)}`, () => {
+      const forcedOff = this.#project.display.setPanelIds(on);
+      this.#bus.emit(Events.DISPLAY_CONTENT_CHANGED, { toggled: 'panelIds', on, forcedOff });
+      this.rebuild();
+    });
   }
 
   /**
@@ -440,7 +483,8 @@ export class WallController {
    * @returns {*} the stored value
    */
   setPanelIdStyle(key, rawOrValue) {
-    return this.#project.panelIdStyle.set(key, rawOrValue);
+    return this.#history.run(PANEL_ID_STYLE_LABELS[key] ?? 'Panel ID style', () => this.#project.panelIdStyle.set(key, rawOrValue),
+      { coalesceKey: `panelIdStyle:${key}` });
   }
 
   /**
@@ -451,6 +495,18 @@ export class WallController {
    */
   rebuildIfPanelIds() {
     if (this.#project.display.panelIdsEnabled) this.rebuild();
+  }
+
+  /**
+   * The tail of a logo edit (rows 20-23: SectionLogosPanel wrote project.logos): rebuildIfPanelIds inside one history
+   * entry (07 5.6.1: 'Set logo (<name>)', 'Clear logo (<name>)', 'Logo position (<name>)', 'Logo scale (<name>)' with
+   * the coalesceKey 'logo:<id>:scale').
+   * Side effects: rebuild() iff panel IDs; a history entry.
+   * @param {string} label
+   * @param {{coalesceKey?: string}} [options]
+   */
+  commitLogoEdit(label, options) {
+    this.#history.run(label, () => this.rebuildIfPanelIds(), options);
   }
 
   /**

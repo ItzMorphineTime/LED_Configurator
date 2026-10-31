@@ -1,7 +1,8 @@
 // Unit tests for spec 04's UV use cases (docs/improvements/04-uvs-uv-editor.md 3.3, 3.4, 5.3, 6.12, 8.1; UV-11, UV-13):
-// js/app/UvController.js with the real UvViewModel and UvFallbackHistory (path B), a real EventBus, the real layout of a
-// two-section wall, and fakes for the view (records updateSectionUvs), the wall controller (records rebuilds; its
-// rebuild runs the P1 observer step) and requestAnimationFrame (a queue flushed by hand).
+// js/app/UvController.js with the real UvViewModel and the app's one undo stack (07 H1: a real History over a real
+// ProjectSession, fixtures/session-history.mjs), a real EventBus, the real layout of a two-section wall, and fakes for the
+// view (records updateSectionUvs), the wall controller (records rebuilds; its rebuild runs the P1 observer step) and
+// requestAnimationFrame (a queue flushed by hand).
 // Run: node --test tests/unit/uv-controller.test.mjs   (zero dependencies)
 
 import { test, describe } from 'node:test';
@@ -10,13 +11,13 @@ import assert from 'node:assert/strict';
 import { EventBus, Events } from '../../js/core/EventBus.js';
 import { Project } from '../../js/domain/Project.js';
 import { WallSection } from '../../js/domain/WallSection.js';
-import { UvTransform } from '../../js/domain/UvSettings.js';
 import { layoutProject } from '../../js/geometry/WallLayout.js';
 import { computeAtlas, sectionTextureScale } from '../../js/geometry/TextureAtlas.js';
 import { planSectionUvs, isLedMaskContent } from '../../js/geometry/UvMapper.js';
 import { UvController } from '../../js/app/UvController.js';
 import { UvViewModel } from '../../js/app/UvViewModel.js';
-import { UvFallbackHistory } from '../../js/app/UvFallbackHistory.js';
+import { History } from '../../js/app/History.js';
+import { historySession } from './fixtures/session-history.mjs';
 
 const section = (id, name, cols, rows) => new WallSection({
   id, name, panelCols: cols, panelRows: rows, panelWidth: 500, panelHeight: 500, ledX: 32, ledY: 32,
@@ -24,7 +25,7 @@ const section = (id, name, cols, rows) => new WallSection({
 });
 
 /** A two-section wall (160 x 96 and 64 x 64 px), the controller and its recorders. */
-function setup({ meshMode = 'section' } = {}) {
+function setup({ meshMode = 'section', clock = () => 0 } = {}) {
   const project = Project.createDefault();
   project.wall.replaceAll([section(1, 'Main', 5, 3), section(2, 'Side', 2, 2)]);
   project.meshMode = meshMode;
@@ -43,7 +44,7 @@ function setup({ meshMode = 'section' } = {}) {
     panelCornersWorld: () => null,
   };
   let maxReads = 0;
-  const history = new UvFallbackHistory({ now: () => 0 });
+  const history = new History({ bus, clock });
   const viewModel = new UvViewModel({
     project, bus,
     panelIds: { sectionCanvas: () => ({ kind: 'canvas' }), atlasCanvas: () => ({ kind: 'atlas' }) },
@@ -67,6 +68,7 @@ function setup({ meshMode = 'section' } = {}) {
     project, wallController, view, viewModel, history, bus, raf,
     maxTextureSize: () => { maxReads++; return 16384; },
   });
+  historySession({ project, wallController, bus, history, features: { uv } });
   const count = (key) => events.filter(([k]) => k === key).length;
   return {
     project, bus, events, frames, flush, updates, uv, viewModel, history, rebuilds, runRebuild, count,
@@ -192,17 +194,18 @@ describe('UvController: live path, fields and drags (6.12, 3.3, 3.4)', () => {
 
   test('repeated spinner commits within 750 ms coalesce into one entry', () => {
     let now = 0;
-    const history = new UvFallbackHistory({ now: () => now });
-    history.record('UV Rotate (Main)', { kind: 'transforms', before: [{ id: 1, t: new UvTransform() }], after: [{ id: 1, t: new UvTransform({ rotation: 1 }) }] }, { coalesceKey: 'uv:1:rotation' });
+    const s = setup({ clock: () => now });
+    s.runRebuild('init');
+    s.uv.commitField(1, 'rotation', '1');
     now = 500;
-    history.record('UV Rotate (Main)', { kind: 'transforms', before: [{ id: 1, t: new UvTransform({ rotation: 1 }) }], after: [{ id: 1, t: new UvTransform({ rotation: 2 }) }] }, { coalesceKey: 'uv:1:rotation' });
+    s.uv.commitField(1, 'rotation', '2');
     now = 2000;
-    history.record('UV Rotate (Main)', { kind: 'transforms', before: [{ id: 1, t: new UvTransform({ rotation: 2 }) }], after: [{ id: 1, t: new UvTransform({ rotation: 3 }) }] }, { coalesceKey: 'uv:1:rotation' });
-    const last = history.undo();
-    assert.equal(last.after[0].t.rotation, 3);
-    const first = history.undo();
-    assert.deepEqual([first.before[0].t.rotation, first.after[0].t.rotation], [0, 2], 'coalesced: first before, last after');
-    assert.equal(history.canUndo, false);
+    s.uv.commitField(1, 'rotation', '3');
+    s.uv.undo();
+    assert.equal(s.main().uvTransform.rotation, 2);
+    s.uv.undo();
+    assert.equal(s.main().uvTransform.rotation, 0, 'coalesced: the first entry held 1 then 2');
+    assert.equal(s.history.canUndo, false);
   });
 
   test('N live updates within one animation frame give one viewer refresh', () => {
@@ -295,23 +298,26 @@ describe('UvController: observers and settings', () => {
     s.uv.setGltfCanvasTexcoord1(false);
     assert.equal(s.project.uv.gltfCanvasTexcoord1, false);
     assert.deepEqual(s.rebuilds, ['edit'], 'export-only');
+    assert.equal(s.history.undoLabel, 'glTF second UV channel: off');
     s.uv.undo();
     assert.equal(s.project.uv.gltfCanvasTexcoord1, true);
     s.uv.undo();
     assert.equal(s.project.uv.combinedLayout, 'atlas');
-    assert.deepEqual(s.rebuilds, ['edit', 'edit']);
+    assert.deepEqual(s.rebuilds, ['edit', 'import', 'import'], 'each undo is one apply (one rebuild)');
   });
 
-  test('an import clears the UV history; a delete prunes the deleted section from a Copy to all entry', () => {
+  test('one global stack (07 C16): an undo restores every section a Copy to all changed; an apply keeps the stack', () => {
     const s = setup();
     s.runRebuild('init');
     s.uv.toggleFlip(1, 'u');
     s.uv.copyToAll(1);
-    s.project.wall.removeById(2);
-    s.runRebuild('edit');
-    assert.equal(s.history.undoLabel, 'UV flip U (Main)', 'the copy entry held only the deleted section');
-    s.runRebuild('import');
-    assert.equal(s.history.canUndo, false);
+    assert.equal(s.project.wall.sections[1].uvTransform.flipU, true);
+    s.uv.undo();
+    assert.deepEqual([s.main().uvTransform.flipU, s.project.wall.sections[1].uvTransform.flipU], [true, false]);
+    assert.deepEqual([s.history.undoLabel, s.history.redoLabel], ['UV flip U (Main)', 'UV copy to all']);
+    s.uv.redo();
+    assert.equal(s.project.wall.sections[1].uvTransform.flipU, true);
+    assert.equal(s.history.canRedo, false);
   });
 
   test('showPanelIds turns panel IDs on through the wall controller', () => {
