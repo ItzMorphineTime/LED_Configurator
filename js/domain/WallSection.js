@@ -13,6 +13,7 @@
 
 import { orDefault } from '../legacy/LegacyCompat.js';
 import { clamp, deepFreeze, roundInt, sanitizeText } from './rules.js';
+import { UvTransform } from './UvSettings.js';
 
 /**
  * One card rule after its fallback (08 P2-8a, 4.4): the value rounded when the field is an integer field, then
@@ -36,20 +37,48 @@ export const SECTION_FIELDS = Object.freeze(['id', 'name', 'panelCols', 'panelRo
 
 /**
  * One wall section: the 11 legacy fields as own enumerable properties (SECTION_FIELDS order) plus derived,
- * side-effect-free card labels on the prototype.
+ * side-effect-free card labels on the prototype, and its UV transform (04 UV-5a) behind the `uvTransform` accessor.
  */
 export class WallSection {
   /**
+   * The section's own UV transform (04 4.1): never shared, replaced only through setUvTransform (a clone). Kept out of
+   * the own enumerable fields (a deviation from 04 4.1, which appends 'uvTransform' to SECTION_FIELDS), so the legacy
+   * field list, the legacy-parity tests and every `{...section}` copy keep exactly the 11 legacy fields.
+   * @type {UvTransform}
+   */
+  #uvTransform;
+
+  /**
    * Assigns exactly the SECTION_FIELDS keys from `fields`, in SECTION_FIELDS order, as own enumerable
-   * properties. Ids are never written after construction.
+   * properties, and the UV transform: fields.uvTransform when it is a UvTransform (stored as given), else the identity
+   * (04 4.1; a new section never inherits a transform, Q8). Ids are never written after construction.
    * Side effects: none.
    * @param {{id: *, name: *, panelCols: *, panelRows: *, panelWidth: *, panelHeight: *, ledX: *, ledY: *,
-   *          curveIntensity: *, angleOffset: *, color: *}} fields
+   *          curveIntensity: *, angleOffset: *, color: *, uvTransform?: UvTransform}} fields
    */
   constructor(fields) {
     // No coercion here (R12). Since 08 P2-3b (B-L8 fixed) an import reaches the constructor only through the validator
     // (io/ProjectSchema.sectionsFromProject), and the card rules and setName normalise every typed value.
     for (const key of SECTION_FIELDS) this[key] = fields[key];
+    this.#uvTransform = fields.uvTransform instanceof UvTransform ? fields.uvTransform : UvTransform.identity();
+  }
+
+  /**
+   * The section's UV transform (04 4.1, 6.3). Never mutate it in place: write through setUvTransform.
+   * Side effects: none.
+   * @returns {UvTransform}
+   */
+  get uvTransform() {
+    return this.#uvTransform;
+  }
+
+  /**
+   * Replaces the UV transform with a copy of `t` (04 4.1; the writers are 04's UvController and the project load).
+   * Side effects: writes the section's UV transform.
+   * @param {UvTransform} t
+   */
+  setUvTransform(t) {
+    this.#uvTransform = t.clone();
   }
 
   /**

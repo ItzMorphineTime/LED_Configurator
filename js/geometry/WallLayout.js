@@ -494,13 +494,14 @@ export class WallLayout {
 }
 
 /**
- * A column-major 4x4 matrix applied to a point (w = 1). Module-private helper of the layout geometry (spec 02's
- * postTransform seam).
+ * A column-major 4x4 matrix applied to a point (w = 1). The helper of the layout geometry (spec 02's postTransform
+ * seam), exported for geometry/PixelMap.wallPointFromBaseUv (04 6.10).
+ * Side effects: none.
  * @param {number[]} m
  * @param {{x: number, y: number, z: number}} p
  * @returns {{x: number, y: number, z: number}}
  */
-function transformPoint(m, p) {
+export function transformPoint(m, p) {
   return {
     x: m[0] * p.x + m[4] * p.y + m[8] * p.z + m[12],
     y: m[1] * p.x + m[5] * p.y + m[9] * p.z + m[13],

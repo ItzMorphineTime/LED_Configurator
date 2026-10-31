@@ -215,13 +215,20 @@ js/
                                                  isValidSectionId, createIdAllocator (07 6.8), MAX_IMPORT_BYTES and its parts;
                                                  03 T1: STAGE_POSITION_LIMIT_M (the +-100,000 m bound of 07 C22)
     WallSection.js                         WP3   WallSection entity (legacy field names, field rules, derived labels), MM_TO_M;
-                                                 08 P2-8a: LIMITS, the rounding and capped field rules
+                                                 08 P2-8a: LIMITS, the rounding and capped field rules; 04 UV-5a: the
+                                                 uvTransform accessor (a private field, not in SECTION_FIELDS) and
+                                                 setUvTransform (stores a clone)
     Wall.js                                WP3   Wall (ordered sections, id allocator, totals; the legacy flat bounds left with 08 P2-11c), WallPivot, PivotMode;
                                                  08 P2-3b: MAX_SECTIONS, canAddSection, the 07 6.8 nextSectionId;
                                                  08 P2-3b2: allocateId (07 6.8 nextFree over the live ids);
                                                  03 T1: the WallPivot API and rules, PIVOT_MODES, PIVOT_OFFSET_LIMIT_M
     Project.js                             WP3   Project aggregate, DisplaySettings (content enum), ContentMode, PanelIdStyle;
-                                                 03 T1: DisplaySettings.showPivotMarker, DEFAULT_SHOW_PIVOT_MARKER
+                                                 03 T1: DisplaySettings.showPivotMarker, DEFAULT_SHOW_PIVOT_MARKER;
+                                                 04 UV-5a: Project.uv (a UvSettings, injected, never replaced)
+    UvSettings.js                          04 UV-5a  UvLayout, PanelUvMode, UvTransform (04 4.1: rules, identity,
+                                                 isIdentityFor, summaryFor, JSON shapes) and UvSettings (combinedLayout
+                                                 'per-section' | 'atlas', panelUvs 'section' | 'panel', gltfAtlasTexcoord1);
+                                                 session-only until 04 UV-5c (project file v2)
     LogoLibrary.js                         WP3   Section logos keyed by section id (plain-object key semantics)
     CineCamera.js                          WP3   Film camera: lens, pose, enabled flag, FILMBACK_PRESETS, FOV/safe-D math,
                                                  field rules, gizmo/pilot pose arithmetic; 03 T1: LIMITS, translateStage, the posZ
@@ -245,10 +252,17 @@ js/
                                                  the bottom edge chain and its LED normal), alignmentYawDeg; imports
                                                  domain/rules
     WallMeshBuilder.js                     WP4   quadIndices + WallMeshBuilder: the one owner of winding, normals, UVs, panel quads;
-                                                 maxIndexOf, indexWidth (index component width, 08 P2-1b)
+                                                 maxIndexOf, indexWidth (index component width, 08 P2-1b); 04 UV-6: the
+                                                 SectionUvPlan uv option, sectionUvs, combinedGrid(layout, atlas, plans) with
+                                                 the case 'plan', panelUvs(panel, sl, plan)
     TextureAtlas.js                        WP4   computeAtlas (LED totals, px/LED, start columns, x offsets, UV offsets),
                                                  sectionPxPerLed, panelPxPerLed (wall-wide budget since 08 P2-12d);
                                                  CANVAS_HARD_LIMITS, canvasFits (08 P2-1c)
+    UvMapper.js                            04 UV-6  The UV transform maths of 04 6.3-6.8: applyUv / invertUv (identity
+                                                 short-circuit), planSectionUvs / planSectionUv (the SectionUvPlan of every
+                                                 consumer), sectionUv, presets, quarterTurn, pixelAccuracy, drag maths
+    PixelMap.js                            04 UV-6  Base UV <-> pixel / panel / atlas pixel, wallPointFromBaseUv (04 6.10),
+                                                 describeHit (hover), pixelMapJson (the derived 4.2 blocks)
     TextureBudget.js                       08 P2-12d  07 X3's module, delivered early: SECTION_TEXTURE_BUDGET_PX,
                                                  PANEL_TEXTURE_BUDGET_PX (wall-wide), MAX_CANVAS_SIDE, panelModePxPerLed
                                                  (07 6.12; imports nothing)
@@ -536,6 +550,12 @@ tests/
                                                  and 500 seeded integer walls through the OBJ and glTF writers, all modes
     typing-target.test.mjs                 08 P2-9b  the 07 3.8 truth table of core/typingTarget.js (plain objects) and the
                                                  InputState re-exports (fake THREE)
+    uv-mapper.test.mjs                     04 UV-5a/UV-6  UvTransform / UvSettings rules and JSON shapes, the
+                                                 WallSection and Project fields; UvMapper (identity bit for bit, inverse,
+                                                 rectangle and no-shear invariants, exact quarter turns and flips, presets,
+                                                 pixel accuracy, drags, plans of every mode); identity plans == 'unit' and
+                                                 'atlas-pixel-accurate' (Object.is), per-section islands fill 0..1, vertex
+                                                 ranges, panelUvs(…, plan); PixelMap
     validator.test.mjs                     08 P2-3b  the import pipeline (08 4.3, 8.4): detectVersion, migrateV1toV2 and
                                                  validateProject row by row with the 07 issue shape and the 3.3 texts, ids
                                                  (07 6.8), idempotence over 2,000 seeded documents, the harness configs (no
@@ -4479,3 +4499,8 @@ The verified defect list (`docs/DEFECTS.md`, last section) also records observat
 - 1.4: the stage and export frames are x_S = R_y(ψ)(x_L − O) and x_E = R_y(ψ)(x_L − P); the pipeline turns the translated walk (`rotated(ψ)`) before spec 02's section offsets; the orientation bullet records the landing.
 - 2.2, 3.6: `geometry/WallOrientation.js` (new, pure): `yawTrig`, `turnXZ`, `azimuthDeg`, `wallCentre`, `alignmentYawDeg`. `WallLayout.js`: `SectionLayout.rotated`, `WallLayout.rotated` (raw walk only), the orientation fields of `resolvePivot` (`align`, `yawOffsetDeg`, `alignYawDeg`, `yawDeg`), `yawShift`, `stageChange`, `layoutProject`'s turn and its `pivot.yawDeg`, and the framing's `wallZ` at the turned walk start.
 - 2.3: `orientation.test.mjs` tests 2-4 and the composition contract under a turn (03 12.3: spec 02's stub section matrix built on the turned layout equals the raw one translated and turned).
+
+**04 UV-5a and UV-6, the UV domain and maths (docs/improvements/04-uvs-uv-editor.md 4.1, 5.3, 6.2-6.10)** (an invariance step: no consumer reads a plan yet, `'atlas-pixel-accurate'` stays active):
+- 2.2, 3.5: `domain/UvSettings.js` (new): `UvLayout`, `PanelUvMode`, `UvTransform`, `UvSettings` (defaults: Combined layout `'per-section'`, the owner's decision; panel UVs `'section'`; no glTF TEXCOORD_1). `WallSection.uvTransform` is an accessor over a private field with `setUvTransform(t)` (a clone), so `SECTION_FIELDS` keeps the 11 legacy fields (a deviation from 04 4.1, which appends the key; it keeps the legacy-parity tests and `{...section}` copies unchanged). `Project.uv` (constructor default `new UvSettings()`). UV state is session-only: project file v2 and 04 UV-5c have not landed (the owner skipped UV-5c for now).
+- 2.2, 3.6: `geometry/UvMapper.js` and `geometry/PixelMap.js` (new, pure); `WallLayout.transformPoint` is exported for `PixelMap.wallPointFromBaseUv`. `WallMeshBuilder`: the `SectionUvPlan` uv option (an identity plan is the `'unit'` writer itself, so identity outputs are bit-identical), `sectionUvs(sl, plan)`, `combinedGrid(layout, atlas, plans)` with the case `'plan'` (default plans: per-section, no transforms), `panelUvs(panel, sl, plan)`.
+- 2.3: `tests/unit/uv-mapper.test.mjs`.

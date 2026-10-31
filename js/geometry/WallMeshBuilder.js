@@ -13,6 +13,7 @@
  */
 
 import { unsupportedStrategy } from '../legacy/LegacyCompat.js';
+import { planSectionUvs, sectionUv } from './UvMapper.js';
 
 /**
  * The 6 indices of one grid quad (two triangles).
@@ -159,17 +160,28 @@ function pushAveragedNormal(normals, section, edgePositions, col) {
  *   {offsetU, widthU, heightV} -> (offsetU + (col / panelCols) * widthU, (row / panelRows) * heightV)
  *                                 (08 P2-7a, 08 6.7: the pixel-accurate atlas rect; heightV = 1 reproduces row / panelRows
  *                                 bit for bit)
+ *   SectionUvPlan (04 UV-6)    -> UvMapper.sectionUv(plan, col / panelCols, row / panelRows): the plan's transform
+ *                                 (iff plan.transform), then its atlas rect (iff plan.rect); a plan with neither is
+ *                                 the 'unit' writer itself, so identity plans are bit-identical to 'unit' and to the
+ *                                 atlas rect (04 R5)
  *   null / undefined           -> null
  * Module-private.
- * @param {'unit'|{offsetU: number, widthU: number, heightV?: number}|null|undefined} uv
+ * @param {'unit'|{offsetU: number, widthU: number, heightV?: number}|import('./UvMapper.js').SectionUvPlan|null|undefined} uv
  * @returns {((uvs: number[], section: object, row: number, col: number) => void)|null}
  * @throws {TypeError} for any other value
  */
 function uvWriter(uv) {
   if (uv === null || uv === undefined) return null;
-  if (uv === 'unit') {
+  if (uv === 'unit' || (isUvPlan(uv) && uv.transform === null && uv.rect === null)) {
     return (uvs, section, row, col) => {
       uvs.push(col / section.panelCols, row / section.panelRows);
+    };
+  }
+  if (isUvPlan(uv)) {
+    const pair = [0, 0];
+    return (uvs, section, row, col) => {
+      sectionUv(uv, col / section.panelCols, row / section.panelRows, pair);
+      uvs.push(pair[0], pair[1]);
     };
   }
   if (typeof uv === 'object') {
@@ -186,6 +198,16 @@ function uvWriter(uv) {
     };
   }
   throw new TypeError(`Unknown sectionGrid uv option ${JSON.stringify(uv)}`);
+}
+
+/**
+ * Whether a sectionGrid uv option is a SectionUvPlan of UvMapper (it carries `transform` and `rect`; an atlas rect does
+ * not). Module-private.
+ * @param {*} uv
+ * @returns {boolean}
+ */
+function isUvPlan(uv) {
+  return typeof uv === 'object' && uv !== null && 'transform' in uv && 'rect' in uv;
 }
 
 /**
@@ -274,7 +296,7 @@ export class WallMeshBuilder {
    *     1607-1625; 'none' -> nothing pushed;
    *   uvs: 'unit' -> (col / panelCols, row / panelRows); {offsetU, widthU} -> (offsetU + (col / panelCols) * widthU,
    *     row / panelRows); {offsetU, widthU, heightV} (08 P2-7a) -> the same u and (row / panelRows) * heightV;
-   *     null -> nothing pushed.
+   *     a SectionUvPlan (04 UV-6) -> UvMapper.sectionUv(plan, col / panelCols, row / panelRows); null -> nothing pushed.
    * Indices: vertsPerRow = section.panelCols + 1 (raw); for row < panelRows, col < panelCols:
    *   bl = indexBase + row * vertsPerRow + col; br = bl + 1; tl = indexBase + (row + 1) * vertsPerRow + col;
    *   tr = tl + 1; indices.push(...quadIndices(bl, br, tl, tr, this.profile.winding)).
@@ -283,8 +305,9 @@ export class WallMeshBuilder {
    * 4592-4603 / 4637-4653 (OBJ, indexBase = running offset from 1), 4837-4847 / 4856-4865 (glTF).
    * Side effects: appends to the `out` arrays.
    * @param {import('./WallLayout.js').SectionLayout} sl
-   * @param {{indexBase?: number, uv?: 'unit'|{offsetU: number, widthU: number, heightV?: number}|null,
-   *          normals?: 'averaged'|'right-panel'|'none'}} [opts]  defaults: indexBase 0, uv null, normals
+   * @param {{indexBase?: number, uv?: 'unit'|{offsetU: number, widthU: number, heightV?: number}|
+   *          import('./UvMapper.js').SectionUvPlan|null, normals?: 'averaged'|'right-panel'|'none'}} [opts]
+   *   defaults: indexBase 0, uv null, normals
    *   this.profile.normals
    * @param {{positions: number[], normals: number[], uvs: number[], indices: number[]}} [out]  defaults to fresh arrays
    * @returns {SectionGrid} the out arrays plus vertexAdvance
@@ -330,6 +353,25 @@ export class WallMeshBuilder {
     // oracle tests it does not, and the next section's indexBase advances by it).
     const vertexAdvance = (section.panelCols + 1) * (section.panelRows + 1);
     return { positions: out.positions, normals: out.normals, uvs: out.uvs, indices: out.indices, vertexAdvance };
+  }
+
+  /**
+   * The UVs of one section grid under a plan (04 5.3, UV-6), through the same per-vertex writer as sectionGrid (so they
+   * equal sectionGrid(sl, {uv: plan}).uvs): (u, v) per vertex, rows 0..panelRows outer, columns 0..panelCols inner.
+   * The live UV path of 04 6.12 writes them into an existing uv attribute.
+   * Side effects: none.
+   * @param {import('./WallLayout.js').SectionLayout} sl
+   * @param {import('./UvMapper.js').SectionUvPlan|null} plan  null: the base UVs ('unit')
+   * @returns {number[]} (u, v) * (panelCols + 1) * (panelRows + 1)
+   */
+  sectionUvs(sl, plan) {
+    const write = uvWriter(plan ?? 'unit');
+    const { section } = sl;
+    const uvs = [];
+    for (let row = 0; row <= section.panelRows; row++) {
+      for (let col = 0; col <= section.panelCols; col++) write(uvs, section, row, col);
+    }
+    return uvs;
   }
 
   /**
@@ -379,8 +421,12 @@ export class WallMeshBuilder {
 
   /**
    * The combined mesh: sectionGrid for each section in order into shared arrays, with indexBase = the running
-   * vertexOffset (starts 0, += vertexAdvance) and the atlas UV option chosen by this.profile.combinedUV:
-   * 'atlas-pixel-accurate' (08 P2-7a, 08 6.7; B-M5 fixed) -> uv = atlasUvRect(atlas.entries[i]): u along the section's
+   * vertexOffset (starts 0, += vertexAdvance) and the UV option chosen by this.profile.combinedUV:
+   * 'plan' (04 UV-7, the production viewport case) -> uv = plans[i], the SectionUvPlan of UvMapper.planSectionUvs: each
+   *   section filling 0..1 (the per-section layout) or atlas-placed (the atlas layout), with its UV transform; without
+   *   plans, the default per-section plans without transforms;
+   * 'atlas-pixel-accurate' (08 P2-7a, 08 6.7; B-M5 fixed; equal to 'plan' with the atlas layout and identity transforms,
+   *   unit-tested) -> uv = atlasUvRect(atlas.entries[i]): u along the section's
    *   atlas columns and v = (row / panelRows) * uvHeight, so each bottom-aligned section samples exactly its own pixels
    *   of the atlas (with equal heights uvHeight = 1 and v is the legacy row / panelRows bit for bit);
    * 'atlas-u-full-v' (the Phase-1 case, kept for LegacyProfiles) -> uv = {offsetU: uvOffsetX, widthU: uvWidth}, v over
@@ -389,6 +435,7 @@ export class WallMeshBuilder {
    * Side effects: none.
    * @param {import('./WallLayout.js').WallLayout} layout
    * @param {{entries: {uvOffsetX: number, uvWidth: number, uvHeight: number}[]}} atlas  computeAtlas() of the same sections
+   * @param {import('./UvMapper.js').SectionUvPlan[]|null} [plans]  one plan per layout section ('plan' only)
    * @returns {{positions: number[], normals: number[], uvs: number[], indices: number[],
    *            sectionRanges: {sectionId: *, sectionIndex: number, indexStart: number, indexCount: number,
    *                            vertexStart: number, vertexCount: number}[]}}
@@ -397,9 +444,15 @@ export class WallMeshBuilder {
    *   vertexAdvance, which equal the pushed counts for every validated wall; 07 C52)
    * @throws {Error} unsupportedStrategy('mesh.combinedUV', ...) for a foreign profile value
    */
-  combinedGrid(layout, atlas) {
+  combinedGrid(layout, atlas, plans = null) {
     let uvFor;
     switch (this.profile.combinedUV) {
+      case 'plan': {
+        // 04 UV-7: the UV plans of the project's layout setting and transforms (UvMapper.planSectionUvs).
+        const p = plans ?? planSectionUvs({ layout, atlas, settings: null, meshMode: 'combined', applyTransforms: false });
+        uvFor = (i) => p[i];
+        break;
+      }
       case 'atlas-pixel-accurate':
         // 08 P2-7a (B-M5 fixed, 08 6.7): v covers only the section's own share of the bottom-aligned atlas.
         uvFor = (i) => atlasUvRect(atlas.entries[i]);
@@ -486,21 +539,32 @@ export class WallMeshBuilder {
   }
 
   /**
-   * The section-space UVs of a panel-mode quad (08 P2-12d, 08 6.15; 04 5.3's panelUvs without a UV plan): for each corner
-   * (lu, lv) of PANEL_UVS, ((panel.col + lu) / panelCols, (panel.row + lv) / panelRows), in the panelCorners order BL,
-   * BR, TR, TL. A corner shared with the neighbouring panel equals the section-mode strip UV (col / panelCols,
-   * row / panelRows) bit for bit, as (c + 1) + 0 and c + 1 are the same integer. Reads no profile key.
+   * The UVs of a panel-mode quad, in the panelCorners order BL, BR, TR, TL (08 P2-12d, 08 6.15; 04 5.3, UV-9):
+   *   no plan, or a plan with panelUvs 'section' -> section space: for each corner (lu, lv) of PANEL_UVS, the base UV
+   *     ((panel.col + lu) / panelCols, (panel.row + lv) / panelRows), then UvMapper.sectionUv(plan, ...) (the section's
+   *     UV transform; an identity plan returns the base UV untouched). A corner shared with the neighbouring panel equals
+   *     the section-mode strip UV (col / panelCols, row / panelRows) bit for bit, as (c + 1) + 0 and c + 1 are the same
+   *     integer;
+   *   a plan with panelUvs 'panel' (04's legacy option) -> the per-panel [0, 0], [1, 0], [1, 1], [0, 1].
+   * Reads no profile key.
    * Side effects: none.
    * @param {import('./WallLayout.js').LayoutPanel} panel  panel.col and panel.row within its section
    * @param {import('./WallLayout.js').SectionLayout} sl  the panel's section (panelCols, panelRows)
+   * @param {import('./UvMapper.js').SectionUvPlan|null} [plan]  the section's plan (04 UV-9)
    * @returns {number[][]} 4 new [u, v] pairs
    */
-  panelUvs(panel, sl) {
-    const { panelCols, panelRows } = sl.section;
+  panelUvs(panel, sl, plan = null) {
     const local = WallMeshBuilder.PANEL_UVS;
     const uvs = [];
+    if (plan !== null && plan.panelUvs === 'panel') {
+      for (let k = 0; k < 4; k++) uvs.push([local[2 * k], local[2 * k + 1]]);
+      return uvs;
+    }
+    const { panelCols, panelRows } = sl.section;
     for (let k = 0; k < 4; k++) {
-      uvs.push([(panel.col + local[2 * k]) / panelCols, (panel.row + local[2 * k + 1]) / panelRows]);
+      const u = (panel.col + local[2 * k]) / panelCols;
+      const v = (panel.row + local[2 * k + 1]) / panelRows;
+      uvs.push(plan !== null ? sectionUv(plan, u, v) : [u, v]);
     }
     return uvs;
   }

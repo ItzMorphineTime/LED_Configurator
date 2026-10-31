@@ -14,6 +14,7 @@ import { WallSection } from './WallSection.js';
 import { LogoLibrary } from './LogoLibrary.js';
 import { CineCamera } from './CineCamera.js';
 import { PersonProp, CarProp } from './Prop.js';
+import { UvSettings } from './UvSettings.js';
 
 /** What the wall shows (Feature 5 adds 'hdri'). */
 export const ContentMode = Object.freeze({ COLOR: 'color', LED_SIM: 'ledSim', PANEL_IDS: 'panelIds' });
@@ -157,13 +158,16 @@ export class Project {
   person;
   /** @type {CarProp} */
   car;
+  /** @type {UvSettings} the UV layout settings (04 4.1, UV-5a): injected by reference and never replaced; session-only
+   *  until 04 UV-5c persists them */
+  uv;
 
   /**
    * Side effects: none.
    * @param {{wall: Wall, meshMode?: string, display: DisplaySettings, panelIdStyle: PanelIdStyle, logos: LogoLibrary,
-   *          camera: CineCamera, person: PersonProp, car: CarProp}} parts
+   *          camera: CineCamera, person: PersonProp, car: CarProp, uv?: UvSettings}} parts  uv: default new UvSettings()
    */
-  constructor({ wall, meshMode = 'combined', display, panelIdStyle, logos, camera, person, car }) {
+  constructor({ wall, meshMode = 'combined', display, panelIdStyle, logos, camera, person, car, uv = new UvSettings() }) {
     this.wall = wall;
     this.meshMode = meshMode;
     this.display = display;
@@ -172,6 +176,7 @@ export class Project {
     this.camera = camera;
     this.person = person;
     this.car = car;
+    this.uv = uv;
   }
 
   /**
