@@ -14,8 +14,8 @@
  * commit, coalesced per field within 750 ms; a drag at its end; each button), none for previews, cancelled drags or
  * selection changes. A section whose grid size (panelCols x panelRows) changes loses its vertex edits and their history
  * states at the next rebuild, with a notice in the viewer.
- * UV state is session-only until project file v2 (04 UV-5c): an import starts every section from the identity and
- * clears the UV history.
+ * UV state is saved in project file v2 since revision 1 (04 UV-5c, M7a): the sections' transforms and vertex edits come
+ * with the sections, the settings through this controller's feature hook (hydrate); an import clears the UV history.
  * Legacy source: none (Feature 4).
  * Layer: app (may import core, legacy, domain, geometry; collaborators are injected).
  */
@@ -290,8 +290,8 @@ export class UvController {
 
   /**
    * WallController rebuild observer (P1 step 8, the bootstrap rebuild included): caches the layout, atlas and plans of
-   * the live path; drops the history and sessions of vanished sections (all of them on an import, whose sections start
-   * from the identity: UV state is session-only); moves the viewer to the nearest remaining section; emits
+   * the live path; drops the history and sessions of vanished sections (all of them on an import, whose sections carry
+   * the file's UV state); moves the viewer to the nearest remaining section; emits
    * UV_SETTINGS_CHANGED with the atlas note values (maxTextureSize read here); refreshes the viewer.
    * Side effects: as listed.
    * @param {{layout: object, atlas: object, plans: object[], sectionScale?: object|null, cause?: string}} info
@@ -778,6 +778,20 @@ export class UvController {
   }
 
   // ---- settings (UV-14) -------------------------------------------------------------------------------------------
+
+  /**
+   * The 'uv' feature hook of ProjectSession.apply (07 C41, 5.5.2 step 3; 04 UV-5c, M7a): a full apply assigns the file's
+   * `uv` settings in place (a v2 file without them gives the defaults); a wall-scope (v1) import keeps the session's (the
+   * wall-only scope, like the pivot's owner rule). The sections' transforms and vertex edits arrive with the sections.
+   * No event and no rebuild here: apply step 7 rebuilds once (cause 'import'), and onWallRebuilt emits
+   * UV_SETTINGS_CHANGED (the sidebar) and refreshes the viewer.
+   * Side effects: writes project.uv (full scope).
+   * @param {object} v2  the validated v2 object
+   * @param {{scope: 'full'|'wall'}} ctx
+   */
+  hydrate(v2, { scope }) {
+    if (scope === 'full' && v2.uv) this.#project.uv.assign(UvSettings.fromJSON(v2.uv));
+  }
 
   /** Side effects: as #changeSetting. @param {string} value  'per-section' | 'atlas' */
   setCombinedLayout(value) {

@@ -128,7 +128,7 @@ const HEADER_HTML = `<span id="uv-viewer-dot" class="uv-viewer__dot" aria-hidden
  * The presets act on the island transform only: vertex edits stay until Reset all vertex edits.
  */
 const HINTS = Object.freeze({
-  island: 'Moving the island right shows more of the source’s right side (the image slides left on the wall). Reset, Fit 0–1 and Pixel-accurate keep vertex edits. UV edits are not saved in project files yet.',
+  island: 'Moving the island right shows more of the source’s right side (the image slides left on the wall). Reset, Fit 0–1 and Pixel-accurate keep vertex edits.',
   vertices: 'Click, Shift+click, a box or Ctrl+A selects; drag moves (Alt free, Shift fine), arrows nudge. Reset, Fit 0–1 and Pixel-accurate change the island only; Reset all vertex edits clears vertex edits.',
 });
 

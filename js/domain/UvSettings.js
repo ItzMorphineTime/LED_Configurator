@@ -4,8 +4,8 @@
  * (`WallSection.uvTransform`), the per-section vertex edits (`WallSection.uvVertexEdits`, UvVertexEdits) and the
  * project-wide UV settings (`Project.uv`). Pure values with their field rules; the maths that applies them lives in
  * geometry/UvMapper.js.
- * Persistence (04 UV-5c, the v2 keys `sections[].uv_transform` and `uv`) has not landed: the state is session-only, and
- * toJSON / fromJSON only fix the key shapes of 04 4.2 for it.
+ * Persistence (04 UV-5c, project file v2 revision 1, M7a): `sections[].uv_transform`, `sections[].uv_vertex_edits` and
+ * `uv`; toJSON / fromJSON fix their key shapes (04 4.2), io/ProjectValidator checks them with the same rules.
  * Legacy source: none (Feature 4).
  * Layer: domain (may import legacy; THREE-free and DOM-free).
  */
@@ -244,8 +244,8 @@ const deltaRule = (raw) => {
  * section's (panelCols + 1) x (panelRows + 1) panel-corner grid (key = row * (cols + 1) + col, row 0 at the bottom) to
  * a delta [du, dv] in the island's BASE space, before the section's UvTransform: the vertex's UV is T(base + delta), so
  * moving, scaling or rotating the island keeps the edits. Bound to the grid size it was made for (matches(); a section
- * whose panelCols or panelRows changes drops its edits, UvController). Session-only like the transform. A section stores
- * its own copy (WallSection.setUvVertexEdits); a stored delta is a frozen pair and is never mutated.
+ * whose panelCols or panelRows changes drops its edits, UvController). Saved like the transform (toJSON, M7a). A section
+ * stores its own copy (WallSection.setUvVertexEdits); a stored delta is a frozen pair and is never mutated.
  */
 export class UvVertexEdits {
   /** @type {number} */
@@ -328,6 +328,38 @@ export class UvVertexEdits {
   /** Side effects: none. @param {number} cols @param {number} rows @returns {boolean} made for this grid size */
   matches(cols, rows) {
     return this.#cols === cols && this.#rows === rows;
+  }
+
+  /**
+   * The `sections[i].uv_vertex_edits` list of project file v2 (M7a): one {row, col, du, dv} per edited vertex, in key
+   * order (row by row from the bottom, then by column); never a zero delta.
+   * Side effects: none.
+   * @returns {Array<{row: number, col: number, du: number, dv: number}>}
+   */
+  toJSON() {
+    return this.keys().map((k) => {
+      const [col, row] = this.colRow(k);
+      const d = this.#map.get(k);
+      return { row, col, du: d[0], dv: d[1] };
+    });
+  }
+
+  /**
+   * The edits of a cols x rows grid from a validated list (ProjectValidator: every vertex inside the grid, valid deltas).
+   * Side effects: none.
+   * @param {Array<{row: number, col: number, du: number, dv: number}>} list
+   * @param {number} cols
+   * @param {number} rows
+   * @returns {UvVertexEdits}
+   * @throws {RangeError} for a vertex outside the grid (never for a validated list)
+   */
+  static fromJSON(list, cols, rows) {
+    const e = new UvVertexEdits(cols, rows);
+    for (const { row, col, du, dv } of list) {
+      if (col > cols) throw new RangeError(`Vertex column ${col} is outside the ${cols} x ${rows} grid`);
+      e.set(e.key(col, row), du, dv);
+    }
+    return e;
   }
 
   /** Side effects: none. @returns {UvVertexEdits} a copy (the frozen pairs are shared) */

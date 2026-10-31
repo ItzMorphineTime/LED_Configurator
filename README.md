@@ -154,8 +154,9 @@ orientation and **Individual Section Meshes**; the **Mesh Options** and **Wall P
 title, or focus it and press Enter or Space, to open them). The person and car props of a new project now stand in front
 of the LED face (2 m and 3.5 m out, to the right of the camera's axis).
 
-Release note: the pivot is new. It lasts for the session only: Export JSON does not save it (or the orientation) yet,
-and importing a project file keeps the session's pivot and orientation (a file's mesh mode still applies). The camera's "Z Distance from Wall" field is now "Z Position", because
+Release note: the pivot is new, and project files save it: Export JSON and Export All (ZIP) store the pivot, its offset,
+the orientation and both switches, and opening the file restores them (a file without a pivot, such as a version 1.0
+file, keeps the current pivot and orientation). The camera's "Z Distance from Wall" field is now "Z Position", because
 it is a stage coordinate measured from the pivot on the floor.
 
 ### Pilot Camera Mode
@@ -275,22 +276,30 @@ Every download is named after the product: `morph-led-wall.json`, `morph-led-wal
 `morph-led-wall-panel-ids.png` and `morph-led-wall-safe-distance.obj`. OBJ, MTL and glTF files name "Morph LED Configurator" as their generator.
 
 ### JSON Configuration
-Export and import whole projects. The JSON project file (`"format": "morph-led-project"`, `"version": "2.0"`) contains:
+Export and import whole projects. The JSON project file (`"format": "morph-led-project"`, `"version": "2.1"`, with a
+`"generator"` record that names the app and its version) contains:
 - All section parameters (name, panels, LED resolution, curvature, angle offset, colour) and each section's logo
+- Each section's UV transform (offset, scale, rotation, flips, source rotated) and its moved UV vertices
 - The mesh mode
+- The wall pivot (mode, offset, Keep stage layout) and the orientation (alignment and yaw offset)
+- The UV Mapping options (Combined layout, panel UVs, the glTF second UV channel)
 - The display settings (content: colour, LED simulation or panel IDs; LED layout; wireframe; panel frames; grid; safe
-  distance)
+  distance; the pivot marker)
 - The panel ID styling (border, label font size and colour, section names and their size and colour)
 - The camera (preview on or off, filmback, focal length, position and rotation)
 - The person and car props (shown or hidden, position, rotation, scale)
 - The logo images, once per distinct image, stored in the file itself
-- Totals (sections, panels, pixels)
+- For other tools, values the app works out and ignores on import: the resolved pivot point, each section's pixel map
+  and the panel-ID atlas size (`pixel_map`, `atlas`), and the totals (sections, panels, pixels)
 
-Importing a version 2.0 file restores all of it in one step, including a camera position saved while the preview was
-off (it is used when you next turn the preview on). Pilot mode is left first, and a selected camera or prop stays
-selected. Version 2.0 files keep every key of version 1.0 in the same place, so a tool
-that reads version 1.0 files still reads the same wall. Version 1.0 files still import as before: they replace the wall
-and the mesh mode only, keep the camera, props, display and styling as they are, and clear the section logos.
+Importing a version 2 file restores all of it in one step, including a camera position saved while the preview was
+off (it is used when you next turn the preview on). The camera and prop positions are measured from the file's own
+pivot, so they come back exactly where they were relative to the wall. A version 2.0 file (saved before the pivot and
+UVs were saved) keeps the current pivot and orientation and opens with the default UV options. Pilot mode is left
+first, and a selected camera or prop stays selected. Version 2 files keep every key of version 1.0 in the same place,
+so a tool that reads version 1.0 files still reads the same wall. Version 1.0 files still import as before: they
+replace the wall and the mesh mode only, keep the camera, props, display, styling, pivot and UV options as they are,
+and clear the section logos.
 
 Release note: a section name is always shown as plain text. A project file shared by someone else could hide HTML or
 script in a section name, which the page used to run on import; such a name is now displayed exactly as written.
@@ -310,10 +319,9 @@ images, or with more than 20,000 panels, opens with a note that says what will n
 (`project`) are kept when a file has them; this version has no field to edit them yet.
 
 Release note: project files now save the camera, the props, the display settings, the panel ID styling and the section
-logos (format version 2.0). The pivot and orientation, the UV settings and UV edits are not saved yet; they will be added
-to the version 2 format by their own releases. Until the pivot is saved, the camera and prop positions in a file are
-measured from the pivot that was active when it was saved, so open the file with the same pivot and orientation (a new
-project's defaults, unless you changed them) to see them where you left them.
+logos (format version 2.0), and since format version 2.1 also the pivot and orientation, the pivot marker switch, the
+UV Mapping options and every section's UV transform and moved UV vertices: nothing is session-only any more. Opening a
+file and saving it again gives the same file.
 
 Release note: logo uploads are checked. PNG, JPEG and WebP images are kept as they are; SVG logos are cleaned (scripts,
 embedded web content and links to other files are removed) and get a size when they have none; other image types (GIF,
@@ -474,10 +482,11 @@ distance along the camera's optical axis to the wall plane it is aimed at.
   OBJ header's `Stage placement` line states. Place the asset that much above your stage floor to stand the wall on the
   floor; a floor-level pivot (every mode with Offset Y = 0) needs no height.
 
-### Session only (for now)
-The pivot, its offset, the orientation and the "Keep stage layout" and marker switches last for the session: Export JSON
-and Export All (ZIP) do not save them yet, and importing a project file keeps the session's pivot and orientation. They
-will be added to the JSON v2 project format by their own release (version 2.0 saves the camera, props, display and logos).
+### Saved in the project file
+The pivot, its offset, the orientation and the "Keep stage layout" and marker switches are saved by Export JSON and Export
+All (ZIP) (`pivot` and `display.show_pivot_marker`), and opening the file restores them together with the camera and
+prop positions, which are stored relative to that pivot. Opening is not an edit: nothing is moved or re-expressed. A file
+without a pivot (version 1.0, or 2.0 from before this release) keeps the current pivot and orientation.
 
 ---
 
@@ -571,10 +580,13 @@ example a camera-mapped or pre-rendered combined plate). OBJ holds a single UV s
 only. Untick "glTF: second UV channel" to leave it out (for example when an engine's lightmap UV generation targets
 channel 1).
 
-### Session only (for now)
-UV edits and the UV Mapping options last for the session: Export JSON and Export All (ZIP) do not save them yet, and
-importing a project file starts every section from the identity (and clears the UV undo history). They will be saved with
-the JSON v2 project format by their own release. The OBJ and glTF exports always carry the current UVs.
+### Saved in the project file
+Export JSON and Export All (ZIP) save the UV Mapping options (`uv`), each section's UV transform (`uv_transform`) and
+its moved vertices (`uv_vertex_edits`: one entry per moved vertex of the panel-corner grid, as an offset in the island's
+own space before the transform), and opening the file restores them (the UV undo history starts empty). A moved vertex
+that lies outside its section's grid in a hand-edited file is left out with a message. A version 1.0 file keeps the
+current UV Mapping options and starts its sections from the identity. The OBJ and glTF exports always carry the current
+UVs.
 
 ---
 
@@ -696,6 +708,7 @@ Contributions are welcome! Feel free to:
 ## 📋 Changelog
 
 ### Latest Updates
+- ✅ Project files (format 2.1) save the pivot and orientation, the pivot marker switch, the UV Mapping options and every section's UV transform and moved UV vertices, and name the app that wrote them; opening a file restores them
 - ✅ Panel IDs and Camera Frustum Preview are collapsible cards too, collapsed at start like Mesh Options and Wall Pivot (click the title, or focus it and press Enter or Space)
 - ✅ glTF second UV channel (`TEXCOORD_1`, on by default): every section on one combined canvas in wall order, pixels square, in every mesh mode (OBJ keeps UV channel 0)
 - ✅ "Centre on +X (LED faces −X)" alignment, now the default (the wall's centre on +X, facing the origin, like the reference Blender scene); new-project props stand in front of the LED face
@@ -706,7 +719,7 @@ Contributions are welcome! Feel free to:
 - ✅ Correct normals: stage-facing triangles and per-vertex normals in the viewport, OBJ and glTF; a normals debug view (N, Shift+N) with face-orientation shading
 - ✅ Export OBJ downloads one ZIP (`.obj`, `.mtl` and every referenced texture), so materials load in Blender; glTF has UVs (`TEXCOORD_0`) and one material per section
 - ✅ Safer imports (names escaped, values validated and clamped), lossless ZIP bundles, working Safe Distance OBJ export, no glTF crash on large walls, clean exit from pilot mode when the preview is turned off
-- ✅ Wall pivot: export origin at the bottom-left corner, the wall mesh centre on the floor or the wall centre on the floor, plus an offset; draggable pivot marker (O); camera and props kept in place; floor grid centred on the pivot (session only for now)
+- ✅ Wall pivot: export origin at the bottom-left corner, the wall mesh centre on the floor or the wall centre on the floor, plus an offset; draggable pivot marker (O); camera and props kept in place; floor grid centred on the pivot
 - ✅ Morph branding: dark interface, Morph colours on the 3D scene and the panel-ID textures, the Morph section palette, exports named `morph-led-wall-*`
 - ✅ 3D Gizmo system for camera and prop manipulation
 - ✅ World/Local space toggle for gizmos

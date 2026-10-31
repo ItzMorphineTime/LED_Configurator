@@ -2,8 +2,9 @@
  * @module ui/PivotPanel
  * The "Wall Pivot" section of the control panel (Feature 3, docs/improvements/03-pivot.md 3.2, 3.6, 5.3): the pivot-mode
  * radio cards, the offset inputs, Reset offset, Select pivot (O), the Ctrl-drag snap step, the keep-stage-layout and
- * marker toggles (commands down to PivotController), and the readout and status mirrors (events up). The pivot is
- * session-only until project file v2 (the owner's decision of 2026-10-17); the panel says so.
+ * marker toggles (commands down to PivotController), and the readout and status mirrors (events up). The pivot, the
+ * orientation and both toggles are saved in the project file (M7a); an open mirrors them through WALL_PIVOT_CHANGED
+ * {source: 'import'}.
  * Every mirror is a pure function of the payload it receives (R3: idempotent; the panel keeps no event history), so
  * delivering any payload twice gives the same DOM.
  * Owns #pivot-mode-select (its .pivot-mode-option labels and pivot-mode radios), #pivot-offset-x/y/z,

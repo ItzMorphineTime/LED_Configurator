@@ -74,6 +74,22 @@ function setup({ meshMode = 'section' } = {}) {
   };
 }
 
+describe('UvController.hydrate: the \'uv\' feature hook (07 C41; 04 UV-5c, M7a)', () => {
+  test('a full apply assigns the file\'s settings in place (no event, no rebuild); a wall-scope import keeps the session\'s', () => {
+    const s = setup();
+    const uv = s.project.uv;
+    s.uv.hydrate({ uv: { combined_layout: 'atlas', panel_uvs: 'panel', gltf_canvas_texcoord1: false } }, { reason: 'open', scope: 'full' });
+    assert.equal(s.project.uv, uv, 'never replaced');
+    assert.deepEqual(uv.toJSON(), { combined_layout: 'atlas', panel_uvs: 'panel', gltf_canvas_texcoord1: false });
+    assert.deepEqual([s.events.length, s.rebuilds.length], [0, 0], 'apply step 7 rebuilds once and onWallRebuilt emits');
+    s.uv.hydrate({ sections: [], mesh_mode: 'panel' }, { reason: 'import', scope: 'wall' });
+    assert.equal(uv.combinedLayout, 'atlas', 'v1: kept');
+    s.runRebuild('import');
+    const settings = s.events.filter(([k]) => k === 'UV_SETTINGS_CHANGED').at(-1)[1];
+    assert.deepEqual([settings.combinedLayout, settings.panelUvs, settings.gltfCanvasTexcoord1], ['atlas', 'panel', false], 'the sidebar mirror');
+  });
+});
+
 describe('UvController: construction and the rebuild observer', () => {
   test('construction reads no renderer: maxTextureSize is read in onWallRebuilt only', () => {
     const s = setup();

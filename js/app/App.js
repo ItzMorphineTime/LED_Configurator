@@ -19,6 +19,7 @@ import JSZip from '../vendor/jszip.js';
 import { EventBus } from '../core/EventBus.js';
 import { Strategies } from '../legacy/LegacyCompat.js';
 import { Theme } from '../theme/Theme.js';
+import { APP_VERSION } from '../core/AppInfo.js';
 import { buildTheme } from '../theme/ThemeBridge.js';
 import { Project } from '../domain/Project.js';
 import { DebugViewSettings } from '../domain/DebugViewSettings.js';
@@ -127,7 +128,7 @@ export class App {
     // −X), the props in front of the LED face
     const project = Project.createNew({ defaultSectionColor: theme.palette.defaultSectionColor });
     // 04 UV-14 retired the `?uv_layout=` / `?panel_uvs=` stopgap of UV-7 / UV-9: the UV settings are the sidebar's
-    // UV Mapping options (session-only, like all UV state until project file v2, 04 UV-5c).
+    // UV Mapping options (saved in the project file since 04 UV-5c, M7a).
     const display = project.display;
     const style = project.panelIdStyle;
     const logos = project.logos;
@@ -220,22 +221,24 @@ export class App {
       selection, gizmo, interaction, bus,
     });
     selection.register(pivotController);
-    const serializer = new ProjectSerializer({ palette: theme.palette });
+    // 06 T8 (07 C10, C62): every project file names its writer, {name: Brand.jsonGenerator.name, version: APP_VERSION}
+    const serializer = new ProjectSerializer({
+      palette: theme.palette, generator: { name: brand.jsonGenerator.name, version: APP_VERSION },
+    });
     const objExporter = new ObjExporter({ brand, colorToRgb, builder: new WallMeshBuilder(Strategies.mesh.obj) });
     const gltfExporter = new GltfExporter({ brand, colorToRgb, builder: new WallMeshBuilder(Strategies.mesh.gltf) });
     const downloader = new Downloader({ doc, win });
     // 07 D5, D6 (5.5.3): every logo image by asset id (uploads and opened files), loaded through the one logo loader.
     const assetStore = new AssetStore({ logoLoader });
     // 07 D5 (5.5.2): open, save, new, capture and the one apply. `features` is the hook map of 07 C41: each landed
-    // feature's step-3 restore step. The pivot and orientation are session-only until project file v2 saves them, so
-    // their hook keeps them and announces them to the pivot mirrors (03 4.4, the owner's rule of 03 12.11).
+    // feature's step-3 restore step, in this order: 'pivot' (PivotController.hydrate: the file's pivot, orientation and
+    // marker flag; a file without a pivot keeps the session's, 03 12.11), then 'uv' (UvController.hydrate, registered
+    // below once the controller exists: the UV settings; the section transforms and vertex edits come with the sections).
     const session = new ProjectSession({
       project, serializer, assets: assetStore, wallController, cameraController, personController, carController, pilot,
       selection, sceneManager, ledTiles, bus, dialogs, downloader, brand, win, JSZip, stateFromProject, sectionsFromProject,
       createProject: () => Project.createNew({ defaultSectionColor: theme.palette.defaultSectionColor }),
-      features: {
-        pivot: { hydrate: () => wallController.applyPivot(null) },
-      },
+      features: { pivot: pivotController },
     });
     const projectIO = new ProjectIO({
       project,
@@ -276,7 +279,7 @@ export class App {
     // 04 UV-11 (5.3; path B, the owner's decision): the UV viewer's view model (its state in memory), the UV-only undo
     // stack and the UV use cases, registered as a selection observer and a rebuild observer before the bootstrap
     // rebuild, so the first onWallRebuilt caches the layout and fills the sidebar atlas note. Nothing reads the renderer
-    // here (maxTextureSize is a getter). UV state is session-only until project file v2 (04 UV-5c).
+    // here (maxTextureSize is a getter). UV state is saved in the project file (04 UV-5c, M7a): its hook is registered here.
     const uvViewModel = new UvViewModel({ project, panelIds, ledTiles, bus });
     const uvController = new UvController({
       project, wallController, view: wallView, viewModel: uvViewModel, probe: uvProbe, history: new UvFallbackHistory(),
@@ -286,6 +289,7 @@ export class App {
     });
     selection.addObserver(uvController);
     wallController.addRebuildObserver(uvController);
+    session.registerFeature('uv', uvController);
     // 2026-10-31: wall sections are selectable by a click in the viewport (the provider SelectionManager raycasts on a
     // click, in every mesh mode) and stay valid across rebuilds (a deleted section is deselected, a rename re-announced).
     const sectionSelection = new SectionSelection({ project, view: wallView, selection });

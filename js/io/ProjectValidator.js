@@ -3,7 +3,8 @@
  * The import validator (spec 07 4.7, 6.7, 6.8; 08 4.3, P2-3b: the wall subset of 07 D2; 08 P2-13e: the v2 path). It
  * checks the wall keys of a v2-shaped document (`sections`, `mesh_mode`; a migrated v1 file) or, on the v2 path, a
  * whole v2 file (every block of io/ProjectSchema: display, panel-ID style, camera, props, the logo assets and the
- * section logos, the extensions; unknown and not-yet-applied keys are dropped with a dropped-unknown info), corrects
+ * section logos, the extensions; since revision 1 (M7a) the pivot, the UV settings and each section's UV transform and
+ * vertex edits; unknown and not-yet-applied keys are dropped with a dropped-unknown info), corrects
  * what it can (coerced, rounded, clamped, defaulted, sanitized, truncated, reassigned-id, missing-asset,
  * invalid-reference, newer-revision warnings, 08 3.3 correction lines) and refuses what it cannot (no sections, more
  * than `Wall.MAX_SECTIONS`). It never spreads or assigns input objects: the result is built field by field from
@@ -16,12 +17,14 @@
 
 import { clamp, roundInt, stripControls, truncateUnits, isValidSectionId, createIdAllocator, MAX_LOGO_BYTES } from '../domain/rules.js';
 import { FILMBACK_PRESETS } from '../domain/CineCamera.js';
+import { UvTransform } from '../domain/UvSettings.js';
 import { logoAssetName, parseLogoDataUri } from '../domain/LogoRules.js';
 import { canvasFits, CANVAS_HARD_LIMITS } from '../geometry/TextureAtlas.js';
 import {
   LIMITS, MESH_MODES, SECTION_NUMBER_ROWS, SECTION_GROUP_LABELS, SECTION_LABELS, SECTION_DERIVED_KEYS, SECTION_KEYS,
   FORMAT, KNOWN_REVISION, TOP_LEVEL_KEYS, DERIVED_TOP_LEVEL_KEYS, KNOWN_UNAPPLIED_KEYS, DISPLAY_ROWS, PANEL_ID_STYLE_ROWS,
   CAMERA_ROWS, PROP_ROWS, PROPS, LOGO_ROWS, PROJECT_ROWS, MAX_PANELS_BUDGET, ASSET_PATH_RE, ASSET_EXTENSIONS, getPath, setPath,
+  PIVOT_ROWS, PIVOT_DERIVED_KEYS, UV_ROWS, UV_TRANSFORM_LABELS,
 } from './ProjectSchema.js';
 import { ImportMessages, isPlainObject } from './ProjectMigrations.js';
 
@@ -231,8 +234,9 @@ function budgetIssues(sections, exportLimits, push) {
 
 /**
  * One section: a fresh object in the v2 key order. Its correction lines are added to `issues` after its name is known,
- * so every line names the corrected section. On the v2 path (`v2` given, 08 P2-13e) the section also gets its logo
- * (logoField) and its extensions, and every unknown key is dropped with a dropped-unknown info (derived keys silently).
+ * so every line names the corrected section. On the v2 path (`v2` given, 08 P2-13e) the section also gets its UV
+ * transform and vertex edits (revision 1, M7a: uvTransformField, uvVertexEditsField), its logo (logoField) and its
+ * extensions, and every unknown key is dropped with a dropped-unknown info (derived keys silently).
  * @param {*} s0
  * @param {number} i
  * @param {typeof LIMITS} limits
@@ -271,7 +275,12 @@ function validateSection(s0, i, limits, defaultColor, issues, v2 = null) {
   const color = colorField(s.color, defaultColor, reporter(`${base}.color`, SECTION_LABELS.color));
   let logo = null;
   let extensions = null;
+  let uv = null;
   if (v2) {
+    uv = {
+      uv_transform: uvTransformField(s.uv_transform, `${base}.uv_transform`, pending),
+      uv_vertex_edits: uvVertexEditsField(s.uv_vertex_edits, `${base}.uv_vertex_edits`, values.panelCols, values.panelRows, pending),
+    };
     logo = logoField(s.logo, `${base}.logo`, v2, pending);
     extensions = extensionsField(s.extensions, `${base}.extensions`, (p) => pending.push(p));
     const drop = (path) => pending.push({ path, code: 'dropped-unknown', severity: 'info', text: `ignored "${path.slice(base.length + 1)}"` });
@@ -294,6 +303,7 @@ function validateSection(s0, i, limits, defaultColor, issues, v2 = null) {
     led_resolution: { x: values.ledX, y: values.ledY },
     curvature: { angle_degrees: values.curveIntensity, angle_offset_degrees: values.angleOffset },
     color,
+    ...(uv ?? {}),
     logo,
   };
   if (v2) out.extensions = extensions;
@@ -356,7 +366,7 @@ const ASSET_ID_RE = /^[A-Za-z0-9_.-]{1,64}$/;
 const SHA256_RE = /^[0-9a-fA-F]{64}$/;
 
 /** The nested groups of the v2 blocks in correction messages ("Camera position: 7 → defaults"). */
-const GROUP_LABELS = Object.freeze({ position_m: 'position', rotation_deg: 'rotation' });
+const GROUP_LABELS = Object.freeze({ position_m: 'position', rotation_deg: 'rotation', offset_m: 'offset', orientation: 'orientation' });
 
 /** A value of a v2 correction line: booleans as text, everything else as formatValue (08 3.3). */
 const formatBlockValue = (v) => (typeof v === 'boolean' ? String(v) : formatValue(v));
@@ -539,6 +549,136 @@ function logoField(v, path, { assets, kinds }, pending) {
 }
 
 /**
+ * A section's `uv_transform` (04 4.2, UV-5c; revision 1): absent gives the identity silently; null or any other
+ * non-object the identity with a warning; each leaf by UvTransform.RULES, reported: offsets finite (else 0, defaulted)
+ * and clamped to [-8, 8]; a scale of 0 or not finite is 1 (defaulted), a negative scale is its absolute value and
+ * toggles its flip (coerced), then [0.01, 16] (clamped); the rotation finite (else 0) and normalised into (-180, 180]
+ * (wrapped, info); the flips and source_rotated as booleans ("true" / "false" coerced). Unknown leaves are dropped.
+ * Side effects: pushes to `pending`.
+ * @param {*} v
+ * @param {string} path  'sections[i].uv_transform'
+ * @param {object[]} pending  the section's pending correction lines
+ * @returns {{offset_u: number, offset_v: number, scale_u: number, scale_v: number, rotation_degrees: number,
+ *            flip_u: boolean, flip_v: boolean, source_rotated: boolean}} in UvTransform.toJSON's key order
+ */
+function uvTransformField(v, path, pending) {
+  const out = UvTransform.identity().toJSON();
+  if (v === undefined) return out;
+  if (!isPlainObject(v)) {
+    pending.push({ path, code: 'defaulted', from: v, to: null, text: `UV transform ${formatValue(v)} → identity` });
+    return out;
+  }
+  const report = (key) => (code, from, to) => pending.push({ path: `${path}.${key}`, code, from, to,
+    text: `${UV_TRANSFORM_LABELS[key]} ${formatBlockValue(from)} → ${formatBlockValue(to)}`,
+    ...(code === 'wrapped' ? { severity: 'info' } : {}) });
+  for (const key of ['flip_u', 'flip_v', 'source_rotated']) out[key] = boolField(v[key], false, report(key));
+  for (const key of ['offset_u', 'offset_v']) out[key] = numberField(v[key], { min: -8, max: 8, int: false, default: 0 }, report(key));
+  for (const [key, flip] of [['scale_u', 'flip_u'], ['scale_v', 'flip_v']]) {
+    const raw = v[key];
+    const r = report(key);
+    let x = num(raw);
+    if (raw === undefined) {
+      x = 1;
+    } else if (!Number.isFinite(x) || x === 0) {
+      r('defaulted', raw, 1);
+      x = 1;
+    } else {
+      if (typeof raw === 'string') r('coerced', raw, x);
+      if (x < 0) {
+        r('coerced', x, -x);
+        x = -x;
+        out[flip] = !out[flip];
+      }
+      if (x < 0.01 || x > 16) {
+        const y = clamp(x, 0.01, 16);
+        r('clamped', x, y);
+        x = y;
+      }
+    }
+    out[key] = x;
+  }
+  const rawRot = v.rotation_degrees;
+  let rot = num(rawRot);
+  if (rawRot === undefined) {
+    rot = 0;
+  } else if (!Number.isFinite(rot)) {
+    report('rotation_degrees')('defaulted', rawRot, 0);
+    rot = 0;
+  } else {
+    if (typeof rawRot === 'string') report('rotation_degrees')('coerced', rawRot, rot);
+    const wrapped = UvTransform.normalizeRotation(rot);
+    if (wrapped !== rot) report('rotation_degrees')('wrapped', rot, wrapped);
+    rot = wrapped;
+  }
+  out.rotation_degrees = rot;
+  for (const key of Object.keys(v)) {
+    if (!Object.prototype.hasOwnProperty.call(out, key)) pending.push({ path: `${path}.${key}`, code: 'dropped-unknown', severity: 'info', text: `ignored "uv_transform.${key}"` });
+  }
+  return out;
+}
+
+/**
+ * A section's `uv_vertex_edits` (revision 1, M7a; the owner's per-vertex UV edits of 2026-10-31): a list of
+ * {row, col, du, dv}, base-space deltas of the vertices of the section's (columns + 1) x (rows + 1) panel-corner grid
+ * (row 0 at the bottom). Absent gives none silently; a non-list none with a warning. An entry that is not an object, a
+ * vertex whose col / row is not an integer inside the grid of the section's (validated) columns and rows
+ * (invalid-reference) and a repeated vertex are dropped with a warning; du and dv follow UvVertexEdits' delta rule
+ * (finite, else 0 with a warning; clamped to [-8, 8]; |d| < 1e-12 is 0, rounded); a zero delta is no edit (dropped
+ * silently); unknown keys are dropped (info). The result is sorted by vertex (row, then col), as UvVertexEdits.toJSON
+ * writes it.
+ * Side effects: pushes to `pending`.
+ * @param {*} v
+ * @param {string} path  'sections[i].uv_vertex_edits'
+ * @param {number} cols  the section's validated panel columns
+ * @param {number} rows  the section's validated panel rows
+ * @param {object[]} pending
+ * @returns {Array<{row: number, col: number, du: number, dv: number}>}
+ */
+function uvVertexEditsField(v, path, cols, rows, pending) {
+  if (v === undefined) return [];
+  if (!Array.isArray(v)) {
+    pending.push({ path, code: 'defaulted', from: v, to: null, text: `UV vertex edits ${formatValue(v)} → none` });
+    return [];
+  }
+  const byKey = new Map();
+  v.forEach((e, j) => {
+    const p = `${path}[${j}]`;
+    if (!isPlainObject(e)) {
+      pending.push({ path: p, code: 'defaulted', from: e, to: null, text: `UV vertex edit ${j + 1}: ${formatValue(e)} → dropped` });
+      return;
+    }
+    const { col, row } = e;
+    if (!Number.isInteger(col) || !Number.isInteger(row) || col < 0 || row < 0 || col > cols || row > rows) {
+      pending.push({ path: p, code: 'invalid-reference', from: { col, row }, to: null,
+        text: `UV vertex edit at column ${formatValue(col)}, row ${formatValue(row)} → dropped (outside the ${cols} × ${rows} panel grid)` });
+      return;
+    }
+    const key = row * (cols + 1) + col;
+    if (byKey.has(key)) {
+      pending.push({ path: p, code: 'defaulted', from: { col, row }, to: null, text: `UV vertex edit at column ${col}, row ${row} → dropped (repeated)` });
+      return;
+    }
+    const delta = (name) => {
+      const label = `UV vertex (column ${col}, row ${row}) ${name}`;
+      const r = (code, from, to) => pending.push({ path: `${p}.${name}`, label, code, from, to });
+      const d = numberField(e[name], { min: -8, max: 8, int: false, default: 0 }, r);
+      if (d !== 0 && Math.abs(d) < 1e-12) {
+        r('rounded', d, 0);
+        return 0;
+      }
+      return d;
+    };
+    const du = delta('du');
+    const dv = delta('dv');
+    for (const k of Object.keys(e)) {
+      if (!['row', 'col', 'du', 'dv'].includes(k)) pending.push({ path: `${p}.${k}`, code: 'dropped-unknown', severity: 'info', text: `ignored "uv_vertex_edits[].${k}"` });
+    }
+    if (du !== 0 || dv !== 0) byKey.set(key, { row, col, du, dv });
+  });
+  return [...byKey.keys()].sort((a, b) => a - b).map((k) => byKey.get(k));
+}
+
+/**
  * The logo assets (07 4.5, 08 6.16): each entry must be a plain object of kind 'logo' with a valid, unique id, stored
  * inline, with a data URI that parseLogoDataUri accepts and whose MIME equals `mime`; at most `maxLogoAssets` are kept
  * (the rest are dropped, each with a warning). `bytes` is recomputed from the data (derived), `name` sanitised; a
@@ -615,7 +755,8 @@ function validateAssets(raw, limits, push) {
 /**
  * One block of the v2 file (io/ProjectSchema rows): a fresh object in row order. An absent block or value takes the
  * default silently; a block or nested group that is not an object takes the defaults with a warning; each value is
- * checked by its row type (bool, number, int, enum, hex); every unknown key is dropped (dropped-unknown info).
+ * checked by its row type (bool, number, int, enum, hex), then a number row's `parse` (the domain rule, e.g. the 1 mm
+ * of WallPivot.parseOffset: rounded); every unknown key is dropped (dropped-unknown info), the `derived` ones silently.
  * @param {*} v
  * @param {ReadonlyArray<import('./ProjectSchema.js').BlockRow>} rows
  * @param {string} path      'display', 'camera', 'props.person', ...
@@ -623,9 +764,10 @@ function validateAssets(raw, limits, push) {
  * @param {string} prefix    the prefix of the row labels ('Person ', '')
  * @param {object} defaults  per-field defaults that replace a row's default (the prop positions)
  * @param {(issue: Issue) => void} push
+ * @param {ReadonlyArray<string>} [derived]  derived keys of the block, ignored without an issue (pivot.resolved_m)
  * @returns {object}
  */
-function validateBlock(v, rows, path, blockLabel, prefix, defaults, push) {
+function validateBlock(v, rows, path, blockLabel, prefix, defaults, push, derived = []) {
   let block = v;
   if (v !== undefined && !isPlainObject(v)) {
     push({ path, code: 'defaulted', severity: 'warning', message: `${blockLabel}: ${formatValue(v)} → defaults`, from: v, to: null });
@@ -655,7 +797,13 @@ function validateBlock(v, rows, path, blockLabel, prefix, defaults, push) {
       case 'enum': value = enumField(raw, row.values, dflt, row.fallback ?? dflt, report); break;
       case 'hex': value = colorField(raw, dflt, report); break;
       case 'text': value = textField(raw, row, dflt, report); break;
-      default: value = numberField(raw, { min: row.min, max: row.max, int: row.type === 'int', default: dflt }, report);
+      default:
+        value = numberField(raw, { min: row.min, max: row.max, int: row.type === 'int', default: dflt }, report);
+        if (row.parse) {
+          const parsed = row.parse(value);
+          if (parsed !== value) report('rounded', value, parsed);
+          value = parsed;
+        }
     }
     setPath(out, row.key, value);
   }
@@ -663,6 +811,7 @@ function validateBlock(v, rows, path, blockLabel, prefix, defaults, push) {
   const top = new Set(rows.map((r) => r.key.split('.')[0]));
   for (const key of Object.keys(block)) {
     if (!top.has(key)) {
+      if (derived.includes(key)) continue;
       push({ path: `${path}.${key}`, code: 'dropped-unknown', severity: 'info', message: `${blockLabel}: ignored "${key}"` });
     } else if (groups.has(key) && isPlainObject(block[key])) {
       const sub = rows.filter((r) => r.key.startsWith(`${key}.`)).map((r) => r.key.slice(key.length + 1));
@@ -677,16 +826,19 @@ function validateBlock(v, rows, path, blockLabel, prefix, defaults, push) {
 /**
  * The v2 path of validateProject (08 P2-13e; 07 4.6 "Any v2 revision goes straight to validateProject with absent means
  * default"): the same errors as the wall subset; then, in this order, the logo assets, the `project` block (07 D1:
- * name and notes, kept only when the file has the key), the sections (with their logos and extensions) and their ids
- * (07 6.8), the mesh mode (absent: 'combined', 07 4.3), the display, panel-ID style, camera and prop blocks (a preset
- * filmback takes the preset's size, info if different), the top-level extensions, and every unknown or
- * not-yet-applied key (one dropped-unknown info each; generator and totals are derived and ignored silently).
+ * name and notes, kept only when the file has the key), the sections (with their UV transforms and vertex edits, logos
+ * and extensions) and their ids (07 6.8), the mesh mode (absent: 'combined', 07 4.3), the `pivot` block (revision 1,
+ * 03 T7: kept only when the file has the key, so a file without one keeps the session's pivot; its `resolved_m` is
+ * derived), the `uv` block (04 UV-5c: absent gives the defaults), the display (with the view-only
+ * show_pivot_marker), panel-ID style, camera and prop blocks (a preset filmback takes the preset's size, info if
+ * different), the top-level extensions, and every unknown or not-yet-applied key (one dropped-unknown info each;
+ * generator, atlas and totals are derived and ignored silently).
  * Unreferenced assets are dropped (dropped-unknown info). A file of a newer revision (07 D2, 4.4 rule 4) opens with one
  * newer-revision warning, first in the list, that names its format version and every key this build ignored (section
  * indexes folded); unknown keys inside `extensions` are kept verbatim, every other unknown key is dropped. Last, the
  * `budget` warnings of the wall (budgetIssues).
- * The result is a normalised v2 file: version "2.<knownRevision>", format, [project], sections, mesh_mode, display,
- * panel_id_style, camera, props, assets, extensions, so validating it again gives no issue but the same budget notes
+ * The result is a normalised v2 file: version "2.<knownRevision>", format, [project], sections, mesh_mode, [pivot], uv,
+ * display, panel_id_style, camera, props, assets, extensions, so validating it again gives no issue but the same budget notes
  * (idempotence) and a file the app wrote validates to itself without its derived keys (fidelity, 07 4.7).
  * Side effects: none.
  * @param {*} input
@@ -726,6 +878,9 @@ function validateV2(input, { limits, palette, knownRevision, revision, exportLim
     }
   }
 
+  const pivot = input.pivot === undefined ? null
+    : validateBlock(input.pivot, PIVOT_ROWS, 'pivot', 'Pivot', '', {}, push, PIVOT_DERIVED_KEYS);
+  const uv = validateBlock(input.uv, UV_ROWS, 'uv', 'UV', '', {}, push);
   const display = validateBlock(input.display, DISPLAY_ROWS, 'display', 'Display', '', {}, push);
   const panelIdStyle = validateBlock(input.panel_id_style, PANEL_ID_STYLE_ROWS, 'panel_id_style', 'Panel ID style', '', {}, push);
   const camera = validateBlock(input.camera, CAMERA_ROWS, 'camera', 'Camera', '', {}, push);
@@ -783,7 +938,8 @@ function validateV2(input, { limits, palette, knownRevision, revision, exportLim
     ok: true,
     project: {
       version: `2.${knownRevision}`, format: FORMAT, ...(projectBlock ? { project: projectBlock } : {}), sections,
-      mesh_mode: meshMode, display, panel_id_style: panelIdStyle, camera, props, assets: kept, extensions,
+      mesh_mode: meshMode, ...(pivot ? { pivot } : {}), uv, display, panel_id_style: panelIdStyle, camera, props,
+      assets: kept, extensions,
     },
     issues,
   };

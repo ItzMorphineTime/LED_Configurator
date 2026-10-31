@@ -349,23 +349,27 @@ describe('07 D2: budget notes, newer revisions, the project block (D1), the id f
 
   test('newer revision (07 4.4 rule 4): one warning first, naming the format and the ignored keys; extensions kept verbatim', () => {
     const r = readDoc(v2doc({
-      version: '2.4', pivot: { mode: 'x' },
-      sections: [section({ uv_transform: {}, extensions: { 'acme.x': { deep: [1, 2] } } }), section({ id: 1, uv_transform: {} })],
-      display: { show_pivot_marker: false }, extensions: { 'acme.y': 'kept' },
+      version: '2.4', hdri: { quality: '4k' },
+      sections: [section({ face_orientation: 'stage', extensions: { 'acme.x': { deep: [1, 2] } } }), section({ id: 1, face_orientation: 'stage' })],
+      display: { inner_frustum: { enabled: true } }, extensions: { 'acme.y': 'kept' },
     }));
     assert.ok(r.ok);
     assert.equal(r.issues[0].code, 'newer-revision');
     assert.equal(r.issues[0].message, 'Some settings were saved by a newer version and were ignored (file format 2.4, this app '
-      + 'reads 2.0): sections[].uv_transform, display.show_pivot_marker, pivot.');
+      + 'reads 2.1): sections[].face_orientation, display.inner_frustum, hdri.');
     assert.deepEqual(r.issues.slice(1).map((i) => [i.code, i.severity]), Array(4).fill(['dropped-unknown', 'info']));
     assert.deepEqual(r.project.sections[0].extensions, { 'acme.x': { deep: [1, 2] } });
     assert.deepEqual(r.project.extensions, { 'acme.y': 'kept' });
-    assert.equal(r.project.version, '2.0');
-    assert.deepEqual(readDoc(v2doc({ pivot: {} })).issues.map((i) => i.code), ['dropped-unknown'], 'the same key in a 2.0 file: info only');
-    assert.equal(readDoc(v2doc({ version: '2.1' })).issues[0].message,
-      'Some settings were saved by a newer version and were ignored (file format 2.1, this app reads 2.0).');
+    assert.equal(r.project.version, '2.1');
+    assert.deepEqual(readDoc(v2doc({ hdri: {} })).issues.map((i) => i.code), ['dropped-unknown'], 'the same key in an older file: info only');
+    // revision 1 (M7a): the pivot, uv and marker keys are read, also from a file that names an older revision
+    const rev1 = readDoc(v2doc({ pivot: { mode: 'wall-center' }, uv: { combined_layout: 'atlas' }, display: { show_pivot_marker: false } }));
+    assert.deepEqual(rev1.issues, []);
+    assert.deepEqual([rev1.project.pivot.mode, rev1.project.uv.combined_layout, rev1.project.display.show_pivot_marker], ['wall-center', 'atlas', false]);
+    assert.equal(readDoc(v2doc({ version: '2.2' })).issues[0].message,
+      'Some settings were saved by a newer version and were ignored (file format 2.2, this app reads 2.1).');
     const keys = Object.fromEntries(Array.from({ length: 10 }, (_, k) => [`k${k}`, 1]));
-    assert.match(readDoc(v2doc({ version: '2.1', ...keys })).issues[0].message, /: k0, k1, k2, k3, k4, k5, k6, k7, …and 2 more\.$/);
+    assert.match(readDoc(v2doc({ version: '2.2', ...keys })).issues[0].message, /: k0, k1, k2, k3, k4, k5, k6, k7, …and 2 more\.$/);
   });
 
   test('the project block (07 D1): name stripped, cut to 64 units, trimmed, empty -> the default; notes untrimmed; absent stays absent', () => {

@@ -322,7 +322,7 @@ describe('tools/make-cap-wall.mjs and tests/fixtures/normals-max-wall.json (01 T
 
   test('it imports as 200 sections (project file v2 since 08 P2-13e) of 50 x 20 panels in combined mode: 214,200 vertices and 200,000 quads', () => {
     const doc = JSON.parse(fs.readFileSync(CAP_WALL_FILE, 'utf8'));
-    assert.equal(doc.version, '2.0');
+    assert.equal(doc.version, '2.1');
     assert.equal(doc.mesh_mode, 'combined');
     assert.deepEqual(CAP_WALL, { sections: 200, panelCols: 50, panelRows: 20, panelWidth: 500, panelHeight: 500, ledX: 32, ledY: 32 });
     const read = new ProjectSerializer({ palette: Palette }).read(doc);

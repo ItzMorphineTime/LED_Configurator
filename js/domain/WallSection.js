@@ -47,7 +47,7 @@ export class WallSection {
    */
   #uvTransform;
 
-  /** @type {import('./UvSettings.js').UvVertexEdits|null} the per-vertex UV edits (session-only), null for none */
+  /** @type {import('./UvSettings.js').UvVertexEdits|null} the per-vertex UV edits (`uv_vertex_edits`), null for none */
   #uvVertexEdits = null;
 
   /**

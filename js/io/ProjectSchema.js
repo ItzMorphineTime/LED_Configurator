@@ -10,7 +10,8 @@
  *    PANEL_ID_STYLE_ROWS, CAMERA_ROWS, PROP_ROWS) whose row order is the file's key order;
  *  - bumps KNOWN_REVISION once per feature release and records the keys in REVISIONS (C40);
  *  - adds the writer and validator entry (io/ProjectSerializer, io/ProjectValidator; a block row needs none) and the
- *    restore step (app/ProjectIO.#applyV2), with "absent means default" and a round-trip test.
+ *    restore step (a feature hook of app/ProjectSession, 07 C41, or the section mapping of sectionsFromProject), with
+ *    "absent means default" and a round-trip test.
  * Until then the reader drops such a key with a `dropped-unknown` info (KNOWN_UNAPPLIED_KEYS names the 07 v2.0 keys
  * whose state does not exist yet).
  * Legacy source: index.html@cd3fd3f 4974-4988 (the import's section mapping, now `sectionsFromProject`).
@@ -18,54 +19,67 @@
  */
 
 import { WallSection } from '../domain/WallSection.js';
-import { Wall } from '../domain/Wall.js';
+import { Wall, WallPivot, PIVOT_MODES, ORIENTATION_ALIGNS, PIVOT_OFFSET_LIMIT_M, YAW_OFFSET_LIMIT_DEG } from '../domain/Wall.js';
+import { UvLayout, PanelUvMode, UvTransform, UvVertexEdits } from '../domain/UvSettings.js';
 import { FILMBACK_PRESETS, CineCamera } from '../domain/CineCamera.js';
 import { Prop } from '../domain/Prop.js';
 import { LOGO_POSITIONS, LOGO_SCALE } from '../domain/LogoRules.js';
 import { deepFreeze, MAX_LOGO_ASSETS } from '../domain/rules.js';
-import { ProjectMeta } from '../domain/Project.js';
+import { ProjectMeta, DisplaySettings } from '../domain/Project.js';
 
 /** The value of a project file's `format` key (07 4.2); a file may omit it (the version decides). */
 export const FORMAT = 'morph-led-project';
 
 /**
- * The newest v2 revision this build reads and writes (07 4.4 rule 4, C40): 0 is v2.0, the Phase-2 keys of 08 P2-13e.
+ * The newest v2 revision this build reads and writes (07 4.4 rule 4, C40): 0 is v2.0, the Phase-2 keys of 08 P2-13e;
+ * 1 (M7a) adds the pivot and orientation (03 T7), the pivot-marker flag (03 T9) and the UV state (04 UV-5c).
  * Each feature release that adds keys bumps it once and records them in REVISIONS.
  */
-export const KNOWN_REVISION = 0;
+export const KNOWN_REVISION = 1;
 
 /** The `version` this build writes: "2.<KNOWN_REVISION>". */
 export const VERSION = `2.${KNOWN_REVISION}`;
 
-/** Revision -> the keys it introduced (07 C40; the dropped-unknown and newer-revision messages read it). */
+/**
+ * Revision -> the keys it introduced (07 C40): the model and view keys; the derived ones (generator, pixel_map, atlas,
+ * resolved_m, totals) never bump the revision and are not listed after revision 0.
+ */
 export const REVISIONS = deepFreeze({
   0: ['version', 'format', 'project', 'sections', 'mesh_mode', 'display', 'panel_id_style', 'camera', 'props', 'assets',
     'totals', 'extensions'],
+  1: ['pivot', 'uv', 'display.show_pivot_marker', 'sections[].uv_transform', 'sections[].uv_vertex_edits'],
 });
 
 /** The mesh modes a file may name (07 4.3); anything else becomes 'combined' with a warning. */
 export const MESH_MODES = deepFreeze(['combined', 'section', 'panel']);
 
 /**
- * The top-level keys the writer emits, in the file's key order (07 4.2, the Phase-2 subset of 08 4.6). `project` (07 D1)
- * is written only while the project's name or notes differ from the defaults (absent means default), so every file of a
- * project without them keeps its bytes.
+ * The top-level keys the writer emits, in the file's key order (07 4.2, the subset that has landed). `generator` (06 T8,
+ * 07 C10: the second key) only when the writer was given one (App always gives it); `project` (07 D1) only while the
+ * project's name or notes differ from the defaults (absent means default); `generator`, `atlas` and `totals` are
+ * derived (not in the 'history' variant).
  */
-export const TOP_LEVEL_KEYS = deepFreeze(['version', 'format', 'project', 'sections', 'mesh_mode', 'display',
-  'panel_id_style', 'camera', 'props', 'assets', 'totals', 'extensions']);
+export const TOP_LEVEL_KEYS = deepFreeze(['version', 'generator', 'format', 'project', 'sections', 'mesh_mode', 'pivot',
+  'uv', 'atlas', 'display', 'panel_id_style', 'camera', 'props', 'assets', 'totals', 'extensions']);
 
-/** The keys of one section the writer emits, in the file's key order (07 4.2); texture_file only in the 'zip' variant. */
-export const SECTION_KEYS = deepFreeze(['name', 'id', 'panel', 'led_resolution', 'curvature', 'color', 'logo',
-  'texture_file', 'extensions']);
+/**
+ * The keys of one section the writer emits, in the file's key order (07 4.2); `pixel_map` is derived (not in 'history'),
+ * texture_file only in the 'zip' variant.
+ */
+export const SECTION_KEYS = deepFreeze(['name', 'id', 'panel', 'led_resolution', 'curvature', 'color', 'uv_transform',
+  'uv_vertex_edits', 'pixel_map', 'logo', 'texture_file', 'extensions']);
 
 /** Derived keys: written for downstream tools, ignored on read without an issue (07 4.2). */
-export const DERIVED_TOP_LEVEL_KEYS = deepFreeze(['generator', 'totals']);
+export const DERIVED_TOP_LEVEL_KEYS = deepFreeze(['generator', 'atlas', 'totals']);
+
+/** The derived keys of the pivot block (03 4.2: the resolution, informational; ignored on read). */
+export const PIVOT_DERIVED_KEYS = deepFreeze(['resolved_m']);
 
 /**
  * The 07 v2.0 keys whose state does not exist yet (07 4.2, 08 4.6): known, validated as present and dropped with one
  * dropped-unknown info each. A feature's landing commit moves its key from here into the tables above.
  */
-export const KNOWN_UNAPPLIED_KEYS = deepFreeze(['pivot', 'uv', 'atlas', 'hdri', 'production', 'measurements', 'viewport']);
+export const KNOWN_UNAPPLIED_KEYS = deepFreeze(['hdri', 'production', 'measurements', 'viewport']);
 
 /** More panels than this raise the `budget` warning on import (07 4.7, 6.7). */
 export const MAX_PANELS_BUDGET = 20000;
@@ -124,7 +138,9 @@ export const SECTION_LABELS = deepFreeze({ name: 'Section Name', id: 'id', color
  * @property {ReadonlyArray<string>} [values]  enum values
  * @property {*} default
  * @property {string} label
- * @property {boolean} [viewOnly]  view-only (07 4.4 rule 5): excluded from a future history variant
+ * @property {boolean} [viewOnly]  view-only (07 4.4 rule 5): excluded from the 'history' variant
+ * @property {(v: number) => number} [parse]  number: the domain's own rule after the range check (WallPivot.parseOffset
+ *   rounds to 1 mm); a changed value is reported as rounded
  */
 
 /**
@@ -144,7 +160,52 @@ export const DISPLAY_ROWS = deepFreeze([
   { key: 'show_frame', field: 'showFrame', type: 'bool', default: false, label: 'Show Panel Frames' },
   { key: 'show_grid', field: 'showGrid', type: 'bool', default: true, label: 'Grid', viewOnly: true },
   { key: 'show_safe_distance', field: 'showSafeDistance', type: 'bool', default: false, label: 'Show Safe Distance 3D' },
+  // 03 T9 (M7a): view-only; restored by the 'pivot' feature hook (PivotController.hydrate), not by DisplaySettings.assign
+  { key: 'show_pivot_marker', field: 'showPivotMarker', type: 'bool', default: DisplaySettings.DEFAULT_SHOW_PIVOT_MARKER,
+    label: 'Show pivot marker', viewOnly: true },
 ]);
+
+/**
+ * `pivot` (03 4.2, 12.11; T7, M7a) <-> `project.wall.pivot` (WallPivot.toJSON / fromJSON write and read the same keys):
+ * the mode, the offset (WallPivot.parseOffset: ±1000 m at 1 mm), keep stage layout and the orientation (an alignment of
+ * ORIENTATION_ALIGNS, the yaw offset through WallPivot.parseYawOffset: ±180° at 0.1°). The derived `resolved_m` is
+ * written after them and ignored on read (PIVOT_DERIVED_KEYS). A file without `pivot` keeps the session's pivot (the
+ * owner's rule, 03 12.11).
+ */
+export const PIVOT_ROWS = deepFreeze([
+  { key: 'mode', field: 'mode', type: 'enum', values: PIVOT_MODES, default: 'bottom-left', label: 'Pivot mode' },
+  { key: 'offset_m.x', field: 'offsetX', type: 'number', min: -PIVOT_OFFSET_LIMIT_M, max: PIVOT_OFFSET_LIMIT_M,
+    parse: WallPivot.parseOffset, default: 0, label: 'Pivot Offset X (m)' },
+  { key: 'offset_m.y', field: 'offsetY', type: 'number', min: -PIVOT_OFFSET_LIMIT_M, max: PIVOT_OFFSET_LIMIT_M,
+    parse: WallPivot.parseOffset, default: 0, label: 'Pivot Offset Y (m)' },
+  { key: 'offset_m.z', field: 'offsetZ', type: 'number', min: -PIVOT_OFFSET_LIMIT_M, max: PIVOT_OFFSET_LIMIT_M,
+    parse: WallPivot.parseOffset, default: 0, label: 'Pivot Offset Z (m)' },
+  { key: 'keep_stage_layout', field: 'keepStageLayout', type: 'bool', default: true, label: 'Keep stage layout on pivot change' },
+  { key: 'orientation.align', field: 'align', type: 'enum', values: ORIENTATION_ALIGNS, default: WallPivot.DEFAULT_ALIGN,
+    label: 'Orientation alignment' },
+  { key: 'orientation.yaw_offset_deg', field: 'yawOffsetDeg', type: 'number', min: -YAW_OFFSET_LIMIT_DEG,
+    max: YAW_OFFSET_LIMIT_DEG, parse: WallPivot.parseYawOffset, default: 0, label: 'Orientation Yaw offset (°)' },
+]);
+
+/**
+ * `uv` (04 4.2, UV-5c, M7a) <-> `project.uv` (UvSettings.toJSON / fromJSON): the Combined layout, the panel UV space and
+ * the glTF second UV channel (`gltf_canvas_texcoord1`, the owner's request of 2026-10-31, which replaced 04's
+ * `gltf_atlas_texcoord1`; on by default). The labels are UvController's history labels.
+ */
+export const UV_ROWS = deepFreeze([
+  { key: 'combined_layout', field: 'combinedLayout', type: 'enum', values: Object.values(UvLayout), default: UvLayout.PER_SECTION, label: 'UV layout' },
+  { key: 'panel_uvs', field: 'panelUvs', type: 'enum', values: Object.values(PanelUvMode), default: PanelUvMode.SECTION, label: 'Panel UVs' },
+  { key: 'gltf_canvas_texcoord1', field: 'gltfCanvasTexcoord1', type: 'bool', default: true, label: 'glTF second UV channel' },
+]);
+
+/**
+ * `sections[i].uv_transform` (04 4.2, UV-5c): the correction label of each leaf (the leaves and their order are
+ * UvTransform.toJSON's; ProjectValidator applies UvTransform.RULES and reports each change).
+ */
+export const UV_TRANSFORM_LABELS = deepFreeze({
+  offset_u: 'UV Offset U', offset_v: 'UV Offset V', scale_u: 'UV Scale U', scale_v: 'UV Scale V',
+  rotation_degrees: 'UV Rotation (°)', flip_u: 'UV Flip U', flip_v: 'UV Flip V', source_rotated: 'UV Source rotated',
+});
 
 /** `panel_id_style` (07 4.3) <-> `project.panelIdStyle` (PanelIdStyle; the ranges of PanelIdStyle.RULES). */
 export const PANEL_ID_STYLE_ROWS = deepFreeze([
@@ -276,7 +337,8 @@ export function blockToDomain(rows, block) {
 
 /**
  * The domain sections of a validated project (the inverse of the v1 section mapping; every value is already valid).
- * A v2 section's `extensions` are kept on the section (07 4.4: preserved verbatim).
+ * A v2 section's `extensions` are kept on the section (07 4.4: preserved verbatim), and (revision 1, 04 UV-5c, M7a) its
+ * UV transform and vertex edits are restored; a v1 (wall-scope) section starts from the identity without edits.
  * Side effects: none.
  * @param {{sections: Array<{name: string, id: number, panel: {columns: number, rows: number, width_mm: number,
  *          height_mm: number}, led_resolution: {x: number, y: number},
@@ -285,26 +347,35 @@ export function blockToDomain(rows, block) {
  * @returns {WallSection[]} fresh sections, fields in SECTION_FIELDS order
  */
 export function sectionsFromProject(project) {
-  return project.sections.map((s) => new WallSection({
-    id: s.id,
-    name: s.name,
-    panelCols: s.panel.columns,
-    panelRows: s.panel.rows,
-    panelWidth: s.panel.width_mm,
-    panelHeight: s.panel.height_mm,
-    ledX: s.led_resolution.x,
-    ledY: s.led_resolution.y,
-    curveIntensity: s.curvature.angle_degrees,
-    angleOffset: s.curvature.angle_offset_degrees,
-    color: s.color,
-    extensions: s.extensions,
-  }));
+  return project.sections.map((s) => {
+    const section = new WallSection({
+      id: s.id,
+      name: s.name,
+      panelCols: s.panel.columns,
+      panelRows: s.panel.rows,
+      panelWidth: s.panel.width_mm,
+      panelHeight: s.panel.height_mm,
+      ledX: s.led_resolution.x,
+      ledY: s.led_resolution.y,
+      curveIntensity: s.curvature.angle_degrees,
+      angleOffset: s.curvature.angle_offset_degrees,
+      color: s.color,
+      uvTransform: s.uv_transform ? UvTransform.fromJSON(s.uv_transform) : undefined,
+      extensions: s.extensions,
+    });
+    if (Array.isArray(s.uv_vertex_edits) && s.uv_vertex_edits.length) {
+      section.setUvVertexEdits(UvVertexEdits.fromJSON(s.uv_vertex_edits, s.panel.columns, s.panel.rows));
+    }
+    return section;
+  });
 }
 
 /**
- * The domain state of a validated v2 project (08 P2-13e; what app/ProjectIO.#applyV2 restores, 08 6.17): the
+ * The domain state of a validated v2 project (08 P2-13e; what app/ProjectSession.apply restores, 08 6.17): the
  * sections, the mesh mode, the display, panel-ID style, camera and prop values keyed by their domain fields, the
- * section logos ({sectionId, assetId, position, scale}) and the logo assets, and the top-level extensions.
+ * section logos ({sectionId, assetId, position, scale}) and the logo assets, and the top-level extensions. The pivot,
+ * the marker flag and the UV settings are restored by their feature hooks (PivotController.hydrate, UvController.hydrate)
+ * from the v2 object itself.
  * Side effects: none.
  * @param {object} project  the `project` of a successful v2 validateProject
  * @returns {{sections: WallSection[], meshMode: string, display: object, panelIdStyle: object, camera: object,

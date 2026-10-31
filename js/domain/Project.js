@@ -41,7 +41,8 @@ export class DisplaySettings {
   showGrid = true;
   /** legacy safeDistanceEnabled */
   showSafeDistance = false;
-  /** the pivot marker (Feature 3, 03 4.1; view-only, session-only); written by PivotController.setMarkerVisible */
+  /** the pivot marker (Feature 3, 03 4.1; view-only: `display.show_pivot_marker`, not in history); written by
+   *  PivotController (setMarkerVisible, and hydrate when a project file is applied) */
   showPivotMarker = DisplaySettings.DEFAULT_SHOW_PIVOT_MARKER;
 
   /**
@@ -226,8 +227,8 @@ export class Project {
   person;
   /** @type {CarProp} */
   car;
-  /** @type {UvSettings} the UV layout settings (04 4.1, UV-5a): injected by reference and never replaced; session-only
-   *  until 04 UV-5c persists them */
+  /** @type {UvSettings} the UV layout settings (04 4.1, UV-5a): injected by reference and never replaced; saved as
+   *  the project file's `uv` (04 UV-5c, M7a) */
   uv;
   /** @type {Readonly<object>} the top-level `extensions` of the project file (07 4.4 rule 4; 08 P2-13e): validated,
    *  frozen and kept verbatim for a round trip; replaced only through setExtensions */

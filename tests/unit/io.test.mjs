@@ -42,6 +42,7 @@ import { GltfExporter, chunkedBase64 } from '../../js/io/GltfExporter.js';
 import { ProjectIO, Downloader } from '../../js/app/ProjectIO.js';
 import { ProjectSession } from '../../js/app/ProjectSession.js';
 import { EventBus } from '../../js/core/EventBus.js';
+import { APP_VERSION } from '../../js/core/AppInfo.js';
 import { ExportPanel } from '../../js/ui/ExportPanel.js';
 import { PanelIdRenderer } from '../../js/render/textures/PanelIdRenderer.js';
 import { Brand, Palette } from '../../js/theme/Theme.js';
@@ -93,7 +94,8 @@ function legacySpreadBase64(bytes) {
 /** Node's own base64, the reference for every encoder test. */
 const nodeBase64 = (bytes) => Buffer.from(bytes).toString('base64');
 
-const serializer = new ProjectSerializer({ palette: Palette });
+// App's serializer: the theme palette and (06 T8) the JSON generator record
+const serializer = new ProjectSerializer({ palette: Palette, generator: { name: Brand.jsonGenerator.name, version: APP_VERSION } });
 const makeObj = (profile = Strategies.mesh.obj, brand = Brand) => new ObjExporter({ brand, colorToRgb, builder: new WallMeshBuilder(profile) });
 const makeGltf = (profile = Strategies.mesh.gltf, encodeBase64 = undefined, brand = Brand) =>
   new GltfExporter({ brand, colorToRgb, builder: new WallMeshBuilder(profile), encodeBase64 });
@@ -374,6 +376,9 @@ function projectFromV2(read) {
     p[kind].assign(st[kind]);
   }
   p.setExtensions(st.extensions);
+  // revision 1 (M7a): the pivot hook (a file without a pivot keeps the new project's) and the UV settings hook
+  if (read.project.pivot) p.wall.pivot = WallPivot.fromJSON(read.project.pivot);
+  p.uv.assign(UvSettings.fromJSON(read.project.uv));
   return p;
 }
 
@@ -845,7 +850,8 @@ describe('golden files (byte-identical to the legacy downloads)', { skip: golden
       same(json2(serializer.write(project, { variant: 'file' })), golden('final', 'json', 'json'));
       const entries = `${golden('final', 'zip', 'zip')}.entries`;
       const layout = layoutProject(project);
-      same(json2(serializer.write(project, { variant: 'zip', textureNames: textureFileNames(sections) })), `${entries}/${FILES.json}`);
+      same(json2(serializer.write(project, { variant: 'zip', textureNames: textureFileNames(sections), atlasFile: atlasTexturePath(FILES) })),
+        `${entries}/${FILES.json}`);
       const zipTextures = { textureNames: textureFileNames(sections), atlasFile: atlasTexturePath(FILES) };
       const zipObj = OBJ.write({ sections, meshMode: 'combined', layout, ...zipTextures });
       same(zipObj.objContent, `${entries}/${FILES.obj}`);
@@ -984,15 +990,22 @@ describe('ProjectSerializer', () => {
     const project = projectOf([new WallSection({ id: 4, name: 'A B', panelCols: 2, panelRows: 3, panelWidth: 500, panelHeight: 250,
       ledX: 64, ledY: 32, curveIntensity: -3, angleOffset: 15, color: '#ff00aa' })], 'section');
     const file = serializer.write(project);
-    assert.deepEqual(Object.keys(file), ['version', 'format', 'sections', 'mesh_mode', 'display', 'panel_id_style', 'camera',
-      'props', 'assets', 'totals', 'extensions']);
-    assert.equal(file.version, '2.0');
+    assert.deepEqual(Object.keys(file), ['version', 'generator', 'format', 'sections', 'mesh_mode', 'pivot', 'uv', 'atlas', 'display',
+      'panel_id_style', 'camera', 'props', 'assets', 'totals', 'extensions']);
+    assert.equal(file.version, '2.1');
+    assert.deepEqual(file.generator, { name: 'Morph LED Configurator', version: APP_VERSION });
     assert.equal(file.format, 'morph-led-project');
-    assert.deepEqual(Object.keys(file.sections[0]), ['name', 'id', 'panel', 'led_resolution', 'curvature', 'color', 'logo', 'extensions']);
+    assert.deepEqual(Object.keys(file.sections[0]), ['name', 'id', 'panel', 'led_resolution', 'curvature', 'color', 'uv_transform',
+      'uv_vertex_edits', 'pixel_map', 'logo', 'extensions']);
     assert.deepEqual(file.sections[0].curvature, { type: 'convex', angle_degrees: -3, angle_offset_degrees: 15 });
     assert.deepEqual(file.totals, { sections: 1, total_panels: 6, total_pixels: 12288 });
     const zip = serializer.write(project, { variant: 'zip', textureNames: textureFileNames(project.wall.sections) });
-    assert.deepEqual(Object.keys(zip.sections[0]), ['name', 'id', 'panel', 'led_resolution', 'curvature', 'color', 'logo', 'texture_file', 'extensions']);
+    assert.deepEqual(Object.keys(zip.sections[0]), ['name', 'id', 'panel', 'led_resolution', 'curvature', 'color', 'uv_transform',
+      'uv_vertex_edits', 'pixel_map', 'logo', 'texture_file', 'extensions']);
+    assert.equal('texture_file' in zip.atlas, false, 'atlas.texture_file only when the atlas was written');
+    const zipAtlas = serializer.write(project, { variant: 'zip', textureNames: textureFileNames(project.wall.sections), atlasFile: ATLAS });
+    assert.equal(zipAtlas.atlas.texture_file, ATLAS);
+    assert.equal('texture_file' in serializer.write(project, { atlasFile: ATLAS }).atlas, false, "'zip' only");
     assert.deepEqual(zip.sections[0].curvature, { type: 'convex', angle_degrees: -3, angle_offset_degrees: 15 });
     assert.equal(zip.sections[0].texture_file, 'textures/A_B_PanelIDs.png');
     project.wall.sections[0].name = 42;
@@ -1499,7 +1512,7 @@ describe('ProjectIO use cases', () => {
     const gltf = GLTF.write({ sections, meshMode: 'combined', layout, textures: { sectionFiles: names, atlasFile: ATLAS } });
     const expected = [
       ['new JSZip'],
-      ['zip.file', FILES.json, undefined, json2(serializer.write(project, { variant: 'zip', textureNames: textureFileNames(sections) }))],
+      ['zip.file', FILES.json, undefined, json2(serializer.write(project, { variant: 'zip', textureNames: textureFileNames(sections), atlasFile: ATLAS }))],
       ['layout'],
       ['zip.file', FILES.obj, undefined, objContent],
       ['zip.file', FILES.mtl, undefined, mtlContent],
@@ -1547,7 +1560,7 @@ describe('ProjectIO use cases', () => {
     await fakeIO(project, log, { sectionSize: (s) => (s === tooBig ? { width: 70000, height: 128 } : { width: 640, height: 384 }) }).exportZIP();
     const skipped = sections.map((s) => s === tooBig);
     const layout = layoutProject(project);
-    const json = json2(serializer.write(project, { variant: 'zip', textureNames: textureFileNames(sections).map((n, i) => (skipped[i] ? null : n)) }));
+    const json = json2(serializer.write(project, { variant: 'zip', textureNames: textureFileNames(sections).map((n, i) => (skipped[i] ? null : n)), atlasFile: ATLAS }));
     assert.equal(JSON.parse(json).sections[1].texture_file, null);
     assert.equal(JSON.parse(json).sections[0].texture_file, 'textures/Left_PanelIDs.png');
     const { objContent, mtlContent } = OBJ.write({ sections, meshMode: 'section', layout,
@@ -1608,7 +1621,7 @@ describe('ProjectIO use cases', () => {
       'textures/Left_PanelIDs.png', 'textures/Center_PanelIDs.png', ATLAS, FILES.json, FILES.mtl, FILES.gltf]);
     const rewrites = log.filter((e) => e[0] === 'zip.file').slice(-3);
     const kept = textureFileNames(sections).map((n, i) => (skipped[i] ? null : n));
-    assert.equal(rewrites[0][3], json2(serializer.write(project, { variant: 'zip', textureNames: kept })));
+    assert.equal(rewrites[0][3], json2(serializer.write(project, { variant: 'zip', textureNames: kept, atlasFile: ATLAS })));
     assert.equal(rewrites[1][3], OBJ.write({ sections, meshMode: 'section', layout, textureNames: kept }).mtlContent);
     // 04 UV-8b: the glTF images name exactly the files the archive holds, so it is re-written too
     assert.equal(rewrites[2][3], json2(GLTF.write({ sections, meshMode: 'section', layout, textures: { sectionFiles: kept, atlasFile: ATLAS } })));
@@ -1641,6 +1654,10 @@ describe('ProjectIO use cases', () => {
     const finalMtl = log.filter((e) => e[0] === 'zip.file' && e[1] === FILES.mtl).at(-1)[3];
     const kept = textureFileNames(sections).map((n, i) => (i === 0 ? null : n));
     assert.equal(finalMtl, OBJ.write({ sections, meshMode: 'combined', layout, textureNames: kept }).mtlContent);
+    // M7a: the re-written JSON no longer names the left-out atlas (04 4.2 atlas.texture_file: only when written)
+    const finalJson = JSON.parse(log.filter((e) => e[0] === 'zip.file' && e[1] === FILES.json).at(-1)[3]);
+    assert.equal('texture_file' in finalJson.atlas, false);
+    assert.equal(JSON.parse(log.find((e) => e[0] === 'zip.file' && e[1] === FILES.json)[3]).atlas.texture_file, ATLAS);
     assert.deepEqual(log.at(-1), ['alert', mExp4([`textures/${textureFileNames(sections)[0]}`, ATLAS])]);
   });
 

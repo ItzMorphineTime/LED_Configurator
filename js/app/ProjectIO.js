@@ -319,7 +319,7 @@ export class ProjectIO {
     // null: JSON texture_file null and no MTL map_Kd.
     const plan = this.#planSectionTextures(sections);
     const atlasPlan = this.#planAtlas(sections);
-    const jsonDoc = () => this.#serializer.write(project, { variant: 'zip', textureNames: plan.textureNames });
+    const jsonDoc = () => this.#serializer.write(project, { variant: 'zip', textureNames: plan.textureNames, atlasFile: atlasPlan.file });
     const jsonText = () => JSON.stringify(jsonDoc(), null, 2);
 
     // Step 2: JSON (texture_file null when skipped; 07 D6: each logo asset by its ZIP path, stored right after it as
@@ -343,10 +343,10 @@ export class ProjectIO {
     zip.file(brand.files.gltf, gltfText());
 
     // Steps 3-4: the textures that fit, then the atlas; when one is left out late, re-write the entries that name it
-    // without it (JSZip keeps an entry's position): the JSON for a section texture, the MTL and the glTF for either.
+    // without it (JSZip keeps an entry's position): the JSON (texture_file, atlas.texture_file), the MTL and the glTF.
     const lateSections = this.#addSectionTextures(zip.folder('textures'), sections, plan);
     const lateAtlas = this.#addAtlasTexture(zip, sections, atlasPlan);
-    if (lateSections) zip.file(brand.files.json, jsonText());
+    if (lateSections || lateAtlas) zip.file(brand.files.json, jsonText());
     if (lateSections || lateAtlas) {
       zip.file(brand.files.mtl, writeObj().mtlContent);
       zip.file(brand.files.gltf, gltfText());

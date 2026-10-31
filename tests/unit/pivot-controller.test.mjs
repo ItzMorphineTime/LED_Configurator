@@ -496,11 +496,54 @@ describe('PropControls: the pivot pose mirror (03 5.5)', () => {
   });
 });
 
+describe('hydrate: the \'pivot\' feature hook of ProjectSession.apply (07 C41; 03 T7, T9, 12.11; M7a)', () => {
+  /** A validated pivot block (WallPivot.toJSON shape). */
+  const block = (over = {}) => ({ mode: 'mesh-center', offset_m: { x: 0.5, y: 0, z: 2 }, keep_stage_layout: false,
+    orientation: { align: 'center-neg-x', yaw_offset_deg: 15 }, ...over });
+
+  test('a file pivot replaces the session pivot: one WALL_PIVOT_CHANGED {import}, nothing re-expressed, no rebuild; the marker is set first', () => {
+    const r = makeRig();
+    r.project.display.showPivotMarker = true;
+    r.pc.hydrate({ pivot: block(), display: { show_pivot_marker: false } }, { reason: 'open', scope: 'full' });
+    assert.deepEqual(r.trace, ['WALL_PIVOT_CHANGED'], 'no translateStage, no commitPivot, no view.rebuild');
+    for (const a of r.anchored) assert.deepEqual(a.calls, [], `${a.id}: a load is not an edit (07 C45)`);
+    assert.deepEqual(r.project.wall.pivot.toJSON(), block());
+    assert.equal(r.project.display.showPivotMarker, false, 'the mirrors read the flag on the event');
+    const [payload] = r.emitted('WALL_PIVOT_CHANGED');
+    assert.equal(payload.source, 'import');
+    assert.equal(payload.reexpressed, false);
+    assert.equal(payload.resolution.mode, 'mesh-center');
+    assert.equal(payload.resolution.align, 'center-neg-x');
+    assert.notEqual(payload.pivot, r.project.wall.pivot, 'a copy');
+  });
+
+  test('without a pivot key (v1, 2.0) the session pivot is kept; undo/redo and the wall scope keep the marker', () => {
+    const r = makeRig();
+    r.project.wall.pivot = WallPivot.createForNewProject();
+    const kept = r.project.wall.pivot.clone();
+    r.project.display.showPivotMarker = false;
+    r.events.length = 0;
+    r.pc.hydrate({ display: { show_pivot_marker: true } }, { reason: 'open', scope: 'full' });
+    assert.ok(r.project.wall.pivot.equals(kept), 'kept (the owner rule, 03 12.11)');
+    assert.equal(r.project.display.showPivotMarker, true, 'a full open applies the view-only flag');
+    assert.deepEqual(r.emitted('WALL_PIVOT_CHANGED').map((p) => p.source), ['import'], 'announced all the same');
+    for (const reason of ['undo', 'redo']) {
+      r.pc.hydrate({ pivot: block(), display: { show_pivot_marker: false } }, { reason, scope: 'full' });
+      assert.equal(r.project.display.showPivotMarker, true, `${reason} keeps the live marker`);
+      assert.deepEqual(r.project.wall.pivot.toJSON(), block(), `${reason} restores the model pivot`);
+    }
+    r.project.wall.pivot = kept.clone();
+    r.pc.hydrate({ sections: [], mesh_mode: null }, { reason: 'import', scope: 'wall' });
+    assert.ok(r.project.wall.pivot.equals(kept));
+    assert.equal(r.project.display.showPivotMarker, true);
+  });
+});
+
 describe('PivotController module boundaries (ARCHITECTURE.md 1.3; 03 8.2)', () => {
-  test('imports only core and geometry (no ui/, render/, interaction/, no THREE)', () => {
+  test('imports only core, domain and geometry (no ui/, render/, interaction/, no THREE)', () => {
     const src = readFileSync(join(ROOT, 'js/app/PivotController.js'), 'utf8');
     const imports = [...src.matchAll(/^\s*import\s+[^'"]*from\s+['"]([^'"]+)['"]/gm)].map((m) => m[1]);
-    assert.deepEqual(imports, ['../core/EventBus.js', '../geometry/WallLayout.js', '../geometry/WallOrientation.js']);
+    assert.deepEqual(imports, ['../core/EventBus.js', '../domain/Wall.js', '../geometry/WallLayout.js', '../geometry/WallOrientation.js']);
   });
 
   test('WallPivot fields are written only through WallPivot methods (no direct assignment in the controller)', () => {

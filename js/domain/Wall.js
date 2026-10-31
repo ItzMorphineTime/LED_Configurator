@@ -62,8 +62,8 @@ export const YAW_OFFSET_LIMIT_DEG = 180;
  * an explicit pivot or orientation edit re-expresses the camera and props (D6, 03 12.6). The orientation (03 section 12)
  * turns the whole wall about the vertical axis through P: the alignment (an ORIENTATION_ALIGNS value) plus a yaw offset
  * in degrees. The default is the identity (bottom-left, zero offset, DEFAULT_ALIGN 'none' with a zero yaw offset): the
- * implicit legacy pivot. Written only through these methods (ARCHITECTURE.md section 4); the pivot is session-only
- * until the project file v2 lands (03 header, "Sequencing", the owner's decision of 2026-10-17).
+ * implicit legacy pivot. Written only through these methods (ARCHITECTURE.md section 4). Saved in project file v2 since
+ * revision 1 (03 T7, M7a: the `pivot` block, toJSON / fromJSON).
  */
 export class WallPivot {
   /**
@@ -237,6 +237,41 @@ export class WallPivot {
     const v = typeof raw === 'number' ? raw : parseFloat(raw);
     if (!Number.isFinite(v)) return null;
     return Math.max(-YAW_OFFSET_LIMIT_DEG, Math.min(YAW_OFFSET_LIMIT_DEG, Math.round(v * 10) / 10)) || 0;
+  }
+
+  /**
+   * The `pivot` block of project file v2 (03 4.2, 12.11; T7): mode, offset_m, keep_stage_layout and orientation
+   * {align, yaw_offset_deg}, in the file's key order (io/ProjectSchema PIVOT_ROWS); the derived `resolved_m` is the
+   * writer's.
+   * Side effects: none.
+   * @returns {{mode: string, offset_m: {x: number, y: number, z: number}, keep_stage_layout: boolean,
+   *            orientation: {align: string, yaw_offset_deg: number}}}
+   */
+  toJSON() {
+    return {
+      mode: this.mode,
+      offset_m: { x: this.offset.x, y: this.offset.y, z: this.offset.z },
+      keep_stage_layout: this.keepStageLayout,
+      orientation: { align: this.orientation.align, yaw_offset_deg: this.orientation.yawOffsetDeg },
+    };
+  }
+
+  /**
+   * A pivot from a validated `pivot` block (ProjectValidator: every value already valid), through the setters.
+   * Side effects: none.
+   * @param {{mode: string, offset_m: {x: number, y: number, z: number}, keep_stage_layout: boolean,
+   *          orientation: {align: string, yaw_offset_deg: number}}} v
+   * @returns {WallPivot}
+   * @throws {RangeError} for an unknown mode or alignment (never for a validated block)
+   */
+  static fromJSON(v) {
+    const p = new WallPivot();
+    p.setMode(v.mode);
+    p.setOffset(v.offset_m);
+    p.setKeepStageLayout(v.keep_stage_layout);
+    p.setAlign(v.orientation.align);
+    p.setYawOffset(v.orientation.yaw_offset_deg);
+    return p;
   }
 
   /**

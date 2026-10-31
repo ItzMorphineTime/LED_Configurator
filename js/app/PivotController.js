@@ -3,7 +3,8 @@
  * The wall-pivot use cases (Feature 3, docs/improvements/03-pivot.md 5.3, 5.6, 6.5, 6.7): the mode, the offset and its
  * reset, the keep-stage-layout and marker toggles, the Ctrl-drag snap step and the O-key selection toggle, each through
  * the one pivot pipeline P-PIVOT (#commit), plus the Selectable 'pivot' (the path-B hook set of 03 5.4, 07 C33) that the
- * TransformGizmo drives. The pivot is session-only until project file v2 (the owner's decision of 2026-10-17).
+ * TransformGizmo drives. It is also the 'pivot' feature hook of ProjectSession (hydrate: the project file's pivot,
+ * orientation and marker flag, 03 T7 and T9, M7a).
  * Never imports or calls ui/: PivotPanel, PivotMarkerView and CameraPanel mirror WALL_PIVOT_CHANGED; the gizmo follows
  * SELECTABLE_MOVED. WallController stays the only module that decides wall rebuilds (commitPivot, ARCHITECTURE.md 6.2).
  * Legacy source: none (new feature; the stage-anchored participants port no legacy code either).
@@ -11,6 +12,7 @@
  */
 
 import { Events } from '../core/EventBus.js';
+import { WallPivot } from '../domain/Wall.js';
 import { stageChange, stageShift } from '../geometry/WallLayout.js';
 import { turnXZ, yawTrig } from '../geometry/WallOrientation.js';
 
@@ -197,7 +199,28 @@ export class PivotController {
   }
 
   /**
-   * #toggle-pivot-marker (row F3-5): view-only, session-only. While the pivot is selected the marker shows anyway.
+   * The 'pivot' feature hook of ProjectSession.apply (07 C41, 5.5.2 step 3; 03 T7, T9, 4.4, 12.11; M7a): a file's
+   * `pivot` replaces the session's pivot and orientation, a file without one (every v1 file, a v2 file of revision 0)
+   * keeps them (the owner's rule); a full apply also takes the file's `display.show_pivot_marker` (absent: the default),
+   * except undo and redo, which keep the live view-only value (07 4.2). WallController.applyPivot then announces both
+   * (WALL_PIVOT_CHANGED {source: 'import'}: the panel's radios, offsets, orientation, toggles and readout, the marker
+   * view). A load is not an edit: nothing is re-expressed (the file's camera and prop poses are in the stage frame of
+   * its own pivot, 07 C45, so restoring both gives the saved stage) and nothing rebuilds (apply step 7 does).
+   * Side effects: maybe writes display.showPivotMarker; WallController.applyPivot (maybe writes wall.pivot; one event).
+   * @param {object} v2  the validated v2 object (a wall-scope one holds only sections and mesh_mode)
+   * @param {{reason: string, scope: 'full'|'wall'}} ctx
+   */
+  hydrate(v2, { reason, scope }) {
+    const full = scope === 'full';
+    if (full && reason !== 'undo' && reason !== 'redo' && typeof v2.display?.show_pivot_marker === 'boolean') {
+      const display = this.#project.display;
+      display.showPivotMarker = v2.display.show_pivot_marker;
+    }
+    this.#wallController.applyPivot(full && v2.pivot ? WallPivot.fromJSON(v2.pivot) : null);
+  }
+
+  /**
+   * #toggle-pivot-marker (row F3-5): view-only (saved, never in history). While the pivot is selected the marker shows anyway.
    * Side effects: writes display.showPivotMarker; emits WALL_PIVOT_CHANGED {source: 'marker', rebuilds: false} (the
    *   marker view mirrors its visibility, the panel its toggle).
    * @param {boolean} on
