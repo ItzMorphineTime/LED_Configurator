@@ -46,8 +46,8 @@
     font-size: 11px;
 }
 
-.uv-viewer__label {
-    color: var(--color-text-secondary);
+.uv-viewer__select--wide {
+    max-width: 180px;
 }
 
 .uv-viewer__stage {

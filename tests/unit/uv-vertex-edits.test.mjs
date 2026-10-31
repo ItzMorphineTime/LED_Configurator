@@ -22,7 +22,9 @@ import { describeHit } from '../../js/geometry/PixelMap.js';
 import { WallMeshBuilder } from '../../js/geometry/WallMeshBuilder.js';
 import { Strategies } from '../../js/legacy/LegacyCompat.js';
 import { UvController } from '../../js/app/UvController.js';
-import { UvViewModel, mergeSelection } from '../../js/app/UvViewModel.js';
+import { UvViewModel, mergeSelection, gridOutline } from '../../js/app/UvViewModel.js';
+import { GltfExporter } from '../../js/io/GltfExporter.js';
+import { Brand } from '../../js/theme/Theme.js';
 import { UvFallbackHistory } from '../../js/app/UvFallbackHistory.js';
 import { nearestPoint, pointsInBox } from '../../js/ui/UVCanvas.js';
 import { readoutText } from '../../js/ui/UVViewer.js';
@@ -377,5 +379,64 @@ describe('the fixed-size viewer: readout and chip reserve', () => {
     assert.match(r, /overflow-y: auto;/);
     assert.match(rule('.uv-swap__pane'), /grid-area: 1 \/ 1;/);
     assert.match(css, /\.uv-swap__pane\[data-inactive\] \{\s*visibility: hidden;/);
+  });
+});
+
+describe('UV2 · Combined canvas: the viewer shows exactly the exported TEXCOORD_1', () => {
+  const hex = (c) => ({ r: parseInt(c.slice(1, 3), 16) / 255, g: parseInt(c.slice(3, 5), 16) / 255, b: parseInt(c.slice(5, 7), 16) / 255 });
+  const floats = (doc, a) => {
+    const accessor = doc.accessors[a];
+    const view = doc.bufferViews[accessor.bufferView];
+    const bytes = Buffer.from(doc.buffers[0].uri.split(',')[1], 'base64');
+    const n = accessor.count * 2;
+    return Array.from(new Float32Array(bytes.buffer.slice(bytes.byteOffset + view.byteOffset, bytes.byteOffset + view.byteOffset + 4 * n)));
+  };
+
+  test('islands in wall order at u1 = (x_i + u0 w_i) / W, v1 = v0 h_i / W, edits and transform included; the strip and the outline', () => {
+    const project = Project.createDefault();
+    project.wall.replaceAll([section(1, 'Left', 5, 3), section(2, 'Right', 2, 2)]);   // 160 x 96 and 64 x 64: W = 224
+    project.meshMode = 'section';
+    const right = project.wall.sections[1];
+    right.setUvTransform(new UvTransform({ offsetU: 0.125, scaleU: 0.5, scaleV: 0.5 }));
+    const e = new UvVertexEdits(2, 2);
+    e.set(e.key(1, 1), 0.1, 0);
+    right.setUvVertexEdits(e);
+    const bus = new EventBus();
+    const out = [];
+    bus.on('uv:dataChanged', (pl) => out.push(pl.data));
+    const vm = new UvViewModel({ project, bus, panelIds: { sectionCanvas: () => null, atlasCanvas: () => 'ATLAS' }, ledTiles: { tileCanvas: () => null } });
+    const layout = layoutProject(project);
+    const atlas = computeAtlas(project.wall.sections);
+    vm.setOpen(true);
+    vm.setSection(2);
+    vm.setSpace('canvas');
+    vm.refresh({ layout, atlas });
+    const cv = out.at(-1).canvasView;
+    assert.equal(cv.W, 224);
+    close(cv.stripV, 96 / 224);
+    assert.equal(cv.canvas, 'ATLAS');
+    assert.deepEqual(cv.islands.map((i) => [i.name, i.current]), [['Left', false], ['Right', true]]);
+    // the edited vertex (1, 1) of Right: T = 0.5 scale about the centre, offset 0.125 -> u0 = 0.5 + 0.5 * (0.6 - 0.5) + 0.125
+    const u0 = 0.5 + 0.5 * 0.1 + 0.125;
+    close(cv.uvs[2 * 4], (160 + u0 * 64) / 224);
+    close(cv.uvs[2 * 4 + 1], (0.5 * 64) / 224);
+    closePair(cv.islands[0].outline[0], [0, 0]);
+    closePair(gridOutline([0, 0, 1, 0, 0, 1, 1, 1], 1, 1)[2], [1, 1], 0);
+    assert.equal(cv.islands[0].outline.length, 2 * (5 + 3));
+    assert.ok(out.at(-1).notices.some((n) => n.text.startsWith('ⓘ UV2 follows UV1 edits')));
+    // the exporter writes exactly these values (float32, t = 1 - v), and TEXCOORD_0 carries the edit
+    const gltf = new GltfExporter({ brand: Brand, colorToRgb: hex, builder: new WallMeshBuilder(Strategies.mesh.gltf) });
+    const doc = gltf.write({ sections: project.wall.sections, meshMode: 'section', layout: layoutProject(project, { frame: 'export' }), uvSettings: project.uv });
+    const prim = doc.meshes[1].primitives[0];
+    const t1 = floats(doc, prim.attributes.TEXCOORD_1);
+    cv.uvs.forEach((x, k) => close(t1[k], k % 2 ? 1 - x : x, 1e-6));
+    const t0 = floats(doc, prim.attributes.TEXCOORD_0);
+    close(t0[2 * 4], u0, 1e-6);
+    // the setting off: UV2 is not exported, the viewer says so
+    project.uv.assign({ gltfCanvasTexcoord1: false });
+    vm.refresh({ layout, atlas }, { backgroundDirty: false });
+    assert.ok(out.at(-1).notices.some((n) => n.text.startsWith('⚠ UV2 is not exported')));
+    assert.equal(gltf.write({ sections: project.wall.sections, meshMode: 'section', layout: layoutProject(project, { frame: 'export' }), uvSettings: project.uv })
+      .meshes[1].primitives[0].attributes.TEXCOORD_1, undefined);
   });
 });

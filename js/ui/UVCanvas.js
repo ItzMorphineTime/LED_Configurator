@@ -4,7 +4,9 @@
  * about a point, pan, framing of the 0-1 rect with an 8 % margin, Texture / Square / Auto aspect), the drawing (background
  * in the 0-1 rect, the dimmed outside, the source-pixel grid, the panel wireframe, the island with its handles and rotate
  * knob or, in the Vertices mode, the grid vertex handles and the selection box, the hover crosshair and panel, the drag
- * tooltip) and the hit-testing of the handles on a general quadrilateral and of the grid vertices.
+ * tooltip) and the hit-testing of the handles on a general quadrilateral and of the grid vertices; read-only, the Atlas
+ * and the UV2 combined canvas (every section's island outlined and labelled, the viewed one highlighted, the panel-ID
+ * atlas in its strip).
  * It draws a precomputed SectionUvData (UvViewModel) and maps between screen and UV only: every transform computation
  * stays in the controller. The island's screen corners (BL, BR, TR, TL; CSS px relative to the canvas) are written to
  * the canvas's data-island attribute after every draw, for the harness.
@@ -199,7 +201,7 @@ export class UVCanvas {
   /** Whether the grid vertices are the handles (data present, no message, Section space, the Vertices mode). */
   #vertexMode() {
     const d = this.#data;
-    return !!d && !d.message && !d.atlasView && d.editMode === 'vertices';
+    return !!d && !d.message && !d.atlasView && !d.canvasView && d.editMode === 'vertices';
   }
 
   /** @returns {number[][]} the grid vertices' screen points (canvas CSS px), in key order */
@@ -244,11 +246,12 @@ export class UVCanvas {
     return Math.max(w / h, h / w) > 8 ? 'square' : 'texture';
   }
 
-  /** The source size the 0-1 rect stands for (the atlas in Atlas space). */
+  /** The source size the 0-1 rect stands for (the atlas in Atlas space, the square W x W canvas in UV2). */
   #sourceDims() {
     const d = this.#data;
     if (!d || d.message) return { w: 1, h: 1 };
     if (d.atlasView) return { w: d.atlasView.W, h: d.atlasView.H };
+    if (d.canvasView) return { w: d.canvasView.W, h: d.canvasView.W };
     return { w: d.sourceW, h: d.sourceH };
   }
 
@@ -354,7 +357,7 @@ export class UVCanvas {
   /** The island's screen geometry: corners, edge midpoints (with their enabled state), the knob, the thin-island state. */
   #geometry() {
     const d = this.#data;
-    const pts = (d.atlasView ? d.atlasView.island : d.island).map(([u, v]) => this.screen(u, v));
+    const pts = (d.atlasView ? d.atlasView.island : d.canvasView ? d.canvasView.island : d.island).map(([u, v]) => this.screen(u, v));
     const bottom = dist(pts[0], pts[1]);
     const left = dist(pts[0], pts[3]);
     const thin = bottom < 16 && left < 16;
@@ -381,7 +384,7 @@ export class UVCanvas {
   /** Whether the island can be edited here (data present, no message, Section space, the Island mode). */
   #editable() {
     const d = this.#data;
-    return !!d && !d.message && !d.atlasView && d.editMode !== 'vertices';
+    return !!d && !d.message && !d.atlasView && !d.canvasView && d.editMode !== 'vertices';
   }
 
   /**
@@ -470,7 +473,7 @@ export class UVCanvas {
     ctx.fillRect(right, top, cssW - right, bottom - top);
     // 4. source-pixel grid when a source pixel is at least 6 px wide
     const { w: Sw, h: Sh } = this.#sourceDims();
-    if (!d.atlasView && uW / Sw >= 6 && uH / Sh >= 6) this.#drawPixelGrid(ctx, x0, y0, uW / Sw, uH / Sh, Sw, Sh);
+    if (!d.atlasView && !d.canvasView && uW / Sw >= 6 && uH / Sh >= 6) this.#drawPixelGrid(ctx, x0, y0, uW / Sw, uH / Sh, Sw, Sh);
     // 5. wireframe (the panel grid; the atlas rects in Atlas space)
     this.#drawWireframe(ctx, d);
     // 6. island, handles, knob
@@ -482,6 +485,7 @@ export class UVCanvas {
     if (this.#box) this.#drawBox(ctx);
     // 7. hover crosshair and panel
     if (this.#hover && !d.atlasView) this.#drawHover(ctx, d);
+    if (d.canvasView) this.#drawLabels(ctx, d.canvasView);
     // 8. drag tooltip
     if (this.#tooltip) this.#drawTooltip(ctx, cssW, cssH);
     canvas.dataset.island = JSON.stringify(g.pts.map(([x, y]) => [Math.round(x * 10) / 10, Math.round(y * 10) / 10]));
@@ -492,6 +496,18 @@ export class UVCanvas {
     const th = this.#theme;
     let bg = d.background;
     if (d.atlasView) bg = d.atlasView.canvas ? { kind: 'panelIds', canvas: d.atlasView.canvas } : { kind: 'checker' };
+    if (d.canvasView) {
+      // UV2: the panel-ID atlas fills the strip u 0..1, v 0..Hmax / W of the square canvas (sections bottom-aligned)
+      const cv = d.canvasView;
+      if (cv.canvas) {
+        const stripH = uH * cv.stripV;
+        ctx.imageSmoothingEnabled = uW / cv.W < 4;
+        ctx.drawImage(cv.canvas, x0, y0 + uH - stripH, uW, stripH);
+        ctx.imageSmoothingEnabled = true;
+        return;
+      }
+      bg = d.background && d.background.kind === 'checker' ? d.background : null;
+    }
     if (!bg || bg.kind === 'none') return;
     if (bg.canvas) {
       ctx.imageSmoothingEnabled = uW / this.#sourceDims().w < 4;
@@ -559,10 +575,19 @@ export class UVCanvas {
     ctx.stroke();
   }
 
-  /** 6.11 step 5: column and row polylines through the grid UVs (vertex edits bend them). */
+  /**
+   * 6.11 step 5: column and row polylines through the grid UVs (vertex edits bend them); in UV2 also every section's
+   * island outline (the viewed one in the island colour).
+   */
   #drawWireframe(ctx, d) {
     const th = this.#theme;
-    const uvs = d.atlasView ? d.atlasView.uvs : d.uvs;
+    if (d.canvasView) {
+      for (const isl of d.canvasView.islands) {
+        if (!isl.current) this.#strokePath(ctx, isl.outline.map(([u, v]) => this.screen(u, v)), true, th.wire, 1);
+      }
+    }
+    const uvs = d.atlasView ? d.atlasView.uvs : d.canvasView ? d.canvasView.uvs : d.uvs;
+    if (!uvs) return;
     const { cols, rows } = d;
     const P = (row, col) => {
       const k = (row * (cols + 1) + col) * 2;
@@ -588,6 +613,10 @@ export class UVCanvas {
     ctx.strokeStyle = th.wireMinor;
     ctx.lineWidth = 1;
     ctx.stroke();
+    if (d.canvasView) {
+      const cur = d.canvasView.islands.find((isl) => isl.current);
+      if (cur) this.#strokePath(ctx, cur.outline.map(([u, v]) => this.screen(u, v)), true, th.island, 2);
+    }
     if (d.atlasView) {
       for (const r of d.atlasView.rects) {
         const pts = [[r.offsetU, 0], [r.offsetU + r.widthU, 0], [r.offsetU + r.widthU, r.heightV], [r.offsetU, r.heightV]]
@@ -663,14 +692,35 @@ export class UVCanvas {
     ctx.restore();
   }
 
+  /** UV2: each island's section name at the centre of its outline (with a halo), the viewed one in the island colour. */
+  #drawLabels(ctx, cv) {
+    const th = this.#theme;
+    ctx.font = th.font;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    for (const isl of cv.islands) {
+      const pts = isl.outline.map(([u, v]) => this.screen(u, v));
+      const x = pts.reduce((a, p) => a + p[0], 0) / pts.length;
+      const y = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+      const text = String(isl.name);
+      ctx.strokeStyle = th.halo;
+      ctx.lineWidth = 3;
+      ctx.strokeText(text, x, y);
+      ctx.fillStyle = isl.current ? th.island : th.wire;
+      ctx.fillText(text, x, y);
+    }
+  }
+
   /** 6.11 step 7: the hovered panel's quad (from the grid UVs) and a crosshair at the hovered UV. */
   #drawHover(ctx, d) {
     const th = this.#theme;
     const h = this.#hover;
-    if (h.col !== null && h.row !== null && h.col >= 0 && h.col < d.cols && h.row >= 0 && h.row < d.rows) {
+    const uvs = d.canvasView ? d.canvasView.uvs : d.uvs;
+    if (uvs && h.col !== null && h.row !== null && h.col >= 0 && h.col < d.cols && h.row >= 0 && h.row < d.rows) {
       const P = (row, col) => {
         const k = (row * (d.cols + 1) + col) * 2;
-        return this.screen(d.uvs[k], d.uvs[k + 1]);
+        return this.screen(uvs[k], uvs[k + 1]);
       };
       this.#strokePath(ctx, [P(h.row, h.col), P(h.row, h.col + 1), P(h.row + 1, h.col + 1), P(h.row + 1, h.col)], true,
         th.crosshair, 1.5);

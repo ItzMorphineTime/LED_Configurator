@@ -4,7 +4,9 @@
  * (open, viewed section, pin, background, space, aspect, edit mode; in memory for the session, the owner's path-B
  * decision: no app/Prefs.js), the vertex selection of the viewed section, the SectionUvData of the viewed section (its
  * display plan with the transform and the vertex edits applied, so the viewer shows them even while the wall shows
- * LED-mask content or per-panel UVs), the status chips and the background canvases
+ * LED-mask content or per-panel UVs), the read-only views of the Atlas (UV1 in the
+ * Combined + atlas layout) and of UV2, the combined canvas of glTF TEXCOORD_1 (every section's island at u1 = (x_i +
+ * u0·w_i) / W, v1 = v0·h_i / W, the panel-ID atlas in the strip it occupies), the status chips and the background canvases
  * (panel IDs within the 4 MP preview budget, the LED tile, the read-only atlas), cached per section and kind until the
  * next rebuild or rename. It emits the viewer events; UvController drives it and UVViewer mirrors it.
  * Legacy source: none (Feature 4).
@@ -13,14 +15,20 @@
 
 import { Events } from '../core/EventBus.js';
 import {
-  planSectionUv, sectionGridUv, sourceSize, islandCorners, islandBounds, pixelAccuracy, placeInRect,
+  planSectionUv, sectionGridUv, sourceSize, islandCorners, islandBounds, pixelAccuracy, placeInRect, combinedCanvas,
+  canvasUvs,
 } from '../geometry/UvMapper.js';
 import { canvasFits } from '../geometry/TextureAtlas.js';
 
 /** The viewer backgrounds (04 3.3; 'hdri' arrives with spec 05). */
 export const UV_BACKGROUNDS = Object.freeze(['panelIds', 'ledSim', 'checker', 'none']);
-/** The viewer spaces: the section's own 0..1 space, or the read-only atlas (Combined + atlas layout only). */
-export const UV_SPACES = Object.freeze(['section', 'atlas']);
+/**
+ * The viewer spaces (the Channel select): UV1 in the section's own 0..1 space (editable), UV1 in the read-only atlas
+ * (Combined + atlas layout only), or UV2, the read-only combined canvas of glTF TEXCOORD_1.
+ */
+export const UV_SPACES = Object.freeze(['section', 'atlas', 'canvas']);
+/** The section-space plans of TEXCOORD_1 (GltfExporter's SECTION_SPACE_UVS): the transforms and vertex edits applied. */
+const SECTION_SPACE_UVS = Object.freeze({ combinedLayout: 'per-section', panelUvs: 'section' });
 /** The viewer aspects: auto = texture unless the source is longer than 8:1, then square (04 3.3). */
 export const UV_ASPECTS = Object.freeze(['auto', 'texture', 'square']);
 /** The edit modes: the island (transform handles) or the grid vertices (per-vertex edits). */
@@ -92,6 +100,28 @@ function gridBounds(uvs) {
     maxV = Math.max(maxV, uvs[k + 1]);
   }
   return { minU, minV, maxU, maxV };
+}
+
+/**
+ * The boundary of a grid's (u, v) pairs as a closed polyline: the bottom row left to right, the right column up, the
+ * top row back and the left column down.
+ * Side effects: none.
+ * @param {ArrayLike<number>} uvs  (cols + 1) * (rows + 1) pairs, row-major from the bottom
+ * @param {number} cols
+ * @param {number} rows
+ * @returns {number[][]}
+ */
+export function gridOutline(uvs, cols, rows) {
+  const at = (col, row) => {
+    const k = 2 * (row * (cols + 1) + col);
+    return [uvs[k], uvs[k + 1]];
+  };
+  const out = [];
+  for (let col = 0; col < cols; col++) out.push(at(col, 0));
+  for (let row = 0; row < rows; row++) out.push(at(cols, row));
+  for (let col = cols; col > 0; col--) out.push(at(col, rows));
+  for (let row = rows; row > 0; row--) out.push(at(0, row));
+  return out;
 }
 
 /** The centroid of the selected grid vertices' UVs (the vertex fields), null for none. */
@@ -338,11 +368,19 @@ export class UvViewModel {
       ...head, cols, rows, ledX: s.ledX, ledY: s.ledY, W, H, sourceW, sourceH, startCol: entry.startCol,
       transform: { ...t }, summary: t.summaryFor(W, H), uvs, perPanel, island: islandCorners(t, W, H), bounds,
       atlasRect: { offsetU: entry.uvOffsetX, widthU: entry.uvWidth, heightV: entry.uvHeight }, accuracy, notices,
-      background: null, atlasView: null, editMode: this.#editMode,
+      background: null, atlasView: null, canvasView: null, editMode: this.#editMode,
       vertices: { edited, selection, selectionUv: selectionCentroid(uvs, selection) },
     };
     if (this.#space === 'atlas' && base.atlasAvailable) {
       data.atlasView = this.#atlasView(layout, atlas, i, t, W, H);
+    } else if (this.#space === 'canvas') {
+      data.canvasView = this.#canvasView(layout, atlas, i, t, W, H);
+      data.background = this.#background === 'checker' ? { kind: 'checker' } : null;
+      // UV2's own chips replace UV1's (pixel accuracy and 0-1 bounds are UV1 matters)
+      data.notices = [{ kind: 'info', text: 'ⓘ UV2 follows UV1 edits · glTF TEXCOORD_1 (Blender: UVMap.001) · OBJ has UV1 only' }];
+      if (!uv.gltfCanvasTexcoord1) {
+        data.notices.push({ kind: 'warn', text: '⚠ UV2 is not exported: the glTF second UV channel is off (Mesh Options)' });
+      }
     } else {
       data.background = this.#backgroundOf(s, i, entry.startCol, W, H, t, notices);
     }
@@ -416,6 +454,39 @@ export class UvViewModel {
     if (!entry.canvas) return { kind: 'checker' };
     stretched();
     return { kind, canvas: entry.canvas };
+  }
+
+  /**
+   * The read-only UV2 view: the square combined canvas of TEXCOORD_1 (UvMapper.combinedCanvas / canvasUvs of the
+   * section-space UVs, exactly the exporter's), every valid section's island outline in wall order (the boundary of its
+   * grid, so vertex edits show), the viewed section's grid, island frame and canvas entry, and the panel-ID atlas
+   * (totalLedX = W by Hmax LEDs) as the background of the strip u 0..1, v 0..Hmax / W.
+   * @returns {{W: number, stripV: number, canvas: HTMLCanvasElement|null, islands: object[], uvs: number[],
+   *            island: number[][], entry: {x: number, w: number, h: number}}|null}
+   */
+  #canvasView(layout, atlas, i, t, W, H) {
+    const cv = combinedCanvas(layout.sections.map((sl) => sl.section));
+    if (!cv) return null;
+    if (this.#background === 'panelIds' && this.#atlasCanvas === undefined) {
+      this.#atlasCanvas = this.#panelIds.atlasCanvas(layout.sections.map((sl) => sl.section), atlas);
+    }
+    let uvs = null;
+    const islands = [];
+    layout.sections.forEach((sl, k) => {
+      const s = sl.section;
+      if (!validCounts(s)) return;
+      const plan = planSectionUv(sl, k, { settings: SECTION_SPACE_UVS, meshMode: 'section', applyTransforms: true });
+      const grid = canvasUvs(cv, k, gridUvs(plan, s.panelCols, s.panelRows));
+      if (k === i) uvs = grid;
+      islands.push({
+        sectionId: sl.sectionId, name: s.name, current: k === i, outline: gridOutline(grid, s.panelCols, s.panelRows),
+      });
+    });
+    const toCanvas = ([u, v]) => canvasUvs(cv, i, [u, v]);
+    return {
+      W: cv.W, stripV: atlas.totalLedY / cv.W, canvas: this.#background === 'panelIds' ? this.#atlasCanvas : null,
+      islands, uvs, island: islandCorners(t, W, H).map(toCanvas), entry: { ...cv.entries[i] },
+    };
   }
 
   /**

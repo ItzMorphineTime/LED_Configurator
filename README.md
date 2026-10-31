@@ -470,9 +470,16 @@ Open it with **U**, the **UV Viewer** button in the viewport toolbar, **Edit UVs
 **double-click on the wall** (it opens on that section). It floats in the viewport: drag its header to move it, drag its
 bottom-left corner to resize it, × closes it. On narrow screens (900 px wide or less) it is a sheet along the bottom.
 
-- **Section** picks the section, **Show** the background (Panel IDs, LED pixels, a labelled UV checker, or none),
-  **Space** the section's own UV space or the read-only **Atlas** (Single Combined Mesh with the Atlas layout), **View**
-  the aspect (Texture: source pixels square; Square: raw UV space; Auto: Texture unless the section is longer than 8:1).
+- **Section** picks the section, **Show** the background (Panel IDs, LED pixels, a labelled UV checker, or none), the
+  channel select the UVs shown: **UV1 · Section (0–1)** (the section's own UV space, the one you edit), **UV1 · Atlas**
+  (read-only, Single Combined Mesh with the Atlas layout) or **UV2 · Combined canvas** (read-only: the glTF second UV
+  channel, below), **View** the aspect (Texture: source pixels square; Square (UV): raw UV space; Auto: Texture unless
+  the section is longer than 8:1).
+- **UV2 · Combined canvas** shows the square canvas of glTF `TEXCOORD_1` (Blender's `UVMap.001`): every section's island
+  outlined and named in wall order, the viewed one highlighted with its panel grid, and the Panel IDs atlas in the strip
+  it covers (u 0–1, v 0 up to the tallest section's height / the total width). It follows the UV1 edits (transform and
+  vertices) and cannot be edited itself; the status line says when the glTF second UV channel is off (UV2 is then not
+  exported). OBJ holds UV1 only.
 - Wheel zooms about the cursor, middle-drag or Space + drag pans, a double-click on empty canvas (or Home) frames 0–1.
 - Hovering the front of the wall or the canvas shows the section, panel, LED, section pixel, atlas LED pixel and the UV
   before and after the transform; the hovered panel is outlined on the wall and a crosshair marks it in the viewer.

@@ -1,7 +1,8 @@
 /**
  * @module ui/UVViewer
  * The UV viewer and editor panel (docs/improvements/04-uvs-uv-editor.md 3.2-3.8, 5.3; UV-12, UV-13): a FloatingPanel
- * (#uv-viewer) with the section, background, space and view selects, the UV canvas (UVCanvas), the edit mode switch
+ * (#uv-viewer) with the section, background, channel and view selects (Channel: UV1 · Section, editable; UV1 · Atlas and
+ * UV2 · Combined canvas, read-only), the UV canvas (UVCanvas), the edit mode switch
  * (Island | Vertices), the numeric fields with their commit semantics (input previews, change commits, Escape cancels),
  * Turn feed, Source, Flip, the presets, Copy to all, the vertex fields and resets of the Vertices mode, undo / redo, the
  * status chips, the hint line and the hover readout; and the #toggle-uv-viewer toolbar button. The two modes' rows share
@@ -36,13 +37,11 @@ const BODY_HTML = `
   </select></label>
 </div>
 <div class="uv-viewer__bar">
-  <span class="uv-viewer__label">Space</span>
-  <div class="uv-seg" role="group" aria-label="UV space">
-    <button type="button" id="uv-viewer-space-section" class="uv-seg__btn" aria-pressed="true">Section</button>
-    <button type="button" id="uv-viewer-space-atlas" class="uv-seg__btn" aria-pressed="false" title="The pixel-accurate atlas, read-only (Single Combined Mesh with the Atlas layout)">Atlas</button>
-  </div>
-  <label class="uv-viewer__inline">View <select id="uv-viewer-aspect" class="ui-select uv-viewer__select">
-    <option value="auto">Auto</option><option value="texture">Texture aspect</option><option value="square">Square (UV space)</option>
+  <label class="uv-viewer__inline"><select id="uv-viewer-channel" class="ui-select uv-viewer__select uv-viewer__select--wide" aria-label="UV channel" title="UV channel. UV1: the UVs you edit (glTF TEXCOORD_0, OBJ vt); its Atlas view is read-only (Single Combined Mesh with the Atlas layout). UV2: the combined canvas, read-only (glTF TEXCOORD_1)">
+    <option value="section">UV1 · Section (0–1)</option><option value="atlas">UV1 · Atlas</option><option value="canvas">UV2 · Combined canvas</option>
+  </select></label>
+  <label class="uv-viewer__inline">View <select id="uv-viewer-aspect" class="ui-select uv-viewer__select" title="Texture: source pixels square; Square: raw UV space; Auto: Texture unless the source is longer than 8:1">
+    <option value="auto">Auto</option><option value="texture">Texture</option><option value="square">Square (UV)</option>
   </select></label>
 </div>
 <div class="uv-viewer__stage">
@@ -129,12 +128,15 @@ const HEADER_HTML = `<span id="uv-viewer-dot" class="uv-viewer__dot" aria-hidden
  * The presets act on the island transform only: vertex edits stay until Reset all vertex edits.
  */
 const HINTS = Object.freeze({
-  island: 'Moving the island right shows more of the source’s right side (the image slides left on the wall). Reset, Fit 0–1 and Pixel-accurate change the island only and keep vertex edits. UV edits are not saved in project files yet.',
-  vertices: 'Click, Shift+click, a box or Ctrl+A selects vertices; drag moves them (Alt free, Shift fine), arrows nudge. Reset, Fit 0–1 and Pixel-accurate change the island only and keep vertex edits; Reset all vertex edits clears them.',
+  island: 'Moving the island right shows more of the source’s right side (the image slides left on the wall). Reset, Fit 0–1 and Pixel-accurate keep vertex edits. UV edits are not saved in project files yet.',
+  vertices: 'Click, Shift+click, a box or Ctrl+A selects; drag moves (Alt free, Shift fine), arrows nudge. Reset, Fit 0–1 and Pixel-accurate change the island only; Reset all vertex edits clears vertex edits.',
 });
 
 /** The readout placeholder (04 3.3). */
 const READOUT_EMPTY = 'Hover the front of the wall or the UV canvas';
+
+/** Whether the viewer shows no editable UV1 section space (no data, a message, or the read-only Atlas or UV2). */
+const readOnly = (d) => !d || !!d.message || !!d.atlasView || !!d.canvasView;
 
 /** A number for an input: rounded to `digits` decimals, without trailing zeros. */
 const fmt = (x, digits) => String(Number(x.toFixed(digits)));
@@ -243,7 +245,7 @@ export class UVViewer {
     const els = {
       dot: q('uv-viewer-dot'), name: q('uv-viewer-name'), pin: q('uv-viewer-pin'),
       section: q('uv-viewer-section'), background: q('uv-viewer-background'), aspect: q('uv-viewer-aspect'),
-      spaceSection: q('uv-viewer-space-section'), spaceAtlas: q('uv-viewer-space-atlas'),
+      channel: q('uv-viewer-channel'),
       canvas: q('uv-viewer-canvas'), message: q('uv-viewer-message'),
       offsetU: q('uv-offset-u'), offsetV: q('uv-offset-v'), units: q('uv-units'),
       scaleU: q('uv-scale-u'), scaleV: q('uv-scale-v'), lock: q('uv-scale-lock'), rotation: q('uv-rotation'),
@@ -270,8 +272,7 @@ export class UVViewer {
     });
     els.background.addEventListener('change', () => ctl.setBackground(els.background.value));
     els.aspect.addEventListener('change', () => ctl.setAspect(els.aspect.value));
-    els.spaceSection.addEventListener('click', () => ctl.setSpace('section'));
-    els.spaceAtlas.addEventListener('click', () => ctl.setSpace('atlas'));
+    els.channel.addEventListener('change', () => ctl.setSpace(els.channel.value));
 
     // numeric fields (04 3.3)
     for (const [el, field] of [[els.offsetU, 'offsetU'], [els.offsetV, 'offsetV'], [els.scaleU, 'scaleU'],
@@ -366,7 +367,7 @@ export class UVViewer {
       }
       if (e.button !== 0) return;
       const d = this.#data;
-      if (!d || d.message || d.atlasView) return;
+      if (readOnly(d)) return;
       if (d.editMode === 'vertices') {
         this.#vertexDown(e, canvas);
         return;
@@ -413,7 +414,7 @@ export class UVViewer {
       const hit = view.hitTest(e.clientX, e.clientY);
       const overVertex = d && d.editMode === 'vertices' && view.hitVertex(e.clientX, e.clientY).key !== null;
       canvas.style.cursor = view.cursorFor(overVertex ? 'vertex' : hit.handle);
-      if (d && !d.message && !d.atlasView) ctl.probeUv(d.sectionId, hit.uv[0], hit.uv[1]);
+      if (!readOnly(d)) ctl.probeUv(d.sectionId, hit.uv[0], hit.uv[1]);
     });
     const end = (e) => {
       if (this.#pan && e.pointerId === this.#pan.pointerId) this.#pan = null;
@@ -512,7 +513,7 @@ export class UVViewer {
     const d = this.#data;
     const t = e.target;
     const typing = t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA');
-    if (typing || !d || d.message || d.atlasView || d.editMode !== 'vertices') return false;
+    if (typing || readOnly(d) || d.editMode !== 'vertices') return false;
     const ctl = this.#uvController;
     if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'a') {
       ctl.selectAllVertices();
@@ -595,7 +596,7 @@ export class UVViewer {
       return true;
     }
     const d = this.#data;
-    if (!d || d.message || d.atlasView) return false;
+    if (readOnly(d)) return false;
     const id = d.sectionId;
     const nudges = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] };
     if (nudges[e.key]) {
@@ -633,8 +634,7 @@ export class UVViewer {
     const els = this.#els;
     els.background.value = state.background;
     els.aspect.value = state.aspect;
-    els.spaceSection.setAttribute('aria-pressed', String(state.space === 'section'));
-    els.spaceAtlas.setAttribute('aria-pressed', String(state.space === 'atlas'));
+    els.channel.value = state.space;
     els.pin.setAttribute('aria-pressed', String(state.pinned));
     const vertices = state.editMode === 'vertices';
     els.modeIsland.setAttribute('aria-pressed', String(!vertices));
@@ -668,7 +668,7 @@ export class UVViewer {
     els.message.hidden = !message;
     els.message.textContent = message || '';
     els.canvas.hidden = !!message;
-    const editable = !message && !data.atlasView;
+    const editable = !readOnly(data);
     const controls = [els.offsetU, els.offsetV, els.scaleU, els.scaleV, els.rotation, els.rotCcw, els.rotCw, els.sourceWh,
       els.sourceHw, els.flipU, els.flipV, els.reset, els.fit, els.pixel, els.copyAll, els.modeIsland, els.modeVertices];
     for (const el of controls) el.disabled = !editable;
@@ -681,9 +681,8 @@ export class UVViewer {
     els.vertexResetAll.disabled = !vx || !vx.edited.length;
     els.vertexCount.textContent = vx ? `${selected} selected · ${vx.edited.length} edited${data.perPanel ? ' · not applied (per-panel UVs)' : ''}` : '';
     this.#writeVertexFields(true);
-    els.spaceAtlas.disabled = !data.atlasAvailable;
-    els.spaceSection.setAttribute('aria-pressed', String(!data.atlasView));
-    els.spaceAtlas.setAttribute('aria-pressed', String(!!data.atlasView));
+    els.channel.querySelector('option[value="atlas"]').disabled = !data.atlasAvailable;
+    els.channel.value = data.canvasView ? 'canvas' : data.atlasView ? 'atlas' : 'section';
     const h = data.history;
     els.undo.disabled = !(h && h.canUndo);
     els.redo.disabled = !(h && h.canRedo);
@@ -722,11 +721,13 @@ export class UVViewer {
     this.#redraw();
   }
 
-  /** @returns {{u: number, v: number, col: number, row: number}|null} the crosshair of the viewed section */
+  /** @returns {{u: number, v: number, col: number, row: number}|null} the crosshair of the viewed section (UV2: on the canvas) */
   #hoverPoint() {
     const h = this.#hover;
     const d = this.#data;
     if (!h || !d || !Object.is(h.sectionId, d.sectionId)) return null;
+    const c = d.canvasView;
+    if (c) return { u: (c.entry.x + h.viewU * c.entry.w) / c.W, v: (h.viewV * c.entry.h) / c.W, col: h.col, row: h.row };
     return { u: h.viewU, v: h.viewV, col: h.col, row: h.row };
   }
 
